@@ -1,0 +1,2031 @@
+use bevy::prelude::*;
+use std::collections::HashMap;
+use crate::components::*;
+
+/// Definition of a module type with all its stats
+#[allow(dead_code)]
+pub struct ModuleDef {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub category: ModuleCategory,
+    pub size: IVec2,
+    pub health: f32,
+    pub power_generation: f32,
+    pub power_consumption: f32,
+    pub color: Color,
+    pub companion: CompanionData,
+    pub customizable: bool,
+    pub cost: u32,
+    pub base_stats: CalculatedStats,
+    /// Whether this module gets a CrewStation when spawned
+    pub crew_station: bool,
+}
+
+/// Companion component data to attach when spawning a module
+pub enum CompanionData {
+    /// No special companion components
+    None,
+    /// Reactor: generates power, has heat management
+    Reactor { output: f32, max_heat: f32, explosion_risk: bool },
+    /// Engine: provides thrust
+    Engine { thrust: f32, noise_level: f32 },
+    /// Oxygen scrubber: generates O2
+    OxygenScrubber { output: f32 },
+    /// Generic life support (CO2 filter, water recycler)
+    LifeSupport { o2_gen: f32, co2_filter: f32 },
+    /// Ballast tank: buoyancy control
+    Ballast { capacity: f32 },
+    /// Cargo/storage
+    Cargo { capacity: f32 },
+    /// Weapon system
+    Weapon {
+        damage: f32,
+        range: f32,
+        fire_rate: f32,
+        ammo: u32,
+        mount_type: MountType,
+        ammo_type: AmmoType,
+    },
+    /// Active sonar (generates noise on ping)
+    Sonar { range: f32, noise_on_ping: f32 },
+    /// Passive sonar (no noise)
+    PassiveSonar { range: f32 },
+    /// Detection system (non-sonar)
+    Detection { range: f32 },
+    /// Light source
+    Light { range: f32, intensity: f32, attracts_creatures: bool },
+    /// Repair capability
+    Repair { rate: f32 },
+    /// Navigation system
+    Navigation { map_range: f32 },
+    /// Docking port
+    Docking,
+    /// Salvage arm
+    Salvage { range: f32, efficiency: f32 },
+    /// Crew quarters: provides berths
+    Quarters { berths: u32 },
+    /// Crew welfare facility
+    CrewFacility { facility_type: crate::components::FacilityType },
+    /// Capacitor: stores power for burst discharge
+    Capacitor { capacity: f32, charge_rate: f32 },
+    /// Power conduit: routes power through non-adjacent modules
+    PowerConduit { throughput: f32 },
+    /// Fire suppression system
+    FireSuppression { effectiveness: f32 },
+    /// Active cooling pump
+    CoolingPump { cooling_rate: f32 },
+    /// Passive heat vent
+    HeatVent { dissipation_rate: f32 },
+    /// Power transformer
+    Transformer { efficiency: f32 },
+    /// Oxygen storage tank
+    OxygenTank { capacity: f32 },
+    /// Torpedo auto-loader
+    TorpedoLoader { reload_bonus: f32 },
+    /// Pressure reinforcement for hull depth rating
+    PressureReinforcement { depth_bonus: f32 },
+    /// Drone bay: deploys repair/scout drones
+    DroneBay { drone_count: u32, drone_range: f32 },
+    /// Conveyor tube: moves ammo/resources between adjacent modules
+    ConveyorTube { speed: f32 },
+    /// Fuel processor: refines fuel, reduces consumption
+    FuelProcessor { efficiency: f32 },
+    /// Water pump: automated bilge pump
+    WaterPump { pump_rate: f32 },
+    /// Targeting computer: boosts weapon accuracy
+    TargetingComputer { accuracy_bonus: f32 },
+    /// AI combat core: auto-targets highest threat
+    AICombatCore { priority_bonus: f32 },
+    /// Research lab: generates research points from specimens
+    ResearchLab { research_speed: f32 },
+}
+
+/// Data-driven registry of all module types
+#[derive(Resource)]
+pub struct ModuleRegistry {
+    pub defs: HashMap<ModuleType, ModuleDef>,
+}
+
+impl ModuleRegistry {
+    pub fn get(&self, module_type: ModuleType) -> &ModuleDef {
+        self.defs.get(&module_type).expect("ModuleType not in registry")
+    }
+
+    /// Safe accessor that returns None if the module type isn't registered
+    #[cfg(test)]
+    pub fn try_get(&self, module_type: ModuleType) -> Option<&ModuleDef> {
+        self.defs.get(&module_type)
+    }
+}
+
+/// Build the complete module registry with all 42 module definitions
+pub fn build_registry() -> ModuleRegistry {
+    let mut defs = HashMap::new();
+
+    // ========================================================================
+    // POWER (5)
+    // ========================================================================
+
+    defs.insert(ModuleType::SmallReactor, ModuleDef {
+        name: "Small Reactor",
+        description: "Workhorse fission cell. Won't win any power awards, but it'll keep the lights on when everything else is failing.",
+        category: ModuleCategory::Power,
+        size: IVec2::new(1, 1),
+        health: 80.0,
+        power_generation: 300.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.8, 0.4, 0.1),
+        companion: CompanionData::Reactor { output: 300.0, max_heat: 200.0, explosion_risk: true },
+        customizable: true,
+        cost: 100,
+        base_stats: CalculatedStats {
+            reactor: Some(ReactorStats {
+                power_output: 60.0,
+                heat_generation: 80.0,
+                explosion_risk: 0.1,
+            }),
+            ..Default::default()
+        },
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::StandardReactor, ModuleDef {
+        name: "Standard Reactor",
+        description: "The backbone of most submarine power grids. Solid output, manageable heat. Staff it for peak performance.",
+        category: ModuleCategory::Power,
+        size: IVec2::new(1, 1),
+        health: 100.0,
+        power_generation: 500.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.9, 0.5, 0.1),
+        companion: CompanionData::Reactor { output: 500.0, max_heat: 200.0, explosion_risk: true },
+        customizable: false,
+        cost: 180,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::LargeReactor, ModuleDef {
+        name: "Large Reactor",
+        description: "Heavy-duty reactor that drinks fuel and radiates heat, but powers a full weapons loadout without breaking a sweat.",
+        category: ModuleCategory::Power,
+        size: IVec2::new(2, 1),
+        health: 150.0,
+        power_generation: 200.0,
+        power_consumption: 0.0,
+        color: Color::rgb(1.0, 0.5, 0.0),
+        companion: CompanionData::Reactor { output: 200.0, max_heat: 150.0, explosion_risk: true },
+        customizable: false,
+        cost: 500,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::BatteryBank, ModuleDef {
+        name: "Battery Bank",
+        description: "Chemical battery array. Zero heat, zero noise, zero glory — but it keeps systems alive when reactors go down.",
+        category: ModuleCategory::Power,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 30.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.7, 0.6, 0.1),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 60,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::RTG, ModuleDef {
+        name: "RTG",
+        description: "Radioisotope thermoelectric generator. Low but eternal output.",
+        category: ModuleCategory::Power,
+        size: IVec2::new(1, 1),
+        health: 120.0,
+        power_generation: 40.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.6, 0.8, 0.2),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 250,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // ========================================================================
+    // PROPULSION (5)
+    // ========================================================================
+
+    defs.insert(ModuleType::SmallEngine, ModuleDef {
+        name: "Small Engine",
+        description: "Entry-level drive. Gets you moving, but don't expect to outrun anything with teeth.",
+        category: ModuleCategory::Propulsion,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 20.0,
+        color: Color::rgb(0.5, 0.5, 0.5),
+        companion: CompanionData::Engine { thrust: 250.0, noise_level: 20.0 },
+        customizable: true,
+        cost: 50,
+        base_stats: CalculatedStats {
+            engine: Some(EngineStats {
+                thrust: 50.0,
+                fuel_efficiency: 1.0,
+                noise: 10.0,
+            }),
+            ..Default::default()
+        },
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::StandardEngine, ModuleDef {
+        name: "Standard Engine",
+        description: "Reliable mid-range drive. Enough thrust to dodge most threats, quiet enough to not attract them.",
+        category: ModuleCategory::Propulsion,
+        size: IVec2::new(1, 1),
+        health: 100.0,
+        power_generation: 0.0,
+        power_consumption: 30.0,
+        color: Color::rgb(0.6, 0.6, 0.6),
+        companion: CompanionData::Engine { thrust: 400.0, noise_level: 30.0 },
+        customizable: false,
+        cost: 100,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::LargeEngine, ModuleDef {
+        name: "Large Engine",
+        description: "Twin-turbine powerhouse. Makes everything around it vibrate, but nothing in the deep can catch you at full burn.",
+        category: ModuleCategory::Propulsion,
+        size: IVec2::new(2, 1),
+        health: 150.0,
+        power_generation: 0.0,
+        power_consumption: 50.0,
+        color: Color::rgb(0.7, 0.7, 0.7),
+        companion: CompanionData::Engine { thrust: 180.0, noise_level: 50.0 },
+        customizable: false,
+        cost: 300,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::SilentDrive, ModuleDef {
+        name: "Silent Drive",
+        description: "Magneto-hydrodynamic drive with no moving parts. Almost silent — creatures won't hear you coming.",
+        category: ModuleCategory::Propulsion,
+        size: IVec2::new(1, 1),
+        health: 80.0,
+        power_generation: 0.0,
+        power_consumption: 40.0,
+        color: Color::rgb(0.3, 0.3, 0.4),
+        companion: CompanionData::Engine { thrust: 80.0, noise_level: 5.0 },
+        customizable: false,
+        cost: 200,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::ManeuveringThruster, ModuleDef {
+        name: "Maneuvering Thruster",
+        description: "Attitude jet for fine adjustments. Doesn't push hard, but lets you thread the needle between rock formations.",
+        category: ModuleCategory::Propulsion,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 15.0,
+        color: Color::rgb(0.4, 0.4, 0.5),
+        companion: CompanionData::Engine { thrust: 40.0, noise_level: 10.0 },
+        customizable: false,
+        cost: 40,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // ========================================================================
+    // LIFE SUPPORT (3)
+    // ========================================================================
+
+    defs.insert(ModuleType::OxygenScrubber, ModuleDef {
+        name: "O2 Scrubber",
+        description: "Electrolyzes seawater into breathable O2. The hum is annoying, but the alternative is suffocation.",
+        category: ModuleCategory::LifeSupport,
+        size: IVec2::new(1, 1),
+        health: 80.0,
+        power_generation: 0.0,
+        power_consumption: 15.0,
+        color: Color::rgb(0.2, 0.6, 0.8),
+        companion: CompanionData::OxygenScrubber { output: 30.0 },
+        customizable: true,
+        cost: 60,
+        base_stats: CalculatedStats {
+            life_support: Some(LifeSupportStats {
+                o2_generation: 10.0,
+                co2_filtering: 8.0,
+                crew_capacity: 5,
+            }),
+            ..Default::default()
+        },
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::CO2Scrubber, ModuleDef {
+        name: "CO2 Scrubber",
+        description: "Lithium hydroxide scrubber. Pulls CO2 out before it puts your crew to sleep permanently.",
+        category: ModuleCategory::LifeSupport,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 10.0,
+        color: Color::rgb(0.3, 0.5, 0.7),
+        companion: CompanionData::LifeSupport { o2_gen: 0.0, co2_filter: 30.0 },
+        customizable: false,
+        cost: 50,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::WaterRecycler, ModuleDef {
+        name: "Water Recycler",
+        description: "Closed-loop water purification. Don't ask where the input comes from. Just drink it.",
+        category: ModuleCategory::LifeSupport,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 10.0,
+        color: Color::rgb(0.2, 0.4, 0.7),
+        companion: CompanionData::LifeSupport { o2_gen: 0.0, co2_filter: 0.0 },
+        customizable: false,
+        cost: 50,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // ========================================================================
+    // CONTROL (2)
+    // ========================================================================
+
+    defs.insert(ModuleType::NavigationConsole, ModuleDef {
+        name: "Navigation Console",
+        description: "Holographic chart table with dead-reckoning computer. Shows you where you are — and where you shouldn't go.",
+        category: ModuleCategory::Control,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 10.0,
+        color: Color::rgb(0.5, 0.3, 0.6),
+        companion: CompanionData::Navigation { map_range: 500.0 },
+        customizable: false,
+        cost: 80,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::HelmStation, ModuleDef {
+        name: "Helm Station",
+        description: "Where the driver sits. A staffed helm means tighter turns and faster response when something lunges at you.",
+        category: ModuleCategory::Control,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.4, 0.3, 0.5),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 60,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    // ========================================================================
+    // WEAPONS (6)
+    // ========================================================================
+
+    defs.insert(ModuleType::TorpedoTube, ModuleDef {
+        name: "Torpedo Tube",
+        description: "Bread-and-butter forward armament. Reliable, ammo-hungry, and satisfying when it connects.",
+        category: ModuleCategory::Weapons,
+        size: IVec2::new(1, 1),
+        health: 80.0,
+        power_generation: 0.0,
+        power_consumption: 25.0,
+        color: Color::rgb(0.7, 0.2, 0.2),
+        companion: CompanionData::Weapon {
+            damage: 30.0, range: 400.0, fire_rate: 0.5, ammo: 20,
+            mount_type: MountType::Fixed, ammo_type: AmmoType::Torpedo,
+        },
+        customizable: true,
+        cost: 120,
+        base_stats: CalculatedStats {
+            weapon: Some(WeaponStats {
+                damage: 30.0,
+                range: 400.0,
+                fire_rate: 0.5,
+                max_ammo: 20,
+                power_cost: 25.0,
+            }),
+            ..Default::default()
+        },
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::HeavyTorpedoTube, ModuleDef {
+        name: "Heavy Torpedo Tube",
+        description: "The big guns. Each torpedo packs enough punch to crack a leviathan's skull, but you only get 10.",
+        category: ModuleCategory::Weapons,
+        size: IVec2::new(2, 1),
+        health: 120.0,
+        power_generation: 0.0,
+        power_consumption: 35.0,
+        color: Color::rgb(0.8, 0.15, 0.15),
+        companion: CompanionData::Weapon {
+            damage: 80.0, range: 500.0, fire_rate: 0.3, ammo: 10,
+            mount_type: MountType::Fixed, ammo_type: AmmoType::Torpedo,
+        },
+        customizable: false,
+        cost: 350,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::PointDefense, ModuleDef {
+        name: "Point Defense",
+        description: "Auto-tracking turret that shreds anything small and fast. Your last line of defense against swarms.",
+        category: ModuleCategory::Weapons,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 20.0,
+        color: Color::rgb(0.6, 0.3, 0.3),
+        companion: CompanionData::Weapon {
+            damage: 10.0, range: 200.0, fire_rate: 3.0, ammo: 200,
+            mount_type: MountType::Turret, ammo_type: AmmoType::Bullet,
+        },
+        customizable: false,
+        cost: 100,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::ElectricDischarger, ModuleDef {
+        name: "Electric Discharger",
+        description: "Tesla coil on steroids. Arcs lightning through seawater — no ammo, just raw power and screaming capacitors.",
+        category: ModuleCategory::Weapons,
+        size: IVec2::new(1, 1),
+        health: 70.0,
+        power_generation: 0.0,
+        power_consumption: 30.0,
+        color: Color::rgb(0.3, 0.3, 0.8),
+        companion: CompanionData::Weapon {
+            damage: 25.0, range: 150.0, fire_rate: 0.8, ammo: 999,
+            mount_type: MountType::Broadside, ammo_type: AmmoType::Charge,
+        },
+        customizable: false,
+        cost: 150,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::SonicPulse, ModuleDef {
+        name: "Sonic Pulse",
+        description: "Weaponized sonar burst. Stuns everything in a wide radius — including your own crew's eardrums if they're close.",
+        category: ModuleCategory::Weapons,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 25.0,
+        color: Color::rgb(0.5, 0.2, 0.6),
+        companion: CompanionData::Weapon {
+            damage: 15.0, range: 250.0, fire_rate: 0.5, ammo: 999,
+            mount_type: MountType::Broadside, ammo_type: AmmoType::Charge,
+        },
+        customizable: false,
+        cost: 130,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::MineLayer, ModuleDef {
+        name: "Mine Layer",
+        description: "Drops pressure-triggered mines in your wake. Perfect for ambushes, terrible if you forget where you put them.",
+        category: ModuleCategory::Weapons,
+        size: IVec2::new(1, 1),
+        health: 70.0,
+        power_generation: 0.0,
+        power_consumption: 15.0,
+        color: Color::rgb(0.6, 0.2, 0.1),
+        companion: CompanionData::Weapon {
+            damage: 50.0, range: 100.0, fire_rate: 0.2, ammo: 10,
+            mount_type: MountType::Fixed, ammo_type: AmmoType::Mine,
+        },
+        customizable: false,
+        cost: 110,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    // ========================================================================
+    // DETECTION (4)
+    // ========================================================================
+
+    defs.insert(ModuleType::SonarArray, ModuleDef {
+        name: "Sonar Array",
+        description: "Ping and pray. Reveals everything nearby, but everything nearby now knows exactly where you are.",
+        category: ModuleCategory::Detection,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 20.0,
+        color: Color::rgb(0.2, 0.5, 0.5),
+        companion: CompanionData::Sonar { range: 500.0, noise_on_ping: 80.0 },
+        customizable: false,
+        cost: 80,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::AdvancedSonar, ModuleDef {
+        name: "Advanced Sonar",
+        description: "Military-grade phased array. Sees farther, pings quieter. The upgrade you wish you'd bought before the first ambush.",
+        category: ModuleCategory::Detection,
+        size: IVec2::new(1, 1),
+        health: 70.0,
+        power_generation: 0.0,
+        power_consumption: 30.0,
+        color: Color::rgb(0.1, 0.6, 0.6),
+        companion: CompanionData::Sonar { range: 800.0, noise_on_ping: 60.0 },
+        customizable: false,
+        cost: 200,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::PassiveSonar, ModuleDef {
+        name: "Passive Sonar",
+        description: "Sensitive hydrophone array. Hears everything without revealing your position. Patience is a survival strategy.",
+        category: ModuleCategory::Detection,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 10.0,
+        color: Color::rgb(0.2, 0.4, 0.4),
+        companion: CompanionData::PassiveSonar { range: 600.0 },
+        customizable: false,
+        cost: 100,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::DepthScanner, ModuleDef {
+        name: "Depth Scanner",
+        description: "Downward-looking terrain mapper. Reveals the seafloor topology before you accidentally drive into a trench wall.",
+        category: ModuleCategory::Detection,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 15.0,
+        color: Color::rgb(0.3, 0.5, 0.4),
+        companion: CompanionData::Detection { range: 400.0 },
+        customizable: false,
+        cost: 90,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // ========================================================================
+    // STORAGE (5)
+    // ========================================================================
+
+    defs.insert(ModuleType::SmallCargo, ModuleDef {
+        name: "Small Cargo",
+        description: "A steel box bolted to the floor. Holds salvage, samples, and whatever else you drag back from the deep.",
+        category: ModuleCategory::Storage,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.5, 0.4, 0.2),
+        companion: CompanionData::Cargo { capacity: 50.0 },
+        customizable: false,
+        cost: 30,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::LargeCargo, ModuleDef {
+        name: "Large Cargo",
+        description: "Walk-in cargo hold with reinforced shelving. Triple the capacity, double the heartbreak when it floods.",
+        category: ModuleCategory::Storage,
+        size: IVec2::new(2, 1),
+        health: 100.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.6, 0.5, 0.2),
+        companion: CompanionData::Cargo { capacity: 150.0 },
+        customizable: false,
+        cost: 80,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::AmmoBay, ModuleDef {
+        name: "Ammo Bay",
+        description: "Magazine racks for torpedoes, shells, and mines. Keep it away from reactors unless you enjoy fireworks.",
+        category: ModuleCategory::Storage,
+        size: IVec2::new(1, 1),
+        health: 70.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.6, 0.3, 0.2),
+        companion: CompanionData::Cargo { capacity: 100.0 },
+        customizable: false,
+        cost: 50,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::FuelTank, ModuleDef {
+        name: "Fuel Tank",
+        description: "Pressurized fuel bladder. More range means deeper dives — but also more to explode if something bites through.",
+        category: ModuleCategory::Storage,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.5, 0.4, 0.3),
+        companion: CompanionData::Cargo { capacity: 80.0 },
+        customizable: false,
+        cost: 40,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::SpecimenVault, ModuleDef {
+        name: "Specimen Vault",
+        description: "Temperature-regulated containment for biological specimens. The research division pays triple for intact samples.",
+        category: ModuleCategory::Storage,
+        size: IVec2::new(1, 1),
+        health: 80.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.4, 0.5, 0.5),
+        companion: CompanionData::Cargo { capacity: 30.0 },
+        customizable: false,
+        cost: 70,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // ========================================================================
+    // CREW (5)
+    // ========================================================================
+
+    defs.insert(ModuleType::BasicQuarters, ModuleDef {
+        name: "Basic Quarters",
+        description: "Cramped steel bunks and a shared locker. Houses 4, but nobody's thrilled about it.",
+        category: ModuleCategory::Crew,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.3, 0.6, 0.3),
+        companion: CompanionData::Quarters { berths: 4 },
+        customizable: false,
+        cost: 40,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::Barracks, ModuleDef {
+        name: "Barracks",
+        description: "Military-style dormitory with stacked racks. Fits 8 bodies, though personal space is a myth down here.",
+        category: ModuleCategory::Crew,
+        size: IVec2::new(2, 1),
+        health: 100.0,
+        power_generation: 0.0,
+        power_consumption: 10.0,
+        color: Color::rgb(0.35, 0.65, 0.35),
+        companion: CompanionData::Quarters { berths: 8 },
+        customizable: false,
+        cost: 120,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::MedBay, ModuleDef {
+        name: "Med Bay",
+        description: "Surgical suite and recovery ward. Patches up crew injuries at 10 HP/s — staff it or it's just expensive furniture.",
+        category: ModuleCategory::Crew,
+        size: IVec2::new(1, 1),
+        health: 70.0,
+        power_generation: 0.0,
+        power_consumption: 15.0,
+        color: Color::rgb(0.8, 0.8, 0.9),
+        companion: CompanionData::CrewFacility { facility_type: crate::components::FacilityType::MedBay },
+        customizable: false,
+        cost: 100,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::MessHall, ModuleDef {
+        name: "Mess Hall",
+        description: "Hot meals and a place to sit that isn't bolted to a reactor. Boosts morale at +2/s for the whole crew.",
+        category: ModuleCategory::Crew,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.4, 0.7, 0.4),
+        companion: CompanionData::CrewFacility { facility_type: crate::components::FacilityType::MessHall },
+        customizable: false,
+        cost: 60,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::RecRoom, ModuleDef {
+        name: "Rec Room",
+        description: "Cards, books, and a dartboard. Keeps crew morale from dropping below 30 — sanity insurance.",
+        category: ModuleCategory::Crew,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.5, 0.7, 0.3),
+        companion: CompanionData::CrewFacility { facility_type: crate::components::FacilityType::RecRoom },
+        customizable: false,
+        cost: 50,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // ========================================================================
+    // UTILITY (7)
+    // ========================================================================
+
+    defs.insert(ModuleType::RepairBay, ModuleDef {
+        name: "Repair Bay",
+        description: "Robotic arm with welding torch and spare parts bin. Automatically patches damaged modules in its room.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 80.0,
+        power_generation: 0.0,
+        power_consumption: 15.0,
+        color: Color::rgb(0.4, 0.6, 0.4),
+        companion: CompanionData::Repair { rate: 5.0 },
+        customizable: false,
+        cost: 100,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::BallastTank, ModuleDef {
+        name: "Ballast Tank",
+        description: "Flood it to sink, blow it to rise. Essential for depth control — without one you're a very expensive rock.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 80.0,
+        power_generation: 0.0,
+        power_consumption: 10.0,
+        color: Color::rgb(0.2, 0.3, 0.5),
+        companion: CompanionData::Ballast { capacity: 100.0 },
+        customizable: false,
+        cost: 20,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::Floodlight, ModuleDef {
+        name: "Floodlight",
+        description: "Halogen flood array. Lights up the immediate area but acts like a dinner bell for anything hungry.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 40.0,
+        power_generation: 0.0,
+        power_consumption: 10.0,
+        color: Color::rgb(0.9, 0.9, 0.5),
+        companion: CompanionData::Light { range: 200.0, intensity: 1.0, attracts_creatures: true },
+        customizable: false,
+        cost: 30,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::Searchlight, ModuleDef {
+        name: "Searchlight",
+        description: "Narrow-beam spotlight. Cuts through the murk at 400m without painting a target on your hull.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 40.0,
+        power_generation: 0.0,
+        power_consumption: 15.0,
+        color: Color::rgb(0.9, 0.8, 0.4),
+        companion: CompanionData::Light { range: 400.0, intensity: 0.8, attracts_creatures: false },
+        customizable: false,
+        cost: 50,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::AirlockChamber, ModuleDef {
+        name: "Airlock Chamber",
+        description: "Pressurized chamber for suited EVA operations. The crew draws straws for who goes outside.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 80.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.5, 0.5, 0.6),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 60,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::DockingPort, ModuleDef {
+        name: "Docking Port",
+        description: "Universal coupling for stations, wrecks, and allied vessels. Your ticket to resupply and trade.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 70.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.4, 0.4, 0.5),
+        companion: CompanionData::Docking,
+        customizable: false,
+        cost: 80,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::SalvageArm, ModuleDef {
+        name: "Salvage Arm",
+        description: "Articulated claw on a hydraulic boom. Snatches wreckage, samples, and the occasional unlucky fish.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 20.0,
+        color: Color::rgb(0.6, 0.5, 0.3),
+        companion: CompanionData::Salvage { range: 100.0, efficiency: 1.0 },
+        customizable: false,
+        cost: 90,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    // ========================================================================
+    // POWER — NEW (4)
+    // ========================================================================
+
+    defs.insert(ModuleType::FusionReactor, ModuleDef {
+        name: "Fusion Reactor",
+        description: "Deuterium fusion core. 4x the output of a large reactor, but runs dangerously hot. 3x3 endgame power.",
+        category: ModuleCategory::Power,
+        size: IVec2::new(3, 3),
+        health: 250.0,
+        power_generation: 400.0,
+        power_consumption: 0.0,
+        color: Color::rgb(1.0, 0.6, 0.0),
+        companion: CompanionData::Reactor { output: 400.0, max_heat: 200.0, explosion_risk: true },
+        customizable: false,
+        cost: 1200,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::Capacitor, ModuleDef {
+        name: "Capacitor",
+        description: "Banks surplus power for weapon burst fire. Charges when generation exceeds demand.",
+        category: ModuleCategory::Power,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.6, 0.7, 0.2),
+        companion: CompanionData::Capacitor { capacity: 300.0, charge_rate: 50.0 },
+        customizable: false,
+        cost: 150,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::PowerConduit, ModuleDef {
+        name: "Power Conduit",
+        description: "Connects power grid across gaps. Place between reactors and distant systems.",
+        category: ModuleCategory::Power,
+        size: IVec2::new(1, 1),
+        health: 40.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.5, 0.5, 0.2),
+        companion: CompanionData::PowerConduit { throughput: 100.0 },
+        customizable: false,
+        cost: 40,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::SolarCell, ModuleDef {
+        name: "Solar Cell",
+        description: "Photovoltaic panel. Trickle power near the surface, useless at depth.",
+        category: ModuleCategory::Power,
+        size: IVec2::new(1, 1),
+        health: 30.0,
+        power_generation: 15.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.3, 0.5, 0.8),
+        companion: CompanionData::Reactor { output: 15.0, max_heat: 0.0, explosion_risk: false },
+        customizable: false,
+        cost: 30,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // ========================================================================
+    // PROPULSION — NEW (3)
+    // ========================================================================
+
+    defs.insert(ModuleType::JetDrive, ModuleDef {
+        name: "Jet Drive",
+        description: "Water-jet propulsion. Fast but announces your position to everything nearby.",
+        category: ModuleCategory::Propulsion,
+        size: IVec2::new(1, 1),
+        health: 70.0,
+        power_generation: 0.0,
+        power_consumption: 45.0,
+        color: Color::rgb(0.7, 0.5, 0.5),
+        companion: CompanionData::Engine { thrust: 150.0, noise_level: 60.0 },
+        customizable: false,
+        cost: 180,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::EmergencyThruster, ModuleDef {
+        name: "Emergency Thruster",
+        description: "Single-use thruster burst. Maximum escape velocity when something big is chasing you.",
+        category: ModuleCategory::Propulsion,
+        size: IVec2::new(1, 1),
+        health: 40.0,
+        power_generation: 0.0,
+        power_consumption: 60.0,
+        color: Color::rgb(0.8, 0.3, 0.3),
+        companion: CompanionData::Engine { thrust: 200.0, noise_level: 80.0 },
+        customizable: false,
+        cost: 120,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::RudderAssembly, ModuleDef {
+        name: "Rudder Assembly",
+        description: "Hydrodynamic control surface. Near-silent steering for tight maneuvers.",
+        category: ModuleCategory::Propulsion,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.4, 0.4, 0.4),
+        companion: CompanionData::Engine { thrust: 20.0, noise_level: 2.0 },
+        customizable: false,
+        cost: 50,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // ========================================================================
+    // LIFE SUPPORT — NEW (3)
+    // ========================================================================
+
+    defs.insert(ModuleType::AdvancedOxygenator, ModuleDef {
+        name: "Advanced Oxygenator",
+        description: "Industrial-grade electrolyzer. Splits seawater into breathable air for large crews.",
+        category: ModuleCategory::LifeSupport,
+        size: IVec2::new(2, 1),
+        health: 100.0,
+        power_generation: 0.0,
+        power_consumption: 25.0,
+        color: Color::rgb(0.2, 0.7, 0.9),
+        companion: CompanionData::OxygenScrubber { output: 80.0 },
+        customizable: false,
+        cost: 200,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::FireSuppression, ModuleDef {
+        name: "Fire Suppression",
+        description: "Halon suppression system. Automatically smothers fires in adjacent compartments.",
+        category: ModuleCategory::LifeSupport,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 10.0,
+        color: Color::rgb(0.8, 0.2, 0.2),
+        companion: CompanionData::FireSuppression { effectiveness: 2.0 },
+        customizable: false,
+        cost: 80,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::AtmosphereMonitor, ModuleDef {
+        name: "Atmosphere Monitor",
+        description: "Monitors CO2, pressure, and contaminant levels. Warns before conditions turn lethal.",
+        category: ModuleCategory::LifeSupport,
+        size: IVec2::new(1, 1),
+        health: 40.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.3, 0.6, 0.6),
+        companion: CompanionData::LifeSupport { o2_gen: 0.0, co2_filter: 10.0 },
+        customizable: false,
+        cost: 40,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // ========================================================================
+    // WEAPONS — NEW (5)
+    // ========================================================================
+
+    defs.insert(ModuleType::RailGun, ModuleDef {
+        name: "Rail Gun",
+        description: "Electromagnetic accelerator. Punches through anything, but takes 7 seconds to cycle. Requires capacitor bank.",
+        category: ModuleCategory::Weapons,
+        size: IVec2::new(2, 1),
+        health: 100.0,
+        power_generation: 0.0,
+        power_consumption: 80.0,
+        color: Color::rgb(0.5, 0.2, 0.5),
+        companion: CompanionData::Weapon {
+            damage: 120.0, range: 600.0, fire_rate: 0.15, ammo: 8,
+            mount_type: MountType::Fixed, ammo_type: AmmoType::Torpedo,
+        },
+        customizable: false,
+        cost: 500,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::FlakCannon, ModuleDef {
+        name: "Flak Cannon",
+        description: "360-degree turret. Shreds parasite swarms and small creatures. Burns through ammo fast.",
+        category: ModuleCategory::Weapons,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 20.0,
+        color: Color::rgb(0.6, 0.4, 0.2),
+        companion: CompanionData::Weapon {
+            damage: 8.0, range: 250.0, fire_rate: 5.0, ammo: 500,
+            mount_type: MountType::Turret, ammo_type: AmmoType::Bullet,
+        },
+        customizable: false,
+        cost: 150,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::NetLauncher, ModuleDef {
+        name: "Net Launcher",
+        description: "Fires weighted nets. Entangled creatures slow to a crawl. Non-lethal capture option.",
+        category: ModuleCategory::Weapons,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 15.0,
+        color: Color::rgb(0.3, 0.5, 0.3),
+        companion: CompanionData::Weapon {
+            damage: 5.0, range: 200.0, fire_rate: 0.3, ammo: 15,
+            mount_type: MountType::Fixed, ammo_type: AmmoType::Mine,
+        },
+        customizable: false,
+        cost: 90,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::AcidSprayer, ModuleDef {
+        name: "Acid Sprayer",
+        description: "Sprays corrosive compound at close range. Eats through chitin and armor alike.",
+        category: ModuleCategory::Weapons,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 25.0,
+        color: Color::rgb(0.4, 0.7, 0.1),
+        companion: CompanionData::Weapon {
+            damage: 20.0, range: 120.0, fire_rate: 1.0, ammo: 30,
+            mount_type: MountType::Broadside, ammo_type: AmmoType::Charge,
+        },
+        customizable: false,
+        cost: 130,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::EMPEmitter, ModuleDef {
+        name: "EMP Emitter",
+        description: "Electromagnetic pulse weapon. Disrupts nervous systems and electronics. Limited charges.",
+        category: ModuleCategory::Weapons,
+        size: IVec2::new(1, 1),
+        health: 70.0,
+        power_generation: 0.0,
+        power_consumption: 40.0,
+        color: Color::rgb(0.2, 0.3, 0.7),
+        companion: CompanionData::Weapon {
+            damage: 15.0, range: 300.0, fire_rate: 0.2, ammo: 5,
+            mount_type: MountType::Broadside, ammo_type: AmmoType::Charge,
+        },
+        customizable: false,
+        cost: 200,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    // ========================================================================
+    // DETECTION — NEW (3)
+    // ========================================================================
+
+    defs.insert(ModuleType::HydrophoneArray, ModuleDef {
+        name: "Hydrophone Array",
+        description: "Towed hydrophone array. Listens for distant movement without revealing your position.",
+        category: ModuleCategory::Detection,
+        size: IVec2::new(2, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 15.0,
+        color: Color::rgb(0.2, 0.5, 0.6),
+        companion: CompanionData::PassiveSonar { range: 900.0 },
+        customizable: false,
+        cost: 250,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::ThermalImager, ModuleDef {
+        name: "Thermal Imager",
+        description: "Infrared sensor. Spots warm-blooded creatures and thermal vents through darkness.",
+        category: ModuleCategory::Detection,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 20.0,
+        color: Color::rgb(0.7, 0.3, 0.2),
+        companion: CompanionData::Detection { range: 300.0 },
+        customizable: false,
+        cost: 120,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::ProximityAlarm, ModuleDef {
+        name: "Proximity Alarm",
+        description: "Trip-wire sensor. Screams a warning when anything gets within arm's reach.",
+        category: ModuleCategory::Detection,
+        size: IVec2::new(1, 1),
+        health: 30.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.8, 0.6, 0.2),
+        companion: CompanionData::Detection { range: 150.0 },
+        customizable: false,
+        cost: 35,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // ========================================================================
+    // STORAGE — NEW (2)
+    // ========================================================================
+
+    defs.insert(ModuleType::ReinforcedVault, ModuleDef {
+        name: "Reinforced Vault",
+        description: "Armored compartment. Survives explosions that destroy everything else around it.",
+        category: ModuleCategory::Storage,
+        size: IVec2::new(1, 1),
+        health: 150.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.5, 0.5, 0.4),
+        companion: CompanionData::Cargo { capacity: 40.0 },
+        customizable: false,
+        cost: 100,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::CryoStorage, ModuleDef {
+        name: "Cryo Storage",
+        description: "Sub-zero storage. Keeps biological specimens viable for research on the surface.",
+        category: ModuleCategory::Storage,
+        size: IVec2::new(1, 1),
+        health: 70.0,
+        power_generation: 0.0,
+        power_consumption: 15.0,
+        color: Color::rgb(0.3, 0.6, 0.8),
+        companion: CompanionData::Cargo { capacity: 25.0 },
+        customizable: false,
+        cost: 80,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // ========================================================================
+    // CREW — NEW (3)
+    // ========================================================================
+
+    defs.insert(ModuleType::OfficerQuarters, ModuleDef {
+        name: "Officer Quarters",
+        description: "Private cabin with desk and washbasin. Officers sleep better and complain less.",
+        category: ModuleCategory::Crew,
+        size: IVec2::new(1, 1),
+        health: 70.0,
+        power_generation: 0.0,
+        power_consumption: 8.0,
+        color: Color::rgb(0.4, 0.6, 0.5),
+        companion: CompanionData::Quarters { berths: 2 },
+        customizable: false,
+        cost: 90,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::TrainingRoom, ModuleDef {
+        name: "Training Room",
+        description: "Simulator and workshop. Crew train here between shifts, slowly improving at their station.",
+        category: ModuleCategory::Crew,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 10.0,
+        color: Color::rgb(0.5, 0.5, 0.7),
+        companion: CompanionData::CrewFacility { facility_type: crate::components::FacilityType::TrainingRoom },
+        customizable: false,
+        cost: 110,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::Brig, ModuleDef {
+        name: "Brig",
+        description: "Reinforced holding cell. Keeps mutinous crew contained. Morale penalty for occupants.",
+        category: ModuleCategory::Crew,
+        size: IVec2::new(1, 1),
+        health: 100.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.4, 0.4, 0.4),
+        companion: CompanionData::Quarters { berths: 1 },
+        customizable: false,
+        cost: 60,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // ========================================================================
+    // UTILITY — NEW (6)
+    // ========================================================================
+
+    defs.insert(ModuleType::AdvancedRepairBay, ModuleDef {
+        name: "Advanced Repair Bay",
+        description: "Full machine shop with welding rigs. Repairs modules and hull at double speed.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(2, 1),
+        health: 120.0,
+        power_generation: 0.0,
+        power_consumption: 25.0,
+        color: Color::rgb(0.4, 0.7, 0.5),
+        companion: CompanionData::Repair { rate: 12.0 },
+        customizable: false,
+        cost: 250,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::DroneBay, ModuleDef {
+        name: "Drone Bay",
+        description: "Launches autonomous repair drones that patch nearby damaged modules while you focus on driving.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(2, 1),
+        health: 80.0,
+        power_generation: 0.0,
+        power_consumption: 30.0,
+        color: Color::rgb(0.5, 0.6, 0.7),
+        companion: CompanionData::DroneBay { drone_count: 3, drone_range: 200.0 },
+        customizable: false,
+        cost: 300,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    defs.insert(ModuleType::DeepFloodlight, ModuleDef {
+        name: "Deep Floodlight",
+        description: "High-intensity deep-rated lamp. Pierces the abyssal dark, but draws attention.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 15.0,
+        color: Color::rgb(1.0, 1.0, 0.6),
+        companion: CompanionData::Light { range: 350.0, intensity: 1.5, attracts_creatures: true },
+        customizable: false,
+        cost: 60,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::StealthCoating, ModuleDef {
+        name: "Stealth Coating",
+        description: "Sound-dampening hull tiles. Reduces noise emission from adjacent modules.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 40.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.2, 0.2, 0.3),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 150,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::HullPatch, ModuleDef {
+        name: "Hull Patch",
+        description: "Self-sealing resin patch. Slowly mends minor hull damage without power or crew.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 40.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.5, 0.5, 0.3),
+        companion: CompanionData::Repair { rate: 1.0 },
+        customizable: false,
+        cost: 20,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::SignalBuoy, ModuleDef {
+        name: "Signal Buoy",
+        description: "Deployable transponder. Marks points of interest on your navigation map.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 30.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.7, 0.7, 0.2),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 25,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // ========================================================================
+    // STRUCTURAL (8) — NEW CATEGORY
+    // ========================================================================
+
+    defs.insert(ModuleType::HullBeam, ModuleDef {
+        name: "Hull Beam",
+        description: "Load-bearing I-beam. Cheap, tough, fills structural gaps in your hull layout.",
+        category: ModuleCategory::Structural,
+        size: IVec2::new(1, 1),
+        health: 120.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.6, 0.6, 0.6),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 20,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::HullCorner, ModuleDef {
+        name: "Hull Corner",
+        description: "Angled brace for hull corners. Prevents stress fractures where plates meet at sharp angles.",
+        category: ModuleCategory::Structural,
+        size: IVec2::new(1, 1),
+        health: 100.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.55, 0.55, 0.6),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 15,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::Bulkhead, ModuleDef {
+        name: "Bulkhead",
+        description: "Watertight pressure wall. Seals rooms from each other — when one floods, the rest survive.",
+        category: ModuleCategory::Structural,
+        size: IVec2::new(1, 1),
+        health: 150.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.5, 0.5, 0.55),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 30,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::PressureFrame, ModuleDef {
+        name: "Pressure Frame",
+        description: "Titanium ribcage for your hull. Boosts depth rating of nearby segments by 100m. Worth every cell.",
+        category: ModuleCategory::Structural,
+        size: IVec2::new(1, 1),
+        health: 200.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.4, 0.45, 0.5),
+        companion: CompanionData::PressureReinforcement { depth_bonus: 100.0 },
+        customizable: false,
+        cost: 200,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::FloodValve, ModuleDef {
+        name: "Flood Valve",
+        description: "Motorized gate valve. Slam it shut to isolate a flooding compartment, or open it to equalize pressure.",
+        category: ModuleCategory::Structural,
+        size: IVec2::new(1, 1),
+        health: 80.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.3, 0.4, 0.6),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 50,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::AccessHatch, ModuleDef {
+        name: "Access Hatch",
+        description: "Pressure-sealed doorway. Lets crew move between compartments without compromising hull integrity.",
+        category: ModuleCategory::Structural,
+        size: IVec2::new(1, 1),
+        health: 70.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.5, 0.55, 0.5),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 25,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::ViewPort, ModuleDef {
+        name: "View Port",
+        description: "Reinforced glass porthole. Fragile, but your crew will lose their minds without one. Morale matters.",
+        category: ModuleCategory::Structural,
+        size: IVec2::new(1, 1),
+        health: 40.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.5, 0.7, 0.8),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 35,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::ArmorPlate, ModuleDef {
+        name: "Armor Plate",
+        description: "Solid plate of hardened steel. Absorbs hits that would shred anything else. Pure defense.",
+        category: ModuleCategory::Structural,
+        size: IVec2::new(1, 1),
+        health: 200.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.35, 0.35, 0.4),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 80,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // ========================================================================
+    // NEW BLOCKS — Heat, Propulsion, Life Support, Detection, Weapons, Crew
+    // ========================================================================
+
+    defs.insert(ModuleType::CoolingPump, ModuleDef {
+        name: "Cooling Pump",
+        description: "Active cooling system. Draws heat from adjacent blocks and dissipates it. Essential near reactors.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 70.0,
+        power_generation: 0.0,
+        power_consumption: 20.0,
+        color: Color::rgb(0.3, 0.6, 0.8),
+        companion: CompanionData::CoolingPump { cooling_rate: 80.0 },
+        customizable: false,
+        cost: 120,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::HeatVent, ModuleDef {
+        name: "Heat Vent",
+        description: "Passive radiator. Dissipates heat to the surrounding water. More effective at depth.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.7, 0.4, 0.3),
+        companion: CompanionData::HeatVent { dissipation_rate: 40.0 },
+        customizable: false,
+        cost: 60,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::Transformer, ModuleDef {
+        name: "Transformer",
+        description: "Voltage step-down unit. Reduces power loss over distance in the power network.",
+        category: ModuleCategory::Power,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.5, 0.5, 0.2),
+        companion: CompanionData::Transformer { efficiency: 0.9 },
+        customizable: false,
+        cost: 100,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::VectorThruster, ModuleDef {
+        name: "Vector Thruster",
+        description: "Omnidirectional thrust unit. Improves maneuverability at the cost of high power draw.",
+        category: ModuleCategory::Propulsion,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 30.0,
+        color: Color::rgb(0.4, 0.6, 0.3),
+        companion: CompanionData::Engine { thrust: 80.0, noise_level: 25.0 },
+        customizable: false,
+        cost: 180,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::TrimTank, ModuleDef {
+        name: "Trim Tank",
+        description: "Fine buoyancy control. Smaller than a full ballast tank but allows precise depth adjustments.",
+        category: ModuleCategory::Propulsion,
+        size: IVec2::new(1, 1),
+        health: 80.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.3, 0.5, 0.6),
+        companion: CompanionData::Ballast { capacity: 50.0 },
+        customizable: false,
+        cost: 80,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::OxygenTank, ModuleDef {
+        name: "Oxygen Tank",
+        description: "Pressurized O2 reserve. Fills when scrubbers produce surplus, drains to prevent suffocation.",
+        category: ModuleCategory::LifeSupport,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.4, 0.7, 0.9),
+        companion: CompanionData::OxygenTank { capacity: 200.0 },
+        customizable: false,
+        cost: 90,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::AirCirculator, ModuleDef {
+        name: "Air Circulator",
+        description: "Distributes breathable air between rooms. Improves CO2 filtering efficiency.",
+        category: ModuleCategory::LifeSupport,
+        size: IVec2::new(1, 1),
+        health: 40.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.5, 0.7, 0.6),
+        companion: CompanionData::LifeSupport { o2_gen: 0.0, co2_filter: 15.0 },
+        customizable: false,
+        cost: 60,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::CreatureScanner, ModuleDef {
+        name: "Creature Scanner",
+        description: "Bio-signature detector. Identifies creature types at extended range. Essential for deep dives.",
+        category: ModuleCategory::Detection,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 15.0,
+        color: Color::rgb(0.6, 0.3, 0.5),
+        companion: CompanionData::Detection { range: 400.0 },
+        customizable: false,
+        cost: 200,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::MineralScanner, ModuleDef {
+        name: "Mineral Scanner",
+        description: "Ground-penetrating sonar. Detects mineral deposits and salvageable materials.",
+        category: ModuleCategory::Detection,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 15.0,
+        color: Color::rgb(0.5, 0.5, 0.3),
+        companion: CompanionData::Detection { range: 300.0 },
+        customizable: false,
+        cost: 200,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::TorpedoLoader, ModuleDef {
+        name: "Torpedo Loader",
+        description: "Auto-loading mechanism. +30% fire rate to adjacent torpedo tubes. Stack for faster volleys.",
+        category: ModuleCategory::Weapons,
+        size: IVec2::new(1, 1),
+        health: 80.0,
+        power_generation: 0.0,
+        power_consumption: 10.0,
+        color: Color::rgb(0.5, 0.3, 0.3),
+        companion: CompanionData::TorpedoLoader { reload_bonus: 0.3 },
+        customizable: false,
+        cost: 150,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::EngineeringStation, ModuleDef {
+        name: "Engineering Station",
+        description: "Crew-operated workbench. Boosts repair rate of nearby modules by 25% when staffed.",
+        category: ModuleCategory::Crew,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 10.0,
+        color: Color::rgb(0.5, 0.4, 0.3),
+        companion: CompanionData::CrewFacility { facility_type: crate::components::FacilityType::EngineeringStation },
+        customizable: false,
+        cost: 120,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    // ========================================================================
+    // Phase B: 17 new modules
+    // ========================================================================
+
+    // --- Logistics ---
+    defs.insert(ModuleType::ConveyorTube, ModuleDef {
+        name: "Conveyor Tube",
+        description: "Moves ammo and resources between adjacent modules automatically.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 40.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.6, 0.6, 0.5),
+        companion: CompanionData::ConveyorTube { speed: 1.0 },
+        customizable: false,
+        cost: 40,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::MaintenanceLocker, ModuleDef {
+        name: "Maintenance Locker",
+        description: "Stores tools. +15% repair speed to adjacent modules.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.5, 0.45, 0.35),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 30,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::FuelProcessor, ModuleDef {
+        name: "Fuel Processor",
+        description: "Refines fuel, reducing fuel consumption of adjacent engines by 20%.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 70.0,
+        power_generation: 0.0,
+        power_consumption: 15.0,
+        color: Color::rgb(0.5, 0.4, 0.3),
+        companion: CompanionData::FuelProcessor { efficiency: 1.2 },
+        customizable: false,
+        cost: 80,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // --- Damage Infrastructure ---
+    defs.insert(ModuleType::WaterPump, ModuleDef {
+        name: "Water Pump",
+        description: "Automated bilge pump. Drains flooded rooms without crew.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 15.0,
+        color: Color::rgb(0.3, 0.5, 0.7),
+        companion: CompanionData::WaterPump { pump_rate: 0.15 },
+        customizable: false,
+        cost: 60,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::EmergencyBulkhead, ModuleDef {
+        name: "Emergency Bulkhead",
+        description: "Auto-seals when adjacent room floods. Blocks fire and water spread.",
+        category: ModuleCategory::Structural,
+        size: IVec2::new(1, 1),
+        health: 100.0,
+        power_generation: 0.0,
+        power_consumption: 10.0,
+        color: Color::rgb(0.7, 0.3, 0.3),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 80,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::FirebreakWall, ModuleDef {
+        name: "Firebreak Wall",
+        description: "Blocks fire spread unconditionally. No seal needed.",
+        category: ModuleCategory::Structural,
+        size: IVec2::new(1, 1),
+        health: 120.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.8, 0.4, 0.2),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 50,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::PressureSensor, ModuleDef {
+        name: "Pressure Sensor",
+        description: "Detects hull breaches early, triggers warnings.",
+        category: ModuleCategory::Detection,
+        size: IVec2::new(1, 1),
+        health: 30.0,
+        power_generation: 0.0,
+        power_consumption: 5.0,
+        color: Color::rgb(0.4, 0.6, 0.5),
+        companion: CompanionData::Detection { range: 100.0 },
+        customizable: false,
+        cost: 35,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // --- Navigation & Control ---
+    defs.insert(ModuleType::TargetingComputer, ModuleDef {
+        name: "Targeting Computer",
+        description: "+15% weapon accuracy for all weapons.",
+        category: ModuleCategory::Control,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 20.0,
+        color: Color::rgb(0.4, 0.5, 0.6),
+        companion: CompanionData::TargetingComputer { accuracy_bonus: 0.15 },
+        customizable: false,
+        cost: 100,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::AutopilotCore, ModuleDef {
+        name: "Autopilot Core",
+        description: "Enables depth-hold autopilot when active.",
+        category: ModuleCategory::Control,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 15.0,
+        color: Color::rgb(0.3, 0.5, 0.6),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 90,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::AICombatCore, ModuleDef {
+        name: "AI Combat Core",
+        description: "Auto-targets highest threat. +20% targeting priority.",
+        category: ModuleCategory::Control,
+        size: IVec2::new(2, 1),
+        health: 80.0,
+        power_generation: 0.0,
+        power_consumption: 30.0,
+        color: Color::rgb(0.4, 0.4, 0.6),
+        companion: CompanionData::AICombatCore { priority_bonus: 0.2 },
+        customizable: false,
+        cost: 150,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    // --- Environmental Interaction ---
+    defs.insert(ModuleType::ThermalVentGenerator, ModuleDef {
+        name: "Thermal Vent Generator",
+        description: "Generates power near thermal vents.",
+        category: ModuleCategory::Power,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 10.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.8, 0.4, 0.2),
+        companion: CompanionData::Reactor { output: 10.0, max_heat: 50.0, explosion_risk: false },
+        customizable: false,
+        cost: 70,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::MineralExtractor, ModuleDef {
+        name: "Mineral Extractor",
+        description: "Harvests minerals from the environment.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 70.0,
+        power_generation: 0.0,
+        power_consumption: 20.0,
+        color: Color::rgb(0.6, 0.5, 0.3),
+        companion: CompanionData::Salvage { range: 100.0, efficiency: 1.5 },
+        customizable: false,
+        cost: 90,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::CreatureContainment, ModuleDef {
+        name: "Creature Containment",
+        description: "Stores captured creatures for study.",
+        category: ModuleCategory::Storage,
+        size: IVec2::new(2, 1),
+        health: 100.0,
+        power_generation: 0.0,
+        power_consumption: 10.0,
+        color: Color::rgb(0.3, 0.6, 0.5),
+        companion: CompanionData::Cargo { capacity: 50.0 },
+        customizable: false,
+        cost: 110,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::ResearchLab, ModuleDef {
+        name: "Research Lab",
+        description: "Generates research points from specimens in adjacent containment.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(2, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 25.0,
+        color: Color::rgb(0.4, 0.5, 0.6),
+        companion: CompanionData::ResearchLab { research_speed: 1.0 },
+        customizable: false,
+        cost: 130,
+        base_stats: CalculatedStats::default(),
+        crew_station: true,
+    });
+
+    // --- Interior Tiles ---
+    defs.insert(ModuleType::Corridor, ModuleDef {
+        name: "Corridor",
+        description: "Basic passageway. Crew moves faster through corridors.",
+        category: ModuleCategory::Structural,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.55, 0.55, 0.55),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 15,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::LadderShaft, ModuleDef {
+        name: "Ladder Shaft",
+        description: "Vertical access between decks.",
+        category: ModuleCategory::Structural,
+        size: IVec2::new(1, 1),
+        health: 40.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.5, 0.5, 0.45),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 20,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::MaintenanceTunnel, ModuleDef {
+        name: "Maintenance Tunnel",
+        description: "Tight access for crew to reach isolated modules.",
+        category: ModuleCategory::Structural,
+        size: IVec2::new(1, 1),
+        health: 30.0,
+        power_generation: 0.0,
+        power_consumption: 0.0,
+        color: Color::rgb(0.45, 0.45, 0.4),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 15,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    ModuleRegistry { defs }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_module_types_registered() {
+        let registry = build_registry();
+
+        // Collect all ModuleType variants via ModuleCategory::module_types()
+        let all_types: Vec<ModuleType> = ModuleCategory::ALL
+            .iter()
+            .flat_map(|cat| cat.module_types().iter().copied())
+            .collect();
+
+        assert!(!all_types.is_empty(), "Should have module types defined");
+
+        for module_type in &all_types {
+            assert!(
+                registry.try_get(*module_type).is_some(),
+                "ModuleType {:?} is not registered in the registry",
+                module_type
+            );
+        }
+    }
+
+    #[test]
+    fn registry_modules_have_valid_stats() {
+        let registry = build_registry();
+
+        for (module_type, def) in &registry.defs {
+            assert!(def.health > 0.0, "{:?} has zero or negative health", module_type);
+            assert!(def.size.x > 0 && def.size.y > 0, "{:?} has invalid size", module_type);
+            assert!(!def.name.is_empty(), "{:?} has empty name", module_type);
+            assert!(def.cost > 0, "{:?} has zero cost", module_type);
+        }
+    }
+
+    #[test]
+    fn try_get_returns_none_for_missing() {
+        // Build a registry and verify try_get works for known types
+        let registry = build_registry();
+        assert!(registry.try_get(ModuleType::SmallReactor).is_some());
+    }
+}

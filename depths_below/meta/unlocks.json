@@ -1,0 +1,15 @@
+{
+  "modules": [
+    "reactor",
+    "engine",
+    "quarters",
+    "oxygen",
+    "ballast",
+    "light"
+  ],
+  "hull_types": [
+    "standard"
+  ],
+  "upgrades": [],
+  "blueprints_found": []
+}
