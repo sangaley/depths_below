@@ -9,16 +9,10 @@ use super::food_chain;
 /// Base display size for corpse sprites (matches creature spawn sizes)
 fn corpse_display_size(creature_type: CreatureType) -> Vec2 {
     match creature_type {
-        CreatureType::Scavenger =>   Vec2::new(84.0, 42.0),
-        CreatureType::Stalker =>     Vec2::new(150.0, 54.0),
-        CreatureType::Ambusher =>    Vec2::new(120.0, 48.0),
-        CreatureType::ElectricEel => Vec2::new(165.0, 30.0),
-        CreatureType::BlindHunter => Vec2::new(165.0, 105.0),
-        CreatureType::LureFish =>    Vec2::new(66.0, 54.0),
-        CreatureType::SwarmQueen =>  Vec2::new(180.0, 150.0),
-        CreatureType::Leviathan =>   Vec2::new(660.0, 180.0),
-        CreatureType::Parasite =>    Vec2::new(36.0, 24.0),
-        CreatureType::Watcher =>     Vec2::new(90.0, 90.0),
+        CreatureType::VoidDrifter =>     Vec2::new(45.0, 22.0),
+        CreatureType::Stalker =>         Vec2::new(150.0, 54.0),
+        CreatureType::Leviathan =>       Vec2::new(660.0, 180.0),
+        CreatureType::ParasiteSwarm =>   Vec2::new(30.0, 20.0),
     }
 }
 

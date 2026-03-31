@@ -85,11 +85,11 @@ pub fn track_salvage_contracts(
 // ============================================================================
 
 fn current_zone(depth: f32) -> ZoneType {
-    if depth < 200.0 { ZoneType::Light }
-    else if depth < 500.0 { ZoneType::Twilight }
-    else if depth < 1000.0 { ZoneType::Dark }
-    else if depth < 2000.0 { ZoneType::Abyss }
-    else { ZoneType::Trench }
+    if depth < 200.0 { ZoneType::NearOrbit }
+    else if depth < 500.0 { ZoneType::AsteroidBelt }
+    else if depth < 1000.0 { ZoneType::DeepSpace }
+    else if depth < 2000.0 { ZoneType::Nebula }
+    else { ZoneType::BlackHole }
 }
 
 pub fn track_survey_contracts(
@@ -149,7 +149,7 @@ pub fn check_contract_completion(
             contract.status = ContractStatus::Completed;
             completed_events.send(ContractCompleted { contract_id: contract.id });
             notifications.send(ShowNotification {
-                message: format!("Contract complete: {}! Return to surface.", contract.title),
+                message: format!("Contract complete: {}! Return to station.", contract.title),
                 notification_type: NotificationType::Success,
                 duration: 5.0,
             });
@@ -158,7 +158,7 @@ pub fn check_contract_completion(
 }
 
 // ============================================================================
-// TURN IN (on entering SurfaceBase)
+// TURN IN (on entering StationDocked)
 // ============================================================================
 
 pub fn turn_in_contracts(

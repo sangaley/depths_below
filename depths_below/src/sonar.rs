@@ -108,7 +108,7 @@ fn spawn_radar_display(commands: &mut Commands) {
     )).with_children(|parent| {
         // Title
         parent.spawn(TextBundle {
-            text: Text::from_section("SONAR", TextStyle {
+            text: Text::from_section("RADAR", TextStyle {
                 font_size: 12.0,
                 color: Color::rgb(0.2, 0.8, 0.2),
                 ..default()
@@ -221,16 +221,17 @@ pub fn update_sonar_radar(
 
             // Blip color based on creature threat
             let blip_color = match creature.creature_type {
-                CreatureType::Leviathan | CreatureType::SwarmQueen => Color::rgb(1.0, 0.2, 0.2),
-                CreatureType::Stalker | CreatureType::BlindHunter => Color::rgb(1.0, 0.6, 0.2),
-                _ => Color::rgb(1.0, 1.0, 0.3),
+                CreatureType::Leviathan => Color::rgb(1.0, 0.2, 0.2),
+                CreatureType::Stalker => Color::rgb(1.0, 0.6, 0.2),
+                CreatureType::ParasiteSwarm => Color::rgb(1.0, 1.0, 0.3),
+                CreatureType::VoidDrifter => Color::rgb(0.5, 0.8, 0.5),
             };
 
             // Blip size based on creature threat
             let blip_size = match creature.creature_type {
                 CreatureType::Leviathan => 8.0,
-                CreatureType::SwarmQueen => 6.0,
-                _ => 4.0,
+                CreatureType::Stalker => 5.0,
+                _ => 3.0,
             };
 
             commands.spawn((
@@ -480,10 +481,9 @@ fn update_depth_visibility(
     sub_state: Res<DepthState>,
     sub_query: Query<&Transform, With<Submarine>>,
     light_query: Query<(&SubmarineLight, &Module)>,
-    mut creature_query: Query<(&Transform, &mut Sprite, Option<&SonarRevealed>), (With<Creature>, Without<Submarine>, Without<PointOfInterest>, Without<WorldDecoration>, Without<AmbientCreature>)>,
-    mut poi_query: Query<(&Transform, &mut Sprite, Option<&SonarRevealed>), (With<PointOfInterest>, Without<Creature>, Without<Submarine>, Without<WorldDecoration>, Without<AmbientCreature>)>,
-    mut deco_query: Query<(&Transform, &mut Sprite), (With<WorldDecoration>, Without<Creature>, Without<PointOfInterest>, Without<Submarine>, Without<AmbientCreature>)>,
-    mut ambient_query: Query<(&Transform, &mut Sprite, &AmbientCreature), (Without<Creature>, Without<PointOfInterest>, Without<Submarine>, Without<WorldDecoration>)>,
+    mut creature_query: Query<(&Transform, &mut Sprite, Option<&SonarRevealed>), (With<Creature>, Without<Submarine>, Without<PointOfInterest>, Without<WorldDecoration>)>,
+    mut poi_query: Query<(&Transform, &mut Sprite, Option<&SonarRevealed>), (With<PointOfInterest>, Without<Creature>, Without<Submarine>, Without<WorldDecoration>)>,
+    mut deco_query: Query<(&Transform, &mut Sprite), (With<WorldDecoration>, Without<Creature>, Without<PointOfInterest>, Without<Submarine>)>,
 ) {
     let Ok(sub_transform) = sub_query.get_single() else { return };
     let sub_pos = sub_transform.translation.truncate();
@@ -545,23 +545,4 @@ fn update_depth_visibility(
         }
     }
 
-    // Apply to ambient life
-    for (transform, mut sprite, ambient) in ambient_query.iter_mut() {
-        let dist = transform.translation.truncate().distance(sub_pos);
-
-        let max_alpha = match ambient.kind {
-            AmbientKind::Jellyfish => 0.35,
-            AmbientKind::GiantSquid => 0.25,
-            AmbientKind::Whale => 0.3,
-            AmbientKind::DeepFish => 0.6,
-            _ => 0.8,
-        };
-
-        if dist > visibility_range {
-            sprite.color.set_a(0.0);
-        } else {
-            let fade = 1.0 - ((dist / visibility_range).powi(2));
-            sprite.color.set_a((fade * max_alpha).clamp(0.0, max_alpha));
-        }
-    }
 }

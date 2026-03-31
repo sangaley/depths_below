@@ -4,86 +4,86 @@ use rand::prelude::*;
 use crate::components::*;
 use crate::sprite_map;
 
-/// Dark & mysterious narrative log entries placed at POIs throughout the world.
+/// Dark & mysterious narrative log entries placed at POIs throughout the void.
 /// Each entry: (title, text, minimum_depth_level)
 const LOG_ENTRIES: &[(&str, &str, i32)] = &[
-    // --- SHALLOW ZONE (depth 0-3) ---
+    // --- NEAR ORBIT (depth 0-3) ---
     ("Expedition Log #1",
-     "Day 3: We've descended past the kelp forests. Sonar shows massive structures below. Not natural formations.",
+     "Day 3: We've pushed past the asteroid fields. Radar shows massive structures ahead. Not natural formations.",
      1),
     ("Recovered Note",
-     "To whoever finds this: the company lied about what's down here. Turn back. The surface world has forgotten this place for good reason.",
+     "To whoever finds this: the company lied about what's out here. Turn back. The station has forgotten this sector for good reason.",
      2),
     ("Ship's Log: CSS Meridian",
-     "Engine failure at 180m. Hull compromised. Three crew missing since last night. Nobody heard them leave.",
+     "Engine failure at sector 180. Hull compromised. Three crew missing since last night. Nobody heard them leave.",
      2),
 
-    // --- TWILIGHT ZONE (depth 3-6) ---
+    // --- ASTEROID BELT (depth 3-6) ---
     ("Expedition Log #2",
      "Day 7: Found wreckage of a previous expedition. Their hull was breached from the INSIDE. What could do that?",
      3),
     ("Research Note: Acoustics",
-     "We've been recording infrasound from below. When played back at normal speed, it sounds like breathing.",
+     "We've been recording infrasound from deeper in the void. When played back at normal speed, it sounds like breathing.",
      4),
     ("Distress Signal (Decoded)",
      "MAYDAY MAYDAY. Something is following us. It matches our speed exactly. It's been three days. It never gets closer, never falls behind.",
      5),
-    ("Research Note: Bioluminescence",
+    ("Research Note: Luminescence",
      "The creatures here don't just glow - they communicate with light. Patterns too complex to be random. Are they... words?",
      5),
 
-    // --- DARK ZONE (depth 6-10) ---
+    // --- DEEP SPACE (depth 6-10) ---
     ("Expedition Log #3",
-     "Day 12: The ruins are older than anything on the surface. Carved stone at 800m depth. Impossible geology. The carvings depict... us. Submarines. How?",
+     "Day 12: The ruins are older than anything at the station. Carved metal at sector 800. Impossible engineering. The carvings depict... us. Ships. How?",
      6),
     ("Personal Journal: Dr. Vasquez",
      "The symbols match nothing in any database. But I dream about them now. In the dreams, I can read them perfectly. I just can't remember what they say when I wake.",
      7),
     ("Engineering Report",
-     "Hull sensors report external contact - something is running along the hull. Like fingers. There's nothing on sonar.",
+     "Hull sensors report external contact - something is running along the hull. Like fingers. There's nothing on radar.",
      8),
     ("Audio Transcript #47",
-     "RESEARCHER: The stone tablet we recovered - it's warm to the touch. CAPTAIN: That's impossible at this temp. RESEARCHER: I know. And it's getting warmer.",
+     "RESEARCHER: The artifact we recovered - it's warm to the touch. CAPTAIN: That's impossible in the void. RESEARCHER: I know. And it's getting warmer.",
      9),
     ("Warning Beacon",
-     "AUTOMATED MESSAGE: Do not proceed past 1000m. Repeat: DO NOT proceed. The watchers are not what they seem.",
+     "AUTOMATED MESSAGE: Do not proceed past sector 1000. Repeat: DO NOT proceed. The watchers are not what they seem.",
      9),
 
-    // --- ABYSS ZONE (depth 10-16) ---
+    // --- NEBULA (depth 10-16) ---
     ("Expedition Log #4",
-     "Day 18: We can hear it now. A low hum from below. The instruments say nothing is there, but we can all hear it. Chen says it's trying to communicate.",
+     "Day 18: We can hear it now. A low hum from deeper in. The instruments say nothing is there, but we can all hear it. Chen says it's trying to communicate.",
      10),
     ("Recovered Black Box",
-     "Last words of the crew of the DSV Orpheus: 'It opened its eyes. Oh god, the whole seafloor opened its eyes.'",
+     "Last words of the crew of the DSV Orpheus: 'It opened its eyes. Oh god, the whole void opened its eyes.'",
      11),
     ("Research Note: Evolution",
      "These creatures didn't evolve to live here. They evolved somewhere else and were... placed here. Like prisoners. Or guards.",
      12),
     ("Fragment: Ancient Text",
-     "Translation (partial): '...and in the deep places we built our prisons, for what slumbers must never dream of the surface world...'",
+     "Translation (partial): '...and in the deep void we built our prisons, for what slumbers must never dream of the worlds above...'",
      13),
     ("Personal Log: Unknown Author",
      "Day ??? The compass doesn't work anymore. Neither does time. My watch says it's been 3 hours. My body says weeks. I can feel the hum in my teeth.",
      14),
     ("Radio Intercept",
-     "Surface control, this is Deep Station Seven. We are NOT alone down here. I don't mean the creatures. Something is watching through them. Request immediate extraction.",
+     "Station control, this is Deep Outpost Seven. We are NOT alone out here. I don't mean the creatures. Something is watching through them. Request immediate extraction.",
      15),
 
-    // --- TRENCH ZONE (depth 16+) ---
+    // --- BLACK HOLE PROXIMITY (depth 16+) ---
     ("Final Transmission",
      "They built this place to contain something. The ruins aren't ruins - they're a cage. And it's waking up.",
      16),
-    ("Carved Stone (Translated)",
-     "WE WHO GUARD THE DEEP PLACES WARN YOU: WHAT SLEEPS BELOW DREAMS OF YOUR WORLD. DO NOT WAKE IT. DO NOT LISTEN TO ITS SONGS.",
+    ("Carved Metal (Translated)",
+     "WE WHO GUARD THE DEEP VOID WARN YOU: WHAT SLEEPS BEYOND DREAMS OF YOUR WORLDS. DO NOT WAKE IT. DO NOT LISTEN TO ITS SONGS.",
      17),
     ("???",
      "The hum has stopped. That's worse. That's so much worse.",
      18),
     ("Final Entry",
-     "We were wrong about everything. The ocean isn't hostile. It's terrified. The water itself is trying to keep us away from what lies beneath.",
+     "We were wrong about everything. The void isn't hostile. It's terrified. Space itself is trying to keep us away from what lies beyond.",
      19),
     ("[UNTITLED]",
-     "You found it. The deepest point. The silence is absolute. The water itself seems alive. You understand now - you were always meant to come here. It was always going to be you.",
+     "You found it. The deepest point. The silence is absolute. The void itself seems alive. You understand now - you were always meant to come here. It was always going to be you.",
      20),
 ];
 
@@ -118,18 +118,18 @@ pub fn generate_chunk(
         return chunk;
     }
 
-    // The seabed is at depth_level 9-10 (roughly 450-500m)
-    // Only those chunks get terrain. Everything above is open water.
-    let seabed_level = 9;
-    let is_seabed_chunk = depth_level >= seabed_level;
+    // The asteroid field floor is at depth_level 9-10 (roughly 450-500 units)
+    // Only those chunks get terrain. Everything above is open void.
+    let terrain_level = 9;
+    let is_terrain_chunk = depth_level >= terrain_level;
 
     // --- Settlements at fixed depth intervals ---
     if depth_level > 0 && depth_level % 4 == 0 && (chunk_pos.x.abs() % 3 == 0) {
         spawn_poi(commands, asset_server, chunk, PoiType::Settlement, depth_level, &mut rng);
     }
 
-    // --- POIs scattered in open water ---
-    if depth_level > 0 && depth_level < seabed_level {
+    // --- POIs scattered in open void ---
+    if depth_level > 0 && depth_level < terrain_level {
         let poi_chance = 0.20 + (depth_level as f32 * 0.02).min(0.2);
         if rng.gen::<f32>() < poi_chance {
             let poi_type = match depth_level {
@@ -152,27 +152,27 @@ pub fn generate_chunk(
         }
     }
 
-    // --- POIs on the seabed ---
-    if is_seabed_chunk {
+    // --- POIs on the terrain ---
+    if is_terrain_chunk {
         if rng.gen::<f32>() < 0.4 {
             let poi_type = if rng.gen::<f32>() < 0.5 { PoiType::Ruins } else { PoiType::ThermalVent };
             spawn_poi(commands, asset_server, chunk, poi_type, depth_level, &mut rng);
         }
     }
 
-    // Only generate terrain on seabed chunks
-    if is_seabed_chunk {
+    // Only generate terrain on deep chunks
+    if is_terrain_chunk {
         spawn_decorations(commands, asset_server, chunk, depth_level, chunk_pos, seed, &mut rng);
     } else if depth_level > 0 {
-        // Open water chunks get floating particles for visual reference
-        spawn_water_particles(commands, chunk, depth_level, &mut rng);
+        // Open void chunks get floating particles for visual reference
+        spawn_void_particles(commands, chunk, depth_level, &mut rng);
     }
 
     chunk
 }
 
-/// Spawns floating particles/debris in open water chunks for visual reference when moving
-fn spawn_water_particles(
+/// Spawns floating particles/debris in open void chunks for visual reference when moving
+fn spawn_void_particles(
     commands: &mut Commands,
     parent: Entity,
     depth_level: i32,
@@ -198,7 +198,7 @@ fn spawn_water_particles(
                 transform: Transform::from_xyz(x, y, -0.1),
                 ..default()
             },
-            WorldDecoration { decoration_type: DecorationType::BioluminescentSpot },
+            WorldDecoration { decoration_type: DecorationType::EnergySpot },
         )).set_parent(parent);
     }
 
@@ -224,7 +224,7 @@ fn spawn_water_particles(
                 },
                 ..default()
             },
-            WorldDecoration { decoration_type: DecorationType::SandMound },
+            WorldDecoration { decoration_type: DecorationType::RockDebris },
         )).set_parent(parent);
     }
 }
@@ -337,33 +337,33 @@ const DECORATION_CONFIGS: &[DecorationConfig] = &[
         width_min: 120.0, width_max: 250.0, height_min: 100.0, height_max: 200.0,
         can_rotate: false,
     },
-    // --- KELP FOREST (tall, swaying seaweed) ---
+    // --- SPORE GROWTH (tall, swaying growths) ---
     DecorationConfig {
-        decoration_type: DecorationType::Algae,
+        decoration_type: DecorationType::SporeGrowth,
         base_count: 6, depth_multiplier: 0.2, min_depth: 0, max_depth: 4,
         color: Color::rgb(0.15, 0.40, 0.12),
         width_min: 12.0, width_max: 25.0, height_min: 80.0, height_max: 180.0,
         can_rotate: false,
     },
-    // --- GIANT KELP (very tall, rare) ---
+    // --- GIANT SPORE STALK (very tall, rare) ---
     DecorationConfig {
-        decoration_type: DecorationType::Algae,
+        decoration_type: DecorationType::SporeGrowth,
         base_count: 2, depth_multiplier: 0.1, min_depth: 0, max_depth: 3,
         color: Color::rgb(0.10, 0.35, 0.08),
         width_min: 20.0, width_max: 40.0, height_min: 200.0, height_max: 350.0,
         can_rotate: false,
     },
-    // --- CORAL CLUSTERS (colorful, on terrain) ---
+    // --- CRYSTAL CLUSTERS (colorful, on terrain) ---
     DecorationConfig {
-        decoration_type: DecorationType::Coral,
+        decoration_type: DecorationType::Crystal,
         base_count: 4, depth_multiplier: 0.2, min_depth: 0, max_depth: 6,
         color: Color::rgb(0.75, 0.35, 0.45),
         width_min: 40.0, width_max: 100.0, height_min: 30.0, height_max: 80.0,
         can_rotate: false,
     },
-    // --- LARGE CORAL REEF (massive, rare) ---
+    // --- LARGE CRYSTAL FORMATION (massive, rare) ---
     DecorationConfig {
-        decoration_type: DecorationType::Coral,
+        decoration_type: DecorationType::Crystal,
         base_count: 1, depth_multiplier: 0.15, min_depth: 1, max_depth: 5,
         color: Color::rgb(0.8, 0.5, 0.3),
         width_min: 130.0, width_max: 220.0, height_min: 80.0, height_max: 150.0,
@@ -371,7 +371,7 @@ const DECORATION_CONFIGS: &[DecorationConfig] = &[
     },
     // --- BIOLUMINESCENT SPOTS (deep zone glow) ---
     DecorationConfig {
-        decoration_type: DecorationType::BioluminescentSpot,
+        decoration_type: DecorationType::EnergySpot,
         base_count: 0, depth_multiplier: 2.0, min_depth: 5, max_depth: 0,
         color: Color::rgb(0.1, 0.8, 0.9),
         width_min: 20.0, width_max: 60.0, height_min: 20.0, height_max: 60.0,
@@ -457,7 +457,7 @@ fn spawn_decorations(
                 transform: Transform::from_xyz(local_x, -256.0 + height, -0.45),
                 ..default()
             },
-            WorldDecoration { decoration_type: DecorationType::SandMound },
+            WorldDecoration { decoration_type: DecorationType::RockDebris },
         )).set_parent(parent);
 
         // Surface highlight - thin lighter strip at the terrain top
@@ -476,7 +476,7 @@ fn spawn_decorations(
                 transform: Transform::from_xyz(local_x, -256.0 + height, -0.44),
                 ..default()
             },
-            WorldDecoration { decoration_type: DecorationType::SandMound },
+            WorldDecoration { decoration_type: DecorationType::RockDebris },
         )).set_parent(parent);
     }
 
@@ -594,10 +594,10 @@ fn spawn_decorations(
 
     // --- Step 6: Vegetation anchored to terrain surface ---
 
-    // Kelp/seaweed (shallow to mid depth)
+    // Spore growths (near orbit to mid distance)
     if depth_level <= 5 {
-        let kelp_count = rng.gen_range(3..8).min(8 - depth_level).max(0);
-        for _ in 0..kelp_count {
+        let spore_count = rng.gen_range(3..8).min(8 - depth_level).max(0);
+        for _ in 0..spore_count {
             let local_x = rng.gen_range(-240.0..240.0_f32);
             let world_x = chunk_world_x + local_x + 256.0;
             let ground_y = -256.0 + terrain_height_at(world_x);
@@ -623,15 +623,15 @@ fn spawn_decorations(
                     },
                     ..default()
                 },
-                WorldDecoration { decoration_type: DecorationType::Algae },
+                WorldDecoration { decoration_type: DecorationType::SporeGrowth },
             )).set_parent(parent);
         }
     }
 
-    // Coral clusters (shallow to mid depth)
+    // Crystal clusters (near orbit to mid distance)
     if depth_level >= 1 && depth_level <= 6 {
-        let coral_count = rng.gen_range(1..4);
-        for _ in 0..coral_count {
+        let crystal_count = rng.gen_range(1..4);
+        for _ in 0..crystal_count {
             let local_x = rng.gen_range(-230.0..230.0_f32);
             let world_x = chunk_world_x + local_x + 256.0;
             let ground_y = -256.0 + terrain_height_at(world_x);
@@ -640,7 +640,7 @@ fn spawn_decorations(
             let w = rng.gen_range(30.0..90.0_f32);
             let h = rng.gen_range(20.0..60.0_f32);
 
-            // Coral colors: pinks, oranges, purples
+            // Crystal colors: pinks, oranges, purples
             let hue = rng.gen_range(0..3);
             let color = match hue {
                 0 => Color::rgb(0.75 + rng.gen_range(-0.1..0.1), 0.30, 0.40),
@@ -659,7 +659,7 @@ fn spawn_decorations(
                     transform: Transform::from_xyz(x, ground_y, -0.22),
                     ..default()
                 },
-                WorldDecoration { decoration_type: DecorationType::Coral },
+                WorldDecoration { decoration_type: DecorationType::Crystal },
             )).set_parent(parent);
         }
     }
@@ -688,7 +688,7 @@ fn spawn_decorations(
                     transform: Transform::from_xyz(x, y, -0.15),
                     ..default()
                 },
-                WorldDecoration { decoration_type: DecorationType::BioluminescentSpot },
+                WorldDecoration { decoration_type: DecorationType::EnergySpot },
             )).set_parent(parent);
         }
     }

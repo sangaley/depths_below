@@ -14,7 +14,7 @@ impl Plugin for CrewPlugin {
             .init_resource::<CrewRoster>()
             .init_resource::<StaffingState>()
             .init_resource::<AutoAssignTimer>()
-            // Staffing / efficiency systems run at both SurfaceBase and Exploring
+            // Staffing / efficiency systems run at both StationDocked and Exploring
             // so the HUD shows correct crew/station counts at the surface.
             .add_systems(
                 Update,
@@ -25,7 +25,7 @@ impl Plugin for CrewPlugin {
                     reconcile_hired_crew,
                 )
                     .run_if(in_state(GameState::Exploring)
-                        .or_else(in_state(GameState::SurfaceBase))
+                        .or_else(in_state(GameState::StationDocked))
                         .or_else(in_state(GameState::Docked))),
             )
             // Gameplay crew systems only run while Exploring
@@ -327,12 +327,12 @@ fn crew_emergency_dispatch(
     mut station_query: Query<(Entity, &mut CrewStation)>,
     mut dispatch_events: EventWriter<CrewDispatched>,
 ) {
-    // Build priority list of emergency rooms: flooding first, then fire
+    // Build priority list of emergency rooms: decompression first, then fire
     let mut emergency_rooms: Vec<(usize, DispatchReason)> = Vec::new();
 
     for room in room_map.rooms.iter() {
-        if room.is_breached && room.water_level > 0.0 {
-            emergency_rooms.push((room.id, DispatchReason::Flooding));
+        if room.is_breached && room.air_level < 1.0 {
+            emergency_rooms.push((room.id, DispatchReason::Decompression));
         }
     }
 
@@ -383,15 +383,15 @@ fn crew_emergency_dispatch(
     }
 }
 
-/// Updates crew AI behavior — now aware of both floods and fires.
+/// Updates crew AI behavior — now aware of both decompression and fires.
 fn update_crew_ai(
     hull_query: Query<(Entity, &HullSegment, &Transform)>,
     fire_query: Query<Entity, With<OnFire>>,
     mut crew_query: Query<&mut CrewMember>,
 ) {
-    let has_flooded = hull_query.iter().any(|(_, hull, _)| hull.is_flooded);
+    let has_depressurized = hull_query.iter().any(|(_, hull, _)| hull.is_depressurized);
     let has_fires = !fire_query.is_empty();
-    let has_danger = has_flooded || has_fires;
+    let has_danger = has_depressurized || has_fires;
 
     for mut crew in crew_query.iter_mut() {
         if crew.health <= 0.0 {
@@ -550,16 +550,16 @@ fn crew_repair_system(
                 // Find hull segments at this tile via occupancy
                 if let Some(&entity) = occupancy.cells.get(&tile) {
                     if let Ok(mut hull) = hull_query.get_mut(entity) {
-                        if hull.is_flooded && hull.flood_level > 0.0 {
+                        if hull.is_depressurized && hull.depressurization_level > 0.0 {
                             let repair_rate = total_power * 0.05 * dt;
-                            hull.flood_level = (hull.flood_level - repair_rate).max(0.0);
-                            if hull.flood_level <= 0.0 {
-                                hull.is_flooded = false;
+                            hull.depressurization_level = (hull.depressurization_level - repair_rate).max(0.0);
+                            if hull.depressurization_level <= 0.0 {
+                                hull.is_depressurized = false;
                                 any_repaired = true;
                             }
                         }
-                        // Repair hull health if damaged and not flooded
-                        if hull.health < hull.max_health && !hull.is_flooded {
+                        // Repair hull health if damaged and not depressurized
+                        if hull.health < hull.max_health && !hull.is_depressurized {
                             let heal_rate = total_power * 2.0 * dt;
                             hull.health = (hull.health + heal_rate).min(hull.max_health);
                         }

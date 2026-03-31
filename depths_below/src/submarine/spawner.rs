@@ -21,7 +21,7 @@ pub fn spawn_starter_submarine(
     if !existing_sub.is_empty() {
         return;
     }
-    info!("Spawning starter submarine...");
+    info!("Spawning starter vessel...");
 
     // Initialize oxygen
     oxygen_state.max_oxygen = 1800.0;
@@ -37,8 +37,8 @@ pub fn spawn_starter_submarine(
         Submarine,
         Velocity(Vec2::ZERO),
         Depth(0.0),
-        Buoyancy {
-            base_buoyancy: 0.0,
+        ThrusterState {
+            base_drift: 0.0,
             current: 0.0,
         },
         Health {
@@ -46,6 +46,8 @@ pub fn spawn_starter_submarine(
             max: 150.0,
         },
         SubmarinePhysics::default(),
+        crate::celestial::components::GravityAffected { mass: 5000.0 },
+        crate::celestial::components::GravityForce::default(),
     )).id();
 
     // ========================================================================
@@ -191,14 +193,14 @@ pub fn spawn_starter_submarine(
     spawn_module(&mut commands, &asset_server, submarine, ModuleType::Floodlight, IVec2::new(5, 0), Rotation::East, &registry);
 
     // --- BOW WEAPONS: On the hull edges (exterior-facing) ---
-    spawn_module(&mut commands, &asset_server, submarine, ModuleType::TorpedoTube, IVec2::new(6, 1), Rotation::East, &registry);
-    spawn_module(&mut commands, &asset_server, submarine, ModuleType::TorpedoTube, IVec2::new(6, -2), Rotation::East, &registry);
-    spawn_module(&mut commands, &asset_server, submarine, ModuleType::PointDefense, IVec2::new(3, 2), Rotation::North, &registry);
+    spawn_module(&mut commands, &asset_server, submarine, ModuleType::HeavyMissile, IVec2::new(6, 1), Rotation::East, &registry);
+    spawn_module(&mut commands, &asset_server, submarine, ModuleType::HeavyMissile, IVec2::new(6, -2), Rotation::East, &registry);
+    spawn_module(&mut commands, &asset_server, submarine, ModuleType::Gatling, IVec2::new(3, 2), Rotation::North, &registry);
 
-    info!("Starter submarine spawned! (submarine-shaped hull, 24 modules)");
+    info!("Starter vessel spawned! (24 modules)");
 
     notifications.send(ShowNotification {
-        message: "WASD: Move | Q/E: Ballast | Space: Fire | Z: Sonar | B: Build | C: Crew".into(),
+        message: "WASD: Move | Q/E: Thrusters | Space: Fire | Z: Radar | V: Warp | B: Build | C: Crew".into(),
         notification_type: NotificationType::Info,
         duration: 8.0,
     });
@@ -345,6 +347,64 @@ pub fn spawn_module(
         _ => {}
     }
 
+    // Add ModuleCustomization for customizable weapons (Tier 2+3 support)
+    if def.customizable && module_type.category() == ModuleCategory::Weapons {
+        commands.entity(module_entity).insert(
+            crate::building::customization::parameters::ModuleCustomization::default()
+        );
+    }
+
+    // Add MachineBlock component for multi-block machines
+    {
+        use crate::building::multiblock::components::*;
+        let machine_role = match module_type {
+            // Weapon cores
+            ModuleType::Cannon | ModuleType::Railgun | ModuleType::Coilgun |
+            ModuleType::Gatling | ModuleType::Laser | ModuleType::PlasmaCaster |
+            ModuleType::IonDisruptor | ModuleType::HeavyMissile | ModuleType::GuidedMissile |
+            ModuleType::ClusterRocket | ModuleType::MiningDrill | ModuleType::TractorBeam |
+            ModuleType::EMPPulse => Some((BlockRole::Core, true)),
+            // Reactor cores
+            ModuleType::SmallReactor | ModuleType::StandardReactor |
+            ModuleType::LargeReactor | ModuleType::FusionReactor => Some((BlockRole::Core, true)),
+            // Engine cores
+            ModuleType::SmallEngine | ModuleType::StandardEngine |
+            ModuleType::LargeEngine => Some((BlockRole::Core, true)),
+            // Extension blocks
+            ModuleType::BarrelExtension => Some((BlockRole::Barrel, false)),
+            ModuleType::AmmoFeedUnit => Some((BlockRole::AmmoFeed, false)),
+            ModuleType::CoolingJacket => Some((BlockRole::Cooling, false)),
+            ModuleType::ReactorFuelRod => Some((BlockRole::FuelRod, false)),
+            ModuleType::ReactorCooling => Some((BlockRole::Cooling, false)),
+            ModuleType::EngineNozzle => Some((BlockRole::Nozzle, false)),
+            ModuleType::ShieldEmitter => Some((BlockRole::ShieldEmitter, false)),
+            _ => None,
+        };
+
+        if let Some((role, is_core)) = machine_role {
+            commands.entity(module_entity).insert(MachineBlock {
+                role,
+                connected_core: if is_core { Some(module_entity) } else { None },
+                chain_distance: 0,
+                next_in_chain: None,
+                prev_in_chain: None,
+            });
+
+            if is_core {
+                commands.entity(module_entity).insert(MachineStats::default());
+            }
+
+            // Barrel blocks get stress tracking and cascade risk
+            if role == BlockRole::Barrel {
+                commands.entity(module_entity).insert(BarrelStress {
+                    load: 1,
+                    effective_cascade_chance: 0.15,
+                });
+                commands.entity(module_entity).insert(CascadeRisk::default());
+            }
+        }
+    }
+
     commands.entity(module_entity).set_parent(parent);
 
     module_entity
@@ -435,10 +495,10 @@ fn insert_companion_components(commands: &mut Commands, entity: Entity, companio
                 water_recycling: 0.0,
             });
         }
-        CompanionData::Ballast { capacity } => {
-            commands.entity(entity).insert(Ballast {
-                capacity: *capacity,
-                current_level: 0.5,
+        CompanionData::Thruster { thrust_power } => {
+            commands.entity(entity).insert(Thruster {
+                thrust_power: *thrust_power,
+                current_output: 0.5,
             });
         }
         CompanionData::Cargo { capacity } => {
@@ -479,7 +539,7 @@ fn insert_companion_components(commands: &mut Commands, entity: Entity, companio
                 },
             ));
             // Physical ammo weapons are explosive (not energy Charge)
-            if matches!(ammo_type, AmmoType::Torpedo | AmmoType::Bullet | AmmoType::Mine) {
+            if matches!(ammo_type, AmmoType::Missile | AmmoType::Bullet | AmmoType::Mine) {
                 let capped_ammo = (*ammo).min(10) as f32;
                 commands.entity(entity).insert(Explosive {
                     blast_radius: 1.5,
@@ -568,9 +628,9 @@ fn insert_companion_components(commands: &mut Commands, entity: Entity, companio
                 active: true,
             });
         }
-        CompanionData::PressureReinforcement { depth_bonus } => {
-            commands.entity(entity).insert(PressureReinforcementComp {
-                depth_bonus: *depth_bonus,
+        CompanionData::RadiationShielding { shielding_bonus } => {
+            commands.entity(entity).insert(RadiationShieldingComp {
+                shielding_bonus: *shielding_bonus,
             });
         }
         CompanionData::DroneBay { drone_count, drone_range } => {
@@ -601,8 +661,8 @@ fn insert_companion_components(commands: &mut Commands, entity: Entity, companio
                 stored: *capacity,
             });
         }
-        CompanionData::TorpedoLoader { reload_bonus } => {
-            commands.entity(entity).insert(TorpedoLoaderComp {
+        CompanionData::AmmoAutoloader { reload_bonus } => {
+            commands.entity(entity).insert(AmmoAutoloaderComp {
                 reload_bonus: *reload_bonus,
             });
         }
@@ -616,9 +676,9 @@ fn insert_companion_components(commands: &mut Commands, entity: Entity, companio
                 efficiency: *efficiency,
             });
         }
-        CompanionData::WaterPump { pump_rate } => {
-            commands.entity(entity).insert(WaterPumpComp {
-                pump_rate: *pump_rate,
+        CompanionData::HullSeal { seal_rate } => {
+            commands.entity(entity).insert(HullSealComp {
+                seal_rate: *seal_rate,
             });
         }
         CompanionData::TargetingComputer { accuracy_bonus } => {

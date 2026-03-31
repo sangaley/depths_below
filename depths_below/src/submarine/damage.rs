@@ -15,7 +15,7 @@ enum DamageTarget {
 ///
 /// If direction is available: collect all hull/module tiles, project onto attack ray,
 /// walk outermost-first applying penetration damage.
-/// If no direction (pressure, explosion): fall back to random hull segment.
+/// If no direction (radiation, explosion): fall back to random hull segment.
 pub fn process_submarine_damage(
     mut damage_events: EventReader<SubmarineDamaged>,
     mut hull_query: Query<(Entity, &mut HullSegment, &GlobalTransform)>,
@@ -23,7 +23,7 @@ pub fn process_submarine_damage(
     sub_query: Query<&GlobalTransform, With<Submarine>>,
     room_map: Res<RoomMap>,
     mut breach_events: EventWriter<HullBreached>,
-    mut room_flood_events: EventWriter<RoomFlooded>,
+    mut room_depressurize_events: EventWriter<RoomDepressurized>,
     mut notifications: EventWriter<ShowNotification>,
     mut commands: Commands,
 ) {
@@ -35,8 +35,8 @@ pub fn process_submarine_damage(
         .unwrap_or(Vec2::ZERO);
 
     for event in damage_events.iter() {
-        // Skip pressure damage — it's handled directly in check_pressure_damage
-        if matches!(event.source, DamageSource::Pressure) {
+        // Skip radiation damage — it's handled directly in check_radiation_damage
+        if matches!(event.source, DamageSource::Radiation) {
             continue;
         }
 
@@ -112,23 +112,23 @@ pub fn process_submarine_damage(
                             };
 
                             // Breach if health drops below 30%
-                            if health_pct < 0.3 && !hull.is_flooded {
-                                hull.is_flooded = true;
+                            if health_pct < 0.3 && !hull.is_depressurized {
+                                hull.is_depressurized = true;
                                 breach_events.send(HullBreached {
                                     segment: *entity,
                                     severity: 1.0 - health_pct,
                                 });
 
-                                // Send RoomFlooded if this tile is in a room
+                                // Send RoomDepressurized if this tile is in a room
                                 if let Some(&room_id) = room_map.tile_to_room.get(grid_pos) {
-                                    room_flood_events.send(RoomFlooded {
+                                    room_depressurize_events.send(RoomDepressurized {
                                         room_id,
                                         severity: 1.0 - health_pct,
                                     });
                                 }
 
                                 notifications.send(ShowNotification {
-                                    message: "Hull breach! Flooding detected!".into(),
+                                    message: "Hull breach! Decompression in progress!".into(),
                                     notification_type: NotificationType::Danger,
                                     duration: 3.0,
                                 });
@@ -147,7 +147,7 @@ pub fn process_submarine_damage(
                 }
             }
         } else {
-            // === NON-DIRECTIONAL FALLBACK (pressure, explosion, etc.) ===
+            // === NON-DIRECTIONAL FALLBACK (radiation, explosion, etc.) ===
             let count = hull_query.iter().count();
             if count == 0 { continue; }
             let idx = rng.gen_range(0..count);
@@ -164,22 +164,22 @@ pub fn process_submarine_damage(
                     0.0
                 };
 
-                if health_pct < 0.3 && !hull.is_flooded {
-                    hull.is_flooded = true;
+                if health_pct < 0.3 && !hull.is_depressurized {
+                    hull.is_depressurized = true;
                     breach_events.send(HullBreached {
                         segment: target,
                         severity: 1.0 - health_pct,
                     });
 
                     if let Some(&room_id) = room_map.tile_to_room.get(&hull.grid_position) {
-                        room_flood_events.send(RoomFlooded {
+                        room_depressurize_events.send(RoomDepressurized {
                             room_id,
                             severity: 1.0 - health_pct,
                         });
                     }
 
                     notifications.send(ShowNotification {
-                        message: "Hull breach! Flooding detected!".into(),
+                        message: "Hull breach! Decompression in progress!".into(),
                         notification_type: NotificationType::Danger,
                         duration: 3.0,
                     });
@@ -320,7 +320,7 @@ pub fn process_detonations(
     mut breach_events: EventWriter<HullBreached>,
     mut hull_destroy_events: EventWriter<HullSegmentDestroyed>,
     room_map: Res<RoomMap>,
-    mut room_flood_events: EventWriter<RoomFlooded>,
+    mut room_depressurize_events: EventWriter<RoomDepressurized>,
     mut notifications: EventWriter<ShowNotification>,
 ) {
     // Collect finished detonations first to avoid borrow issues
@@ -386,14 +386,14 @@ pub fn process_detonations(
                                 segment: hull_entity,
                                 grid_position: target_pos,
                             });
-                        } else if health_pct < 0.3 && !hull.is_flooded {
-                            hull.is_flooded = true;
+                        } else if health_pct < 0.3 && !hull.is_depressurized {
+                            hull.is_depressurized = true;
                             breach_events.send(HullBreached {
                                 segment: hull_entity,
                                 severity: 1.0 - health_pct,
                             });
                             if let Some(&room_id) = room_map.tile_to_room.get(&target_pos) {
-                                room_flood_events.send(RoomFlooded {
+                                room_depressurize_events.send(RoomDepressurized {
                                     room_id,
                                     severity: 1.0 - health_pct,
                                 });

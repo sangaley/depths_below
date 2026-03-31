@@ -18,9 +18,9 @@ pub struct Submarine;
 pub struct HullSegment {
     pub health: f32,
     pub max_health: f32,
-    pub depth_rating: f32,      // Max depth before taking pressure damage
-    pub is_flooded: bool,
-    pub flood_level: f32,       // 0.0 to 1.0
+    pub radiation_shielding: f32,  // Max radiation tolerance before taking damage
+    pub is_depressurized: bool,
+    pub depressurization_level: f32,  // 0.0 to 1.0 (air lost)
     pub hull_layer: HullLayer,
     pub material: HullMaterial,
     pub grid_position: IVec2,
@@ -34,7 +34,7 @@ pub enum HullLayer {
     BulkheadDoor,
 }
 
-/// Hull material tiers - determines depth rating and durability
+/// Hull material tiers - determines radiation shielding and durability
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, Default)]
 pub enum HullMaterial {
     #[default]
@@ -45,7 +45,7 @@ pub enum HullMaterial {
 }
 
 impl HullMaterial {
-    pub fn depth_rating(&self) -> f32 {
+    pub fn radiation_shielding(&self) -> f32 {
         match self {
             HullMaterial::Steel => 300.0,
             HullMaterial::Titanium => 500.0,
@@ -97,9 +97,9 @@ impl Default for HullSegment {
         Self {
             health: 100.0 * material.health_multiplier(),
             max_health: 100.0 * material.health_multiplier(),
-            depth_rating: material.depth_rating(),
-            is_flooded: false,
-            flood_level: 0.0,
+            radiation_shielding: material.radiation_shielding(),
+            is_depressurized: false,
+            depressurization_level: 0.0,
             hull_layer: HullLayer::Outer,
             material,
             grid_position: IVec2::ZERO,
@@ -348,18 +348,20 @@ impl ModuleCategory {
                 ModuleType::AICombatCore,
             ],
             ModuleCategory::Weapons => &[
-                ModuleType::TorpedoTube,
-                ModuleType::HeavyTorpedoTube,
-                ModuleType::PointDefense,
-                ModuleType::ElectricDischarger,
-                ModuleType::SonicPulse,
-                ModuleType::MineLayer,
-                ModuleType::RailGun,
-                ModuleType::FlakCannon,
-                ModuleType::NetLauncher,
-                ModuleType::AcidSprayer,
-                ModuleType::EMPEmitter,
-                ModuleType::TorpedoLoader,
+                ModuleType::Cannon,
+                ModuleType::Railgun,
+                ModuleType::Coilgun,
+                ModuleType::Gatling,
+                ModuleType::Laser,
+                ModuleType::PlasmaCaster,
+                ModuleType::IonDisruptor,
+                ModuleType::HeavyMissile,
+                ModuleType::GuidedMissile,
+                ModuleType::ClusterRocket,
+                ModuleType::MiningDrill,
+                ModuleType::TractorBeam,
+                ModuleType::EMPPulse,
+                ModuleType::AmmoAutoloader,
             ],
             ModuleCategory::Detection => &[
                 ModuleType::SonarArray,
@@ -472,18 +474,23 @@ pub enum ModuleType {
     NavigationConsole,
     HelmStation,
 
-    // Weapons (11)
-    TorpedoTube,
-    HeavyTorpedoTube,
-    PointDefense,
-    ElectricDischarger,
-    SonicPulse,
-    MineLayer,
-    RailGun,
-    FlakCannon,
-    NetLauncher,
-    AcidSprayer,
-    EMPEmitter,
+    // Weapons — Kinetic (4)
+    Cannon,
+    Railgun,
+    Coilgun,
+    Gatling,
+    // Weapons — Energy (3)
+    Laser,
+    PlasmaCaster,
+    IonDisruptor,
+    // Weapons — Missile (3)
+    HeavyMissile,
+    GuidedMissile,
+    ClusterRocket,
+    // Weapons — Utility (3)
+    MiningDrill,
+    TractorBeam,
+    EMPPulse,
 
     // Detection (7)
     SonarArray,
@@ -556,7 +563,7 @@ pub enum ModuleType {
     MineralScanner,
 
     // Weapons (new)
-    TorpedoLoader,
+    AmmoAutoloader,
 
     // Crew (new)
     EngineeringStation,
@@ -587,6 +594,56 @@ pub enum ModuleType {
     Corridor,
     LadderShaft,
     MaintenanceTunnel,
+
+    // Multi-block extension blocks (core)
+    BarrelExtension,
+    AmmoFeedUnit,
+    CoolingJacket,
+    ReactorFuelRod,
+    ReactorCooling,
+    EngineNozzle,
+    ShieldEmitter,
+
+    // Advanced weapon enhancers (optional optimization)
+    MuzzleBrake,          // Reduces recoil, increases accuracy
+    RecoilAbsorber,       // Protects adjacent blocks from firing stress
+    OverchargeCapacitor,  // One-shot damage boost, long cooldown
+    BoreEvacuator,        // Clears barrel fumes, faster follow-up shots
+    MagneticAccelerator,  // Boosts projectile velocity (railgun/coilgun)
+    FocusingArray,        // Tightens energy weapon beam
+    WarheadBay,           // Extra torpedo/missile storage
+
+    // Advanced reactor enhancers
+    FuelEnrichmentUnit,   // More power per fuel rod, more heat
+    ContainmentField,     // Reduces explosion radius if reactor blows
+    EmergencyShutdown,    // Auto-kills reactor before meltdown
+    PowerRegulator,       // Smooths output fluctuations, reduces waste
+
+    // Advanced engine enhancers
+    Afterburner,          // Temporary speed boost, burns fuel fast
+    ThrustVectoring,      // Improves turning at high speed
+    FuelInjector,         // Better fuel efficiency
+    InertialDampener,     // Reduces drift, tighter handling
+
+    // Defense modules (passive/active protection)
+    DecoyLauncher,        // Distracts guided missiles
+    ChaffDispenser,       // Disrupts targeting systems
+    AblativeArmor,        // Takes hits instead of hull, replaceable
+    PointDefenseDrone,    // Auto-shoots incoming projectiles
+    HullReinforcePlate,   // Reduces cascade chance in adjacent blocks
+
+    // Advanced utility
+    SignalJammer,         // Reduces enemy detection range
+    GravityCompensator,   // Reduces gravity pull on ship
+    RadiationHardening,   // Reduces radiation damage to adjacent modules
+    EmergencyO2Cache,     // Burst oxygen when life support fails
+    BlackBox,             // Records ship data, survives destruction
+
+    // Structural enhancers
+    ReinforcedJoint,      // Reduces cascade explosion chance in barrel chains
+    VibrationDamper,      // Reduces accuracy loss from adjacent firing
+    ThermalInsulator,     // Blocks heat spread between sections
+    StructuralBrace,      // Increases HP of adjacent hull/modules
 }
 
 impl ModuleType {
@@ -598,7 +655,11 @@ impl ModuleType {
             ModuleType::Capacitor | ModuleType::PowerConduit |
             ModuleType::SolarCell |
             ModuleType::Transformer |
-            ModuleType::ThermalVentGenerator => ModuleCategory::Power,
+            ModuleType::ThermalVentGenerator |
+            ModuleType::FuelEnrichmentUnit |
+            ModuleType::ContainmentField |
+            ModuleType::EmergencyShutdown |
+            ModuleType::PowerRegulator => ModuleCategory::Power,
 
             ModuleType::SmallEngine | ModuleType::StandardEngine |
             ModuleType::LargeEngine | ModuleType::SilentDrive |
@@ -606,7 +667,11 @@ impl ModuleType {
             ModuleType::EmergencyThruster |
             ModuleType::RudderAssembly |
             ModuleType::VectorThruster |
-            ModuleType::TrimTank => ModuleCategory::Propulsion,
+            ModuleType::TrimTank |
+            ModuleType::Afterburner |
+            ModuleType::ThrustVectoring |
+            ModuleType::FuelInjector |
+            ModuleType::InertialDampener => ModuleCategory::Propulsion,
 
             ModuleType::OxygenScrubber | ModuleType::CO2Scrubber |
             ModuleType::WaterRecycler | ModuleType::AdvancedOxygenator |
@@ -621,13 +686,47 @@ impl ModuleType {
             ModuleType::AutopilotCore |
             ModuleType::AICombatCore => ModuleCategory::Control,
 
-            ModuleType::TorpedoTube | ModuleType::HeavyTorpedoTube |
-            ModuleType::PointDefense | ModuleType::ElectricDischarger |
-            ModuleType::SonicPulse | ModuleType::MineLayer |
-            ModuleType::RailGun | ModuleType::FlakCannon |
-            ModuleType::NetLauncher | ModuleType::AcidSprayer |
-            ModuleType::EMPEmitter |
-            ModuleType::TorpedoLoader => ModuleCategory::Weapons,
+            ModuleType::Cannon | ModuleType::Railgun |
+            ModuleType::Coilgun | ModuleType::Gatling |
+            ModuleType::Laser | ModuleType::PlasmaCaster |
+            ModuleType::IonDisruptor |
+            ModuleType::HeavyMissile | ModuleType::GuidedMissile |
+            ModuleType::ClusterRocket |
+            ModuleType::MiningDrill | ModuleType::TractorBeam |
+            ModuleType::EMPPulse |
+            ModuleType::AmmoAutoloader |
+            ModuleType::BarrelExtension |
+            ModuleType::AmmoFeedUnit |
+            ModuleType::CoolingJacket |
+            ModuleType::MuzzleBrake |
+            ModuleType::RecoilAbsorber |
+            ModuleType::OverchargeCapacitor |
+            ModuleType::BoreEvacuator |
+            ModuleType::MagneticAccelerator |
+            ModuleType::FocusingArray |
+            ModuleType::WarheadBay => ModuleCategory::Weapons,
+
+            ModuleType::ReactorFuelRod |
+            ModuleType::ReactorCooling => ModuleCategory::Power,
+
+            ModuleType::EngineNozzle => ModuleCategory::Propulsion,
+
+            ModuleType::ShieldEmitter |
+            ModuleType::DecoyLauncher |
+            ModuleType::ChaffDispenser |
+            ModuleType::AblativeArmor |
+            ModuleType::PointDefenseDrone |
+            ModuleType::HullReinforcePlate |
+            ModuleType::SignalJammer |
+            ModuleType::GravityCompensator |
+            ModuleType::RadiationHardening |
+            ModuleType::EmergencyO2Cache |
+            ModuleType::BlackBox => ModuleCategory::Utility,
+
+            ModuleType::ReinforcedJoint |
+            ModuleType::VibrationDamper |
+            ModuleType::ThermalInsulator |
+            ModuleType::StructuralBrace => ModuleCategory::Structural,
 
             ModuleType::SonarArray | ModuleType::AdvancedSonar |
             ModuleType::PassiveSonar | ModuleType::DepthScanner |
@@ -693,35 +792,37 @@ impl ModuleType {
             ModuleType::SmallEngine => "Small Engine",
             ModuleType::StandardEngine => "Standard Engine",
             ModuleType::LargeEngine => "Large Engine",
-            ModuleType::SilentDrive => "Silent Drive",
+            ModuleType::SilentDrive => "Stealth Drive",
             ModuleType::ManeuveringThruster => "Maneuvering Thruster",
             ModuleType::JetDrive => "Jet Drive",
             ModuleType::EmergencyThruster => "Emergency Thruster",
             ModuleType::RudderAssembly => "Rudder Assembly",
             ModuleType::OxygenScrubber => "O2 Scrubber",
             ModuleType::CO2Scrubber => "CO2 Scrubber",
-            ModuleType::WaterRecycler => "Water Recycler",
+            ModuleType::WaterRecycler => "Waste Recycler",
             ModuleType::AdvancedOxygenator => "Advanced Oxygenator",
             ModuleType::FireSuppression => "Fire Suppression",
             ModuleType::AtmosphereMonitor => "Atmosphere Monitor",
             ModuleType::NavigationConsole => "Navigation Console",
             ModuleType::HelmStation => "Helm Station",
-            ModuleType::TorpedoTube => "Torpedo Tube",
-            ModuleType::HeavyTorpedoTube => "Heavy Torpedo Tube",
-            ModuleType::PointDefense => "Point Defense",
-            ModuleType::ElectricDischarger => "Electric Discharger",
-            ModuleType::SonicPulse => "Sonic Pulse",
-            ModuleType::MineLayer => "Mine Layer",
-            ModuleType::RailGun => "Rail Gun",
-            ModuleType::FlakCannon => "Flak Cannon",
-            ModuleType::NetLauncher => "Net Launcher",
-            ModuleType::AcidSprayer => "Acid Sprayer",
-            ModuleType::EMPEmitter => "EMP Emitter",
-            ModuleType::SonarArray => "Sonar Array",
-            ModuleType::AdvancedSonar => "Advanced Sonar",
-            ModuleType::PassiveSonar => "Passive Sonar",
-            ModuleType::DepthScanner => "Depth Scanner",
-            ModuleType::HydrophoneArray => "Hydrophone Array",
+            ModuleType::Cannon => "Cannon",
+            ModuleType::Railgun => "Railgun",
+            ModuleType::Coilgun => "Coilgun",
+            ModuleType::Gatling => "Gatling",
+            ModuleType::Laser => "Laser",
+            ModuleType::PlasmaCaster => "Plasma Caster",
+            ModuleType::IonDisruptor => "Ion Disruptor",
+            ModuleType::HeavyMissile => "Heavy Missile Launcher",
+            ModuleType::GuidedMissile => "Guided Missile",
+            ModuleType::ClusterRocket => "Cluster Rocket",
+            ModuleType::MiningDrill => "Mining Drill",
+            ModuleType::TractorBeam => "Tractor Beam",
+            ModuleType::EMPPulse => "EMP Pulse",
+            ModuleType::SonarArray => "Radar Array",
+            ModuleType::AdvancedSonar => "Advanced Radar",
+            ModuleType::PassiveSonar => "Passive Sensor",
+            ModuleType::DepthScanner => "Long Range Scanner",
+            ModuleType::HydrophoneArray => "Signal Interceptor",
             ModuleType::ThermalImager => "Thermal Imager",
             ModuleType::ProximityAlarm => "Proximity Alarm",
             ModuleType::SmallCargo => "Small Cargo",
@@ -740,23 +841,23 @@ impl ModuleType {
             ModuleType::TrainingRoom => "Training Room",
             ModuleType::Brig => "Brig",
             ModuleType::RepairBay => "Repair Bay",
-            ModuleType::BallastTank => "Ballast Tank",
-            ModuleType::Floodlight => "Floodlight",
+            ModuleType::BallastTank => "Maneuvering Thruster",
+            ModuleType::Floodlight => "Spotlight",
             ModuleType::Searchlight => "Searchlight",
             ModuleType::AirlockChamber => "Airlock Chamber",
             ModuleType::DockingPort => "Docking Port",
             ModuleType::SalvageArm => "Salvage Arm",
             ModuleType::AdvancedRepairBay => "Advanced Repair Bay",
             ModuleType::DroneBay => "Drone Bay",
-            ModuleType::DeepFloodlight => "Deep Floodlight",
+            ModuleType::DeepFloodlight => "High-Power Spotlight",
             ModuleType::StealthCoating => "Stealth Coating",
             ModuleType::HullPatch => "Hull Patch",
             ModuleType::SignalBuoy => "Signal Buoy",
             ModuleType::HullBeam => "Hull Beam",
             ModuleType::HullCorner => "Hull Corner",
             ModuleType::Bulkhead => "Bulkhead",
-            ModuleType::PressureFrame => "Pressure Frame",
-            ModuleType::FloodValve => "Flood Valve",
+            ModuleType::PressureFrame => "Radiation Shield",
+            ModuleType::FloodValve => "Airlock Valve",
             ModuleType::AccessHatch => "Access Hatch",
             ModuleType::ViewPort => "View Port",
             ModuleType::ArmorPlate => "Armor Plate",
@@ -764,20 +865,20 @@ impl ModuleType {
             ModuleType::HeatVent => "Heat Vent",
             ModuleType::Transformer => "Transformer",
             ModuleType::VectorThruster => "Vector Thruster",
-            ModuleType::TrimTank => "Trim Tank",
+            ModuleType::TrimTank => "Attitude Thruster",
             ModuleType::OxygenTank => "Oxygen Tank",
             ModuleType::AirCirculator => "Air Circulator",
             ModuleType::CreatureScanner => "Creature Scanner",
             ModuleType::MineralScanner => "Mineral Scanner",
-            ModuleType::TorpedoLoader => "Torpedo Loader",
+            ModuleType::AmmoAutoloader => "Ammo Autoloader",
             ModuleType::EngineeringStation => "Engineering Station",
             ModuleType::ConveyorTube => "Conveyor Tube",
             ModuleType::MaintenanceLocker => "Maintenance Locker",
             ModuleType::FuelProcessor => "Fuel Processor",
-            ModuleType::WaterPump => "Water Pump",
+            ModuleType::WaterPump => "Hull Seal System",
             ModuleType::EmergencyBulkhead => "Emergency Bulkhead",
             ModuleType::FirebreakWall => "Firebreak Wall",
-            ModuleType::PressureSensor => "Pressure Sensor",
+            ModuleType::PressureSensor => "Radiation Sensor",
             ModuleType::TargetingComputer => "Targeting Computer",
             ModuleType::AutopilotCore => "Autopilot Core",
             ModuleType::AICombatCore => "AI Combat Core",
@@ -786,8 +887,51 @@ impl ModuleType {
             ModuleType::CreatureContainment => "Creature Containment",
             ModuleType::ResearchLab => "Research Lab",
             ModuleType::Corridor => "Corridor",
-            ModuleType::LadderShaft => "Ladder Shaft",
+            ModuleType::LadderShaft => "Shaft",
             ModuleType::MaintenanceTunnel => "Maintenance Tunnel",
+            // Multi-block extension blocks
+            ModuleType::BarrelExtension => "Barrel Extension",
+            ModuleType::AmmoFeedUnit => "Ammo Feed",
+            ModuleType::CoolingJacket => "Cooling Jacket",
+            ModuleType::ReactorFuelRod => "Fuel Rod",
+            ModuleType::ReactorCooling => "Reactor Cooling",
+            ModuleType::EngineNozzle => "Engine Nozzle",
+            ModuleType::ShieldEmitter => "Shield Emitter",
+            // Advanced weapon enhancers
+            ModuleType::MuzzleBrake => "Muzzle Brake",
+            ModuleType::RecoilAbsorber => "Recoil Absorber",
+            ModuleType::OverchargeCapacitor => "Overcharge Capacitor",
+            ModuleType::BoreEvacuator => "Bore Evacuator",
+            ModuleType::MagneticAccelerator => "Magnetic Accelerator",
+            ModuleType::FocusingArray => "Focusing Array",
+            ModuleType::WarheadBay => "Warhead Bay",
+            // Advanced reactor enhancers
+            ModuleType::FuelEnrichmentUnit => "Fuel Enrichment Unit",
+            ModuleType::ContainmentField => "Containment Field",
+            ModuleType::EmergencyShutdown => "Emergency Shutdown",
+            ModuleType::PowerRegulator => "Power Regulator",
+            // Advanced engine enhancers
+            ModuleType::Afterburner => "Afterburner",
+            ModuleType::ThrustVectoring => "Thrust Vectoring",
+            ModuleType::FuelInjector => "Fuel Injector",
+            ModuleType::InertialDampener => "Inertial Dampener",
+            // Defense modules
+            ModuleType::DecoyLauncher => "Decoy Launcher",
+            ModuleType::ChaffDispenser => "Chaff Dispenser",
+            ModuleType::AblativeArmor => "Ablative Armor",
+            ModuleType::PointDefenseDrone => "Point Defense Drone",
+            ModuleType::HullReinforcePlate => "Hull Reinforce Plate",
+            // Advanced utility
+            ModuleType::SignalJammer => "Signal Jammer",
+            ModuleType::GravityCompensator => "Gravity Compensator",
+            ModuleType::RadiationHardening => "Radiation Hardening",
+            ModuleType::EmergencyO2Cache => "Emergency O2 Cache",
+            ModuleType::BlackBox => "Black Box",
+            // Structural enhancers
+            ModuleType::ReinforcedJoint => "Reinforced Joint",
+            ModuleType::VibrationDamper => "Vibration Damper",
+            ModuleType::ThermalInsulator => "Thermal Insulator",
+            ModuleType::StructuralBrace => "Structural Brace",
         }
     }
 }
@@ -819,11 +963,11 @@ pub struct OxygenScrubber {
     pub output: f32,
 }
 
-/// Ballast tank data
+/// Thruster data (replaces ballast for space maneuvering)
 #[derive(Component)]
-pub struct Ballast {
-    pub capacity: f32,
-    pub current_level: f32,     // 0 = empty (rise), 1 = full (sink)
+pub struct Thruster {
+    pub thrust_power: f32,
+    pub current_output: f32,    // 0 = idle, 1 = full thrust
 }
 
 /// Cargo hold data
@@ -916,7 +1060,7 @@ pub struct AmmoStorage {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AmmoType {
-    Torpedo,
+    Missile,
     Bullet,
     Charge,
     Mine,
@@ -925,7 +1069,7 @@ pub enum AmmoType {
 impl AmmoType {
     pub fn speed_mult(&self) -> f32 {
         match self {
-            AmmoType::Torpedo => 0.8,
+            AmmoType::Missile => 0.8,
             AmmoType::Bullet  => 1.5,
             AmmoType::Charge  => 0.6,
             AmmoType::Mine    => 0.0,
@@ -934,7 +1078,7 @@ impl AmmoType {
 
     pub fn lifetime_secs(&self) -> f32 {
         match self {
-            AmmoType::Torpedo => 4.0,
+            AmmoType::Missile => 4.0,
             AmmoType::Bullet  => 1.5,
             AmmoType::Charge  => 2.0,
             AmmoType::Mine    => 0.0,
@@ -943,7 +1087,7 @@ impl AmmoType {
 
     pub fn hit_radius_mult(&self) -> f32 {
         match self {
-            AmmoType::Torpedo => 1.5,
+            AmmoType::Missile => 1.5,
             AmmoType::Bullet  => 0.7,
             AmmoType::Charge  => 2.5,
             AmmoType::Mine    => 1.0,
@@ -956,7 +1100,7 @@ impl AmmoType {
 
     pub fn projectile_color(&self) -> Color {
         match self {
-            AmmoType::Torpedo => Color::rgb(1.0, 0.9, 0.3),
+            AmmoType::Missile => Color::rgb(1.0, 0.9, 0.3),
             AmmoType::Bullet  => Color::rgb(1.0, 1.0, 1.0),
             AmmoType::Charge  => Color::rgb(0.4, 0.6, 1.0),
             AmmoType::Mine    => Color::rgb(0.6, 0.6, 0.6),
@@ -965,7 +1109,7 @@ impl AmmoType {
 
     pub fn projectile_size(&self) -> Vec2 {
         match self {
-            AmmoType::Torpedo => Vec2::new(18.0, 7.0),
+            AmmoType::Missile => Vec2::new(18.0, 7.0),
             AmmoType::Bullet  => Vec2::new(10.0, 4.0),
             AmmoType::Charge  => Vec2::new(22.0, 22.0),
             AmmoType::Mine    => Vec2::splat(14.0),
@@ -974,7 +1118,7 @@ impl AmmoType {
 
     pub fn display_name(&self) -> &'static str {
         match self {
-            AmmoType::Torpedo => "Torpedo launched!",
+            AmmoType::Missile => "Missile launched!",
             AmmoType::Bullet  => "Firing!",
             AmmoType::Charge  => "Charge fired!",
             AmmoType::Mine    => "Mine deployed!",
@@ -1059,10 +1203,10 @@ pub struct FireSuppressionComp {
     pub active: bool,
 }
 
-/// Pressure reinforcement: increases depth rating for adjacent hull
+/// Radiation shielding reinforcement: increases radiation tolerance for adjacent hull
 #[derive(Component)]
-pub struct PressureReinforcementComp {
-    pub depth_bonus: f32,
+pub struct RadiationShieldingComp {
+    pub shielding_bonus: f32,
 }
 
 /// Drone bay: deploys repair/scout drones
@@ -1110,9 +1254,9 @@ pub struct OxygenTankComp {
     pub stored: f32,
 }
 
-/// Torpedo auto-loader — boosts fire rate of adjacent torpedo tubes
+/// Ammo auto-loader — boosts fire rate of adjacent weapon systems
 #[derive(Component)]
-pub struct TorpedoLoaderComp {
+pub struct AmmoAutoloaderComp {
     pub reload_bonus: f32,
 }
 
@@ -1128,10 +1272,10 @@ pub struct FuelProcessorComp {
     pub efficiency: f32,
 }
 
-/// Water pump — automated bilge pump for flooded rooms
+/// Hull seal system — automated breach sealing for depressurized rooms
 #[derive(Component)]
-pub struct WaterPumpComp {
-    pub pump_rate: f32,
+pub struct HullSealComp {
+    pub seal_rate: f32,
 }
 
 /// Targeting computer — boosts weapon accuracy
@@ -1236,11 +1380,11 @@ pub struct Chunk {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum ZoneType {
-    Light,      // 0-200m
-    Twilight,   // 200-500m
-    Dark,       // 500-1000m
-    Abyss,      // 1000m+
-    Trench,     // Endgame
+    NearOrbit,    // Low radiation zone
+    AsteroidBelt, // Moderate radiation
+    DeepSpace,    // High radiation
+    Nebula,       // Extreme radiation
+    BlackHole,    // Endgame
 }
 
 #[derive(Component)]
@@ -1284,11 +1428,11 @@ pub struct WorldDecoration {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DecorationType {
     Rock,
-    Algae,
-    Coral,
-    BioluminescentSpot,
+    SporeGrowth,
+    Crystal,
+    EnergySpot,
     ThermalVentSmoke,
-    SandMound,
+    RockDebris,
 }
 
 // ============================================================================
@@ -1309,16 +1453,10 @@ pub struct Creature {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, Serialize, Deserialize)]
 pub enum CreatureType {
-    Scavenger,
-    Stalker,
-    Ambusher,
-    ElectricEel,
-    BlindHunter,
-    LureFish,
-    SwarmQueen,
-    Leviathan,
-    Parasite,
-    Watcher,
+    VoidDrifter,     // Passive ambient life, clusters near planets
+    Stalker,         // Ambush predator, uses gravity/terrain
+    Leviathan,       // Apex predator, massive, territorial
+    ParasiteSwarm,   // Tiny swarmers, attach to hull
 }
 
 /// What a creature is targeting
@@ -1365,7 +1503,7 @@ pub struct WeaponCooldown {
     pub timer: Timer,
 }
 
-/// Sonar ping visual ring
+/// Radar ping visual ring
 #[derive(Component)]
 pub struct SonarPing {
     pub radius: f32,
@@ -1373,34 +1511,13 @@ pub struct SonarPing {
     pub speed: f32,
 }
 
-/// Marks an entity as revealed by sonar
+/// Marks an entity as revealed by radar
 #[derive(Component)]
 pub struct SonarRevealed {
     pub timer: Timer,
 }
 
-// ============================================================================
-// AMBIENT LIFE (lightweight passive creatures)
-// ============================================================================
-
-#[derive(Component)]
-pub struct AmbientCreature {
-    pub kind: AmbientKind,
-    pub health: f32,
-    pub food_value: f32,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
-pub enum AmbientKind {
-    SmallFish,
-    Jellyfish,
-    SchoolFish,
-    DeepFish,
-    GiantSquid,
-    Whale,
-}
-
-/// Fish scatter away from the sub briefly then resume
+/// Scatter behavior — creatures flee briefly from threats then resume
 #[derive(Component)]
 pub struct ScatterBehavior {
     pub scatter_timer: f32,
@@ -1452,9 +1569,7 @@ pub enum FoodChainTier {
 pub struct FoodChainRole {
     pub tier: FoodChainTier,
     pub prey_types: Vec<CreatureType>,
-    pub prey_ambient: Vec<AmbientKind>,
     pub threat_types: Vec<CreatureType>,
-    pub eats_corpses: bool,
     pub attacks_submarine: bool,
 }
 
@@ -1541,8 +1656,8 @@ pub struct SubmarinePhysics {
 impl Default for SubmarinePhysics {
     fn default() -> Self {
         Self {
-            mass: 800.0,
-            drag_coefficient: 0.15,
+            mass: 1200.0,           // Heavier = more inertia, feels like a real ship
+            drag_coefficient: 0.0,  // No drag in space. Momentum is forever. You must thrust to stop.
             frontal_area: 4.0,
             angular_velocity: 0.0,
             rotation: 0.0,
@@ -1563,9 +1678,9 @@ pub struct Velocity(pub Vec2);
 pub struct Depth(pub f32);
 
 #[derive(Component)]
-pub struct Buoyancy {
-    pub base_buoyancy: f32,     // Natural tendency to rise/sink
-    pub current: f32,           // Modified by ballast
+pub struct ThrusterState {
+    pub base_drift: f32,        // Natural drift from gravity/momentum
+    pub current: f32,           // Modified by thrusters
 }
 
 // ============================================================================
@@ -1742,7 +1857,7 @@ pub struct ComponentPiece {
 // CRISIS MANAGEMENT COMPONENTS
 // ============================================================================
 
-/// Marker: a BulkheadDoor hull segment that is sealed (blocks flood/fire spread)
+/// Marker: a BulkheadDoor hull segment that is sealed (blocks decompression/fire spread)
 #[derive(Component)]
 pub struct BulkheadSealed;
 
@@ -1879,17 +1994,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn hull_material_depth_ratings_increase_with_tier() {
+    fn hull_material_radiation_shielding_increases_with_tier() {
         let ratings = [
-            HullMaterial::Steel.depth_rating(),
-            HullMaterial::Titanium.depth_rating(),
-            HullMaterial::Composite.depth_rating(),
-            HullMaterial::AbyssalAlloy.depth_rating(),
+            HullMaterial::Steel.radiation_shielding(),
+            HullMaterial::Titanium.radiation_shielding(),
+            HullMaterial::Composite.radiation_shielding(),
+            HullMaterial::AbyssalAlloy.radiation_shielding(),
         ];
 
         for i in 1..ratings.len() {
             assert!(ratings[i] > ratings[i - 1],
-                "Higher tier hull material should have higher depth rating");
+                "Higher tier hull material should have higher radiation shielding");
         }
     }
 
@@ -1914,9 +2029,9 @@ mod tests {
         assert_eq!(hull.material, HullMaterial::Steel);
         assert!((hull.health - 100.0).abs() < f32::EPSILON);
         assert!((hull.max_health - 100.0).abs() < f32::EPSILON);
-        assert!((hull.depth_rating - 300.0).abs() < f32::EPSILON);
-        assert!(!hull.is_flooded);
-        assert!((hull.flood_level - 0.0).abs() < f32::EPSILON);
+        assert!((hull.radiation_shielding - 300.0).abs() < f32::EPSILON);
+        assert!(!hull.is_depressurized);
+        assert!((hull.depressurization_level - 0.0).abs() < f32::EPSILON);
     }
 
     #[test]

@@ -24,9 +24,7 @@ pub(super) fn creature_ranged_attack(
 
         // Only some creature types shoot back
         let (shoot_range, shoot_damage, shoot_cooldown) = match creature.creature_type {
-            CreatureType::ElectricEel => (200.0, 8.0, 3.0),
             CreatureType::Stalker => (300.0, 12.0, 4.0),
-            CreatureType::Watcher => (400.0, 25.0, 2.5),
             _ => continue,
         };
 
@@ -94,12 +92,10 @@ pub(super) fn despawn_dead_creatures(
         if creature.health <= 0.0 {
             // Determine loot
             let loot = match creature.creature_type {
-                CreatureType::Scavenger => vec![ItemType::ScrapMetal],
+                CreatureType::VoidDrifter => vec![ItemType::ScrapMetal],
                 CreatureType::Stalker => vec![ItemType::BioSample],
-                CreatureType::BlindHunter => vec![ItemType::BioSample, ItemType::RareAlloy],
                 CreatureType::Leviathan => vec![ItemType::RareAlloy, ItemType::AncientArtifact],
-                CreatureType::ElectricEel => vec![ItemType::FuelCell],
-                _ => vec![ItemType::ScrapMetal],
+                CreatureType::ParasiteSwarm => vec![ItemType::ScrapMetal],
             };
 
             // Add loot to inventory

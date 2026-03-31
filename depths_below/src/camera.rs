@@ -52,7 +52,7 @@ impl Plugin for CameraPlugin {
                 )
                     .chain()
                     .run_if(in_state(GameState::Exploring)
-                        .or_else(in_state(GameState::SurfaceBase))),
+                        .or_else(in_state(GameState::StationDocked))),
             );
     }
 }
@@ -149,44 +149,57 @@ fn camera_follow_submarine(
     projection.scale = projection.scale + (target_scale - projection.scale) * 5.0 * time.delta_seconds();
 }
 
-/// Realistic depth-based background darkening
-/// Surface is bright ocean blue, gradually loses light
-/// Abyss is near-black, only submarine lights illuminate
+/// Dynamic background based on celestial proximity.
+/// Near stars: warm glow. Near black holes: deep red/dark. Open void: dark blue/black.
 pub fn update_background_color(
     depth_state: Res<DepthState>,
+    sub_query: Query<&Transform, With<Submarine>>,
+    star_query: Query<(&Transform, &crate::celestial::components::Star, &crate::celestial::components::CelestialBody)>,
+    bh_query: Query<(&Transform, &crate::celestial::components::BlackHole, &crate::celestial::components::CelestialBody)>,
     mut clear_color: ResMut<ClearColor>,
 ) {
-    let depth = depth_state.current_depth;
+    let sub_pos = sub_query
+        .get_single()
+        .map(|t| t.translation.truncate())
+        .unwrap_or(Vec2::ZERO);
 
-    // Multi-stage depth zones for realistic light falloff
-    let (surface, target, t) = if depth < 200.0 {
-        // Light zone: bright ocean blue
-        let s = Vec3::new(0.05, 0.20, 0.45);
-        let e = Vec3::new(0.03, 0.12, 0.30);
-        (s, e, depth / 200.0)
-    } else if depth < 500.0 {
-        // Twilight zone: fading blue
-        let s = Vec3::new(0.03, 0.12, 0.30);
-        let e = Vec3::new(0.02, 0.05, 0.15);
-        (s, e, (depth - 200.0) / 300.0)
-    } else if depth < 1000.0 {
-        // Dark zone: deep navy
-        let s = Vec3::new(0.02, 0.05, 0.15);
-        let e = Vec3::new(0.01, 0.02, 0.05);
-        (s, e, (depth - 500.0) / 500.0)
-    } else if depth < 2000.0 {
-        // Abyss: near black
-        let s = Vec3::new(0.01, 0.02, 0.05);
-        let e = Vec3::new(0.005, 0.005, 0.01);
-        (s, e, (depth - 1000.0) / 1000.0)
-    } else {
-        // Trench: absolute darkness
-        let s = Vec3::new(0.005, 0.005, 0.01);
-        let e = Vec3::new(0.0, 0.0, 0.0);
-        (s, e, ((depth - 2000.0) / 1000.0).min(1.0))
-    };
+    // Base color: deep void (dark blue-black)
+    let void_color = Vec3::new(0.01, 0.02, 0.06);
 
-    let c = surface.lerp(target, t.clamp(0.0, 1.0));
+    // Star influence: warm glow when close
+    let mut star_influence = Vec3::ZERO;
+    let mut star_proximity = 0.0_f32;
+    for (star_transform, star, body) in star_query.iter() {
+        let dist = sub_pos.distance(star_transform.translation.truncate());
+        let influence_range = body.radius * 4.0;
+        if dist < influence_range {
+            let t = 1.0 - (dist / influence_range).clamp(0.0, 1.0);
+            let warmth = match star.size_class {
+                crate::celestial::components::StarSizeClass::Dwarf => Vec3::new(0.15, 0.08, 0.03),
+                crate::celestial::components::StarSizeClass::Main => Vec3::new(0.15, 0.12, 0.06),
+                crate::celestial::components::StarSizeClass::Giant => Vec3::new(0.20, 0.10, 0.03),
+                crate::celestial::components::StarSizeClass::Supergiant => Vec3::new(0.10, 0.12, 0.20),
+            };
+            star_influence += warmth * t * t;
+            star_proximity = star_proximity.max(t);
+        }
+    }
+
+    // Black hole influence: dark red pull
+    let mut bh_influence = Vec3::ZERO;
+    for (bh_transform, bh, _body) in bh_query.iter() {
+        let dist = sub_pos.distance(bh_transform.translation.truncate());
+        let influence_range = bh.accretion_disk_radius * 3.0;
+        if dist < influence_range {
+            let t = 1.0 - (dist / influence_range).clamp(0.0, 1.0);
+            bh_influence += Vec3::new(0.08 * t, 0.0, 0.02 * t); // Dark red
+            // Also darken overall as black hole sucks light
+            bh_influence -= Vec3::splat(0.03 * t);
+        }
+    }
+
+    let c = void_color + star_influence + bh_influence;
+    let c = c.clamp(Vec3::ZERO, Vec3::ONE);
     clear_color.0 = Color::rgb(c.x, c.y, c.z);
 }
 

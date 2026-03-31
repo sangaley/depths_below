@@ -17,32 +17,27 @@ pub mod noise_trail;
 pub mod territory;
 pub mod migration;
 
-pub use behaviors::*;
 
 pub struct CreaturePlugin;
 
 impl Plugin for CreaturePlugin {
     fn build(&self, app: &mut App) {
-        // Init ecosystem resources
         app.init_resource::<EcosystemState>()
-            .init_resource::<EcosystemConfig>()
-            .init_resource::<noise_trail::NoiseTrailTimer>();
+            .init_resource::<EcosystemConfig>();
 
         app.add_systems(
             Update,
             (
-                // Core creature AI pipeline (chained)
                 spawn_creatures,
+                behaviors::gravity_aware_wandering,
                 ecosystem::update_creature_needs,
                 ecosystem::ecosystem_ai_decisions,
                 migration::follow_migration_path,
-                watcher_alert_system,
                 creature_movement,
                 creature_attack_system,
                 creature_combat::creature_vs_creature_combat,
                 check_creature_detection,
-                electric_eel_shock,
-                swarm_queen_spawn,
+                parasite_attach_system,
             )
                 .chain()
                 .run_if(in_state(GameState::Exploring)),
@@ -50,7 +45,6 @@ impl Plugin for CreaturePlugin {
         .add_systems(
             Update,
             (
-                // Ecosystem support systems (independent of main chain)
                 ecosystem::feeding_system,
                 ecosystem::starvation_system,
                 ecosystem::reproduction_system,
@@ -63,16 +57,6 @@ impl Plugin for CreaturePlugin {
                 territory::update_territories,
                 migration::check_migration,
                 cleanup_distant_creatures,
-            )
-                .run_if(in_state(GameState::Exploring)),
-        )
-        .add_systems(
-            Update,
-            (
-                // Ambient life systems (independent, lightweight)
-                spawn_ambient_life,
-                ambient_movement,
-                cleanup_ambient,
                 animate_creature_sprites,
             )
                 .run_if(in_state(GameState::Exploring)),
@@ -80,7 +64,7 @@ impl Plugin for CreaturePlugin {
     }
 }
 
-/// Spawns creatures based on depth and biome, using ecosystem population caps.
+/// Spawns creatures based on distance from station and biome.
 fn spawn_creatures(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -96,33 +80,27 @@ fn spawn_creatures(
     mut spawn_timer: Local<f32>,
     session_timer: Res<ExploringSessionTimer>,
 ) {
-    // Don't spawn any hostile creatures in the first 30 seconds of Exploring
+    // Don't spawn any hostile creatures in the first 30 seconds
     let hostile_warmup = 30.0;
-    if session_timer.elapsed < hostile_warmup {
-        return;
-    }
 
     *spawn_timer += time.delta_seconds();
 
-    // Use ecosystem total cap
     let total_creatures: u32 = eco_state.population_counts.values().sum();
     if total_creatures >= eco_config.max_total_creatures {
         return;
     }
 
-    // Also check old depth-based max as a safety valve
     let depth = sub_state.current_depth.abs();
-    let max_creatures = (5 + (depth / 400.0) as usize).min(eco_config.max_total_creatures as usize);
+    let max_creatures = (8 + (depth / 300.0) as usize).min(eco_config.max_total_creatures as usize);
     if creature_query.iter().count() >= max_creatures {
         return;
     }
 
-    // Spawn rate scales with depth (faster spawns deeper)
-    let spawn_interval = (2.5 - (depth / 1500.0).min(1.0)) / config.creature_spawn_rate;
+    let spawn_interval = (2.0 - (depth / 1500.0).min(1.0)) / config.creature_spawn_rate;
     if *spawn_timer >= spawn_interval {
         *spawn_timer = 0.0;
 
-        // Use biome creature weights for weighted random selection
+        // Weighted selection based on biome
         let weights = crate::world::biome_creature_weights(world_state.current_biome);
         let creature_type = if !weights.is_empty() {
             let total: f32 = weights.iter().map(|(_, w)| w).sum();
@@ -136,31 +114,41 @@ fn spawn_creatures(
                 }
             }
             match selected {
-                "scavenger" => CreatureType::Scavenger,
+                "void_drifter" => CreatureType::VoidDrifter,
                 "stalker" => CreatureType::Stalker,
-                "ambusher" => CreatureType::Ambusher,
-                "electric_eel" => CreatureType::ElectricEel,
-                "blind_hunter" => CreatureType::BlindHunter,
-                "lure_fish" => CreatureType::LureFish,
-                "swarm_queen" => CreatureType::SwarmQueen,
                 "leviathan" => CreatureType::Leviathan,
-                "parasite" => CreatureType::Parasite,
-                "watcher" => CreatureType::Watcher,
-                _ => CreatureType::Scavenger,
+                "parasite_swarm" => CreatureType::ParasiteSwarm,
+                _ => CreatureType::VoidDrifter,
             }
         } else {
-            // Fallback: depth-based
-            match sub_state.current_depth {
-                d if d < 200.0 => CreatureType::Scavenger,
-                d if d < 500.0 => CreatureType::Stalker,
-                d if d < 1000.0 => CreatureType::BlindHunter,
-                _ => CreatureType::Watcher,
+            // Fallback: distance-based
+            match depth {
+                d if d < 300.0 => CreatureType::VoidDrifter,
+                d if d < 800.0 => CreatureType::Stalker,
+                _ => CreatureType::ParasiteSwarm,
             }
         };
 
-        // Leviathans only spawn in deep water (1500m+)
+        // Don't spawn hostile creatures during warmup
+        if session_timer.elapsed < hostile_warmup && creature_type != CreatureType::VoidDrifter {
+            return;
+        }
+
+        // Leviathans only spawn in deep space (1500+ distance)
         let creature_type = if creature_type == CreatureType::Leviathan && depth < 1500.0 {
-            CreatureType::BlindHunter
+            CreatureType::Stalker
+        } else {
+            creature_type
+        };
+
+        // Per-system ecosystem modifier: later systems have more dangerous creatures
+        // Galaxy system ID acts as difficulty scaling
+        let galaxy_state = world_state.seed; // Use seed as proxy for system danger
+        let system_danger = (galaxy_state as f32 / 100.0).min(3.0);
+        let creature_type = if system_danger > 1.5 && creature_type == CreatureType::VoidDrifter
+            && rand::thread_rng().gen::<f32>() < 0.3
+        {
+            CreatureType::ParasiteSwarm // Dangerous systems convert some drifters to parasites
         } else {
             creature_type
         };
@@ -180,25 +168,30 @@ fn spawn_creatures(
             return;
         }
 
-        // Get submarine's actual position
         let sub_pos = submarine_query
             .get_single()
             .map(|t| t.translation.truncate())
             .unwrap_or(Vec2::ZERO);
 
-        // Randomize spawn position around the submarine (full 360 degrees, 600-1000 units away)
         let mut rng = rand::thread_rng();
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
         let dist = rng.gen_range(600.0..1000.0);
-
-        let offset = Vec2::new(angle.cos() * dist, angle.sin() * dist);
-        let spawn_pos = sub_pos + offset;
+        let spawn_pos = sub_pos + Vec2::new(angle.cos() * dist, angle.sin() * dist);
 
         spawn_creature(&mut commands, &asset_server, &mut texture_atlases, creature_type, spawn_pos);
+
+        // ParasiteSwarm spawns in clusters
+        if creature_type == CreatureType::ParasiteSwarm {
+            let group_size = rng.gen_range(3..8);
+            for _ in 0..group_size {
+                let offset = Vec2::new(rng.gen_range(-40.0..40.0), rng.gen_range(-40.0..40.0));
+                spawn_creature(&mut commands, &asset_server, &mut texture_atlases, CreatureType::ParasiteSwarm, spawn_pos + offset);
+            }
+        }
     }
 }
 
-/// Spawn a creature entity with animated sprite sheet and random size variation
+/// Spawn a creature entity with animated sprite sheet
 fn spawn_creature(
     commands: &mut Commands,
     asset_server: &AssetServer,
@@ -208,60 +201,48 @@ fn spawn_creature(
 ) {
     let mut rng = rand::thread_rng();
 
-    // Use Y position as proxy for depth (negative Y = deeper)
     let depth = position.y.abs();
     let depth_factor = 1.0 + (depth / 1000.0).min(2.0);
     let speed_factor = 1.0 + (depth / 2000.0).min(0.5);
     let range_factor = 1.0 + (depth / 3000.0).min(0.3);
 
-    // Base stats: (sprite_frame_w, sprite_frame_h, display_w, display_h, health, damage, speed, detection_range)
-    // sprite_frame_w/h = per-frame size in the sprite sheet
-    // display_w/h = world-space render size (before random scaling)
+    // (frame_w, frame_h, display_w, display_h, health, damage, speed, detection_range)
+    // Stats: the void is hostile. No weapons = you're prey.
     let (frame_w, frame_h, base_w, base_h, health, damage, speed, range) = match creature_type {
-        CreatureType::Scavenger =>    ( 64,  64,  84.0,  42.0,  20.0,  5.0,  50.0, 200.0),
-        CreatureType::Stalker =>      ( 64,  64, 150.0,  54.0,  50.0, 15.0,  80.0, 350.0),
-        CreatureType::Ambusher =>     ( 64,  64, 120.0,  48.0,  40.0, 20.0, 120.0, 180.0),
-        CreatureType::ElectricEel =>  ( 64,  64, 165.0,  30.0,  25.0, 12.0,  90.0, 300.0),
-        CreatureType::BlindHunter =>  ( 64,  64, 165.0, 105.0,  80.0, 25.0, 100.0, 150.0),
-        CreatureType::LureFish =>     ( 64,  64,  66.0,  54.0,  30.0,  8.0,  30.0, 250.0),
-        CreatureType::SwarmQueen =>   ( 64,  64, 180.0, 150.0,  60.0, 10.0,  40.0, 400.0),
-        CreatureType::Leviathan =>    (128,  64, 660.0, 180.0, 500.0,100.0,  40.0, 500.0),
-        CreatureType::Parasite =>     ( 64,  64,  36.0,  24.0,  15.0,  3.0,  70.0, 120.0),
-        CreatureType::Watcher =>      ( 64,  64,  90.0,  90.0,  30.0,  0.0,  20.0, 600.0),
+        CreatureType::VoidDrifter =>     ( 64,  64,  45.0,  22.0,   8.0,  0.0,  12.0,  80.0),  // Ambient, harmless
+        CreatureType::Stalker =>         ( 64,  64, 150.0,  54.0,  75.0, 18.0,  90.0, 400.0),  // Fast, hits hard, detects far
+        CreatureType::Leviathan =>       (128,  64, 660.0, 180.0,1200.0,120.0,  35.0, 700.0),  // Tank. You need a real weapon system.
+        CreatureType::ParasiteSwarm =>   ( 64,  64,  30.0,  20.0,   4.0,  2.0,  75.0, 250.0),  // Fast, numerous, relentless
     };
 
-    // Random size variation: 0.75x to 1.35x (bigger = more health, slower)
     let size_scale = rng.gen_range(0.75..1.35_f32);
     let w = base_w * size_scale;
     let h = base_h * size_scale;
-    let health_scale = size_scale.powf(1.5); // bigger creatures are tougher
-    let speed_scale = 1.0 / size_scale.sqrt(); // bigger creatures are slower
+    let health_scale = size_scale.powf(1.5);
+    let speed_scale = 1.0 / size_scale.sqrt();
 
     let attack_time = match creature_type {
         CreatureType::Leviathan => 3.0,
-        CreatureType::Scavenger => 2.0,
-        CreatureType::Parasite => 0.5,
-        _ => 1.5,
+        CreatureType::ParasiteSwarm => 0.5,
+        CreatureType::Stalker => 1.5,
+        CreatureType::VoidDrifter => 5.0,
     };
 
-    // Apply depth + size scaling to creature stats
     let scaled_health = health * depth_factor * health_scale;
     let scaled_damage = damage * depth_factor * size_scale;
     let scaled_speed = speed * speed_factor * speed_scale;
     let scaled_range = range * range_factor;
 
-    // Get ecosystem data
     let eco_stats = food_chain::creature_ecosystem_stats(creature_type);
     let role = food_chain::food_chain_role(creature_type);
 
-    // Animation: hostile creatures have 6 frames (4 swim + 2 attack) in a horizontal strip
     let swim_frames = 4;
-    let attack_frames = 2;
+    let attack_frames = if creature_type == CreatureType::VoidDrifter { 0 } else { 2 };
     let total_frames = swim_frames + attack_frames;
     let anim_speed = match creature_type {
-        CreatureType::Parasite => 0.1,
+        CreatureType::ParasiteSwarm => 0.1,
         CreatureType::Leviathan => 0.25,
-        CreatureType::SwarmQueen => 0.2,
+        CreatureType::VoidDrifter => 0.3,
         _ => 0.15,
     };
 
@@ -269,8 +250,8 @@ fn spawn_creature(
     let atlas = TextureAtlas::from_grid(
         texture,
         Vec2::new(frame_w as f32, frame_h as f32),
-        total_frames, // columns
-        1,            // rows
+        total_frames,
+        1,
         None,
         None,
     );
@@ -297,10 +278,18 @@ fn spawn_creature(
             food_value: eco_stats.food_value * size_scale,
         },
         CreatureAI {
-            state: CreatureAIState::Wandering,
+            state: if creature_type == CreatureType::VoidDrifter {
+                CreatureAIState::Wandering
+            } else {
+                CreatureAIState::Wandering
+            },
             target: None,
             home_position: position,
-            wander_radius: 200.0,
+            wander_radius: match creature_type {
+                CreatureType::VoidDrifter => 300.0,
+                CreatureType::Leviathan => 500.0,
+                _ => 200.0,
+            },
         },
         AttackCooldown {
             timer: Timer::from_seconds(attack_time, TimerMode::Once),
@@ -313,7 +302,6 @@ fn spawn_creature(
             total_frames,
             current_frame: 0,
         },
-        // Ecosystem components
         CreatureNeeds {
             hunger: 20.0 + rng.gen_range(0.0..30.0),
             energy: 80.0 + rng.gen_range(0.0..20.0),
@@ -322,9 +310,18 @@ fn spawn_creature(
         },
         role,
         CreatureMemory::default(),
+        // Gravity interaction — creatures get pulled by celestial bodies
+        crate::celestial::components::GravityAffected {
+            mass: match creature_type {
+                CreatureType::VoidDrifter => 10.0,     // Light, drifts easily
+                CreatureType::Stalker => 200.0,        // Medium, resists somewhat
+                CreatureType::Leviathan => 5000.0,     // Massive, barely affected
+                CreatureType::ParasiteSwarm => 5.0,    // Tiny, blown around
+            },
+        },
+        crate::celestial::components::GravityForce::default(),
     ));
 
-    // Add territory for territorial creatures
     if eco_stats.is_territorial {
         entity_commands.insert(Territory {
             center: position,
@@ -333,7 +330,6 @@ fn spawn_creature(
         });
     }
 
-    // Add reproduction for creatures that can breed
     if eco_stats.can_reproduce {
         entity_commands.insert(Reproductive {
             gestation_timer: 0.0,
@@ -344,7 +340,7 @@ fn spawn_creature(
     }
 }
 
-/// Moves creatures based on AI state, resolving EcoTarget for direction
+/// Moves creatures based on AI state
 fn creature_movement(
     time: Res<Time>,
     submarine_query: Query<&Transform, With<Submarine>>,
@@ -357,7 +353,6 @@ fn creature_movement(
         .map(|t| t.translation.truncate())
         .unwrap_or(Vec2::ZERO);
 
-    // Pre-collect creature positions to avoid conflicting borrows
     let creature_pos_map: std::collections::HashMap<Entity, Vec2> = creature_query
         .iter()
         .map(|(e, t, _, _, _)| (e, t.translation.truncate()))
@@ -366,7 +361,6 @@ fn creature_movement(
     for (_entity, mut transform, creature, ai, mut velocity) in creature_query.iter_mut() {
         let pos = transform.translation.truncate();
 
-        // Resolve target position from EcoTarget
         let target_pos = if let Some(ref eco_target) = ai.target {
             match eco_target {
                 EcoTarget::Submarine(_) => sub_pos,
@@ -389,10 +383,9 @@ fn creature_movement(
             ai.home_position
         };
 
-        // Wounded rage: creatures move faster when hurt (except passive types)
+        // Wounded rage for combat creatures
         let health_pct = if creature.max_health > 0.0 { creature.health / creature.max_health } else { 1.0 };
-        let rage_mult = if health_pct < 0.4 && !matches!(creature.creature_type,
-            CreatureType::Watcher | CreatureType::LureFish | CreatureType::Parasite) {
+        let rage_mult = if health_pct < 0.4 && creature.creature_type != CreatureType::VoidDrifter {
             1.5
         } else {
             1.0
@@ -406,11 +399,9 @@ fn creature_movement(
                     CreatureType::Stalker => {
                         let perp = Vec2::new(-direction.y, direction.x);
                         let weave = (time.elapsed_seconds() * 3.0).sin() * 0.4;
-                        (direction + perp * weave).normalize_or_zero() * creature.speed
+                        (direction + perp * weave).normalize_or_zero() * creature.speed * rage_mult
                     }
-                    // SwarmQueen: slow but relentless
-                    CreatureType::SwarmQueen => direction * creature.speed * 0.6,
-                    // Leviathan: phases based on health
+                    // Leviathan: slow sweeping approach, enraged when hurt
                     CreatureType::Leviathan => {
                         if health_pct < 0.5 {
                             direction * creature.speed * 1.8 * rage_mult
@@ -426,8 +417,8 @@ fn creature_movement(
             CreatureAIState::Attacking => {
                 let direction = (target_pos - pos).normalize_or_zero();
                 match creature.creature_type {
-                    CreatureType::Ambusher => direction * creature.speed * 2.5,
-                    CreatureType::Parasite => direction * creature.speed * 1.3,
+                    CreatureType::Stalker => direction * creature.speed * 2.5,
+                    CreatureType::ParasiteSwarm => direction * creature.speed * 1.3,
                     CreatureType::Leviathan => {
                         if health_pct < 0.25 {
                             direction * creature.speed * 2.5 * rage_mult
@@ -439,67 +430,34 @@ fn creature_movement(
                 }
             }
             CreatureAIState::Fleeing => {
-                // Flee away from the threat (target position)
-                let flee_from = target_pos;
-                let direction = (pos - flee_from).normalize_or_zero();
+                let direction = (pos - target_pos).normalize_or_zero();
                 direction * creature.speed * 1.5
             }
             CreatureAIState::Observing => {
                 let to_target = target_pos - pos;
-                let dist = to_target.length();
-                match creature.creature_type {
-                    CreatureType::LureFish => {
-                        if dist > 100.0 {
-                            to_target.normalize_or_zero() * creature.speed * 0.3
-                        } else {
-                            let perp = Vec2::new(-to_target.y, to_target.x).normalize_or_zero();
-                            perp * creature.speed * 0.15
-                        }
-                    }
-                    CreatureType::Watcher => {
-                        let perp = Vec2::new(-to_target.y, to_target.x).normalize_or_zero();
-                        let radial = if dist < 150.0 {
-                            (pos - target_pos).normalize_or_zero() * creature.speed * 0.3
-                        } else {
-                            Vec2::ZERO
-                        };
-                        perp * creature.speed * 0.5 + radial
-                    }
-                    _ => {
-                        let perp = Vec2::new(-to_target.y, to_target.x).normalize_or_zero();
-                        perp * creature.speed * 0.5
-                    }
-                }
+                let perp = Vec2::new(-to_target.y, to_target.x).normalize_or_zero();
+                perp * creature.speed * 0.5
             }
             CreatureAIState::Feeding => {
-                // Slow approach to corpse/food
                 let direction = (target_pos - pos).normalize_or_zero();
                 let dist = pos.distance(target_pos);
-                if dist > 30.0 {
-                    direction * creature.speed * 0.3
-                } else {
-                    Vec2::ZERO // Stay at food
-                }
+                if dist > 30.0 { direction * creature.speed * 0.3 } else { Vec2::ZERO }
             }
             CreatureAIState::Patrolling => {
-                // Circle around territory center (home_position)
                 let to_home = ai.home_position - pos;
                 let dist = to_home.length();
                 let perp = Vec2::new(-to_home.y, to_home.x).normalize_or_zero();
                 if dist > 200.0 {
-                    // Drift back toward center
                     (to_home.normalize_or_zero() * 0.5 + perp * 0.5).normalize_or_zero() * creature.speed * 0.4
                 } else {
                     perp * creature.speed * 0.4
                 }
             }
             CreatureAIState::Migrating => {
-                // Move toward migration waypoint
                 let direction = (target_pos - pos).normalize_or_zero();
                 direction * creature.speed * 0.7
             }
             CreatureAIState::Investigating => {
-                // Follow noise trail toward highest intensity point
                 let direction = (target_pos - pos).normalize_or_zero();
                 direction * creature.speed * 0.6
             }
@@ -510,9 +468,8 @@ fn creature_movement(
             CreatureAIState::Idle => Vec2::ZERO,
         };
 
-        // Lerp speed varies: ambush lunge is snappy, leviathan is heavy
         let lerp_factor = match creature.creature_type {
-            CreatureType::Ambusher if matches!(ai.state, CreatureAIState::Attacking) => 8.0,
+            CreatureType::Stalker if matches!(ai.state, CreatureAIState::Attacking) => 8.0,
             CreatureType::Leviathan => 0.8,
             _ => 2.0,
         };
@@ -521,7 +478,6 @@ fn creature_movement(
         transform.translation.x += velocity.0.x * time.delta_seconds();
         transform.translation.y += velocity.0.y * time.delta_seconds();
 
-        // Rotate sprite to face movement direction
         if velocity.0.length_squared() > 1.0 {
             let angle = velocity.0.y.atan2(velocity.0.x);
             transform.rotation = Quat::from_rotation_z(angle);
@@ -529,7 +485,7 @@ fn creature_movement(
     }
 }
 
-/// Creature attack system - damages submarine only when targeting submarine
+/// Creature attack system — damages player ship or AI ships
 fn creature_attack_system(
     time: Res<Time>,
     sub_query: Query<(Entity, &Transform), With<Submarine>>,
@@ -555,16 +511,12 @@ fn creature_attack_system(
 
         let creature_pos = transform.translation.truncate();
 
-        // Wounded creatures deal +25% damage
         let health_pct = if creature.max_health > 0.0 { creature.health / creature.max_health } else { 1.0 };
         let rage_damage = if health_pct < 0.4 { creature.damage * 1.25 } else { creature.damage };
 
-        // Check if targeting player submarine
         if matches!(ai.target, Some(EcoTarget::Submarine(_))) {
             let dist = creature_pos.distance(sub_pos);
-            if dist > 100.0 {
-                continue;
-            }
+            if dist > 100.0 { continue; }
 
             cooldown.timer.reset();
 
@@ -585,15 +537,11 @@ fn creature_attack_system(
                 notification_type: NotificationType::Danger,
                 duration: 2.0,
             });
-        }
-        // Check if targeting an AI submarine
-        else if let Some(EcoTarget::AiSubmarine(ai_sub_entity)) = ai.target {
+        } else if let Some(EcoTarget::AiSubmarine(ai_sub_entity)) = ai.target {
             if let Ok((ai_e, ai_transform)) = ai_sub_query.get(ai_sub_entity) {
                 let ai_pos = ai_transform.translation.truncate();
                 let dist = creature_pos.distance(ai_pos);
-                if dist > 100.0 {
-                    continue;
-                }
+                if dist > 100.0 { continue; }
 
                 cooldown.timer.reset();
 
@@ -609,73 +557,63 @@ fn creature_attack_system(
     }
 }
 
-/// Watcher scout mechanic: when a Watcher enters Observing state, it alerts nearby creatures
-fn watcher_alert_system(
-    mut creature_query: Query<(Entity, &Transform, &Creature, &mut CreatureAI)>,
-    submarine_query: Query<Entity, With<Submarine>>,
+/// ParasiteSwarm: attaches to hull and slowly drains systems
+fn parasite_attach_system(
+    time: Res<Time>,
+    parasite_query: Query<(&Transform, &Creature, &CreatureAI), Without<Submarine>>,
+    sub_query: Query<&Transform, With<Submarine>>,
+    mut damage_events: EventWriter<SubmarineDamaged>,
     mut notifications: EventWriter<ShowNotification>,
-    mut alerted_this_dive: Local<bool>,
+    mut drain_timer: Local<f32>,
 ) {
-    let Ok(_sub_entity) = submarine_query.get_single() else { return };
-
-    // Reset alert flag when no creatures exist (new dive after cleanup)
-    if creature_query.is_empty() {
-        *alerted_this_dive = false;
+    *drain_timer += time.delta_seconds();
+    if *drain_timer < 1.0 {
         return;
     }
 
-    // Collect watcher positions and targets first
-    let watchers: Vec<(Vec2, EcoTarget)> = creature_query
-        .iter()
-        .filter(|(_, _, c, ai)| {
-            c.creature_type == CreatureType::Watcher
-                && matches!(ai.state, CreatureAIState::Observing)
-        })
-        .filter_map(|(_, t, _, ai)| ai.target.map(|tgt| (t.translation.truncate(), tgt)))
-        .collect();
+    let Ok(sub_transform) = sub_query.get_single() else { return };
+    let sub_pos = sub_transform.translation.truncate();
 
-    if watchers.is_empty() {
-        return;
-    }
+    let mut attached_count = 0u32;
+    for (transform, creature, ai) in parasite_query.iter() {
+        if creature.creature_type != CreatureType::ParasiteSwarm { continue; }
+        if !matches!(ai.state, CreatureAIState::Attacking) { continue; }
+        if !matches!(ai.target, Some(EcoTarget::Submarine(_))) { continue; }
 
-    // Alert nearby creatures for each watcher
-    for (watcher_pos, target) in &watchers {
-        for (_, transform, creature, mut ai) in creature_query.iter_mut() {
-            if creature.creature_type == CreatureType::Watcher {
-                continue;
-            }
-            if !matches!(ai.state, CreatureAIState::Wandering | CreatureAIState::Idle) {
-                continue;
-            }
-            let dist = transform.translation.truncate().distance(*watcher_pos);
-            if dist < 400.0 {
-                ai.state = CreatureAIState::Hunting;
-                ai.target = Some(*target);
-            }
+        let dist = transform.translation.truncate().distance(sub_pos);
+        if dist < 80.0 {
+            attached_count += 1;
         }
     }
 
-    // First-time notification
-    if !*alerted_this_dive {
-        *alerted_this_dive = true;
-        notifications.send(ShowNotification {
-            message: "Something is watching you...".into(),
-            notification_type: NotificationType::Warning,
-            duration: 3.0,
+    if attached_count > 0 {
+        *drain_timer = 0.0;
+        let drain_damage = attached_count as f32 * 0.8; // 0.8 per parasite per second — 10 parasites = 8 DPS. Build point defense.
+        damage_events.send(SubmarineDamaged {
+            source: DamageSource::Creature(Entity::PLACEHOLDER),
+            amount: drain_damage,
+            position: None,
+            direction: None,
         });
+
+        if attached_count >= 3 {
+            notifications.send(ShowNotification {
+                message: format!("Parasite swarm draining hull! ({} attached)", attached_count),
+                notification_type: NotificationType::Danger,
+                duration: 2.0,
+            });
+        }
     }
 }
 
-/// Checks if creatures detect the submarine and fires events
+/// Checks if creatures detect the ship
 fn check_creature_detection(
     submarine_query: Query<&Transform, With<Submarine>>,
     creature_query: Query<(Entity, &Transform, &Creature, &CreatureAI)>,
     mut spotted_events: EventWriter<CreatureSpotted>,
     mut detected: Local<std::collections::HashSet<Entity>>,
 ) {
-    let Ok(sub_transform) = submarine_query.get_single() else {
-        return;
-    };
+    let Ok(sub_transform) = submarine_query.get_single() else { return };
 
     for (entity, transform, creature, ai) in creature_query.iter() {
         let distance = transform.translation.truncate()
@@ -694,102 +632,7 @@ fn check_creature_detection(
     }
 }
 
-/// ElectricEel: AoE shock that damages sub when attacking at close range
-fn electric_eel_shock(
-    time: Res<Time>,
-    eel_query: Query<(&Transform, &Creature, &CreatureAI), Without<Submarine>>,
-    sub_query: Query<&Transform, With<Submarine>>,
-    mut damage_events: EventWriter<SubmarineDamaged>,
-    mut notifications: EventWriter<ShowNotification>,
-    mut shock_timer: Local<f32>,
-) {
-    *shock_timer += time.delta_seconds();
-    if *shock_timer < 3.0 {
-        return;
-    }
-
-    let Ok(sub_transform) = sub_query.get_single() else { return };
-    let sub_pos = sub_transform.translation.truncate();
-
-    for (transform, creature, ai) in eel_query.iter() {
-        if creature.creature_type != CreatureType::ElectricEel {
-            continue;
-        }
-        if !matches!(ai.state, CreatureAIState::Attacking | CreatureAIState::Hunting) {
-            continue;
-        }
-
-        // Only shock submarine if targeting it
-        if !matches!(ai.target, Some(EcoTarget::Submarine(_))) {
-            continue;
-        }
-
-        let dist = transform.translation.truncate().distance(sub_pos);
-        let shock_range = 150.0;
-
-        if dist < shock_range {
-            let shock_damage = creature.damage * 0.5 * (1.0 - dist / shock_range);
-            if shock_damage > 0.5 {
-                *shock_timer = 0.0;
-                damage_events.send(SubmarineDamaged {
-                    source: DamageSource::Creature(Entity::PLACEHOLDER),
-                    amount: shock_damage,
-                    position: Some(transform.translation.truncate()),
-                    direction: Some((transform.translation.truncate() - sub_pos).normalize_or_zero()),
-                });
-                notifications.send(ShowNotification {
-                    message: format!("Electric shock! ({:.0} damage)", shock_damage),
-                    notification_type: NotificationType::Danger,
-                    duration: 2.0,
-                });
-                return;
-            }
-        }
-    }
-}
-
-/// SwarmQueen: periodically spawns Parasite minions while hunting
-fn swarm_queen_spawn(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
-    time: Res<Time>,
-    queen_query: Query<(&Transform, &Creature, &CreatureAI)>,
-    creature_count: Query<&Creature>,
-    mut spawn_timer: Local<f32>,
-) {
-    *spawn_timer += time.delta_seconds();
-    if *spawn_timer < 8.0 {
-        return;
-    }
-
-    if creature_count.iter().count() >= 15 {
-        return;
-    }
-
-    for (transform, creature, ai) in queen_query.iter() {
-        if creature.creature_type != CreatureType::SwarmQueen {
-            continue;
-        }
-        if !matches!(ai.state, CreatureAIState::Hunting | CreatureAIState::Attacking) {
-            continue;
-        }
-
-        *spawn_timer = 0.0;
-        let queen_pos = transform.translation.truncate();
-        for i in 0..2 {
-            let offset = Vec2::new(
-                if i == 0 { -30.0 } else { 30.0 },
-                rand::thread_rng().gen_range(-20.0..20.0),
-            );
-            spawn_creature(&mut commands, &asset_server, &mut texture_atlases, CreatureType::Parasite, queen_pos + offset);
-        }
-        return;
-    }
-}
-
-/// Despawn creatures that are very far from the submarine.
-/// Decrements ecosystem population counts. Doesn't despawn migrating creatures.
+/// Despawn creatures that are very far from the ship
 fn cleanup_distant_creatures(
     mut commands: Commands,
     sub_query: Query<&Transform, With<Submarine>>,
@@ -801,24 +644,17 @@ fn cleanup_distant_creatures(
 
     for (entity, transform, creature, ai) in creature_query.iter() {
         let dist = transform.translation.truncate().distance(sub_pos);
-        if dist > 2000.0 {
-            // Don't despawn migrating creatures
-            if ai.state == CreatureAIState::Migrating {
-                continue;
-            }
-
-            // Decrement population count
+        if dist > 2500.0 {
+            if ai.state == CreatureAIState::Migrating { continue; }
             if let Some(count) = eco_state.population_counts.get_mut(&creature.creature_type) {
                 *count = count.saturating_sub(1);
             }
-
             commands.entity(entity).despawn_recursive();
         }
     }
 }
 
-/// Animate creature sprite sheets — cycles swim frames normally,
-/// switches to attack frames when in Attacking state.
+/// Animate creature sprite sheets
 fn animate_creature_sprites(
     time: Res<Time>,
     mut query: Query<(
@@ -829,16 +665,13 @@ fn animate_creature_sprites(
 ) {
     for (mut anim, mut sprite, ai) in query.iter_mut() {
         anim.timer.tick(time.delta());
-        if !anim.timer.just_finished() {
-            continue;
-        }
+        if !anim.timer.just_finished() { continue; }
 
         let attacking = ai
             .map(|a| matches!(a.state, CreatureAIState::Attacking))
             .unwrap_or(false);
 
         if attacking && anim.attack_frames > 0 {
-            // Cycle through attack frames
             let attack_start = anim.swim_frames;
             let attack_end = anim.swim_frames + anim.attack_frames;
             anim.current_frame = if anim.current_frame >= attack_start && anim.current_frame < attack_end - 1 {
@@ -847,7 +680,6 @@ fn animate_creature_sprites(
                 attack_start
             };
         } else {
-            // Cycle through swim frames
             anim.current_frame = (anim.current_frame + 1) % anim.swim_frames;
         }
 

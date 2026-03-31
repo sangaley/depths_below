@@ -8,7 +8,7 @@ use crate::resources::PowerGraph;
 pub struct Room {
     pub id: usize,
     pub tiles: Vec<IVec2>,
-    pub water_level: f32,       // 0.0 = dry, 1.0 = full
+    pub air_level: f32,       // 1.0 = pressurized, 0.0 = vacuum
     pub is_breached: bool,
     pub has_power: bool,
 }
@@ -113,7 +113,7 @@ pub fn detect_rooms(
         rooms.push(Room {
             id: room_id,
             tiles: room_tiles,
-            water_level: 0.0,
+            air_level: 1.0,
             is_breached: false,
             has_power: false,
         });
@@ -137,31 +137,31 @@ pub fn update_room_map(
         .map(|(_, transform)| transform_to_grid(transform))
         .collect();
 
-    // Save flood state for every tile in every room
-    let mut tile_flood_state: HashMap<IVec2, (f32, bool)> = HashMap::new();
+    // Save air state for every tile in every room
+    let mut tile_air_state: HashMap<IVec2, (f32, bool)> = HashMap::new();
     for room in room_map.rooms.iter() {
-        if room.water_level > 0.0 || room.is_breached {
+        if room.air_level < 1.0 || room.is_breached {
             for &tile in &room.tiles {
-                tile_flood_state.insert(tile, (room.water_level, room.is_breached));
+                tile_air_state.insert(tile, (room.air_level, room.is_breached));
             }
         }
     }
 
     *room_map = detect_rooms(&hull_query, &module_query, &sealed_positions);
 
-    // Restore flood state: new room inherits the highest water level from any
+    // Restore air state: new room inherits the lowest air level from any
     // overlapping old tile, and is_breached if any overlapping tile was breached.
     for room in room_map.rooms.iter_mut() {
-        let mut max_water = 0.0_f32;
+        let mut min_air = 1.0_f32;
         let mut any_breached = false;
         for tile in &room.tiles {
-            if let Some(&(water_level, is_breached)) = tile_flood_state.get(tile) {
-                max_water = max_water.max(water_level);
+            if let Some(&(air_level, is_breached)) = tile_air_state.get(tile) {
+                min_air = min_air.min(air_level);
                 any_breached = any_breached || is_breached;
             }
         }
-        if max_water > 0.0 || any_breached {
-            room.water_level = max_water;
+        if min_air < 1.0 || any_breached {
+            room.air_level = min_air;
             room.is_breached = any_breached;
         }
     }

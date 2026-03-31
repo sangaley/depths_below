@@ -1,5 +1,5 @@
 //! Systems for companion components: Capacitor, FireSuppression,
-//! PressureReinforcement, DroneBay, TorpedoLoader, and Phase B subsystems.
+//! RadiationShielding, DroneBay, AmmoAutoloader, and Phase B subsystems.
 
 use bevy::prelude::*;
 use crate::components::*;
@@ -74,21 +74,21 @@ pub fn update_fire_suppression(
 }
 
 // ============================================================================
-// PRESSURE REINFORCEMENT — boosts depth rating of adjacent hull segments
+// RADIATION SHIELDING — boosts radiation tolerance of adjacent hull segments
 // ============================================================================
 
-/// Pressure frame modules increase the depth_rating of adjacent hull segments.
+/// Radiation shielding modules increase the radiation_shielding of adjacent hull segments.
 /// Applied additively each frame (idempotent because hull segments reset to base each tick).
-pub fn update_pressure_reinforcement(
-    reinforcements: Query<(&PressureReinforcementComp, &Module), Without<DestroyedModule>>,
+pub fn update_radiation_shielding(
+    reinforcements: Query<(&RadiationShieldingComp, &Module), Without<DestroyedModule>>,
     mut hull_segments: Query<&mut HullSegment>,
 ) {
-    // First, reset all hull segments to their base depth rating
+    // First, reset all hull segments to their base radiation shielding
     for mut hull in hull_segments.iter_mut() {
-        hull.depth_rating = hull.material.depth_rating();
+        hull.radiation_shielding = hull.material.radiation_shielding();
     }
 
-    // Then apply bonuses from active PressureFrame modules
+    // Then apply bonuses from active shielding modules
     for (reinforcement, module) in reinforcements.iter() {
         if !module.is_active {
             continue;
@@ -97,7 +97,7 @@ pub fn update_pressure_reinforcement(
         for mut hull in hull_segments.iter_mut() {
             let dist = (hull.grid_position - module.grid_position).as_vec2().length();
             if dist <= 2.5 {
-                hull.depth_rating += reinforcement.depth_bonus;
+                hull.radiation_shielding += reinforcement.shielding_bonus;
             }
         }
     }
@@ -147,11 +147,11 @@ pub fn update_drone_bays(
 // TORPEDO LOADER — boosts fire rate of adjacent torpedo tubes
 // ============================================================================
 
-/// TorpedoLoader modules speed up the reload of adjacent torpedo weapons.
+/// AmmoAutoloader modules speed up the reload of adjacent torpedo weapons.
 /// Finds torpedo tubes within 1 grid cell and multiplies their cooldown speed.
 pub fn apply_torpedo_loader_bonus(
-    loader_query: Query<(&TorpedoLoaderComp, &Module), Without<DestroyedModule>>,
-    mut weapon_query: Query<(&mut WeaponCooldown, &Module), (Without<TorpedoLoaderComp>, Without<DestroyedModule>)>,
+    loader_query: Query<(&AmmoAutoloaderComp, &Module), Without<DestroyedModule>>,
+    mut weapon_query: Query<(&mut WeaponCooldown, &Module), (Without<AmmoAutoloaderComp>, Without<DestroyedModule>)>,
 ) {
     for (loader, loader_module) in loader_query.iter() {
         if !loader_module.is_active { continue; }
@@ -160,7 +160,7 @@ pub fn apply_torpedo_loader_bonus(
             if !weapon_module.is_active { continue; }
 
             // Only boost torpedo tubes
-            if !matches!(weapon_module.module_type, ModuleType::TorpedoTube | ModuleType::HeavyTorpedoTube) {
+            if !matches!(weapon_module.module_type, ModuleType::HeavyMissile | ModuleType::GuidedMissile | ModuleType::ClusterRocket) {
                 continue;
             }
 

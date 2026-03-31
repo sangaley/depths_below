@@ -126,7 +126,7 @@ pub fn apply_cooling(
         }
     }
 
-    // HeatVents: dissipate own tile heat, scaled by depth (deeper = colder water)
+    // HeatVents: dissipate own tile heat, scaled by distance (deeper void = better radiative cooling)
     for (vent, module) in vent_query.iter() {
         if !module.is_active { continue; }
         let depth_bonus = 1.0 + (depth_state.current_depth / 500.0).min(2.0);

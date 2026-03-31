@@ -8,6 +8,16 @@ use crate::events::*;
 use crate::submarine::spawn_module;
 use crate::sprite_map;
 
+pub mod customization;
+pub mod inspection;
+pub mod multiblock;
+pub mod build_history;
+pub mod symmetry;
+pub mod build_info;
+pub mod clipboard;
+pub mod templates;
+pub mod template_ghost;
+
 pub mod rooms;
 pub mod registry;
 pub mod stat_calculator;
@@ -27,7 +37,17 @@ impl Plugin for BuildingPlugin {
             .init_resource::<rooms::RoomMap>()
             .init_resource::<GridOccupancy>()
             .init_resource::<BlueprintResource>()
+            .init_resource::<build_history::BuildHistory>()
+            .init_resource::<symmetry::SymmetryState>()
+            .init_resource::<build_info::ModuleSearchState>()
+            .init_resource::<clipboard::BuildClipboard>()
+            .init_resource::<templates::TemplateState>()
             .insert_resource(registry::build_registry())
+            .insert_resource({
+                let mut reg = customization::parameters::CustomizationRegistry::default();
+                customization::weapons::register_weapon_customizations(&mut reg);
+                reg
+            })
             .add_systems(
                 Update,
                 (
@@ -42,9 +62,11 @@ impl Plugin for BuildingPlugin {
                     blueprint::save_blueprint_system,
                     blueprint::load_blueprint_system,
                     blueprint::delete_blueprint_system,
+                    inspection::right_click_inspect,
+                    inspection::handle_customize_click,
                 )
                     .chain()
-                    .run_if(in_state(GameState::SurfaceBase)),
+                    .run_if(in_state(GameState::StationDocked)),
             )
             // Room detection runs in both surface and exploring
             .add_systems(
@@ -52,13 +74,59 @@ impl Plugin for BuildingPlugin {
                 (
                     rooms::update_room_map,
                     rooms::update_room_power,
-                ).run_if(in_state(GameState::SurfaceBase)
+                ).run_if(in_state(GameState::StationDocked)
                     .or_else(in_state(GameState::Exploring))),
             )
             // Custom module stat recalculation + weapon sync (runs in all states)
             .add_systems(
                 Update,
                 (recalculate_custom_module_stats, sync_calculated_to_weapon).chain(),
+            )
+            // Multi-block machine systems (connection detection, stat calc, damage chain)
+            .add_systems(
+                Update,
+                (
+                    multiblock::connections::rebuild_machine_connections,
+                    multiblock::connections::calculate_barrel_stress
+                        .after(multiblock::connections::rebuild_machine_connections),
+                    multiblock::stats::calculate_machine_stats
+                        .after(multiblock::connections::rebuild_machine_connections),
+                    multiblock::stats::apply_machine_stats_to_weapons
+                        .after(multiblock::stats::calculate_machine_stats),
+                    multiblock::damage::process_block_destruction,
+                ).run_if(in_state(GameState::StationDocked)
+                    .or_else(in_state(GameState::Exploring))),
+            )
+            // Enhancer effects (separate system group to stay under tuple limit)
+            .add_systems(
+                Update,
+                (
+                    multiblock::enhancers::apply_weapon_enhancers,
+                    multiblock::enhancers::apply_hull_enhancers,
+                    multiblock::enhancers::apply_utility_enhancers,
+                    multiblock::enhancers::emergency_o2_system,
+                    multiblock::enhancers::emergency_shutdown_system,
+                    multiblock::enhancers::afterburner_system,
+                ).run_if(in_state(GameState::Exploring)),
+            )
+            // Build mode tools (undo, symmetry, overlays, info)
+            .add_systems(
+                Update,
+                (
+                    multiblock::build_helpers::draw_connection_lines,
+                    build_history::undo_redo_input,
+                    symmetry::toggle_symmetry,
+                    build_info::toggle_cost_summary,
+                    build_info::update_center_of_mass,
+                    build_info::toggle_power_overlay,
+                    build_info::toggle_heat_overlay,
+                    clipboard::clipboard_input,
+                    clipboard::clipboard_paste,
+                    clipboard::paste_ghost_preview,
+                    templates::template_input,
+                    template_ghost::update_template_ghost,
+                    template_ghost::chain_delete_system,
+                ).run_if(in_state(GameState::StationDocked)),
             );
     }
 }
@@ -219,7 +287,7 @@ fn handle_build_input(
                 duration: 3.0,
             });
         }
-        info!("Material: {} ({:.0}m)", build_state.hull_material.name(), build_state.hull_material.depth_rating());
+        info!("Material: {} ({:.0}m)", build_state.hull_material.name(), build_state.hull_material.radiation_shielding());
     }
 
     // X: Toggle deletion mode
@@ -367,7 +435,27 @@ fn update_ghost_preview(
             BuildSelection::Module(mt) => currency.credits >= registry.get(mt).cost,
         };
 
-        let valid = no_overlap && (has_neighbor || is_first) && position_ok && can_afford;
+        // Multi-block directional validation for extension blocks
+        let multiblock_ok = {
+            let selection_mt = match &selection {
+                BuildSelection::Module(mt) => Some(*mt),
+                _ => None,
+            };
+            if let Some(mt) = selection_mt {
+                match multiblock::build_helpers::module_type_to_role(mt) {
+                    Some(_) => {
+                        // This is a multi-block extension — validate direction
+                        // We can't pass the full query here, so check adjacency to any MachineBlock core
+                        true // Detailed validation happens at placement time
+                    }
+                    None => true, // Not a multi-block module, no extra validation
+                }
+            } else {
+                true
+            }
+        };
+
+        let valid = no_overlap && (has_neighbor || is_first) && position_ok && can_afford && multiblock_ok;
         build_state.is_valid_placement = valid;
         build_state.placement_reason = if valid {
             None
@@ -484,30 +572,62 @@ fn handle_module_placement(
     current_state: Res<State<BuildState>>,
     mut place_module_events: EventWriter<PlaceModuleRequest>,
     mut place_hull_events: EventWriter<PlaceHullRequest>,
+    symmetry_state: Res<symmetry::SymmetryState>,
+    occupancy: Res<GridOccupancy>,
 ) {
     if *current_state.get() != BuildState::Placing {
         return;
     }
 
     if mouse.just_pressed(MouseButton::Left) && build_state.is_valid_placement {
+        let pos = build_state.ghost_position;
+        let rot = build_state.rotation;
+
         match build_state.current_selection() {
             BuildSelection::Hull(layer) => {
                 place_hull_events.send(PlaceHullRequest {
                     layer,
                     material: build_state.hull_material,
-                    grid_position: build_state.ghost_position,
+                    grid_position: pos,
                     free: false,
                 });
+                // Symmetry: mirror hull placement
+                if symmetry_state.enabled {
+                    let mirror_pos = symmetry::mirror_position(pos);
+                    if mirror_pos != pos && !occupancy.cells.contains_key(&mirror_pos) {
+                        place_hull_events.send(PlaceHullRequest {
+                            layer,
+                            material: build_state.hull_material,
+                            grid_position: mirror_pos,
+                            free: false,
+                        });
+                    }
+                }
             }
             BuildSelection::Module(module_type) => {
                 place_module_events.send(PlaceModuleRequest {
                     module_type,
-                    grid_position: build_state.ghost_position,
-                    rotation: build_state.rotation,
+                    grid_position: pos,
+                    rotation: rot,
                     custom_name: None,
                     subcomponents: None,
                     free: false,
                 });
+                // Symmetry: mirror module placement
+                if symmetry_state.enabled {
+                    let mirror_pos = symmetry::mirror_position(pos);
+                    let mirror_rot = symmetry::mirror_rotation(rot);
+                    if mirror_pos != pos && !occupancy.cells.contains_key(&mirror_pos) {
+                        place_module_events.send(PlaceModuleRequest {
+                            module_type,
+                            grid_position: mirror_pos,
+                            rotation: mirror_rot,
+                            custom_name: None,
+                            subcomponents: None,
+                            free: false,
+                        });
+                    }
+                }
             }
         }
     }
@@ -600,7 +720,7 @@ fn process_hull_placement(
             HullSegment {
                 hull_layer: event.layer,
                 material,
-                depth_rating: material.depth_rating(),
+                radiation_shielding: material.radiation_shielding(),
                 health: 100.0 * material.health_multiplier(),
                 max_health: 100.0 * material.health_multiplier(),
                 grid_position: grid_pos,

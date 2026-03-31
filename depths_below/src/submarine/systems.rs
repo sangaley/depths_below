@@ -48,9 +48,9 @@ pub fn check_game_over(
     let all_crew_dead = crew_count == 0 || crew_query.iter().all(|c| c.health <= 0.0);
     let hull_destroyed = hull_state.hull_integrity <= 0.0;
 
-    // Depth crush: if depth exceeds max rating by 50%, instant implosion
-    let crush_depth = hull_state.max_depth_rating * 1.5;
-    let crushed = depth_state.current_depth > crush_depth && hull_state.max_depth_rating > 0.0;
+    // Radiation overload: if radiation exceeds max shielding by 50%, instant hull failure
+    let critical_radiation = hull_state.max_radiation_shielding * 1.5;
+    let crushed = depth_state.current_depth > critical_radiation && hull_state.max_radiation_shielding > 0.0;
 
     // Phase 3.5: Oxygen depletion game over after 30 seconds at zero
     if oxygen_state.current_oxygen <= 0.0 {
@@ -62,21 +62,21 @@ pub fn check_game_over(
 
     if all_crew_dead {
         notifications.send(ShowNotification {
-            message: "All crew lost! The submarine drifts silently...".into(),
+            message: "All crew lost. The ship drifts silently into the void...".into(),
             notification_type: NotificationType::Danger,
             duration: 5.0,
         });
         next_state.set(GameState::GameOver);
     } else if hull_destroyed {
         notifications.send(ShowNotification {
-            message: "Hull integrity critical! The submarine is breaking apart!".into(),
+            message: "Hull integrity zero! The ship is breaking apart!".into(),
             notification_type: NotificationType::Danger,
             duration: 5.0,
         });
         next_state.set(GameState::GameOver);
     } else if crushed {
         notifications.send(ShowNotification {
-            message: "IMPLOSION! The pressure was too great!".into(),
+            message: "RADIATION OVERLOAD! Hull shielding exceeded!".into(),
             notification_type: NotificationType::Danger,
             duration: 5.0,
         });
@@ -166,7 +166,6 @@ pub fn cleanup_game_entities(
     mut commands: Commands,
     submarines: Query<Entity, With<Submarine>>,
     creatures: Query<Entity, With<Creature>>,
-    ambient: Query<Entity, With<AmbientCreature>>,
     chunks: Query<Entity, With<Chunk>>,
     pois: Query<Entity, With<PointOfInterest>>,
     mut chunk_manager: ResMut<ChunkManager>,
@@ -183,10 +182,6 @@ pub fn cleanup_game_entities(
     }
     // Despawn creatures
     for entity in creatures.iter() {
-        commands.entity(entity).despawn_recursive();
-    }
-    // Despawn ambient life
-    for entity in ambient.iter() {
         commands.entity(entity).despawn_recursive();
     }
     // Despawn chunks (and their children: POIs, decorations)
@@ -206,7 +201,7 @@ pub fn cleanup_game_entities(
     oxygen_state.current_oxygen = 1000.0;
     oxygen_state.max_oxygen = 1000.0;
     hull_state.hull_integrity = 1.0;
-    hull_state.max_depth_rating = 0.0;
+    hull_state.max_radiation_shielding = 0.0;
     fuel_state.current_fuel = fuel_state.max_fuel;
     noise_state.noise_level = 0.0;
 

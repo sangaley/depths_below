@@ -70,7 +70,7 @@ pub fn ai_sub_death_system(
         };
 
         notifications.send(ShowNotification {
-            message: format!("{} submarine destroyed! Wreck detected on sonar.", type_name),
+            message: format!("{} vessel destroyed! Wreck detected on radar.", type_name),
             notification_type: NotificationType::Success,
             duration: 4.0,
         });

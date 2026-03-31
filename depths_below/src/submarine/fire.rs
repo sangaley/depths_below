@@ -19,10 +19,10 @@ pub fn apply_fire_ignition(
             continue;
         };
 
-        // Can't ignite in heavily flooded rooms
+        // Can't ignite in heavily depressurized rooms (no oxygen to sustain fire)
         if let Some(&room_id) = room_map.tile_to_room.get(&event.grid_position) {
             if let Some(room) = room_map.rooms.get(room_id) {
-                if room.water_level > 0.3 {
+                if room.air_level < 0.3 {
                     continue;
                 }
             }
@@ -44,7 +44,7 @@ pub fn apply_fire_ignition(
     }
 }
 
-/// Updates all burning modules: flood suppression, burnout, DoT, visual tint, and spread.
+/// Updates all burning modules: vacuum suppression, burnout, DoT, visual tint, and spread.
 pub fn update_fire(
     mut commands: Commands,
     time: Res<Time>,
@@ -72,21 +72,21 @@ pub fn update_fire(
     }
 
     for (entity, mut fire, mut module, mut sprite) in fire_query.iter_mut() {
-        // Flood suppression
+        // Vacuum/decompression suppression — fire can't burn without air
         if let Some(&room_id) = room_map.tile_to_room.get(&module.grid_position) {
             if let Some(room) = room_map.rooms.get(room_id) {
-                if room.water_level > 0.5 {
-                    // Fully extinguish
+                if room.air_level < 0.2 {
+                    // Fully extinguish — not enough oxygen
                     commands.entity(entity).remove::<OnFire>();
                     sprite.color = Color::rgb(0.2, 0.2, 0.2); // Burnt/destroyed tint
                     extinguish_events.send(FireExtinguished {
                         module: entity,
-                        cause: FireExtinguishCause::Flooding,
+                        cause: FireExtinguishCause::Decompression,
                     });
                     continue;
-                } else if room.water_level > 0.1 {
-                    // Reduce intensity based on water
-                    fire.intensity = (fire.intensity - room.water_level * 0.5 * dt).max(0.0);
+                } else if room.air_level < 0.5 {
+                    // Reduce intensity based on low air
+                    fire.intensity = (fire.intensity - (1.0 - room.air_level) * 0.5 * dt).max(0.0);
                     fire.damage_per_second = 8.0 * fire.intensity;
                 }
             }
@@ -144,7 +144,7 @@ pub fn update_fire(
     }
 }
 
-/// Emergency bulkheads auto-seal when adjacent rooms flood and unseal when water drains.
+/// Emergency bulkheads auto-seal when adjacent rooms depressurize and unseal when air is restored.
 pub fn emergency_bulkhead_system(
     mut commands: Commands,
     bulkhead_query: Query<(Entity, &Module, Option<&BulkheadSealed>), Without<DestroyedModule>>,
@@ -155,28 +155,28 @@ pub fn emergency_bulkhead_system(
         if module.module_type != ModuleType::EmergencyBulkhead { continue; }
         if !module.is_active { continue; }
 
-        // Check adjacent tiles for flooding
-        let mut adjacent_flooded = false;
+        // Check adjacent tiles for decompression
+        let mut adjacent_depressurized = false;
         for offset in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
             let adj_pos = module.grid_position + offset;
             if let Some(&room_id) = room_map.tile_to_room.get(&adj_pos) {
                 if let Some(room) = room_map.rooms.get(room_id) {
-                    if room.water_level > 0.3 {
-                        adjacent_flooded = true;
+                    if room.air_level < 0.7 {
+                        adjacent_depressurized = true;
                         break;
                     }
                 }
             }
         }
 
-        if adjacent_flooded && sealed.is_none() {
+        if adjacent_depressurized && sealed.is_none() {
             commands.entity(entity).insert(BulkheadSealed);
             notifications.send(ShowNotification {
-                message: "Emergency bulkhead auto-sealed!".into(),
+                message: "Emergency bulkhead auto-sealed — decompression detected!".into(),
                 notification_type: NotificationType::Warning,
                 duration: 3.0,
             });
-        } else if !adjacent_flooded && sealed.is_some() {
+        } else if !adjacent_depressurized && sealed.is_some() {
             commands.entity(entity).remove::<BulkheadSealed>();
         }
     }

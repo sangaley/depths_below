@@ -18,7 +18,7 @@ pub fn submarine_input(
     mut input_state: ResMut<InputState>,
 ) {
     let mut movement = Vec2::ZERO;
-    let mut ballast_input = 0.0;
+    let mut thruster_input = 0.0;
 
     // W/S: throttle forward/reverse
     if keyboard.pressed(KeyCode::W) || keyboard.pressed(KeyCode::Up) {
@@ -28,7 +28,7 @@ pub fn submarine_input(
         movement.y = -1.0; // reverse
     }
 
-    // A/D: rudder left/right (turns the sub)
+    // A/D: yaw left/right (turns the ship)
     if keyboard.pressed(KeyCode::A) || keyboard.pressed(KeyCode::Left) {
         movement.x -= 1.0;
     }
@@ -36,35 +36,34 @@ pub fn submarine_input(
         movement.x += 1.0;
     }
 
-    // Q/E: ballast fill/empty (sink/rise)
+    // Q/E: vertical thrusters (ascend/descend)
     if keyboard.pressed(KeyCode::Q) {
-        ballast_input = -1.0; // empty ballast = rise
+        thruster_input = 1.0; // thrust up
     }
     if keyboard.pressed(KeyCode::E) {
-        ballast_input = 1.0; // fill ballast = sink
+        thruster_input = -1.0; // thrust down
     }
 
     input_state.movement = movement;
-    input_state.ballast_input = ballast_input;
+    input_state.thruster_input = thruster_input;
 }
 
-/// Applies realistic physics to submarine movement
+/// Applies space physics to ship movement (no drag, inertial flight)
 pub fn submarine_movement(
     time: Res<Time>,
     input_state: Res<InputState>,
     _config: Res<GameConfig>,
     engine_query: Query<(&Engine, &Module, Option<&CalculatedStats>, Option<&ModuleEfficiency>)>,
-    ballast_query: Query<(&mut Ballast, &Module)>,
-    mut submarine_query: Query<(&mut Transform, &mut Velocity, &mut SubmarinePhysics, &mut Buoyancy), With<Submarine>>,
+    thruster_query: Query<(&mut Thruster, &Module)>,
+    mut submarine_query: Query<(&mut Transform, &mut Velocity, &mut SubmarinePhysics, &mut ThrusterState), With<Submarine>>,
 ) {
-    let Ok((mut transform, mut velocity, mut physics, mut buoyancy)) = submarine_query.get_single_mut() else {
+    let Ok((mut transform, mut velocity, mut physics, mut thruster_state)) = submarine_query.get_single_mut() else {
         return;
     };
 
     let dt = time.delta_seconds();
 
     // Calculate total thrust from active engines
-    // Uses ModuleEfficiency (damage * staffing) when available, falls back to damage-only
     let total_thrust: f32 = engine_query
         .iter()
         .filter(|(_, module, _, _)| module.is_active)
@@ -74,51 +73,50 @@ pub fn submarine_movement(
         })
         .sum();
 
-    // --- RUDDER / TURNING ---
+    // --- YAW / TURNING ---
     physics.rudder = input_state.movement.x;
     let speed = velocity.0.length();
 
-    // Turning works at any speed - minimum 50% effectiveness when stopped
+    // In space, RCS thrusters allow turning at any speed
     let turn_effectiveness = (speed / 80.0).clamp(0.5, 1.0);
     let torque = physics.rudder * 3.0 * turn_effectiveness;
     physics.angular_velocity += torque * dt;
-    physics.angular_velocity *= 0.88_f32; // angular drag
+    physics.angular_velocity *= 0.95_f32; // RCS damping
     physics.rotation += physics.angular_velocity * dt;
 
     // --- THROTTLE ---
     let throttle_input = input_state.movement.y;
     physics.throttle = physics.throttle + (throttle_input - physics.throttle) * 3.0 * dt;
 
-    // Direction sub faces
+    // Direction ship faces
     let facing = Vec2::new(physics.rotation.cos(), physics.rotation.sin());
 
     // Thrust force
     let thrust_force = facing * total_thrust * physics.throttle;
 
-    // --- DRAG ---
-    let water_density = 1025.0 + (transform.translation.y.abs() * 0.001); // slightly denser deep
+    // --- SPACE DRAG (minimal — just light dampening for gameplay) ---
     let v_sq = velocity.0.length_squared();
-    let drag_magnitude = 0.5 * physics.drag_coefficient * water_density * v_sq * physics.frontal_area * 0.0001;
+    let drag_magnitude = 0.5 * physics.drag_coefficient * v_sq * physics.frontal_area * 0.00002;
     let drag_force = if v_sq > 0.001 {
         -velocity.0.normalize() * drag_magnitude
     } else {
         Vec2::ZERO
     };
 
-    // --- BUOYANCY / BALLAST ---
-    let ballast_effect: f32 = ballast_query
+    // --- VERTICAL THRUSTERS ---
+    let thruster_effect: f32 = thruster_query
         .iter()
         .filter(|(_, module)| module.is_active)
-        .map(|(ballast, _)| (ballast.current_level - 0.5) * 2.0) // -1 to 1
+        .map(|(thruster, _)| thruster.current_output * thruster.thrust_power)
         .sum();
 
-    // Ballast input modifies ballast over time (handled in update_depth)
-    let net_buoyancy = -ballast_effect * 50.0 + buoyancy.base_buoyancy * 30.0;
-    let buoyancy_force = Vec2::new(0.0, net_buoyancy);
-    buoyancy.current = ballast_effect;
+    // Thruster input directly applies vertical force
+    let vertical_thrust = input_state.thruster_input * 50.0 + thruster_effect * thruster_state.base_drift * 30.0;
+    let thruster_force = Vec2::new(0.0, vertical_thrust);
+    thruster_state.current = input_state.thruster_input;
 
     // --- NET FORCE ---
-    let net_force = thrust_force + drag_force + buoyancy_force;
+    let net_force = thrust_force + drag_force + thruster_force;
     let acceleration = net_force / physics.mass;
 
     // Update velocity
@@ -136,27 +134,26 @@ pub fn submarine_movement(
     }
 }
 
-/// Updates submarine depth based on Y position
+/// Updates ship position tracking based on Y position
 pub fn update_depth(
     time: Res<Time>,
     input_state: Res<InputState>,
-    mut ballast_query: Query<(&mut Ballast, &Module)>,
+    mut thruster_query: Query<(&mut Thruster, &Module)>,
     mut submarine_query: Query<(&mut Transform, &mut Depth), With<Submarine>>,
 ) {
     let Ok((mut transform, mut depth)) = submarine_query.get_single_mut() else {
         return;
     };
 
-    // Update ballast tanks based on Q/E input
-    for (mut ballast, module) in ballast_query.iter_mut() {
+    // Update thrusters based on Q/E input
+    for (mut thruster, module) in thruster_query.iter_mut() {
         if module.is_active {
-            let fill_rate = 0.3 * time.delta_seconds();
-            ballast.current_level = (ballast.current_level + input_state.ballast_input * fill_rate).clamp(0.0, 1.0);
+            let response_rate = 0.3 * time.delta_seconds();
+            thruster.current_output = (thruster.current_output + input_state.thruster_input * response_rate).clamp(0.0, 1.0);
         }
     }
 
-    // Depth is derived from Y position (negative Y = deeper)
-    // Clamp to surface (y=0) and max depth 500m (y=-5000)
+    // Position is derived from Y (negative Y = further from safe zone)
     if transform.translation.y > 0.0 {
         transform.translation.y = 0.0;
     }
@@ -167,7 +164,7 @@ pub fn update_depth(
     depth.0 = (-transform.translation.y).max(0.0);
 }
 
-/// Consumes fuel from engines and deactivates them when fuel runs out (Phase 3.3)
+/// Consumes fuel from engines and deactivates them when fuel runs out
 pub fn update_fuel_consumption(
     time: Res<Time>,
     mut fuel_state: ResMut<FuelState>,

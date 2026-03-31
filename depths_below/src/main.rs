@@ -18,6 +18,8 @@ mod camera;
 mod sprite_map;
 mod abyss_horror;
 pub mod ai_submarine;
+mod celestial;
+mod vfx;
 
 use states::GameState;
 use events::EventsPlugin;
@@ -35,13 +37,15 @@ use camera::CameraPlugin;
 use abyss_horror::AbyssHorrorPlugin;
 use ai_submarine::AiSubmarinePlugin;
 use contracts::ContractsPlugin;
+use celestial::CelestialPlugin;
+use vfx::VfxPlugin;
 
 fn main() {
     App::new()
         // Default Bevy plugins (windowing, rendering, input, etc.)
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "Depths Below".into(),
+                title: "Depths Below — Into the Void".into(),
                 resolution: (1280., 720.).into(),
                 ..default()
             }),
@@ -73,6 +77,8 @@ fn main() {
             AbyssHorrorPlugin,
             AiSubmarinePlugin,
             ContractsPlugin,
+            CelestialPlugin,
+            VfxPlugin,
         ))
 
         .run();

@@ -780,7 +780,7 @@ fn horror_notifications(
         ],
         3 => &[
             "They're all looking at you.",
-            "The ocean is listening.",
+            "The void is listening.",
             "Even the predators are afraid.",
             "Nothing attacks. Everything watches.",
             "You feel observed from below.",

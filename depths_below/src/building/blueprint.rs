@@ -165,7 +165,7 @@ pub fn save_blueprint_system(
 
     let Ok(children) = sub_query.get_single() else {
         notifications.send(ShowNotification {
-            message: "No submarine to save.".into(),
+            message: "No ship to save.".into(),
             notification_type: NotificationType::Warning,
             duration: 2.0,
         });

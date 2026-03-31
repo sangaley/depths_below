@@ -11,24 +11,24 @@ pub fn update_hull_integrity(
 ) {
     let mut total_health = 0.0;
     let mut max_health = 0.0;
-    let mut min_depth_rating = f32::MAX;
+    let mut min_radiation_shielding = f32::MAX;
 
     for hull in hull_query.iter() {
         total_health += hull.health;
         max_health += hull.max_health;
 
-        if hull.depth_rating < min_depth_rating {
-            min_depth_rating = hull.depth_rating;
+        if hull.radiation_shielding < min_radiation_shielding {
+            min_radiation_shielding = hull.radiation_shielding;
         }
     }
 
     if max_health > 0.0 {
         hull_state.hull_integrity = total_health / max_health;
     }
-    hull_state.max_depth_rating = if min_depth_rating == f32::MAX {
+    hull_state.max_radiation_shielding = if min_radiation_shielding == f32::MAX {
         200.0
     } else {
-        min_depth_rating
+        min_radiation_shielding
     };
 }
 
@@ -40,7 +40,7 @@ pub fn process_hull_cascade(
     mut hull_query: Query<(Entity, &mut HullSegment), Without<HullDestroyed>>,
     mut breach_events: EventWriter<HullBreached>,
     room_map: Res<RoomMap>,
-    mut room_flood_events: EventWriter<RoomFlooded>,
+    mut room_depressurize_events: EventWriter<RoomDepressurized>,
     mut notifications: EventWriter<ShowNotification>,
 ) {
     let mut destroyed_positions: Vec<IVec2> = Vec::new();
@@ -72,14 +72,14 @@ pub fn process_hull_cascade(
                 };
 
                 // Breach if newly below 30%
-                if health_pct < 0.3 && !hull.is_flooded {
-                    hull.is_flooded = true;
+                if health_pct < 0.3 && !hull.is_depressurized {
+                    hull.is_depressurized = true;
                     breach_events.send(HullBreached {
                         segment: hull_entity,
                         severity: 1.0 - health_pct,
                     });
                     if let Some(&room_id) = room_map.tile_to_room.get(&adj_pos) {
-                        room_flood_events.send(RoomFlooded {
+                        room_depressurize_events.send(RoomDepressurized {
                             room_id,
                             severity: 1.0 - health_pct,
                         });

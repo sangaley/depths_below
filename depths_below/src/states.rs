@@ -6,8 +6,8 @@ pub enum GameState {
     #[default]
     MainMenu,
     Loading,
-    SurfaceBase,    // At surface, full building mode
-    Exploring,      // Underwater, playing
+    StationDocked,  // At station, full building mode
+    Exploring,      // In space, playing
     Docked,         // At outpost or wreck
     Paused,
     GameOver,

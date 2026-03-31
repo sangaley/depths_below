@@ -206,7 +206,7 @@ impl Plugin for ContractsPlugin {
             .init_resource::<MissionBoardOpen>()
             .init_resource::<ui::MissionBoardSelection>()
             // Generate board + turn in completed contracts on surface
-            .add_systems(OnEnter(GameState::SurfaceBase), (
+            .add_systems(OnEnter(GameState::StationDocked), (
                 generation::generate_initial_board,
                 tracking::turn_in_contracts,
             ).chain())
@@ -225,7 +225,7 @@ impl Plugin for ContractsPlugin {
                 ui::toggle_mission_board,
                 ui::mission_board_input,
                 ui::update_mission_board_display,
-            ).chain().run_if(in_state(GameState::SurfaceBase)))
+            ).chain().run_if(in_state(GameState::StationDocked)))
             // Contract HUD during exploration
             .add_systems(OnEnter(GameState::Exploring), ui::spawn_contract_hud)
             .add_systems(OnExit(GameState::Exploring), ui::despawn_contract_hud)

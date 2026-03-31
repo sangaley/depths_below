@@ -4,95 +4,99 @@ use crate::resources::*;
 use crate::events::*;
 use crate::building::rooms::RoomMap;
 
-/// Updates flooding on a per-room basis.
-/// RoomFlooded events mark rooms as breached, water progresses in breached rooms,
-/// hull segments sync to their room's water level via tile_to_room.
-pub fn update_flooding(
+/// Updates decompression on a per-room basis.
+/// RoomDepressurized events mark rooms as breached, air escapes from breached rooms,
+/// hull segments sync to their room's depressurization level via tile_to_room.
+pub fn update_decompression(
     time: Res<Time>,
     mut hull_query: Query<(&mut HullSegment, &Transform)>,
     mut room_map: ResMut<RoomMap>,
-    mut hull_state: ResMut<HullState>,
-    mut room_flood_events: EventReader<RoomFlooded>,
+    mut oxygen_state: ResMut<OxygenState>,
+    mut room_depressurize_events: EventReader<RoomDepressurized>,
 ) {
-    // Read RoomFlooded events → mark rooms as breached
-    for event in room_flood_events.iter() {
+    // Read RoomDepressurized events → mark rooms as breached
+    for event in room_depressurize_events.iter() {
         if let Some(room) = room_map.rooms.get_mut(event.room_id) {
             room.is_breached = true;
         }
     }
 
-    // Progress water_level in breached rooms
+    // Progress depressurization in breached rooms (air escaping)
     let dt = time.delta_seconds();
     for room in room_map.rooms.iter_mut() {
-        if room.is_breached && room.water_level < 1.0 {
-            room.water_level = (room.water_level + 0.1 * dt).min(1.0);
+        if room.is_breached && room.air_level > 0.0 {
+            room.air_level = (room.air_level - 0.15 * dt).max(0.0); // ~7s to empty — build bulkheads or lose everything
         }
     }
 
-    // Build a lookup: tile -> water_level from rooms
-    let mut tile_water: std::collections::HashMap<IVec2, f32> = std::collections::HashMap::new();
+    // Build a lookup: tile -> air_level from rooms
+    let mut tile_air: std::collections::HashMap<IVec2, f32> = std::collections::HashMap::new();
     for room in room_map.rooms.iter() {
-        if room.water_level > 0.0 {
+        if room.air_level < 1.0 {
             for tile in &room.tiles {
-                tile_water.insert(*tile, room.water_level);
+                tile_air.insert(*tile, room.air_level);
             }
         }
     }
 
-    // Sync hull segments with their room's water level
-    let mut flood_weight = 0.0;
+    // Sync hull segments with their room's depressurization level
+    let mut total_air_loss = 0.0;
     for (mut hull, _transform) in hull_query.iter_mut() {
-        if let Some(&water) = tile_water.get(&hull.grid_position) {
-            hull.flood_level = water;
-            hull.is_flooded = water > 0.0;
+        if let Some(&air) = tile_air.get(&hull.grid_position) {
+            hull.depressurization_level = 1.0 - air;  // 0 air = fully depressurized
+            hull.is_depressurized = air < 1.0;
         }
-        // Also progress existing hull-level floods (segments breached directly)
-        if hull.is_flooded && hull.flood_level < 1.0 && !tile_water.contains_key(&hull.grid_position) {
-            hull.flood_level = (hull.flood_level + 0.1 * dt).min(1.0);
+        // Also progress existing hull-level decompression (segments breached directly)
+        if hull.is_depressurized && hull.depressurization_level < 1.0 && !tile_air.contains_key(&hull.grid_position) {
+            hull.depressurization_level = (hull.depressurization_level + 0.15 * dt).min(1.0);
         }
-        flood_weight += hull.flood_level * 500.0;
+        total_air_loss += hull.depressurization_level;
     }
 
-    // Add flood weight from room water levels
+    // Decompression drains oxygen — air escaping into the void
     for room in room_map.rooms.iter() {
-        flood_weight += room.water_level * room.tiles.len() as f32 * 200.0;
+        if room.is_breached {
+            total_air_loss += (1.0 - room.air_level) * room.tiles.len() as f32;
+        }
     }
 
-    hull_state.total_weight = 5000.0 + flood_weight;
+    // Each unit of air loss drains oxygen at 3.0 per second — breach without bulkheads = crew dies
+    let oxygen_drain = total_air_loss * 3.0 * dt;
+    oxygen_state.current_oxygen = (oxygen_state.current_oxygen - oxygen_drain).max(0.0);
 }
 
-/// Crew in Repairing state pump water from their room.
-/// RepairBay modules in the same room multiply pump power.
-/// WaterPump modules provide automated pumping independent of crew.
-pub fn pump_water_system(
+/// Crew in Repairing state seal breaches in their room.
+/// RepairBay modules in the same room multiply seal power.
+/// HullSeal modules provide automated breach sealing independent of crew.
+pub fn seal_breach_system(
     time: Res<Time>,
     crew_query: Query<(&CrewMember, &CrewRoomLocation)>,
     repair_bays: Query<(&Module, &RepairSystem), Without<DestroyedModule>>,
-    water_pumps: Query<(&WaterPumpComp, &Module), Without<DestroyedModule>>,
+    hull_seals: Query<(&HullSealComp, &Module), Without<DestroyedModule>>,
     mut room_map: ResMut<RoomMap>,
 ) {
     let dt = time.delta_seconds();
 
-    // Build per-room pump power from repairing crew
-    let mut room_pump_power: std::collections::HashMap<usize, f32> = std::collections::HashMap::new();
+    // Build per-room seal power from repairing crew
+    let mut room_seal_power: std::collections::HashMap<usize, f32> = std::collections::HashMap::new();
     for (crew, location) in crew_query.iter() {
         if crew.state != CrewState::Repairing || crew.health <= 0.0 {
             continue;
         }
         if let Some(room_id) = location.room_id {
-            *room_pump_power.entry(room_id).or_insert(0.0) += 0.03;
+            *room_seal_power.entry(room_id).or_insert(0.0) += 0.03;
         }
     }
 
-    // Automated WaterPump modules add pump power to their room
-    for (pump, module) in water_pumps.iter() {
+    // Automated HullSeal modules add seal power to their room
+    for (seal, module) in hull_seals.iter() {
         if !module.is_active { continue; }
         if let Some(&room_id) = room_map.tile_to_room.get(&module.grid_position) {
-            *room_pump_power.entry(room_id).or_insert(0.0) += pump.pump_rate;
+            *room_seal_power.entry(room_id).or_insert(0.0) += seal.seal_rate;
         }
     }
 
-    if room_pump_power.is_empty() {
+    if room_seal_power.is_empty() {
         return;
     }
 
@@ -105,16 +109,16 @@ pub fn pump_water_system(
         }
     }
 
-    // Apply pumping to each room
-    for (room_id, pump_power) in room_pump_power.iter() {
+    // Apply sealing to each room (restoring air)
+    for (room_id, seal_power) in room_seal_power.iter() {
         if let Some(room) = room_map.rooms.get_mut(*room_id) {
-            if room.water_level <= 0.0 {
+            if room.air_level >= 1.0 {
                 continue;
             }
             let boost = room_repair_boost.get(room_id).copied().unwrap_or(1.0);
-            let drain = pump_power * boost * dt;
-            room.water_level = (room.water_level - drain).max(0.0);
-            if room.water_level <= 0.0 {
+            let restore = seal_power * boost * dt;
+            room.air_level = (room.air_level + restore).min(1.0);
+            if room.air_level >= 1.0 {
                 room.is_breached = false;
             }
         }
@@ -139,7 +143,7 @@ pub fn handle_bulkhead_toggle(
             commands.entity(event.segment).insert(BulkheadSealed);
             sprite.color = Color::rgb(0.8, 0.2, 0.2); // Red = sealed
             notifications.send(ShowNotification {
-                message: "Bulkhead sealed!".into(),
+                message: "Bulkhead sealed — section airtight!".into(),
                 notification_type: NotificationType::Warning,
                 duration: 2.0,
             });

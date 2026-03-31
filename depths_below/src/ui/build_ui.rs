@@ -4,73 +4,35 @@ use crate::resources::*;
 use crate::components::*;
 use crate::building::{GridOccupancy, ModuleRegistry};
 use crate::events::*;
+use super::theme::{ThemeColors, ThemeFonts, ThemeSpacing};
 
 // ============================================================================
-// INDUSTRIAL PIXEL ART COLOR PALETTE
+// BUILD UI COLOR PALETTE — references theme where possible, build-specific additions
 // ============================================================================
 
-/// Dark industrial background - deep metal gray
-pub const COLOR_BG_DARK: Color = Color::rgb(0.12, 0.12, 0.14);
-
-/// Medium panel background - steel gray
-pub const COLOR_BG_PANEL: Color = Color::rgb(0.18, 0.18, 0.20);
-
-/// Light panel background - lighter steel
-pub const COLOR_BG_PANEL_LIGHT: Color = Color::rgb(0.22, 0.22, 0.24);
-
-/// Border color - industrial steel
-pub const COLOR_BORDER: Color = Color::rgb(0.35, 0.35, 0.38);
-
-/// Border highlight - lighter steel edge
-pub const COLOR_BORDER_LIGHT: Color = Color::rgb(0.45, 0.45, 0.48);
-
-/// Title bar - dark steel with slight blue tint
-pub const COLOR_TITLE_BAR: Color = Color::rgb(0.15, 0.17, 0.20);
-
-/// Button default - medium gray
-pub const COLOR_BUTTON: Color = Color::rgb(0.25, 0.25, 0.27);
-
-/// Button hover - lighter gray
-pub const COLOR_BUTTON_HOVER: Color = Color::rgb(0.32, 0.32, 0.35);
-
-/// Button pressed - darker gray
-pub const COLOR_BUTTON_PRESSED: Color = Color::rgb(0.18, 0.18, 0.20);
-
-/// Button active/selected - industrial yellow
-pub const COLOR_BUTTON_ACTIVE: Color = Color::rgb(0.85, 0.75, 0.25);
-
-/// Grid cell empty - dark with grid lines
-pub const COLOR_GRID_EMPTY: Color = Color::rgb(0.15, 0.15, 0.17);
-
-/// Grid cell occupied - industrial green
-pub const _COLOR_GRID_OCCUPIED: Color = Color::rgb(0.25, 0.65, 0.35);
-
-/// Grid cell hover - light highlight
-pub const COLOR_GRID_HOVER: Color = Color::rgb(0.28, 0.28, 0.32);
-
-/// Text primary - light gray
-pub const COLOR_TEXT_PRIMARY: Color = Color::rgb(0.90, 0.90, 0.92);
-
-/// Text secondary - medium gray
-pub const COLOR_TEXT_SECONDARY: Color = Color::rgb(0.65, 0.65, 0.68);
-
-/// Text active - industrial yellow
-pub const COLOR_TEXT_ACTIVE: Color = Color::rgb(0.95, 0.85, 0.35);
-
-/// Warning/Caution - industrial orange
-pub const _COLOR_WARNING: Color = Color::rgb(0.95, 0.60, 0.20);
-
-/// Success/OK - industrial green
-pub const _COLOR_SUCCESS: Color = Color::rgb(0.30, 0.75, 0.40);
-
-/// Danger/Error - industrial red
-pub const COLOR_DANGER: Color = Color::rgb(0.85, 0.25, 0.25);
-
-/// Component type colors (for visual differentiation)
-pub const COLOR_COMPONENT_WEAPON: Color = Color::rgb(0.85, 0.35, 0.25);      // Red-orange
-pub const COLOR_COMPONENT_ENGINE: Color = Color::rgb(0.35, 0.65, 0.85);      // Blue
-pub const COLOR_COMPONENT_REACTOR: Color = Color::rgb(0.85, 0.75, 0.25);     // Yellow
-pub const COLOR_COMPONENT_LIFE: Color = Color::rgb(0.35, 0.85, 0.55);        // Green
+pub const COLOR_BG_DARK: Color = Color::rgb(0.06, 0.07, 0.12);
+pub const COLOR_BG_PANEL: Color = Color::rgb(0.08, 0.10, 0.16);
+pub const COLOR_BG_PANEL_LIGHT: Color = Color::rgb(0.10, 0.13, 0.20);
+pub const COLOR_BORDER: Color = Color::rgb(0.22, 0.26, 0.35);
+pub const COLOR_BORDER_LIGHT: Color = Color::rgb(0.30, 0.35, 0.45);
+pub const COLOR_TITLE_BAR: Color = Color::rgb(0.08, 0.10, 0.16);
+pub const COLOR_BUTTON: Color = Color::rgb(0.10, 0.13, 0.22);
+pub const COLOR_BUTTON_HOVER: Color = Color::rgb(0.14, 0.17, 0.28);
+pub const COLOR_BUTTON_PRESSED: Color = Color::rgb(0.18, 0.22, 0.35);
+pub const COLOR_BUTTON_ACTIVE: Color = Color::rgb(0.30, 0.55, 1.0);
+pub const COLOR_GRID_EMPTY: Color = Color::rgb(0.06, 0.07, 0.12);
+pub const _COLOR_GRID_OCCUPIED: Color = Color::rgb(0.15, 0.40, 0.25);
+pub const COLOR_GRID_HOVER: Color = Color::rgb(0.14, 0.17, 0.28);
+pub const COLOR_TEXT_PRIMARY: Color = Color::rgb(0.88, 0.90, 0.95);
+pub const COLOR_TEXT_SECONDARY: Color = Color::rgb(0.60, 0.64, 0.70);
+pub const COLOR_TEXT_ACTIVE: Color = Color::rgb(0.30, 0.55, 1.0);
+pub const _COLOR_WARNING: Color = Color::rgb(0.90, 0.55, 0.20);
+pub const _COLOR_SUCCESS: Color = Color::rgb(0.30, 0.80, 0.45);
+pub const COLOR_DANGER: Color = Color::rgb(0.90, 0.25, 0.25);
+pub const COLOR_COMPONENT_WEAPON: Color = Color::rgb(0.85, 0.35, 0.25);
+pub const COLOR_COMPONENT_ENGINE: Color = Color::rgb(0.35, 0.65, 0.85);
+pub const COLOR_COMPONENT_REACTOR: Color = Color::rgb(0.85, 0.75, 0.25);
+pub const COLOR_COMPONENT_LIFE: Color = Color::rgb(0.35, 0.85, 0.55);
 
 // ============================================================================
 // MARKER COMPONENTS
@@ -727,7 +689,7 @@ pub fn spawn_build_panel(
                     flex_direction: FlexDirection::Row,
                     ..default()
                 },
-                background_color: Color::rgba(0.05, 0.05, 0.1, 0.95).into(),
+                background_color: Color::rgba(0.04, 0.05, 0.10, 0.95).into(),
                 ..default()
             })
             .with_children(|tabs_row| {
@@ -776,7 +738,7 @@ pub fn spawn_build_panel(
                                 margin: UiRect::right(Val::Px(2.0)),
                                 ..default()
                             },
-                            background_color: Color::rgba(0.15, 0.15, 0.2, 0.8).into(),
+                            background_color: Color::rgba(0.08, 0.10, 0.18, 0.85).into(),
                             ..default()
                         },
                         CategoryTab { index: i },
@@ -804,7 +766,7 @@ pub fn spawn_build_panel(
                     flex_direction: FlexDirection::Row,
                     ..default()
                 },
-                background_color: Color::rgba(0.03, 0.03, 0.08, 0.92).into(),
+                background_color: Color::rgba(0.03, 0.04, 0.09, 0.94).into(),
                 ..default()
             })
             .with_children(|content| {
@@ -838,7 +800,7 @@ pub fn spawn_build_panel(
                         align_self: AlignSelf::Center,
                         ..default()
                     },
-                    background_color: Color::rgba(1.0, 1.0, 1.0, 0.15).into(),
+                    background_color: Color::rgba(0.20, 0.23, 0.30, 0.4).into(),
                     ..default()
                 });
 
@@ -920,7 +882,7 @@ pub fn spawn_build_panel(
                         BuildDescText,
                     ));
 
-                    // Power & depth summary
+                    // Power & shielding summary
                     info.spawn((
                         TextBundle::from_section(
                             "",
@@ -1072,7 +1034,7 @@ pub fn update_build_panel(
                 }
             }
         } else {
-            *bg = Color::rgba(0.15, 0.15, 0.2, 0.8).into();
+            *bg = Color::rgba(0.08, 0.10, 0.18, 0.85).into();
             for &child in children.iter() {
                 if let Ok(mut text) = text_query.get_mut(child) {
                     text.sections[0].style.color = Color::rgb(0.5, 0.5, 0.55);
@@ -1121,9 +1083,9 @@ pub fn update_build_panel(
                 BuildSelection::Hull(_) => {
                     let mat = build_state.hull_material;
                     format!(
-                        "HP: {:.0} | Size: 1x1 | Depth: {:.0}m | Cost: {}c",
+                        "HP: {:.0} | Size: 1x1 | Rad Shield: {:.0} | Cost: {}c",
                         100.0 * mat.health_multiplier(),
-                        mat.depth_rating(),
+                        mat.radiation_shielding(),
                         mat.cost()
                     )
                 }
@@ -1161,7 +1123,7 @@ pub fn update_build_panel(
             if category == BuildCategory::Hull {
                 let mat = build_state.hull_material;
                 text.sections[0].value =
-                    format!("M: Material | {} ({:.0}m)", mat.name(), mat.depth_rating());
+                    format!("M: Material | {} (Shield: {:.0})", mat.name(), mat.radiation_shielding());
                 text.sections[0].style.color = Color::rgb(0.5, 0.65, 0.5);
             } else {
                 text.sections[0].value = String::new();
@@ -1171,7 +1133,7 @@ pub fn update_build_panel(
 
 }
 
-/// Updates description text and power/depth summary (separate system to stay under 16 params)
+/// Updates description text and power/shielding summary (separate system to stay under 16 params)
 pub fn update_build_info(
     build_state: Res<BuildingState>,
     registry: Res<ModuleRegistry>,
@@ -1188,10 +1150,10 @@ pub fn update_build_info(
             text.sections[0].value = match build_state.current_selection() {
                 BuildSelection::Hull(layer) => {
                     match layer {
-                        HullLayer::Outer => "Primary pressure hull. First line of defense.",
+                        HullLayer::Outer => "Primary hull plating. First line of defense against radiation and debris.",
                         HullLayer::Inner => "Secondary hull layer. Adds redundancy.",
                         HullLayer::Void => "Empty space between hulls. Absorbs damage.",
-                        HullLayer::BulkheadDoor => "Watertight door. Isolates flooded sections.",
+                        HullLayer::BulkheadDoor => "Airtight door. Isolates depressurized sections.",
                     }.to_string()
                 }
                 BuildSelection::Module(mt) => {
@@ -1201,7 +1163,7 @@ pub fn update_build_info(
         }
     }
 
-    // Power & depth summary
+    // Power & shielding summary
     if let Ok(entity) = summary_q.get_single() {
         if let Ok(mut text) = text_query.get_mut(entity) {
             let mut total_gen = 0.0_f32;
@@ -1213,12 +1175,12 @@ pub fn update_build_info(
             }
 
             let weakest_hull = hull_query.iter()
-                .map(|h| h.depth_rating)
+                .map(|h| h.radiation_shielding)
                 .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
             let mut summary = format!("Power: +{:.0} / -{:.0} | Credits: {}", total_gen, total_use, currency.credits);
-            if let Some(depth) = weakest_hull {
-                summary.push_str(&format!(" | Max depth: {:.0}m", depth));
+            if let Some(shielding) = weakest_hull {
+                summary.push_str(&format!(" | Rad shielding: {:.0}", shielding));
             }
 
             let balance = total_gen - total_use;

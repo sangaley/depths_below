@@ -58,11 +58,11 @@ fn check_depth_zone_change(
 
         if first {
             let zone_name = match current_zone {
-                ZoneType::Light => "Light Zone",
-                ZoneType::Twilight => "Twilight Zone",
-                ZoneType::Dark => "Dark Zone",
-                ZoneType::Abyss => "The Abyss",
-                ZoneType::Trench => "The Trench",
+                ZoneType::NearOrbit => "Near Orbit",
+                ZoneType::AsteroidBelt => "Asteroid Belt",
+                ZoneType::DeepSpace => "Deep Space",
+                ZoneType::Nebula => "Nebula",
+                ZoneType::BlackHole => "Black Hole Proximity",
             };
             notifications.send(ShowNotification {
                 message: format!("Entering {}", zone_name),
@@ -76,11 +76,11 @@ fn check_depth_zone_change(
 fn depth_to_zone(depth: f32) -> crate::components::ZoneType {
     use crate::components::ZoneType;
     match depth {
-        d if d < 200.0 => ZoneType::Light,
-        d if d < 500.0 => ZoneType::Twilight,
-        d if d < 1000.0 => ZoneType::Dark,
-        d if d < 2000.0 => ZoneType::Abyss,
-        _ => ZoneType::Trench,
+        d if d < 200.0 => ZoneType::NearOrbit,
+        d if d < 500.0 => ZoneType::AsteroidBelt,
+        d if d < 1000.0 => ZoneType::DeepSpace,
+        d if d < 2000.0 => ZoneType::Nebula,
+        _ => ZoneType::BlackHole,
     }
 }
 
@@ -100,16 +100,16 @@ fn update_biome(
     // Determine biome from position and depth
     let biome = match depth {
         d if d < 200.0 => {
-            if x.abs() > 2000.0 { BiomeType::KelpForest } else { BiomeType::OpenOcean }
+            if x.abs() > 2000.0 { BiomeType::AsteroidField } else { BiomeType::OpenVoid }
         }
         d if d < 500.0 => {
-            if x > 1500.0 { BiomeType::CoralReef } else { BiomeType::OpenOcean }
+            if x > 1500.0 { BiomeType::CrystalFormation } else { BiomeType::OpenVoid }
         }
         d if d < 1000.0 => {
-            if x < -1500.0 { BiomeType::IceCaverns } else { BiomeType::ThermalVents }
+            if x < -1500.0 { BiomeType::IceShells } else { BiomeType::ThermalVents }
         }
-        d if d < 2000.0 => BiomeType::AbyssalPlain,
-        _ => BiomeType::DeepTrench,
+        d if d < 2000.0 => BiomeType::DeadZone,
+        _ => BiomeType::VoidRift,
     };
 
     if world_state.current_biome != biome {

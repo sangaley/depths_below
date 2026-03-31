@@ -66,7 +66,7 @@ impl Plugin for SubmarinePlugin {
             .configure_set(Update, SubmarineSet::State.after(SubmarineSet::Hull).run_if(in_state(GameState::Exploring)))
 
             // Startup - spawn submarine, flush commands, then spawn crew (crew needs submarine entity)
-            .add_systems(OnEnter(GameState::SurfaceBase), (
+            .add_systems(OnEnter(GameState::StationDocked), (
                 (spawn_starter_submarine, reset_victory_state),
                 apply_deferred,
                 spawn_starter_crew,
@@ -79,7 +79,7 @@ impl Plugin for SubmarinePlugin {
                     submarine_input.in_set(SubmarineSet::Input),
                     submarine_movement.in_set(SubmarineSet::Movement),
                     update_depth.in_set(SubmarineSet::Movement),
-                    check_pressure_damage.in_set(SubmarineSet::Physics),
+                    check_radiation_damage.in_set(SubmarineSet::Physics),
                     build_power_graph.in_set(SubmarineSet::Power),
                     update_power_system.after(build_power_graph).in_set(SubmarineSet::Power),
                     update_reactor_heat.after(update_power_system).in_set(SubmarineSet::Power),
@@ -106,9 +106,9 @@ impl Plugin for SubmarinePlugin {
                     fire::update_fire.after(fire::apply_fire_ignition),
                     hull::process_hull_cascade.after(damage::process_detonations),
                     update_hull_integrity.after(hull::process_hull_cascade).after(fire::update_fire),
-                    update_flooding.after(hull::process_hull_cascade),
-                    pump_water_system.after(update_flooding),
-                    fire::emergency_bulkhead_system.after(update_flooding),
+                    update_decompression.after(hull::process_hull_cascade),
+                    seal_breach_system.after(update_decompression),
+                    fire::emergency_bulkhead_system.after(update_decompression),
                     handle_bulkhead_toggle,
                     bulkhead_seal_input,
                 ).in_set(SubmarineSet::Hull),
@@ -128,13 +128,13 @@ impl Plugin for SubmarinePlugin {
                 ).in_set(SubmarineSet::Heat),
             )
 
-            // Subsystems (capacitors, fire suppression, pressure, drones, torpedo loader, Phase B)
+            // Subsystems (capacitors, fire suppression, radiation shielding, drones, torpedo loader, Phase B)
             .add_systems(
                 Update,
                 (
                     subsystems::update_capacitors,
                     subsystems::update_fire_suppression,
-                    subsystems::update_pressure_reinforcement,
+                    subsystems::update_radiation_shielding,
                     subsystems::update_drone_bays,
                     subsystems::apply_torpedo_loader_bonus,
                     subsystems::apply_targeting_computer_bonus,
@@ -149,7 +149,7 @@ impl Plugin for SubmarinePlugin {
             // Atmospheric events (ambient immersion)
             .add_systems(Update, atmospheric_event_system.run_if(in_state(GameState::Exploring)))
 
-            // Reset session timer when starting a dive
+            // Reset session timer when launching into void
             .add_systems(OnEnter(GameState::Exploring), reset_session_timer)
 
             // Cleanup when returning to main menu (after game over / restart)

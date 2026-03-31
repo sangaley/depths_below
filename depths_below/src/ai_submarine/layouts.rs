@@ -87,8 +87,8 @@ fn leviathan_layout() -> AiSubLayout {
         ModulePlacement { module_type: ModuleType::CreatureContainment, grid_pos: IVec2::new(3, 0), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::SpecimenVault, grid_pos: IVec2::new(3, -1), rotation: Rotation::North },
         // Net launchers on hull edges
-        ModulePlacement { module_type: ModuleType::NetLauncher, grid_pos: IVec2::new(6, 0), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::NetLauncher, grid_pos: IVec2::new(6, -1), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::TractorBeam, grid_pos: IVec2::new(6, 0), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::TractorBeam, grid_pos: IVec2::new(6, -1), rotation: Rotation::East },
         // Scanners for finding creatures
         ModulePlacement { module_type: ModuleType::CreatureScanner, grid_pos: IVec2::new(5, 1), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::Floodlight, grid_pos: IVec2::new(7, 0), rotation: Rotation::East },
@@ -124,10 +124,10 @@ fn abyssal_cult_layout() -> AiSubLayout {
         // Ballast
         ModulePlacement { module_type: ModuleType::BallastTank, grid_pos: IVec2::new(0, 0), rotation: Rotation::North },
         // Bio-weapons on exterior
-        ModulePlacement { module_type: ModuleType::AcidSprayer, grid_pos: IVec2::new(6, 1), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::AcidSprayer, grid_pos: IVec2::new(6, -2), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::ElectricDischarger, grid_pos: IVec2::new(5, 0), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::SonicPulse, grid_pos: IVec2::new(4, 0), rotation: Rotation::North },
+        ModulePlacement { module_type: ModuleType::PlasmaCaster, grid_pos: IVec2::new(6, 1), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::PlasmaCaster, grid_pos: IVec2::new(6, -2), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::PlasmaCaster, grid_pos: IVec2::new(5, 0), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::IonDisruptor, grid_pos: IVec2::new(4, 0), rotation: Rotation::North },
         // Healing/support
         ModulePlacement { module_type: ModuleType::RepairBay, grid_pos: IVec2::new(2, 0), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::BasicQuarters, grid_pos: IVec2::new(3, 0), rotation: Rotation::North },
@@ -157,8 +157,8 @@ fn drowned_layout() -> AiSubLayout {
         // Flickering reactor
         ModulePlacement { module_type: ModuleType::SmallReactor, grid_pos: IVec2::new(1, 0), rotation: Rotation::North },
         // Random weapons still active
-        ModulePlacement { module_type: ModuleType::TorpedoTube, grid_pos: IVec2::new(7, 0), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::PointDefense, grid_pos: IVec2::new(4, 1), rotation: Rotation::North },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(7, 0), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::Gatling, grid_pos: IVec2::new(4, 1), rotation: Rotation::North },
         // Empty quarters (no crew)
         ModulePlacement { module_type: ModuleType::BasicQuarters, grid_pos: IVec2::new(3, 0), rotation: Rotation::North },
         // Old cargo
@@ -195,9 +195,9 @@ fn pressure_king_layout() -> AiSubLayout {
         ModulePlacement { module_type: ModuleType::BallastTank, grid_pos: IVec2::new(0, 0), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::FuelTank, grid_pos: IVec2::new(0, -1), rotation: Rotation::North },
         // Pressure weapons on edges
-        ModulePlacement { module_type: ModuleType::EMPEmitter, grid_pos: IVec2::new(7, 0), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::SonicPulse, grid_pos: IVec2::new(7, -1), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyTorpedoTube, grid_pos: IVec2::new(8, 0), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::EMPPulse, grid_pos: IVec2::new(7, 0), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::IonDisruptor, grid_pos: IVec2::new(7, -1), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(8, 0), rotation: Rotation::East },
         // Reinforced interior
         ModulePlacement { module_type: ModuleType::RepairBay, grid_pos: IVec2::new(3, 0), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::BasicQuarters, grid_pos: IVec2::new(4, 0), rotation: Rotation::North },
@@ -282,15 +282,15 @@ fn iron_tide_layout() -> AiSubLayout {
         ModulePlacement { module_type: ModuleType::RepairBay, grid_pos: IVec2::new(3, 0), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::AdvancedRepairBay, grid_pos: IVec2::new(3, -1), rotation: Rotation::North },
         // Weapons array (devastating)
-        ModulePlacement { module_type: ModuleType::RailGun, grid_pos: IVec2::new(11, 0), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyTorpedoTube, grid_pos: IVec2::new(11, 2), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyTorpedoTube, grid_pos: IVec2::new(11, -3), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::TorpedoTube, grid_pos: IVec2::new(10, 1), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::TorpedoTube, grid_pos: IVec2::new(10, -2), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::FlakCannon, grid_pos: IVec2::new(8, 3), rotation: Rotation::North },
-        ModulePlacement { module_type: ModuleType::FlakCannon, grid_pos: IVec2::new(8, -4), rotation: Rotation::South },
-        ModulePlacement { module_type: ModuleType::PointDefense, grid_pos: IVec2::new(7, 2), rotation: Rotation::North },
-        ModulePlacement { module_type: ModuleType::PointDefense, grid_pos: IVec2::new(7, -3), rotation: Rotation::South },
+        ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(11, 0), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(11, 2), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(11, -3), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(10, 1), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(10, -2), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::Cannon, grid_pos: IVec2::new(8, 3), rotation: Rotation::North },
+        ModulePlacement { module_type: ModuleType::Cannon, grid_pos: IVec2::new(8, -4), rotation: Rotation::South },
+        ModulePlacement { module_type: ModuleType::Gatling, grid_pos: IVec2::new(7, 2), rotation: Rotation::North },
+        ModulePlacement { module_type: ModuleType::Gatling, grid_pos: IVec2::new(7, -3), rotation: Rotation::South },
         // Bridge
         ModulePlacement { module_type: ModuleType::HelmStation, grid_pos: IVec2::new(8, 0), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::SonarArray, grid_pos: IVec2::new(9, 0), rotation: Rotation::East },
@@ -329,10 +329,10 @@ fn blackwater_layout() -> AiSubLayout {
         // Crew
         ModulePlacement { module_type: ModuleType::BasicQuarters, grid_pos: IVec2::new(4, 0), rotation: Rotation::North },
         // Weapons (precise, not overwhelming)
-        ModulePlacement { module_type: ModuleType::TorpedoTube, grid_pos: IVec2::new(9, 0), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::TorpedoTube, grid_pos: IVec2::new(9, -1), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::PointDefense, grid_pos: IVec2::new(6, 1), rotation: Rotation::North },
-        ModulePlacement { module_type: ModuleType::PointDefense, grid_pos: IVec2::new(6, -2), rotation: Rotation::South },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(9, 0), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(9, -1), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::Gatling, grid_pos: IVec2::new(6, 1), rotation: Rotation::North },
+        ModulePlacement { module_type: ModuleType::Gatling, grid_pos: IVec2::new(6, -2), rotation: Rotation::South },
     ];
     AiSubLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material }
 }
@@ -357,7 +357,7 @@ fn rust_swarm_layout() -> AiSubLayout {
         // Tiny reactor barely keeping things running
         ModulePlacement { module_type: ModuleType::SmallReactor, grid_pos: IVec2::new(1, 0), rotation: Rotation::North },
         // One weapon (mine layer - cheap and dirty)
-        ModulePlacement { module_type: ModuleType::MineLayer, grid_pos: IVec2::new(3, 0), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::ClusterRocket, grid_pos: IVec2::new(3, 0), rotation: Rotation::East },
         // Scrap cargo
         ModulePlacement { module_type: ModuleType::SmallCargo, grid_pos: IVec2::new(2, 0), rotation: Rotation::North },
     ];

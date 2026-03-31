@@ -53,21 +53,21 @@ fn pick_weighted(weights: &[(ContractType, u32)], rng: &mut impl Rng) -> Contrac
 
 fn creatures_for_star(star: u8) -> &'static [CreatureType] {
     match star {
-        1 => &[CreatureType::Scavenger, CreatureType::Stalker],
-        2 => &[CreatureType::Ambusher, CreatureType::ElectricEel],
-        3 => &[CreatureType::BlindHunter, CreatureType::LureFish],
-        4 => &[CreatureType::SwarmQueen, CreatureType::Parasite],
-        _ => &[CreatureType::Leviathan, CreatureType::Watcher],
+        1 => &[CreatureType::VoidDrifter],
+        2 => &[CreatureType::VoidDrifter, CreatureType::Stalker],
+        3 => &[CreatureType::Stalker, CreatureType::ParasiteSwarm],
+        4 => &[CreatureType::ParasiteSwarm, CreatureType::Leviathan],
+        _ => &[CreatureType::Leviathan],
     }
 }
 
 fn zone_for_star(star: u8) -> ZoneType {
     match star {
-        1 => ZoneType::Light,
-        2 => ZoneType::Twilight,
-        3 => ZoneType::Dark,
-        4 => ZoneType::Abyss,
-        _ => ZoneType::Trench,
+        1 => ZoneType::NearOrbit,
+        2 => ZoneType::AsteroidBelt,
+        3 => ZoneType::DeepSpace,
+        4 => ZoneType::Nebula,
+        _ => ZoneType::BlackHole,
     }
 }
 
@@ -175,7 +175,7 @@ fn generate_single_contract(
             let (item, count) = salvage_items_for_star(star);
             (
                 format!("Retrieve {} {}", count, item.name()),
-                format!("Collect {} units of {} and bring them to surface.", count, item.name()),
+                format!("Collect {} units of {} and bring them to station.", count, item.name()),
                 ContractObjective::RetrieveSalvage { item_type: item, target_count: count, current_count: 0 },
             )
         }
@@ -239,7 +239,7 @@ pub fn generate_contract_board(
 }
 
 // ============================================================================
-// SYSTEM: generate board on entering SurfaceBase
+// SYSTEM: generate board on entering StationDocked
 // ============================================================================
 
 pub fn generate_initial_board(

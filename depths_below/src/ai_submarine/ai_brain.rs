@@ -235,7 +235,7 @@ pub fn ai_brain_system(
             // Ram intruders upward. Don't flee. Ignore shallow threats.
             // ----------------------------------------------------------------
             AiSubType::PressureKing => {
-                // Only active in deep water - idle at shallow depth
+                // Only active in deep void - idle near station
                 if depth < 600.0 {
                     actions.push(ScoredAction {
                         score: 90.0,
@@ -378,7 +378,7 @@ pub fn ai_brain_system(
 
                 // Engage large creatures too (shows dominance)
                 if let Some((_, dist, c_pos, c_type)) = nearest_creature {
-                    let is_large = matches!(c_type, CreatureType::Leviathan | CreatureType::SwarmQueen);
+                    let is_large = matches!(c_type, CreatureType::Leviathan);
                     if dist < 400.0 && is_large {
                         actions.push(ScoredAction {
                             score: 75.0,

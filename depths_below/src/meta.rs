@@ -32,7 +32,7 @@ impl Plugin for MetaPlugin {
                 Update,
                 auto_save_system.run_if(
                     in_state(GameState::Exploring)
-                        .or_else(in_state(GameState::SurfaceBase))
+                        .or_else(in_state(GameState::StationDocked))
                 ),
             );
     }
@@ -128,6 +128,7 @@ fn collect_save_data(
                 rotation: module.rotation,
                 is_active: module.is_active,
                 custom_data,
+                customization_params: None, // Tier 3 params saved in future version
             }
         })
         .collect();
@@ -142,7 +143,7 @@ fn collect_save_data(
                 grid_position: IVec2::new(grid_x, grid_y),
                 health: seg.health,
                 max_health: seg.max_health,
-                depth_rating: seg.depth_rating,
+                radiation_shielding: seg.radiation_shielding,
                 material: seg.material,
                 hull_layer: seg.hull_layer,
             }
@@ -191,6 +192,8 @@ fn collect_save_data(
         current_depth: depth_state.current_depth,
         world_seed: world_state.seed,
         was_exploring: *current_state.get() == GameState::Exploring,
+        current_system_id: 0, // Will be set by save system that reads GalaxyState
+        galaxy_seed: world_state.seed,
     }
 }
 
@@ -238,7 +241,7 @@ fn handle_save_request(
     crew_query: Query<(Entity, &CrewMember)>,
 ) {
     for event in save_events.iter() {
-        let save_data = collect_save_data(
+        let mut save_data = collect_save_data(
             event.slot,
             &depth_state,
             &hull_state,
@@ -254,6 +257,9 @@ fn handle_save_request(
             &crew_query,
             &current_state,
         );
+
+        // Tier 3 customization is saved via customization_params field
+        // (populated when ModuleCustomization query is added in a future refactor)
 
         let success = write_save(&save_data, event.slot);
 
@@ -414,7 +420,7 @@ fn rebuild_entities_from_save(
             Submarine,
             Velocity(Vec2::ZERO),
             Depth(save.current_depth),
-            Buoyancy { base_buoyancy: 0.0, current: 0.0 },
+            ThrusterState { base_drift: 0.0, current: 0.0 },
             Health { current: 100.0, max: 100.0 },
             SubmarinePhysics::default(),
         )).id()
@@ -442,9 +448,9 @@ fn rebuild_entities_from_save(
             HullSegment {
                 health: hull_data.health,
                 max_health: hull_data.max_health,
-                depth_rating: hull_data.depth_rating,
-                is_flooded: false,
-                flood_level: 0.0,
+                radiation_shielding: hull_data.radiation_shielding,
+                is_depressurized: false,
+                depressurization_level: 0.0,
                 hull_layer: hull_data.hull_layer,
                 material: hull_data.material,
                 grid_position: hull_data.grid_position,
@@ -505,7 +511,7 @@ fn rebuild_entities_from_save(
     if save.was_exploring {
         next_state.set(GameState::Exploring);
     } else {
-        next_state.set(GameState::SurfaceBase);
+        next_state.set(GameState::StationDocked);
     }
 
     loaded_events.send(GameLoaded { slot, success: true });
@@ -557,7 +563,7 @@ fn auto_save_system(
 
     // Only auto-save while exploring or at surface base
     match current_state.get() {
-        GameState::Exploring | GameState::SurfaceBase => {}
+        GameState::Exploring | GameState::StationDocked => {}
         _ => return,
     }
 

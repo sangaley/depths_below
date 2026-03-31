@@ -43,7 +43,7 @@ pub fn init_world_simulation(
         }
     }
 
-    info!("World simulation initialized with {} AI submarines across 8 factions", sim.subs.len());
+    info!("World simulation initialized with {} AI vessels across 8 factions", sim.subs.len());
 }
 
 /// Tick the off-screen simulation: move subs, resolve encounters

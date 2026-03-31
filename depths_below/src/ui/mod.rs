@@ -1,5 +1,7 @@
 pub mod build_ui;
 pub mod damage_overlay;
+pub mod windows;
+pub mod theme;
 
 use std::collections::HashMap;
 
@@ -19,15 +21,29 @@ impl Plugin for UiPlugin {
             .init_resource::<CustomizationState>()
             .init_resource::<ComponentPlacementState>()
             .init_resource::<PieceCustomizationState>()
+            .init_resource::<windows::framework::WindowZCounter>()
+            .init_resource::<windows::tooltip::TooltipState>()
+            .init_resource::<windows::notification_log::NotificationHistory>()
             .add_systems(Startup, setup_ui)
             .add_systems(
                 Update,
                 (
                     update_hud,
                     update_hud_secondary,
+                    update_celestial_hud,
                     handle_notifications,
                     update_notifications,
                     handle_menu_input,
+                    // Floating window systems
+                    windows::framework::window_drag_system,
+                    windows::framework::window_close_system,
+                    windows::framework::window_collapse_system,
+                    windows::framework::window_button_hover_system,
+                    // Tooltip
+                    windows::tooltip::tooltip_system,
+                    windows::tooltip::tooltip_position_system,
+                    // Notification log
+                    windows::notification_log::record_notifications,
                 ),
             )
             // Main menu
@@ -64,6 +80,21 @@ impl Plugin for UiPlugin {
                 (
                     handle_game_event_notifications,
                     update_hull_warning_overlay,
+                    // Floating windows (exploring)
+                    windows::minimap::toggle_minimap,
+                    windows::minimap::update_minimap,
+                    windows::notification_log::toggle_notification_log,
+                    // Inspection & customization (exploring)
+                    windows::inspection::slot_button_click,
+                    windows::inspection::slot_button_hover,
+                    windows::inspection::customize_button_hover,
+                    windows::inspection::preset_button_hover,
+                    windows::customization::slider_click_system,
+                    windows::customization::undo_button_hover,
+                    // Radial menu
+                    windows::radial_menu::spawn_radial_on_right_click,
+                    windows::radial_menu::update_radial_menu,
+                    windows::radial_menu::radial_menu_input,
                 ).run_if(in_state(GameState::Exploring)),
             )
             // Damage overlay (while exploring) — chained for correct ordering
@@ -95,7 +126,7 @@ impl Plugin for UiPlugin {
                 (
                     toggle_upgrade_shop,
                     upgrade_shop_input,
-                ).run_if(in_state(GameState::SurfaceBase)),
+                ).run_if(in_state(GameState::StationDocked)),
             )
             // Build UI: ghost preview
             .add_systems(OnEnter(BuildState::Placing), build_ui::spawn_build_ghost)
@@ -134,7 +165,7 @@ impl Plugin for UiPlugin {
                         in_state(BuildState::Placing)
                             .or_else(in_state(BuildState::Deleting)),
                     ),
-                    build_ui::update_controls_help.run_if(in_state(GameState::SurfaceBase)),
+                    build_ui::update_controls_help.run_if(in_state(GameState::StationDocked)),
                     build_ui::update_module_tooltip.run_if(in_state(BuildState::Placing)),
                 ),
             )
@@ -145,7 +176,7 @@ impl Plugin for UiPlugin {
                     build_ui::spawn_customization_panel,
                     build_ui::update_customization_panel,
                     build_ui::handle_customization_input,
-                ).run_if(in_state(GameState::SurfaceBase)),
+                ).run_if(in_state(GameState::StationDocked)),
             )
             // Component placement panel systems
             .add_systems(
@@ -185,7 +216,7 @@ pub struct HullText;
 pub struct FuelText;
 
 #[derive(Component)]
-pub struct BallastText;
+pub struct ThrusterText;
 
 #[derive(Component)]
 pub struct AmmoText;
@@ -216,6 +247,14 @@ pub enum HudBarKind {
 #[derive(Component)]
 pub struct DepthZoneText;
 
+/// Marker for star system info display
+#[derive(Component)]
+pub struct SystemInfoText;
+
+/// Marker for gravity pull indicator
+#[derive(Component)]
+pub struct GravityIndicatorText;
+
 /// Marker for map/inventory overlay
 #[derive(Component)]
 pub struct MapOverlay;
@@ -225,10 +264,10 @@ fn spawn_hud_bar(parent: &mut ChildBuilder, kind: HudBarKind, width: f32, color:
     parent.spawn(NodeBundle {
         style: Style {
             width: Val::Px(width),
-            height: Val::Px(8.0),
+            height: Val::Px(4.0),
             ..default()
         },
-        background_color: Color::rgba(0.15, 0.15, 0.15, 0.8).into(),
+        background_color: Color::rgba(0.10, 0.12, 0.18, 0.8).into(),
         ..default()
     }).with_children(|bar_bg| {
         bar_bg.spawn((
@@ -246,27 +285,38 @@ fn spawn_hud_bar(parent: &mut ChildBuilder, kind: HudBarKind, width: f32, color:
     });
 }
 
-/// Helper to spawn a HUD group with label
+/// Helper to spawn a HUD group with label — uses theme colors
 fn spawn_hud_group(parent: &mut ChildBuilder, label: &str, label_color: Color, children: impl FnOnce(&mut ChildBuilder)) {
     parent.spawn(NodeBundle {
         style: Style {
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
-            padding: UiRect::horizontal(Val::Px(6.0)),
-            row_gap: Val::Px(2.0),
+            padding: UiRect::new(Val::Px(8.0), Val::Px(8.0), Val::Px(2.0), Val::Px(2.0)),
+            row_gap: Val::Px(1.0),
             ..default()
         },
         ..default()
     }).with_children(|group| {
         group.spawn(TextBundle::from_section(label, TextStyle {
-            font_size: 10.0, color: label_color, ..default()
+            font_size: theme::ThemeFonts::TINY, color: label_color, ..default()
         }));
         children(group);
     });
 }
 
-/// Sets up the UI
+/// Helper to spawn a HUD separator
+fn spawn_hud_separator(parent: &mut ChildBuilder) {
+    parent.spawn(NodeBundle {
+        style: Style { width: Val::Px(1.0), height: Val::Px(28.0), ..default() },
+        background_color: theme::ThemeColors::HUD_SEPARATOR.into(),
+        ..default()
+    });
+}
+
+/// Sets up the UI — themed, clean layout
 fn setup_ui(mut commands: Commands) {
+    use theme::*;
+
     commands.spawn((
         NodeBundle {
             style: Style {
@@ -280,180 +330,168 @@ fn setup_ui(mut commands: Commands) {
         },
         HudRoot,
     )).with_children(|parent| {
-        // ===== TOP BAR =====
+        // ===== TOP BAR — Ship Vitals =====
         parent.spawn(NodeBundle {
             style: Style {
                 width: Val::Percent(100.0),
-                padding: UiRect::new(Val::Px(8.0), Val::Px(8.0), Val::Px(4.0), Val::Px(4.0)),
-                column_gap: Val::Px(4.0),
+                padding: UiRect::new(Val::Px(ThemeSpacing::LG), Val::Px(ThemeSpacing::LG), Val::Px(ThemeSpacing::SM), Val::Px(ThemeSpacing::SM)),
+                column_gap: Val::Px(ThemeSpacing::XS),
                 align_items: AlignItems::Center,
                 ..default()
             },
-            background_color: Color::rgba(0.02, 0.03, 0.08, 0.85).into(),
+            background_color: ThemeColors::HUD_BG.into(),
             ..default()
         }).with_children(|top_bar| {
-            // -- DEPTH --
-            spawn_hud_group(top_bar, "DEPTH", Color::rgb(0.4, 0.4, 0.5), |group| {
+            // -- SYSTEM + ZONE --
+            spawn_hud_group(top_bar, "SYS", ThemeColors::ACCENT_PURPLE, |group| {
                 group.spawn((
-                    TextBundle::from_section("0m", TextStyle {
-                        font_size: 18.0, color: Color::WHITE, ..default()
+                    TextBundle::from_section("System-0", TextStyle {
+                        font_size: ThemeFonts::BODY, color: ThemeColors::ACCENT_PURPLE, ..default()
                     }),
-                    DepthText,
+                    SystemInfoText,
                 ));
                 group.spawn((
-                    TextBundle::from_section("Surface", TextStyle {
-                        font_size: 10.0, color: Color::rgb(0.4, 0.7, 1.0), ..default()
+                    TextBundle::from_section("Station Orbit", TextStyle {
+                        font_size: ThemeFonts::TINY, color: ThemeColors::ACCENT_BLUE, ..default()
                     }),
                     DepthZoneText,
                 ));
             });
 
-            // Separator
-            top_bar.spawn(NodeBundle {
-                style: Style { width: Val::Px(1.0), height: Val::Px(30.0), ..default() },
-                background_color: Color::rgba(0.3, 0.3, 0.4, 0.5).into(),
-                ..default()
+            spawn_hud_separator(top_bar);
+
+            // -- GRAVITY --
+            spawn_hud_group(top_bar, "GRAV", ThemeColors::TEXT_MUTED, |group| {
+                group.spawn((
+                    TextBundle::from_section("", TextStyle {
+                        font_size: ThemeFonts::CAPTION, color: ThemeColors::TEXT_SECONDARY, ..default()
+                    }),
+                    GravityIndicatorText,
+                ));
             });
 
+            spawn_hud_separator(top_bar);
+
             // -- HULL --
-            spawn_hud_group(top_bar, "HULL", Color::rgb(0.4, 0.5, 0.4), |group| {
+            spawn_hud_group(top_bar, "HULL", ThemeColors::ACCENT_GREEN, |group| {
                 group.spawn((
                     TextBundle::from_section("100%", TextStyle {
-                        font_size: 18.0, color: Color::GREEN, ..default()
+                        font_size: ThemeFonts::H3, color: ThemeColors::ACCENT_GREEN, ..default()
                     }),
                     HullText,
                 ));
-                spawn_hud_bar(group, HudBarKind::Hull, 60.0, Color::GREEN);
-            });
-
-            // Separator
-            top_bar.spawn(NodeBundle {
-                style: Style { width: Val::Px(1.0), height: Val::Px(30.0), ..default() },
-                background_color: Color::rgba(0.3, 0.3, 0.4, 0.5).into(),
-                ..default()
+                spawn_hud_bar(group, HudBarKind::Hull, 56.0, ThemeColors::ACCENT_GREEN);
             });
 
             // -- O2 --
-            spawn_hud_group(top_bar, "O2", Color::rgb(0.3, 0.5, 0.5), |group| {
+            spawn_hud_group(top_bar, "O2", ThemeColors::ACCENT_CYAN, |group| {
                 group.spawn((
                     TextBundle::from_section("100%", TextStyle {
-                        font_size: 18.0, color: Color::CYAN, ..default()
+                        font_size: ThemeFonts::H3, color: ThemeColors::ACCENT_CYAN, ..default()
                     }),
                     OxygenText,
                 ));
-                spawn_hud_bar(group, HudBarKind::Oxygen, 60.0, Color::CYAN);
+                spawn_hud_bar(group, HudBarKind::Oxygen, 56.0, ThemeColors::ACCENT_CYAN);
             });
 
-            // Separator
-            top_bar.spawn(NodeBundle {
-                style: Style { width: Val::Px(1.0), height: Val::Px(30.0), ..default() },
-                background_color: Color::rgba(0.3, 0.3, 0.4, 0.5).into(),
-                ..default()
-            });
+            spawn_hud_separator(top_bar);
 
             // -- POWER --
-            spawn_hud_group(top_bar, "POWER", Color::rgb(0.5, 0.5, 0.3), |group| {
+            spawn_hud_group(top_bar, "PWR", ThemeColors::ACCENT_YELLOW, |group| {
                 group.spawn((
                     TextBundle::from_section("0/0", TextStyle {
-                        font_size: 18.0, color: Color::YELLOW, ..default()
+                        font_size: ThemeFonts::H3, color: ThemeColors::ACCENT_YELLOW, ..default()
                     }),
                     PowerText,
                 ));
             });
 
-            // Separator
-            top_bar.spawn(NodeBundle {
-                style: Style { width: Val::Px(1.0), height: Val::Px(30.0), ..default() },
-                background_color: Color::rgba(0.3, 0.3, 0.4, 0.5).into(),
-                ..default()
-            });
-
             // -- FUEL --
-            spawn_hud_group(top_bar, "FUEL", Color::rgb(0.5, 0.4, 0.3), |group| {
+            spawn_hud_group(top_bar, "FUEL", ThemeColors::ACCENT_ORANGE, |group| {
                 group.spawn((
                     TextBundle::from_section("100%", TextStyle {
-                        font_size: 18.0, color: Color::rgb(1.0, 0.6, 0.2), ..default()
+                        font_size: ThemeFonts::BODY, color: ThemeColors::ACCENT_ORANGE, ..default()
                     }),
                     FuelText,
                 ));
-                spawn_hud_bar(group, HudBarKind::Fuel, 50.0, Color::rgb(1.0, 0.6, 0.2));
+                spawn_hud_bar(group, HudBarKind::Fuel, 44.0, ThemeColors::ACCENT_ORANGE);
             });
 
-            // Separator
-            top_bar.spawn(NodeBundle {
-                style: Style { width: Val::Px(1.0), height: Val::Px(30.0), ..default() },
-                background_color: Color::rgba(0.3, 0.3, 0.4, 0.5).into(),
-                ..default()
-            });
+            spawn_hud_separator(top_bar);
 
-            // -- BALLAST --
-            spawn_hud_group(top_bar, "BLST", Color::rgb(0.3, 0.4, 0.5), |group| {
+            // -- THRUSTERS --
+            spawn_hud_group(top_bar, "THRS", ThemeColors::ACCENT_BLUE, |group| {
                 group.spawn((
                     TextBundle::from_section("50%", TextStyle {
-                        font_size: 16.0, color: Color::rgb(0.3, 0.5, 1.0), ..default()
+                        font_size: ThemeFonts::BODY, color: ThemeColors::ACCENT_BLUE, ..default()
                     }),
-                    BallastText,
+                    ThrusterText,
                 ));
             });
 
             // -- AMMO --
-            spawn_hud_group(top_bar, "AMMO", Color::rgb(0.5, 0.4, 0.3), |group| {
+            spawn_hud_group(top_bar, "AMMO", ThemeColors::ACCENT_ORANGE, |group| {
                 group.spawn((
                     TextBundle::from_section("-/-", TextStyle {
-                        font_size: 16.0, color: Color::rgb(0.9, 0.7, 0.3), ..default()
+                        font_size: ThemeFonts::BODY, color: ThemeColors::ACCENT_ORANGE, ..default()
                     }),
                     AmmoText,
                 ));
             });
 
             // -- NOISE --
-            spawn_hud_group(top_bar, "NOISE", Color::rgb(0.4, 0.4, 0.4), |group| {
+            spawn_hud_group(top_bar, "NOISE", ThemeColors::TEXT_MUTED, |group| {
                 group.spawn((
                     TextBundle::from_section("0", TextStyle {
-                        font_size: 16.0, color: Color::rgb(0.6, 0.6, 0.6), ..default()
+                        font_size: ThemeFonts::BODY, color: ThemeColors::TEXT_SECONDARY, ..default()
                     }),
                     NoiseText,
                 ));
             });
 
-            // Separator
-            top_bar.spawn(NodeBundle {
-                style: Style { width: Val::Px(1.0), height: Val::Px(30.0), ..default() },
-                background_color: Color::rgba(0.3, 0.3, 0.4, 0.5).into(),
-                ..default()
-            });
+            spawn_hud_separator(top_bar);
 
             // -- CREDITS --
-            spawn_hud_group(top_bar, "CRED", Color::rgb(0.5, 0.5, 0.3), |group| {
+            spawn_hud_group(top_bar, "CRED", ThemeColors::ACCENT_YELLOW, |group| {
                 group.spawn((
                     TextBundle::from_section("500", TextStyle {
-                        font_size: 16.0, color: Color::rgb(0.9, 0.8, 0.3), ..default()
+                        font_size: ThemeFonts::BODY, color: ThemeColors::ACCENT_YELLOW, ..default()
                     }),
                     CreditsText,
                 ));
             });
 
             // -- CREW --
-            spawn_hud_group(top_bar, "CREW", Color::rgb(0.4, 0.5, 0.4), |group| {
+            spawn_hud_group(top_bar, "CREW", ThemeColors::ACCENT_GREEN, |group| {
                 group.spawn((
                     TextBundle::from_section("0/0", TextStyle {
-                        font_size: 16.0, color: Color::rgb(0.7, 0.9, 0.7), ..default()
+                        font_size: ThemeFonts::BODY, color: ThemeColors::ACCENT_GREEN, ..default()
                     }),
                     CrewText,
                 ));
             });
+
+            // -- DISTANCE (replaces old DEPTH) --
+            spawn_hud_group(top_bar, "DIST", ThemeColors::TEXT_MUTED, |group| {
+                group.spawn((
+                    TextBundle::from_section("0", TextStyle {
+                        font_size: ThemeFonts::BODY, color: ThemeColors::TEXT_PRIMARY, ..default()
+                    }),
+                    DepthText,
+                ));
+            });
         });
 
-        // ===== NOTIFICATION CONTAINER (right side) =====
+        // ===== NOTIFICATION CONTAINER =====
         parent.spawn((
             NodeBundle {
                 style: Style {
                     position_type: PositionType::Absolute,
-                    right: Val::Px(10.0),
-                    top: Val::Px(60.0),
+                    right: Val::Px(ThemeSpacing::LG),
+                    top: Val::Px(48.0),
                     flex_direction: FlexDirection::Column,
-                    row_gap: Val::Px(4.0),
-                    max_width: Val::Px(380.0),
+                    row_gap: Val::Px(ThemeSpacing::SM),
+                    max_width: Val::Px(360.0),
                     ..default()
                 },
                 ..default()
@@ -461,22 +499,22 @@ fn setup_ui(mut commands: Commands) {
             NotificationContainer,
         ));
 
-        // ===== BOTTOM BAR =====
+        // ===== BOTTOM BAR — Controls =====
         parent.spawn(NodeBundle {
             style: Style {
                 width: Val::Percent(100.0),
-                height: Val::Px(28.0),
-                padding: UiRect::new(Val::Px(12.0), Val::Px(12.0), Val::Px(6.0), Val::Px(6.0)),
+                height: Val::Px(24.0),
+                padding: UiRect::new(Val::Px(ThemeSpacing::XL), Val::Px(ThemeSpacing::XL), Val::Px(ThemeSpacing::SM), Val::Px(ThemeSpacing::SM)),
                 align_items: AlignItems::Center,
                 ..default()
             },
-            background_color: Color::rgba(0.02, 0.03, 0.08, 0.75).into(),
+            background_color: ThemeColors::HUD_BG.into(),
             ..default()
-        }).with_children(|parent| {
-            parent.spawn((
+        }).with_children(|bar| {
+            bar.spawn((
                 TextBundle::from_section(
-                    "WASD: Move | Q/E: Ballast | Space: Fire | Z: Sonar | C: Crew | M: Map | ESC: Pause",
-                    TextStyle { font_size: 13.0, color: Color::rgb(0.45, 0.50, 0.55), ..default() },
+                    "WASD Move  Q/E Thrust  SPACE Fire  Z Radar  V Warp  N Map  L Log  B Build  ESC Pause",
+                    TextStyle { font_size: ThemeFonts::CAPTION, color: ThemeColors::TEXT_MUTED, ..default() },
                 ),
                 build_ui::ControlsHelpText,
             ));
@@ -484,14 +522,80 @@ fn setup_ui(mut commands: Commands) {
     });
 }
 
-/// Returns the depth zone name for a given depth
+/// Updates celestial HUD elements: system name, gravity pull, nearest star distance
+pub fn update_celestial_hud(
+    galaxy: Res<crate::celestial::resources::GalaxyState>,
+    sub_query: Query<&Transform, With<Submarine>>,
+    star_query: Query<(&Transform, &crate::celestial::components::CelestialBody), With<crate::celestial::components::Star>>,
+    bh_query: Query<(&Transform, &crate::celestial::components::CelestialBody), With<crate::celestial::components::BlackHole>>,
+    gravity_query: Query<&crate::celestial::components::GravityForce, With<Submarine>>,
+    mut system_text_query: Query<&mut Text, (With<SystemInfoText>, Without<GravityIndicatorText>)>,
+    mut gravity_text_query: Query<&mut Text, (With<GravityIndicatorText>, Without<SystemInfoText>)>,
+) {
+    // System name
+    if let Ok(mut text) = system_text_query.get_single_mut() {
+        text.sections[0].value = format!("System-{}", galaxy.current_system);
+    }
+
+    let sub_pos = sub_query.get_single()
+        .map(|t| t.translation.truncate())
+        .unwrap_or(Vec2::ZERO);
+
+    // Gravity indicator
+    if let Ok(mut text) = gravity_text_query.get_single_mut() {
+        let gravity_force = gravity_query.get_single()
+            .map(|gf| gf.0.length())
+            .unwrap_or(0.0);
+
+        if gravity_force > 10.0 {
+            // Find what's pulling us
+            let nearest_star = star_query.iter()
+                .map(|(t, body)| (t.translation.truncate().distance(sub_pos), &body.name))
+                .min_by(|(a, _), (b, _)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+            let nearest_bh = bh_query.iter()
+                .map(|(t, body)| (t.translation.truncate().distance(sub_pos), &body.name))
+                .min_by(|(a, _), (b, _)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+            let source_name = match (nearest_star, nearest_bh) {
+                (Some((sd, sn)), Some((bd, bn))) => if bd < sd { bn.as_str() } else { sn.as_str() },
+                (Some((_, n)), None) => n.as_str(),
+                (None, Some((_, n))) => n.as_str(),
+                _ => "Unknown",
+            };
+
+            let intensity = if gravity_force > 400.0 {
+                "EXTREME"
+            } else if gravity_force > 200.0 {
+                "Strong"
+            } else if gravity_force > 50.0 {
+                "Moderate"
+            } else {
+                "Weak"
+            };
+
+            text.sections[0].value = format!("Grav: {} ({})", intensity, source_name);
+            text.sections[0].style.color = if gravity_force > 400.0 {
+                Color::RED
+            } else if gravity_force > 200.0 {
+                Color::YELLOW
+            } else {
+                Color::rgb(0.8, 0.4, 0.3)
+            };
+        } else {
+            text.sections[0].value = String::new();
+        }
+    }
+}
+
+/// Returns the space zone name for a given distance
 fn depth_zone_name(depth: f32) -> &'static str {
-    if depth < 50.0 { "Surface" }
-    else if depth < 200.0 { "Shallows" }
-    else if depth < 500.0 { "Twilight Zone" }
-    else if depth < 1000.0 { "Dark Zone" }
-    else if depth < 2000.0 { "Abyss" }
-    else { "Hadal Trench" }
+    if depth < 50.0 { "Station Orbit" }
+    else if depth < 200.0 { "Near Space" }
+    else if depth < 500.0 { "Asteroid Belt" }
+    else if depth < 1000.0 { "Deep Space" }
+    else if depth < 2000.0 { "Nebula" }
+    else { "Black Hole Proximity" }
 }
 
 /// Updates HUD text and bars
@@ -587,21 +691,21 @@ pub fn update_hud(
     }
 }
 
-/// Updates secondary HUD elements: Fuel, Ballast, Ammo, Noise, Credits, Crew
+/// Updates secondary HUD elements: Fuel, Thrusters, Ammo, Noise, Credits, Crew
 pub fn update_hud_secondary(
     fuel_state: Res<FuelState>,
     noise_state: Res<NoiseState>,
     currency: Res<Currency>,
     staffing_state: Res<StaffingState>,
     time: Res<Time>,
-    ballast_query: Query<&Ballast>,
+    thruster_query: Query<&Thruster>,
     weapon_query: Query<&Weapon>,
-    mut fuel_query: Query<&mut Text, (With<FuelText>, Without<BallastText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>,
-    mut ballast_text_query: Query<&mut Text, (With<BallastText>, Without<FuelText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>,
-    mut ammo_query: Query<&mut Text, (With<AmmoText>, Without<FuelText>, Without<BallastText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>,
-    mut noise_query: Query<&mut Text, (With<NoiseText>, Without<FuelText>, Without<BallastText>, Without<AmmoText>, Without<CreditsText>, Without<CrewText>)>,
-    mut credits_query: Query<&mut Text, (With<CreditsText>, Without<FuelText>, Without<BallastText>, Without<AmmoText>, Without<NoiseText>, Without<CrewText>)>,
-    mut crew_query_hud: Query<&mut Text, (With<CrewText>, Without<FuelText>, Without<BallastText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>)>,
+    mut fuel_query: Query<&mut Text, (With<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>,
+    mut thruster_text_query: Query<&mut Text, (With<ThrusterText>, Without<FuelText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>,
+    mut ammo_query: Query<&mut Text, (With<AmmoText>, Without<FuelText>, Without<ThrusterText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>,
+    mut noise_query: Query<&mut Text, (With<NoiseText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<CreditsText>, Without<CrewText>)>,
+    mut credits_query: Query<&mut Text, (With<CreditsText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CrewText>)>,
+    mut crew_query_hud: Query<&mut Text, (With<CrewText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>)>,
     mut bar_query: Query<(&HudBar, &mut Style, &mut BackgroundColor)>,
 ) {
     // Fuel
@@ -629,14 +733,14 @@ pub fn update_hud_secondary(
         }
     }
 
-    // Ballast
-    if let Ok(mut text) = ballast_text_query.get_single_mut() {
-        let ballasts: Vec<f32> = ballast_query.iter().map(|b| b.current_level).collect();
-        if ballasts.is_empty() {
+    // Thrusters
+    if let Ok(mut text) = thruster_text_query.get_single_mut() {
+        let outputs: Vec<f32> = thruster_query.iter().map(|t| t.current_output).collect();
+        if outputs.is_empty() {
             text.sections[0].value = "N/A".to_string();
             text.sections[0].style.color = Color::GRAY;
         } else {
-            let avg = ballasts.iter().sum::<f32>() / ballasts.len() as f32;
+            let avg = outputs.iter().sum::<f32>() / outputs.len() as f32;
             let pct = (avg * 100.0) as i32;
             text.sections[0].value = format!("{}%", pct);
             text.sections[0].style.color = Color::rgb(0.3, 0.5, 1.0);
@@ -736,33 +840,34 @@ fn handle_notifications(
 
         let (color, bg_color, prefix) = match event.notification_type {
             NotificationType::Danger => (
-                Color::rgb(1.0, 0.3, 0.3),
-                Color::rgba(0.4, 0.05, 0.05, 0.85),
-                "[!] ",
+                theme::ThemeColors::STATUS_DANGER,
+                theme::ThemeColors::NOTIF_DANGER_BG,
+                "! ",
             ),
             NotificationType::Warning => (
-                Color::rgb(1.0, 0.8, 0.2),
-                Color::rgba(0.3, 0.25, 0.02, 0.8),
-                "[*] ",
+                theme::ThemeColors::STATUS_WARN,
+                theme::ThemeColors::NOTIF_WARN_BG,
+                "* ",
             ),
             NotificationType::Success => (
-                Color::rgb(0.3, 1.0, 0.3),
-                Color::rgba(0.02, 0.2, 0.05, 0.8),
-                "[+] ",
+                theme::ThemeColors::ACCENT_GREEN,
+                theme::ThemeColors::NOTIF_SUCCESS_BG,
+                "+ ",
             ),
             NotificationType::Info => (
-                Color::rgb(0.85, 0.9, 0.95),
-                Color::rgba(0.05, 0.08, 0.15, 0.8),
+                theme::ThemeColors::TEXT_PRIMARY,
+                theme::ThemeColors::NOTIF_INFO_BG,
                 "",
             ),
         };
         let msg = format!("{}{}", prefix, event.message);
         commands.spawn((
             TextBundle::from_section(&msg, TextStyle {
-                font_size: 15.0, color, ..default()
+                font_size: theme::ThemeFonts::BODY, color, ..default()
             }).with_style(Style {
-                margin: UiRect::bottom(Val::Px(3.0)),
-                padding: UiRect::new(Val::Px(8.0), Val::Px(8.0), Val::Px(4.0), Val::Px(4.0)),
+                margin: UiRect::bottom(Val::Px(theme::ThemeSpacing::XS)),
+                padding: UiRect::new(Val::Px(10.0), Val::Px(10.0), Val::Px(5.0), Val::Px(5.0)),
+                max_width: Val::Px(340.0),
                 ..default()
             }).with_background_color(bg_color),
             NotificationToast { timer: Timer::from_seconds(event.duration, TimerMode::Once) },
@@ -813,7 +918,7 @@ fn handle_menu_input(
             return;
         }
         match current_state.get() {
-            GameState::Exploring | GameState::SurfaceBase => {
+            GameState::Exploring | GameState::StationDocked => {
                 pre_pause.0 = Some(*current_state.get());
                 next_state.set(GameState::Paused);
             }
@@ -855,8 +960,8 @@ fn handle_menu_input(
         && !is_customizing
     {
         match current_state.get() {
-            GameState::MainMenu => next_state.set(GameState::SurfaceBase),
-            GameState::SurfaceBase => next_state.set(GameState::Exploring),
+            GameState::MainMenu => next_state.set(GameState::StationDocked),
+            GameState::StationDocked => next_state.set(GameState::Exploring),
             _ => {}
         }
     }
@@ -908,7 +1013,7 @@ fn handle_game_event_notifications(
     // Hull breaches
     for event in breach_events.iter() {
         notifications.send(ShowNotification {
-            message: format!("HULL BREACH! Flooding in progress! (Severity: {:.0}%)", event.severity * 100.0),
+            message: format!("HULL BREACH! Decompression in progress! (Severity: {:.0}%)", event.severity * 100.0),
             notification_type: NotificationType::Danger,
             duration: 4.0,
         });
@@ -1156,6 +1261,8 @@ fn toggle_map_overlay(
 // ============================================================================
 
 fn spawn_main_menu(mut commands: Commands) {
+    use theme::*;
+
     commands.spawn((
         NodeBundle {
             style: Style {
@@ -1164,53 +1271,47 @@ fn spawn_main_menu(mut commands: Commands) {
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(ThemeSpacing::SECTION),
                 ..default()
             },
-            background_color: Color::rgba(0.01, 0.03, 0.10, 0.97).into(),
+            background_color: ThemeColors::BG_VOID.into(),
             z_index: ZIndex::Global(100),
             ..default()
         },
         MainMenuOverlay,
     )).with_children(|parent| {
-        // Title container with subtle border
+        // Title container
         parent.spawn(NodeBundle {
             style: Style {
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
-                padding: UiRect::new(Val::Px(60.0), Val::Px(60.0), Val::Px(30.0), Val::Px(30.0)),
-                row_gap: Val::Px(8.0),
+                padding: UiRect::new(Val::Px(80.0), Val::Px(80.0), Val::Px(ThemeSpacing::XXL), Val::Px(ThemeSpacing::XXL)),
+                row_gap: Val::Px(ThemeSpacing::MD),
                 ..default()
             },
-            background_color: Color::rgba(0.03, 0.06, 0.18, 0.6).into(),
             ..default()
         }).with_children(|title_box| {
-            // Decorative line
+            // Top accent line
             title_box.spawn(NodeBundle {
-                style: Style { width: Val::Px(200.0), height: Val::Px(1.0), margin: UiRect::bottom(Val::Px(10.0)), ..default() },
-                background_color: Color::rgba(0.2, 0.5, 0.8, 0.4).into(),
+                style: Style { width: Val::Px(240.0), height: Val::Px(1.0), margin: UiRect::bottom(Val::Px(ThemeSpacing::LG)), ..default() },
+                background_color: ThemeColors::BORDER_BRIGHT.into(),
                 ..default()
             });
 
             title_box.spawn(TextBundle::from_section("DEPTHS BELOW", TextStyle {
-                font_size: 72.0, color: Color::rgb(0.25, 0.65, 1.0), ..default()
+                font_size: ThemeFonts::DISPLAY, color: ThemeColors::ACCENT_BLUE, ..default()
             }));
 
-            title_box.spawn(TextBundle::from_section("Submarine Survival", TextStyle {
-                font_size: 18.0, color: Color::rgb(0.35, 0.45, 0.55), ..default()
+            title_box.spawn(TextBundle::from_section("Into the Void", TextStyle {
+                font_size: ThemeFonts::H3, color: ThemeColors::TEXT_SECONDARY, ..default()
             }));
 
-            // Decorative line
+            // Bottom accent line
             title_box.spawn(NodeBundle {
-                style: Style { width: Val::Px(200.0), height: Val::Px(1.0), margin: UiRect::top(Val::Px(10.0)), ..default() },
-                background_color: Color::rgba(0.2, 0.5, 0.8, 0.4).into(),
+                style: Style { width: Val::Px(240.0), height: Val::Px(1.0), margin: UiRect::top(Val::Px(ThemeSpacing::LG)), ..default() },
+                background_color: ThemeColors::BORDER_BRIGHT.into(),
                 ..default()
             });
-        });
-
-        // Spacer
-        parent.spawn(NodeBundle {
-            style: Style { height: Val::Px(30.0), ..default() },
-            ..default()
         });
 
         // Actions container
@@ -1218,38 +1319,49 @@ fn spawn_main_menu(mut commands: Commands) {
             style: Style {
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
-                row_gap: Val::Px(12.0),
+                row_gap: Val::Px(ThemeSpacing::LG),
                 ..default()
             },
             ..default()
         }).with_children(|actions| {
-            actions.spawn(TextBundle::from_section("[ENTER]  New Expedition", TextStyle {
-                font_size: 22.0, color: Color::rgb(0.8, 0.9, 1.0), ..default()
-            }));
+            // New game button
+            actions.spawn(NodeBundle {
+                style: Style {
+                    padding: UiRect::new(Val::Px(ThemeSpacing::XXL), Val::Px(ThemeSpacing::XXL), Val::Px(ThemeSpacing::MD), Val::Px(ThemeSpacing::MD)),
+                    ..default()
+                },
+                background_color: ThemeColors::BG_ELEVATED.into(),
+                ..default()
+            }).with_children(|btn| {
+                btn.spawn(TextBundle::from_section("ENTER — New Expedition", TextStyle {
+                    font_size: ThemeFonts::H2, color: ThemeColors::TEXT_PRIMARY, ..default()
+                }));
+            });
 
-            // Show available saves for loading
+            // Saved games
             let slots = crate::meta::get_save_slots();
             let has_saves = slots.iter().any(|(_, info)| info.is_some());
             if has_saves {
                 actions.spawn(NodeBundle {
-                    style: Style { height: Val::Px(10.0), ..default() },
-                    ..default()
-                });
-
-                actions.spawn(NodeBundle {
                     style: Style {
                         flex_direction: FlexDirection::Column,
                         align_items: AlignItems::Center,
-                        padding: UiRect::new(Val::Px(20.0), Val::Px(20.0), Val::Px(12.0), Val::Px(12.0)),
-                        row_gap: Val::Px(6.0),
+                        padding: UiRect::all(Val::Px(ThemeSpacing::XL)),
+                        row_gap: Val::Px(ThemeSpacing::SM),
                         ..default()
                     },
-                    background_color: Color::rgba(0.05, 0.08, 0.15, 0.5).into(),
+                    background_color: ThemeColors::BG_CARD.into(),
                     ..default()
                 }).with_children(|save_box| {
                     save_box.spawn(TextBundle::from_section("SAVED EXPEDITIONS", TextStyle {
-                        font_size: 14.0, color: Color::rgb(0.4, 0.6, 0.8), ..default()
+                        font_size: ThemeFonts::CAPTION, color: ThemeColors::TEXT_MUTED, ..default()
                     }));
+
+                    save_box.spawn(NodeBundle {
+                        style: Style { width: Val::Px(180.0), height: Val::Px(1.0), ..default() },
+                        background_color: ThemeColors::BORDER_SUBTLE.into(),
+                        ..default()
+                    });
 
                     for (slot, info) in &slots {
                         if let Some(info) = info {
@@ -1258,9 +1370,9 @@ fn spawn_main_menu(mut commands: Commands) {
                             let time_min = (info.play_time / 60.0) as i32;
                             let time_sec = (info.play_time % 60.0) as i32;
                             save_box.spawn(TextBundle::from_section(
-                                format!("[{}]  {} - {:.0}m depth, {}:{:02} played",
+                                format!("[{}]  {} — {:.0} distance, {}:{:02} played",
                                     key, label, info.depth, time_min, time_sec),
-                                TextStyle { font_size: 16.0, color: Color::rgb(0.6, 0.8, 0.6), ..default() },
+                                TextStyle { font_size: ThemeFonts::BODY, color: ThemeColors::ACCENT_GREEN, ..default() },
                             ));
                         }
                     }
@@ -1268,27 +1380,17 @@ fn spawn_main_menu(mut commands: Commands) {
             }
         });
 
-        // Spacer
-        parent.spawn(NodeBundle {
-            style: Style { height: Val::Px(40.0), ..default() },
-            ..default()
-        });
+        // Tagline
+        parent.spawn(TextBundle::from_section(
+            "Build your ship. Explore the void. Survive.",
+            TextStyle { font_size: ThemeFonts::BODY, color: ThemeColors::TEXT_MUTED, ..default() },
+        ));
 
-        // Controls hint
-        parent.spawn(NodeBundle {
-            style: Style {
-                flex_direction: FlexDirection::Column,
-                align_items: AlignItems::Center,
-                row_gap: Val::Px(4.0),
-                ..default()
-            },
-            ..default()
-        }).with_children(|hints| {
-            hints.spawn(TextBundle::from_section(
-                "Build your submarine. Explore the depths. Survive.",
-                TextStyle { font_size: 14.0, color: Color::rgb(0.35, 0.4, 0.45), ..default() },
-            ));
-        });
+        // Version / flavor
+        parent.spawn(TextBundle::from_section(
+            "The void remembers those who dare to venture deeper.",
+            TextStyle { font_size: ThemeFonts::BODY_SMALL, color: Color::rgba(0.25, 0.28, 0.35, 0.6), ..default() },
+        ));
     });
 }
 
@@ -1310,12 +1412,9 @@ fn spawn_game_over_screen(
     statistics: Res<Statistics>,
     victory_state: Res<VictoryState>,
 ) {
+    use theme::*;
+
     let is_victory = victory_state.achieved;
-    let bg_color = if is_victory {
-        Color::rgba(0.01, 0.05, 0.03, 0.92)
-    } else {
-        Color::rgba(0.08, 0.02, 0.02, 0.92)
-    };
 
     commands.spawn((
         NodeBundle {
@@ -1325,60 +1424,52 @@ fn spawn_game_over_screen(
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(ThemeSpacing::XXL),
                 ..default()
             },
-            background_color: bg_color.into(),
+            background_color: ThemeColors::BG_VOID.into(),
             ..default()
         },
         GameOverOverlay,
     )).with_children(|parent| {
-        // Title section
+        // Title
         if is_victory {
             parent.spawn(TextBundle::from_section("VICTORY", TextStyle {
-                font_size: 68.0, color: Color::rgb(0.3, 1.0, 0.3), ..default()
+                font_size: ThemeFonts::DISPLAY, color: ThemeColors::ACCENT_GREEN, ..default()
             }));
-            parent.spawn(NodeBundle { style: Style { height: Val::Px(8.0), ..default() }, ..default() });
             parent.spawn(TextBundle::from_section(
-                "You reached the deepest abyss and uncovered the truth.",
-                TextStyle { font_size: 20.0, color: Color::rgb(0.7, 0.9, 1.0), ..default() },
-            ));
-            parent.spawn(TextBundle::from_section(
-                "The ocean remembers those who dare to descend.",
-                TextStyle { font_size: 16.0, color: Color::rgb(0.4, 0.6, 0.7), ..default() },
+                "You reached the deepest void and uncovered the truth.",
+                TextStyle { font_size: ThemeFonts::H3, color: ThemeColors::TEXT_TITLE, ..default() },
             ));
         } else {
-            parent.spawn(TextBundle::from_section("LOST AT SEA", TextStyle {
-                font_size: 68.0, color: Color::rgb(0.8, 0.15, 0.1), ..default()
+            parent.spawn(TextBundle::from_section("LOST IN SPACE", TextStyle {
+                font_size: ThemeFonts::DISPLAY, color: ThemeColors::ACCENT_RED, ..default()
             }));
-            parent.spawn(NodeBundle { style: Style { height: Val::Px(4.0), ..default() }, ..default() });
             parent.spawn(TextBundle::from_section(
-                "The deep claims another vessel.",
-                TextStyle { font_size: 18.0, color: Color::rgb(0.5, 0.35, 0.35), ..default() },
+                "The void claims another vessel.",
+                TextStyle { font_size: ThemeFonts::H3, color: ThemeColors::TEXT_SECONDARY, ..default() },
             ));
         }
-
-        parent.spawn(NodeBundle { style: Style { height: Val::Px(24.0), ..default() }, ..default() });
 
         // Stats panel
         parent.spawn(NodeBundle {
             style: Style {
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::FlexStart,
-                padding: UiRect::new(Val::Px(30.0), Val::Px(30.0), Val::Px(16.0), Val::Px(16.0)),
-                row_gap: Val::Px(8.0),
+                padding: UiRect::all(Val::Px(ThemeSpacing::XXL)),
+                row_gap: Val::Px(ThemeSpacing::MD),
                 ..default()
             },
-            background_color: Color::rgba(0.05, 0.05, 0.08, 0.6).into(),
+            background_color: ThemeColors::BG_CARD.into(),
             ..default()
         }).with_children(|stats| {
             stats.spawn(TextBundle::from_section("EXPEDITION LOG", TextStyle {
-                font_size: 14.0, color: Color::rgb(0.4, 0.5, 0.6), ..default()
+                font_size: ThemeFonts::CAPTION, color: ThemeColors::TEXT_MUTED, ..default()
             }));
 
-            // Decorative line
             stats.spawn(NodeBundle {
-                style: Style { width: Val::Px(180.0), height: Val::Px(1.0), margin: UiRect::bottom(Val::Px(4.0)), ..default() },
-                background_color: Color::rgba(0.3, 0.4, 0.5, 0.3).into(),
+                style: Style { width: Val::Px(200.0), height: Val::Px(1.0), ..default() },
+                background_color: ThemeColors::BORDER_SUBTLE.into(),
                 ..default()
             });
 
@@ -1386,32 +1477,40 @@ fn spawn_game_over_screen(
             let time_sec = (statistics.play_time_seconds % 60.0) as i32;
 
             let stat_items = [
-                (format!("Max Depth        {:.0}m", statistics.max_depth_reached), Color::rgb(0.5, 0.7, 1.0)),
-                (format!("Time Survived    {}:{:02}", time_min, time_sec), Color::WHITE),
-                (format!("Creatures Slain  {}", statistics.creatures_killed), Color::rgb(0.9, 0.6, 0.3)),
-                (format!("Crew Lost        {}", statistics.crew_lost), Color::rgb(0.9, 0.4, 0.4)),
+                (format!("Max Distance     {:.0}", statistics.max_depth_reached), ThemeColors::ACCENT_BLUE),
+                (format!("Time Survived    {}:{:02}", time_min, time_sec), ThemeColors::TEXT_PRIMARY),
+                (format!("Creatures Slain  {}", statistics.creatures_killed), ThemeColors::ACCENT_ORANGE),
+                (format!("Crew Lost        {}", statistics.crew_lost), ThemeColors::ACCENT_RED),
             ];
 
             for (text, color) in stat_items {
                 stats.spawn(TextBundle::from_section(text, TextStyle {
-                    font_size: 20.0, color, ..default()
+                    font_size: ThemeFonts::H3, color, ..default()
                 }));
             }
 
             if !statistics.logs_found.is_empty() {
                 stats.spawn(TextBundle::from_section(
                     format!("Logs Found       {}", statistics.logs_found.len()),
-                    TextStyle { font_size: 20.0, color: Color::CYAN, ..default() },
+                    TextStyle { font_size: ThemeFonts::H3, color: ThemeColors::ACCENT_CYAN, ..default() },
                 ));
             }
         });
 
-        parent.spawn(NodeBundle { style: Style { height: Val::Px(30.0), ..default() }, ..default() });
-
-        parent.spawn(TextBundle::from_section(
-            "[ENTER]  Return to Surface",
-            TextStyle { font_size: 18.0, color: Color::rgb(0.45, 0.5, 0.55), ..default() },
-        ));
+        // Return prompt
+        parent.spawn(NodeBundle {
+            style: Style {
+                padding: UiRect::new(Val::Px(ThemeSpacing::XXL), Val::Px(ThemeSpacing::XXL), Val::Px(ThemeSpacing::MD), Val::Px(ThemeSpacing::MD)),
+                ..default()
+            },
+            background_color: ThemeColors::BG_ELEVATED.into(),
+            ..default()
+        }).with_children(|btn| {
+            btn.spawn(TextBundle::from_section(
+                "ENTER — Return to Station",
+                TextStyle { font_size: ThemeFonts::BODY, color: ThemeColors::TEXT_PRIMARY, ..default() },
+            ));
+        });
     });
 }
 
@@ -1469,15 +1568,15 @@ fn spawn_pause_menu(
                 row_gap: Val::Px(10.0),
                 ..default()
             },
-            background_color: Color::rgba(0.0, 0.0, 0.0, 0.85).into(),
+            background_color: theme::ThemeColors::BG_VOID.into(),
             z_index: ZIndex::Global(100),
             ..default()
         },
         PauseMenuOverlay,
     )).with_children(|parent| {
         // Header
-        parent.spawn(TextBundle::from_section("== PAUSED ==", TextStyle {
-            font_size: 52.0, color: Color::WHITE, ..default()
+        parent.spawn(TextBundle::from_section("PAUSED", TextStyle {
+            font_size: theme::ThemeFonts::H1, color: theme::ThemeColors::TEXT_TITLE, ..default()
         }));
 
         // Vitals line
@@ -1925,20 +2024,20 @@ fn spawn_docking_menu(
                 row_gap: Val::Px(8.0),
                 ..default()
             },
-            background_color: Color::rgba(0.02, 0.05, 0.12, 0.92).into(),
+            background_color: theme::ThemeColors::BG_VOID.into(),
             z_index: ZIndex::Global(100),
             ..default()
         },
         DockingOverlay,
         DockingMenuSelection(0),
     )).with_children(|parent| {
-        parent.spawn(TextBundle::from_section("SETTLEMENT", TextStyle {
-            font_size: 48.0, color: Color::rgb(0.4, 0.8, 0.6), ..default()
+        parent.spawn(TextBundle::from_section("OUTPOST", TextStyle {
+            font_size: theme::ThemeFonts::H1, color: theme::ThemeColors::ACCENT_CYAN, ..default()
         }));
 
         parent.spawn(TextBundle::from_section(
             format!("Credits: {}", currency.credits),
-            TextStyle { font_size: 22.0, color: Color::YELLOW, ..default() },
+            TextStyle { font_size: theme::ThemeFonts::H2, color: theme::ThemeColors::ACCENT_YELLOW, ..default() },
         ));
 
         parent.spawn(TextBundle::from_section("", TextStyle {
@@ -2050,8 +2149,8 @@ fn docking_menu_input(
                     // Also repair all hull segments
                     for mut segment in hull_query.iter_mut() {
                         segment.health = segment.max_health;
-                        segment.is_flooded = false;
-                        segment.flood_level = 0.0;
+                        segment.is_depressurized = false;
+                        segment.depressurization_level = 0.0;
                     }
                     notifications.send(ShowNotification {
                         message: format!("Hull repaired! (-{}c)", cost),
@@ -2450,7 +2549,7 @@ const UPGRADE_DEFS: &[UpgradeDef] = &[
     UpgradeDef { name: "Titanium Hull", cost: 800, unlock_category: "hull_types", unlock_key: "titanium", description: "Depth rating: 500m" },
     UpgradeDef { name: "Composite Hull", cost: 2000, unlock_category: "hull_types", unlock_key: "composite", description: "Depth rating: 1000m" },
     UpgradeDef { name: "Abyssal Alloy Hull", cost: 5000, unlock_category: "hull_types", unlock_key: "abyssal_alloy", description: "Depth rating: 2500m" },
-    UpgradeDef { name: "Advanced Sonar Package", cost: 600, unlock_category: "modules", unlock_key: "advanced_sonar", description: "Unlocks advanced sonar modules" },
+    UpgradeDef { name: "Advanced Radar Package", cost: 600, unlock_category: "modules", unlock_key: "advanced_sonar", description: "Unlocks advanced radar modules" },
     UpgradeDef { name: "Heavy Weapons Package", cost: 1200, unlock_category: "modules", unlock_key: "heavy_weapons", description: "Unlocks heavy weapon modules" },
     UpgradeDef { name: "Silent Drive Technology", cost: 1500, unlock_category: "modules", unlock_key: "silent_drive", description: "Unlocks silent propulsion" },
 ];

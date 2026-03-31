@@ -141,7 +141,7 @@ fn spawn_ai_hull(
 ) {
     for cell in hull_cells {
         let health = cell.material.health_multiplier() * 100.0;
-        let depth_rating = cell.material.depth_rating();
+        let radiation_shielding = cell.material.radiation_shielding();
 
         let x = cell.grid_pos.x as f32 * 66.0;
         let y = cell.grid_pos.y as f32 * 66.0 - 33.0;
@@ -169,9 +169,9 @@ fn spawn_ai_hull(
             HullSegment {
                 health,
                 max_health: health,
-                depth_rating,
-                is_flooded: false,
-                flood_level: 0.0,
+                radiation_shielding,
+                is_depressurized: false,
+                depressurization_level: 0.0,
                 hull_layer: cell.layer,
                 material: cell.material,
                 grid_position: cell.grid_pos,

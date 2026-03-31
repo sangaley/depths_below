@@ -2,12 +2,16 @@ use bevy::prelude::*;
 use crate::components::*;
 use crate::resources::*;
 use crate::events::*;
+use crate::celestial::components::{Star, CelestialBody};
 
-/// Checks for pressure damage at current depth
-pub fn check_pressure_damage(
+/// Checks for radiation damage based on proximity to stars.
+/// Hull segments with insufficient radiation shielding take damage over time.
+/// Radiation intensity comes from nearby stars, not arbitrary depth.
+pub fn check_radiation_damage(
     time: Res<Time>,
     config: Res<GameConfig>,
-    submarine_query: Query<&Depth, With<Submarine>>,
+    submarine_query: Query<&Transform, With<Submarine>>,
+    star_query: Query<(&Transform, &Star, &CelestialBody)>,
     mut hull_query: Query<(Entity, &mut HullSegment)>,
     mut breach_events: EventWriter<HullBreached>,
     mut damage_events: EventWriter<SubmarineDamaged>,
@@ -15,56 +19,73 @@ pub fn check_pressure_damage(
     mut warned_50: Local<bool>,
     mut warned_30: Local<bool>,
 ) {
-    let Ok(depth) = submarine_query.get_single() else {
+    let Ok(sub_transform) = submarine_query.get_single() else {
         return;
     };
+    let sub_pos = sub_transform.translation.truncate();
 
-    // Use actual pressure to scale damage (Phase 4.4)
-    let current_pressure = depth.0 * config.pressure_per_meter;
+    // Calculate total radiation from all nearby stars
+    let mut current_radiation = 0.0_f32;
+    for (star_transform, star, body) in star_query.iter() {
+        let star_pos = star_transform.translation.truncate();
+        let dist = sub_pos.distance(star_pos);
+
+        // Radiation falls off with distance squared
+        let safe_dist = body.radius * 3.0; // Beyond 3x radius, radiation is minimal
+        if dist < safe_dist {
+            let proximity = 1.0 - (dist / safe_dist).clamp(0.0, 1.0);
+            current_radiation += star.radiation_output * proximity * proximity
+                * star.size_class.radiation_multiplier()
+                * config.radiation_per_unit;
+        }
+    }
+
+    // Also add baseline void radiation based on depth (minimal, for deep space danger)
+    let depth = (-sub_transform.translation.y).max(0.0);
+    current_radiation += depth * config.radiation_per_unit * 0.1;
+
+    if current_radiation < 0.01 {
+        *warned_50 = false;
+        *warned_30 = false;
+        return;
+    }
 
     for (entity, mut hull) in hull_query.iter_mut() {
-        // Check if depth exceeds hull rating
-        if depth.0 > hull.depth_rating {
-            let excess = depth.0 - hull.depth_rating;
-            // Scale damage by pressure value for more realistic physics
-            let pressure_factor = (current_pressure / 100.0).max(1.0);
-            let damage = excess * config.pressure_damage_multiplier * pressure_factor * time.delta_seconds();
+        if current_radiation > hull.radiation_shielding {
+            let excess = current_radiation - hull.radiation_shielding;
+            let radiation_factor = (current_radiation / 100.0).max(1.0);
+            let damage = excess * config.radiation_damage_multiplier * radiation_factor * time.delta_seconds();
 
             hull.health -= damage;
 
             let health_pct = hull.health / hull.max_health;
 
-            // Warning at 50% health
             if health_pct <= 0.5 && !*warned_50 {
                 *warned_50 = true;
                 notifications.send(ShowNotification {
-                    message: "Hull segment at 50%! Pressure damage increasing!".into(),
+                    message: "Hull segment at 50%! Stellar radiation is intense!".into(),
                     notification_type: NotificationType::Warning,
                     duration: 3.0,
                 });
             }
 
-            // Warning at 30% health
             if health_pct <= 0.3 && !*warned_30 {
                 *warned_30 = true;
                 notifications.send(ShowNotification {
-                    message: "Hull segment critical at 30%! Breach imminent!".into(),
+                    message: "Hull segment critical at 30%! Move away from the star!".into(),
                     notification_type: NotificationType::Danger,
                     duration: 3.0,
                 });
             }
 
-            // Check for breach
-            if hull.health <= hull.max_health * 0.3 && !hull.is_flooded {
-                // Hull is critically damaged, start flooding
-                hull.is_flooded = true;
+            if hull.health <= hull.max_health * 0.3 && !hull.is_depressurized {
+                hull.is_depressurized = true;
                 breach_events.send(HullBreached {
                     segment: entity,
                     severity: 1.0 - (hull.health / hull.max_health),
                 });
-                // Also fire damage event at breach point (not just at 0%)
                 damage_events.send(SubmarineDamaged {
-                    source: DamageSource::Pressure,
+                    source: DamageSource::Radiation,
                     amount: damage,
                     position: None,
                     direction: None,
@@ -74,14 +95,13 @@ pub fn check_pressure_damage(
             if hull.health <= 0.0 {
                 hull.health = 0.0;
                 damage_events.send(SubmarineDamaged {
-                    source: DamageSource::Pressure,
+                    source: DamageSource::Radiation,
                     amount: 10.0,
                     position: None,
                     direction: None,
                 });
             }
         } else {
-            // Reset warnings when out of danger
             *warned_50 = false;
             *warned_30 = false;
         }

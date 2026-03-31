@@ -3,7 +3,7 @@ use bevy::sprite::TextureAtlasSprite;
 
 #[allow(unused_imports)]
 use crate::components::{
-    AmbientCreature, AttackCooldown, Corpse, Creature, CreatureAI, CreatureAIState,
+    AttackCooldown, Corpse, Creature, CreatureAI, CreatureAIState,
     CreatureAnimation, CreatureMemory, CreatureNeeds, CreatureType, EcoTarget,
     FoodChainRole, FoodChainTier, NoiseTrailPoint, Reproductive, Submarine, Territory,
     Velocity,
@@ -37,7 +37,6 @@ pub fn update_creature_needs(
 /// Sensory data built per creature each frame
 struct PerceptionData {
     nearest_prey_creature: Option<(Entity, f32, Vec2)>,
-    nearest_prey_ambient: Option<(Entity, f32, Vec2)>,
     nearest_threat: Option<(Entity, f32, Vec2)>,
     nearest_corpse: Option<(Entity, f32, Vec2)>,
     sub_distance: Option<(Entity, f32, Vec2)>,
@@ -57,7 +56,6 @@ pub fn ecosystem_ai_decisions(
         Option<&Territory>,
     )>,
     other_creatures: Query<(Entity, &Transform, &Creature), Without<Submarine>>,
-    ambient_query: Query<(Entity, &Transform, &AmbientCreature)>,
     corpse_query: Query<(Entity, &Transform, &Corpse)>,
     sub_query: Query<(Entity, &Transform), With<Submarine>>,
     ai_sub_query: Query<(Entity, &Transform, &AiSubState), With<AiSubmarine>>,
@@ -84,7 +82,6 @@ pub fn ecosystem_ai_decisions(
         // Build perception
         let mut perception = PerceptionData {
             nearest_prey_creature: None,
-            nearest_prey_ambient: None,
             nearest_threat: None,
             nearest_corpse: None,
             sub_distance: None,
@@ -117,22 +114,8 @@ pub fn ecosystem_ai_decisions(
             }
         }
 
-        // Check ambient life
-        for (amb_entity, amb_transform, amb) in ambient_query.iter() {
-            let amb_pos = amb_transform.translation.truncate();
-            let dist = pos.distance(amb_pos);
-            if dist > range && !role.prey_ambient.contains(&amb.kind) {
-                continue;
-            }
-            if role.prey_ambient.contains(&amb.kind) && dist < range {
-                if perception.nearest_prey_ambient.map_or(true, |(_, d, _)| dist < d) {
-                    perception.nearest_prey_ambient = Some((amb_entity, dist, amb_pos));
-                }
-            }
-        }
-
         // Check corpses
-        if role.eats_corpses {
+        {
             for (corpse_entity, corpse_transform, _corpse) in corpse_query.iter() {
                 let corpse_pos = corpse_transform.translation.truncate();
                 let dist = pos.distance(corpse_pos);
@@ -185,8 +168,7 @@ pub fn ecosystem_ai_decisions(
 
         // Check noise trail
         let trail_range = match creature.creature_type {
-            CreatureType::BlindHunter => range * 2.0,
-            CreatureType::Scavenger => range * 1.5,
+            CreatureType::Stalker => range * 1.5,
             _ => range,
         };
         let mut best_trail: Option<(Vec2, f32)> = None;
@@ -213,10 +195,9 @@ pub fn ecosystem_ai_decisions(
 
         let mut actions: Vec<ScoredAction> = Vec::with_capacity(8);
 
-        // 1. Flee (wounded) — except Leviathan and Parasite
+        // 1. Flee (wounded) — except Leviathan
         if health_pct < 0.25
             && creature.creature_type != CreatureType::Leviathan
-            && creature.creature_type != CreatureType::Parasite
         {
             let flee_target = perception
                 .nearest_threat
@@ -288,17 +269,6 @@ pub fn ecosystem_ai_decisions(
                     score: 70.0 * hunger_pct,
                     state: CreatureAIState::Hunting,
                     target: Some(EcoTarget::Creature(prey_e)),
-                });
-            }
-        }
-
-        // 5b. Hunt ambient prey
-        if let Some((amb_e, _, _)) = perception.nearest_prey_ambient {
-            if needs.hunger > eco_config.hunt_hunger_threshold * 0.5 {
-                actions.push(ScoredAction {
-                    score: 65.0 * hunger_pct,
-                    state: CreatureAIState::Hunting,
-                    target: Some(EcoTarget::Creature(amb_e)),
                 });
             }
         }
@@ -522,16 +492,10 @@ pub fn reproduction_system(
                 // Offspring are visually smaller
                 let offspring_scale = 0.5;
                 let (base_w, base_h) = match creature.creature_type {
-                    CreatureType::Scavenger =>   (84.0, 42.0),
-                    CreatureType::Stalker =>     (150.0, 54.0),
-                    CreatureType::Ambusher =>    (120.0, 48.0),
-                    CreatureType::ElectricEel => (165.0, 30.0),
-                    CreatureType::BlindHunter => (165.0, 105.0),
-                    CreatureType::LureFish =>    (66.0, 54.0),
-                    CreatureType::SwarmQueen =>  (180.0, 150.0),
-                    CreatureType::Leviathan =>   (660.0, 180.0),
-                    CreatureType::Parasite =>    (36.0, 24.0),
-                    CreatureType::Watcher =>     (90.0, 90.0),
+                    CreatureType::VoidDrifter =>     (45.0, 22.0),
+                    CreatureType::Stalker =>         (150.0, 54.0),
+                    CreatureType::Leviathan =>       (660.0, 180.0),
+                    CreatureType::ParasiteSwarm =>   (30.0, 20.0),
                 };
 
                 let mut entity_commands = commands.spawn((
@@ -568,8 +532,7 @@ pub fn reproduction_system(
                         timer: Timer::from_seconds(
                             match creature.creature_type {
                                 CreatureType::Leviathan => 3.0,
-                                CreatureType::Scavenger => 2.0,
-                                CreatureType::Parasite => 0.5,
+                                CreatureType::ParasiteSwarm => 0.5,
                                 _ => 1.5,
                             },
                             TimerMode::Once,
@@ -647,8 +610,6 @@ pub fn population_balance(
                 matches!(
                     k.victim_type,
                     CreatureType::Stalker
-                        | CreatureType::BlindHunter
-                        | CreatureType::Ambusher
                         | CreatureType::Leviathan
                 )
             })

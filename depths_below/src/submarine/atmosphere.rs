@@ -25,10 +25,10 @@ impl Default for AtmosphereState {
 #[derive(Clone, Copy, Debug)]
 enum AtmosphericEventType {
     HullCreaking,
-    SonarGhost,
+    RadarGhost,
     InstrumentGlitch,
     HullBump,
-    BioluminescentFlash,
+    CosmicFlash,
     LightsFlicker,
 }
 
@@ -37,10 +37,10 @@ impl AtmosphericEventType {
     fn min_depth(&self) -> f32 {
         match self {
             Self::HullCreaking => 0.0,
-            Self::SonarGhost => 200.0,
+            Self::RadarGhost => 200.0,
             Self::InstrumentGlitch => 500.0,
             Self::HullBump => 300.0,
-            Self::BioluminescentFlash => 500.0,
+            Self::CosmicFlash => 500.0,
             Self::LightsFlicker => 1000.0,
         }
     }
@@ -49,10 +49,10 @@ impl AtmosphericEventType {
     fn weight(&self) -> f32 {
         match self {
             Self::HullCreaking => 3.0,
-            Self::SonarGhost => 2.0,
+            Self::RadarGhost => 2.0,
             Self::InstrumentGlitch => 1.5,
             Self::HullBump => 2.0,
-            Self::BioluminescentFlash => 1.5,
+            Self::CosmicFlash => 1.5,
             Self::LightsFlicker => 1.0,
         }
     }
@@ -60,10 +60,10 @@ impl AtmosphericEventType {
     fn notification_type(&self) -> NotificationType {
         match self {
             Self::HullCreaking => NotificationType::Warning,
-            Self::SonarGhost => NotificationType::Warning,
+            Self::RadarGhost => NotificationType::Warning,
             Self::InstrumentGlitch => NotificationType::Warning,
             Self::HullBump => NotificationType::Danger,
-            Self::BioluminescentFlash => NotificationType::Info,
+            Self::CosmicFlash => NotificationType::Info,
             Self::LightsFlicker => NotificationType::Warning,
         }
     }
@@ -71,32 +71,32 @@ impl AtmosphericEventType {
     fn random_message(&self, rng: &mut impl Rng) -> &'static str {
         match self {
             Self::HullCreaking => match rng.gen_range(0..4) {
-                0 => "The hull groans under the pressure...",
+                0 => "The hull groans under radiation stress...",
                 1 => "Metal creaks ominously around you.",
                 2 => "A deep, resonant groan echoes through the hull.",
                 _ => "The bulkheads shudder with a low creak.",
             },
-            Self::SonarGhost => match rng.gen_range(0..4) {
-                0 => "Sonar picks up a faint contact... then nothing.",
-                1 => "A phantom blip appears on sonar and vanishes.",
-                2 => "Sonar echo returns something massive... probably terrain.",
-                _ => "Brief sonar contact — too fast to identify.",
+            Self::RadarGhost => match rng.gen_range(0..4) {
+                0 => "Radar picks up a faint contact... then nothing.",
+                1 => "A phantom blip appears on radar and vanishes.",
+                2 => "Radar echo returns something massive... probably an asteroid.",
+                _ => "Brief radar contact — too fast to identify.",
             },
             Self::InstrumentGlitch => match rng.gen_range(0..3) {
                 0 => "Navigation instruments flicker momentarily.",
-                1 => "Depth gauge spikes, then returns to normal.",
+                1 => "Distance gauge spikes, then returns to normal.",
                 _ => "Compass spins wildly for a second, then stabilizes.",
             },
             Self::HullBump => match rng.gen_range(0..4) {
                 0 => "Something bumps against the hull!",
-                1 => "A heavy thud reverberates through the submarine.",
+                1 => "A heavy thud reverberates through the ship.",
                 2 => "Impact detected — external contact on the starboard side.",
-                _ => "The sub shudders from an unseen collision.",
+                _ => "The ship shudders from an unseen collision.",
             },
-            Self::BioluminescentFlash => match rng.gen_range(0..3) {
-                0 => "A cascade of bioluminescence drifts past the viewport.",
-                1 => "Glowing organisms pulse in the darkness outside.",
-                _ => "The water shimmers with an eerie blue-green light.",
+            Self::CosmicFlash => match rng.gen_range(0..3) {
+                0 => "A cascade of cosmic energy drifts past the viewport.",
+                1 => "Strange luminous particles pulse in the darkness outside.",
+                _ => "The void shimmers with an eerie blue-green light.",
             },
             Self::LightsFlicker => match rng.gen_range(0..3) {
                 0 => "Interior lights flicker and dim briefly.",
@@ -109,10 +109,10 @@ impl AtmosphericEventType {
 
 const ALL_EVENTS: [AtmosphericEventType; 6] = [
     AtmosphericEventType::HullCreaking,
-    AtmosphericEventType::SonarGhost,
+    AtmosphericEventType::RadarGhost,
     AtmosphericEventType::InstrumentGlitch,
     AtmosphericEventType::HullBump,
-    AtmosphericEventType::BioluminescentFlash,
+    AtmosphericEventType::CosmicFlash,
     AtmosphericEventType::LightsFlicker,
 ];
 

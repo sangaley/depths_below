@@ -1,0 +1,228 @@
+use bevy::prelude::*;
+
+// ============================================================================
+// UNIFIED UI THEME
+// Single source of truth for all game UI styling.
+// Every color, font size, spacing, and border references this file.
+// Dark sci-fi aesthetic — clean, readable, atmospheric.
+// ============================================================================
+
+/// Core color palette
+pub struct ThemeColors;
+
+impl ThemeColors {
+    // --- Backgrounds (darkest to lightest) ---
+    pub const BG_VOID: Color = Color::rgba(0.01, 0.02, 0.05, 0.98);       // Fullscreen overlays (menu, pause)
+    pub const BG_PANEL: Color = Color::rgba(0.04, 0.05, 0.10, 0.95);      // Panel backgrounds
+    pub const BG_CARD: Color = Color::rgba(0.06, 0.08, 0.14, 0.92);       // Cards, group containers
+    pub const BG_INPUT: Color = Color::rgba(0.08, 0.10, 0.18, 0.90);      // Input fields, slots
+    pub const BG_ELEVATED: Color = Color::rgba(0.10, 0.13, 0.22, 0.95);   // Buttons, interactive elements
+    pub const BG_HOVER: Color = Color::rgba(0.14, 0.17, 0.28, 1.0);       // Hover state
+    pub const BG_PRESSED: Color = Color::rgba(0.18, 0.22, 0.35, 1.0);     // Pressed state
+
+    // --- Borders ---
+    pub const BORDER_SUBTLE: Color = Color::rgba(0.15, 0.18, 0.25, 0.5);  // Barely visible separation
+    pub const BORDER_DEFAULT: Color = Color::rgba(0.22, 0.26, 0.35, 0.7); // Standard border
+    pub const BORDER_BRIGHT: Color = Color::rgba(0.35, 0.40, 0.55, 0.8);  // Highlighted border
+    pub const BORDER_ACTIVE: Color = Color::rgba(0.4, 0.6, 1.0, 0.8);     // Selected/active border
+
+    // --- Text ---
+    pub const TEXT_PRIMARY: Color = Color::rgba(0.88, 0.90, 0.95, 1.0);   // Main readable text
+    pub const TEXT_SECONDARY: Color = Color::rgba(0.60, 0.64, 0.70, 1.0); // Labels, less important
+    pub const TEXT_MUTED: Color = Color::rgba(0.40, 0.43, 0.50, 1.0);     // Hints, disabled
+    pub const TEXT_TITLE: Color = Color::rgba(0.70, 0.82, 1.0, 1.0);      // Titles, headers
+
+    // --- Accent colors (functional) ---
+    pub const ACCENT_BLUE: Color = Color::rgb(0.30, 0.55, 1.0);           // Primary action, links
+    pub const ACCENT_CYAN: Color = Color::rgb(0.25, 0.75, 0.85);          // Oxygen, info
+    pub const ACCENT_GREEN: Color = Color::rgb(0.30, 0.80, 0.45);         // Health, success, hull
+    pub const ACCENT_YELLOW: Color = Color::rgb(0.90, 0.75, 0.25);        // Power, credits, warning
+    pub const ACCENT_ORANGE: Color = Color::rgb(0.95, 0.55, 0.20);        // Fuel, medium warning
+    pub const ACCENT_RED: Color = Color::rgb(0.90, 0.25, 0.25);           // Danger, damage
+    pub const ACCENT_PURPLE: Color = Color::rgb(0.60, 0.45, 0.85);        // Special, systems
+
+    // --- Status indicators ---
+    pub const STATUS_OK: Color = Color::rgb(0.35, 0.75, 0.50);
+    pub const STATUS_WARN: Color = Color::rgb(0.90, 0.70, 0.20);
+    pub const STATUS_DANGER: Color = Color::rgb(0.90, 0.30, 0.25);
+    pub const STATUS_CRITICAL: Color = Color::rgb(1.0, 0.15, 0.15);
+
+    // --- HUD specific ---
+    pub const HUD_BG: Color = Color::rgba(0.02, 0.03, 0.08, 0.88);
+    pub const HUD_SEPARATOR: Color = Color::rgba(0.20, 0.23, 0.30, 0.4);
+
+    // --- Notification backgrounds ---
+    pub const NOTIF_INFO_BG: Color = Color::rgba(0.05, 0.08, 0.18, 0.90);
+    pub const NOTIF_WARN_BG: Color = Color::rgba(0.18, 0.15, 0.03, 0.90);
+    pub const NOTIF_DANGER_BG: Color = Color::rgba(0.25, 0.04, 0.04, 0.92);
+    pub const NOTIF_SUCCESS_BG: Color = Color::rgba(0.03, 0.15, 0.06, 0.90);
+}
+
+/// Font size scale — consistent typographic hierarchy
+pub struct ThemeFonts;
+
+impl ThemeFonts {
+    pub const DISPLAY: f32 = 64.0;    // Game title only
+    pub const H1: f32 = 42.0;         // Screen titles (PAUSED, VICTORY)
+    pub const H2: f32 = 24.0;         // Section headers
+    pub const H3: f32 = 18.0;         // Sub-headers, large HUD values
+    pub const BODY: f32 = 14.0;       // Standard readable text
+    pub const BODY_SMALL: f32 = 12.0;  // Compact text, descriptions
+    pub const CAPTION: f32 = 11.0;     // Labels, metadata
+    pub const TINY: f32 = 9.0;         // Min/max values, subtle info
+}
+
+/// Spacing constants — consistent rhythm
+pub struct ThemeSpacing;
+
+impl ThemeSpacing {
+    pub const XS: f32 = 2.0;
+    pub const SM: f32 = 4.0;
+    pub const MD: f32 = 8.0;
+    pub const LG: f32 = 12.0;
+    pub const XL: f32 = 16.0;
+    pub const XXL: f32 = 24.0;
+    pub const SECTION: f32 = 32.0;
+}
+
+/// Border radii (Bevy 0.11 doesn't support border-radius on NodeBundle,
+/// but we keep these for future use and as documentation)
+pub struct ThemeBorders;
+
+impl ThemeBorders {
+    pub const THIN: f32 = 1.0;
+    pub const DEFAULT: f32 = 1.5;
+    pub const THICK: f32 = 2.0;
+}
+
+/// Animation durations (for systems that lerp colors/positions)
+pub struct ThemeAnim;
+
+impl ThemeAnim {
+    pub const FAST: f32 = 0.1;
+    pub const NORMAL: f32 = 0.2;
+    pub const SLOW: f32 = 0.4;
+    pub const NOTIFICATION_FADE: f32 = 0.5;
+}
+
+// ============================================================================
+// HELPER FUNCTIONS — for consistent UI construction
+// ============================================================================
+
+/// Create a standard panel background node
+pub fn panel_style() -> Style {
+    Style {
+        padding: UiRect::all(Val::Px(ThemeSpacing::MD)),
+        flex_direction: FlexDirection::Column,
+        row_gap: Val::Px(ThemeSpacing::SM),
+        ..default()
+    }
+}
+
+/// Create a standard button style
+pub fn button_style() -> Style {
+    Style {
+        padding: UiRect::new(
+            Val::Px(ThemeSpacing::LG),
+            Val::Px(ThemeSpacing::LG),
+            Val::Px(ThemeSpacing::SM),
+            Val::Px(ThemeSpacing::SM),
+        ),
+        justify_content: JustifyContent::Center,
+        align_items: AlignItems::Center,
+        ..default()
+    }
+}
+
+/// Create a horizontal divider
+pub fn spawn_divider(commands: &mut Commands, parent: Entity) {
+    let divider = commands.spawn(
+        NodeBundle {
+            style: Style {
+                width: Val::Percent(100.0),
+                height: Val::Px(ThemeBorders::THIN),
+                margin: UiRect::vertical(Val::Px(ThemeSpacing::SM)),
+                ..default()
+            },
+            background_color: ThemeColors::BORDER_SUBTLE.into(),
+            ..default()
+        },
+    ).id();
+    commands.entity(parent).add_child(divider);
+}
+
+/// Create a section header text
+pub fn spawn_section_header(commands: &mut Commands, parent: Entity, text: &str) {
+    let header = commands.spawn(
+        TextBundle::from_section(
+            text.to_uppercase(),
+            TextStyle {
+                font_size: ThemeFonts::CAPTION,
+                color: ThemeColors::TEXT_MUTED,
+                ..default()
+            },
+        ).with_style(Style {
+            margin: UiRect::new(Val::Px(0.0), Val::Px(0.0), Val::Px(ThemeSpacing::SM), Val::Px(ThemeSpacing::XS)),
+            ..default()
+        }),
+    ).id();
+    commands.entity(parent).add_child(header);
+}
+
+/// Create a key hint (like "[ENTER] Start Game")
+pub fn spawn_key_hint(commands: &mut Commands, parent: Entity, key: &str, action: &str) {
+    let row = commands.spawn(
+        NodeBundle {
+            style: Style {
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(ThemeSpacing::MD),
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            ..default()
+        },
+    ).id();
+
+    let key_badge = commands.spawn(
+        NodeBundle {
+            style: Style {
+                padding: UiRect::new(Val::Px(6.0), Val::Px(6.0), Val::Px(2.0), Val::Px(2.0)),
+                min_width: Val::Px(24.0),
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            background_color: ThemeColors::BG_ELEVATED.into(),
+            ..default()
+        },
+    ).id();
+
+    let key_text = commands.spawn(
+        TextBundle::from_section(key, TextStyle {
+            font_size: ThemeFonts::BODY_SMALL,
+            color: ThemeColors::ACCENT_BLUE,
+            ..default()
+        }),
+    ).id();
+
+    let action_text = commands.spawn(
+        TextBundle::from_section(action, TextStyle {
+            font_size: ThemeFonts::BODY,
+            color: ThemeColors::TEXT_PRIMARY,
+            ..default()
+        }),
+    ).id();
+
+    commands.entity(key_badge).add_child(key_text);
+    commands.entity(row).push_children(&[key_badge, action_text]);
+    commands.entity(parent).add_child(row);
+}
+
+/// Standard hover color transition for buttons
+pub fn button_color_for_interaction(interaction: &Interaction) -> Color {
+    match interaction {
+        Interaction::Hovered => ThemeColors::BG_HOVER,
+        Interaction::Pressed => ThemeColors::BG_PRESSED,
+        Interaction::None => ThemeColors::BG_ELEVATED,
+    }
+}

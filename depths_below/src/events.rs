@@ -21,7 +21,7 @@ pub struct SubmarineDamaged {
 
 #[derive(Clone, Debug)]
 pub enum DamageSource {
-    Pressure,
+    Radiation,
     Creature(Entity),
     Collision,
     Explosion,
@@ -48,9 +48,9 @@ pub struct ModuleDestroyed {
     pub module: Entity,
 }
 
-/// Fired when a room floods
+/// Fired when a room depressurizes (air escaping through hull breach)
 #[derive(Event)]
-pub struct RoomFlooded {
+pub struct RoomDepressurized {
     pub room_id: usize,
     pub severity: f32,
 }
@@ -138,7 +138,7 @@ pub struct CrewDamaged {
 #[derive(Clone, Debug)]
 pub enum CrewDamageSource {
     Suffocation,
-    Flooding,
+    Decompression,
     Fire,
     Creature,
     Explosion,
@@ -321,7 +321,7 @@ pub struct FireExtinguished {
 
 #[derive(Clone, Copy, Debug)]
 pub enum FireExtinguishCause {
-    Flooding,
+    Decompression,
     BurnedOut,
     CrewSuppressed,
 }
@@ -354,7 +354,7 @@ pub struct CrewDispatched {
 
 #[derive(Clone, Copy, Debug)]
 pub enum DispatchReason {
-    Flooding,
+    Decompression,
     Fire,
 }
 
@@ -450,7 +450,7 @@ impl Plugin for EventsPlugin {
             .add_event::<HullBreached>()
             .add_event::<ModuleDamaged>()
             .add_event::<ModuleDestroyed>()
-            .add_event::<RoomFlooded>()
+            .add_event::<RoomDepressurized>()
             .add_event::<PowerStateChanged>()
             .add_event::<OxygenStateChanged>()
             .add_event::<DepthZoneChanged>()
