@@ -28,7 +28,7 @@ pub fn process_block_destruction(
             continue;
         }
 
-        let core_entity = destroyed_block.connected_core.unwrap();
+        let Some(core_entity) = destroyed_block.connected_core else { continue; };
 
         // === CORE DESTRUCTION = CATASTROPHIC ===
         if destroyed_block.role == BlockRole::Core {

@@ -183,7 +183,7 @@ pub fn calculate_barrel_stress(
         if block.role != BlockRole::Barrel || block.connected_core.is_none() { continue; }
 
         let Ok(mut stress) = stress_query.get_mut(entity) else { continue };
-        let core_entity = block.connected_core.unwrap();
+        let Some(core_entity) = block.connected_core else { continue; };
         let max_dist = core_max_distance.get(&core_entity).copied().unwrap_or(1);
 
         stress.load = max_dist.saturating_sub(block.chain_distance) + 1;

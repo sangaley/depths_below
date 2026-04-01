@@ -101,7 +101,7 @@ pub fn process_ai_sub_damage_system(
                 }
             }
         }
-        hull_hits.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        hull_hits.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Apply damage to nearest hull segments
         for (hull_entity, _dist) in &hull_hits {
@@ -139,7 +139,7 @@ pub fn process_ai_sub_damage_system(
                     }
                 }
             }
-            module_hits.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            module_hits.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
             for (mod_entity, _dist) in &module_hits {
                 if remaining_damage <= 0.0 {

@@ -168,5 +168,5 @@ fn weighted_pick(
             return Some(*event);
         }
     }
-    Some(items.last().unwrap().0)
+    items.last().map(|item| item.0)
 }

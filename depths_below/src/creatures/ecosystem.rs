@@ -361,7 +361,7 @@ pub fn ecosystem_ai_decisions(
         });
 
         // Pick highest score
-        if let Some(best) = actions.iter().max_by(|a, b| a.score.partial_cmp(&b.score).unwrap()) {
+        if let Some(best) = actions.iter().max_by(|a, b| a.score.partial_cmp(&b.score).unwrap_or(std::cmp::Ordering::Equal)) {
             ai.state = best.state;
             if best.target.is_some() {
                 ai.target = best.target;

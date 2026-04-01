@@ -37,7 +37,7 @@ pub fn spawn_corpse_on_death(
         if corpse_count >= eco_config.max_corpses {
             if let Some((oldest_entity, _)) = existing_corpses
                 .iter()
-                .min_by(|a, b| a.1.decay_timer.partial_cmp(&b.1.decay_timer).unwrap())
+                .min_by(|a, b| a.1.decay_timer.partial_cmp(&b.1.decay_timer).unwrap_or(std::cmp::Ordering::Equal))
             {
                 commands.entity(oldest_entity).despawn_recursive();
             }

@@ -537,6 +537,7 @@ fn insert_companion_components(commands: &mut Commands, entity: Entity, companio
                     capacity: *ammo * 2,
                     current: *ammo,
                 },
+                crate::combat::targeting::fire_groups::FireGroup::default(),
             ));
             // Physical ammo weapons are explosive (not energy Charge)
             if matches!(ammo_type, AmmoType::Missile | AmmoType::Bullet | AmmoType::Mine) {

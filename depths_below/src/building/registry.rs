@@ -2103,21 +2103,7 @@ pub fn build_registry() -> ModuleRegistry {
         crew_station: false,
     });
 
-    defs.insert(ModuleType::AmmoAutoloader, ModuleDef {
-        name: "Torpedo Loader",
-        description: "Auto-loading mechanism. +30% fire rate to adjacent torpedo tubes. Stack for faster volleys.",
-        category: ModuleCategory::Weapons,
-        size: IVec2::new(1, 1),
-        health: 80.0,
-        power_generation: 0.0,
-        power_consumption: 10.0,
-        color: Color::rgb(0.5, 0.3, 0.3),
-        companion: CompanionData::AmmoAutoloader { reload_bonus: 0.3 },
-        customizable: false,
-        cost: 150,
-        base_stats: CalculatedStats::default(),
-        crew_station: false,
-    });
+    // AmmoAutoloader duplicate removed — defined earlier in the file
 
     defs.insert(ModuleType::EngineeringStation, ModuleDef {
         name: "Engineering Station",
