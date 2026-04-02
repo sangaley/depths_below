@@ -1,6 +1,4 @@
 use bevy::prelude::*;
-use crate::components::*;
-use crate::events::*;
 use crate::celestial::components::{GravityAffected, GravityForce};
 use super::targeting::{TargetSelection, FireGroupState, FireGroup};
 use super::new_projectiles::MissileProjectile;
@@ -240,14 +238,14 @@ pub fn check_missile_hits(
     mut commands: Commands,
     missile_query: Query<(Entity, &MissileProjectile, &Transform)>,
     mut creature_query: Query<(Entity, &Transform, &mut Creature), Without<Submarine>>,
-    mut notifications: EventWriter<ShowNotification>,
+    _notifications: EventWriter<ShowNotification>,
 ) {
     for (missile_entity, missile, missile_transform) in missile_query.iter() {
         if !missile.armed { continue; }
 
         let missile_pos = missile_transform.translation.truncate();
 
-        for (creature_entity, creature_transform, mut creature) in creature_query.iter_mut() {
+        for (_creature_entity, creature_transform, mut creature) in creature_query.iter_mut() {
             if creature.health <= 0.0 { continue; }
 
             let creature_pos = creature_transform.translation.truncate();

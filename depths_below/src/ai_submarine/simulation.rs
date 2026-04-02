@@ -100,8 +100,8 @@ pub fn tick_world_simulation(
     // Phase 2: Off-screen encounters between factions
     for i in 0..positions.len() {
         for j in (i + 1)..positions.len() {
-            let (idx_a, faction_a, pos_a, health_a) = positions[i];
-            let (idx_b, faction_b, pos_b, health_b) = positions[j];
+            let (idx_a, faction_a, pos_a, _health_a) = positions[i];
+            let (idx_b, faction_b, pos_b, _health_b) = positions[j];
 
             let dist = pos_a.distance(pos_b);
             if dist > 500.0 { continue; }

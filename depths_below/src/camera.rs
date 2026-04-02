@@ -152,7 +152,7 @@ fn camera_follow_submarine(
 /// Dynamic background based on celestial proximity.
 /// Near stars: warm glow. Near black holes: deep red/dark. Open void: dark blue/black.
 pub fn update_background_color(
-    depth_state: Res<DepthState>,
+    _depth_state: Res<DepthState>,
     sub_query: Query<&Transform, With<Submarine>>,
     star_query: Query<(&Transform, &crate::celestial::components::Star, &crate::celestial::components::CelestialBody)>,
     bh_query: Query<(&Transform, &crate::celestial::components::BlackHole, &crate::celestial::components::CelestialBody)>,

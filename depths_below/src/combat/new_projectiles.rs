@@ -1,7 +1,4 @@
 use bevy::prelude::*;
-use rand::Rng;
-use crate::components::*;
-use crate::events::*;
 use crate::celestial::components::{GravityAffected, GravityForce};
 use super::targeting::{TargetSelection, FireGroupState, FireGroup, lead_prediction::*};
 use super::*;
@@ -77,8 +74,8 @@ pub fn fire_weapons_system(
     targeting_computer_query: Query<&Module, Without<DestroyedModule>>,
     mut commands: Commands,
 ) {
-    let Ok((sub_transform, sub_physics, sub_velocity)) = sub_query.get_single() else { return };
-    let dt = time.delta_seconds();
+    let Ok((_sub_transform, _sub_physics, sub_velocity)) = sub_query.get_single() else { return };
+    let _dt = time.delta_seconds();
 
     // Build module position list for adjacency checks
     let all_modules: Vec<(IVec2, ModuleType, bool)> = targeting_computer_query.iter()
@@ -173,7 +170,7 @@ pub fn fire_weapons_system(
             _ => 1,
         };
 
-        for i in 0..burst_count {
+        for _i in 0..burst_count {
             let spread_offset = if burst_count > 1 {
                 Vec2::new(
                     (rand::random::<f32>() - 0.5) * 3.0,
@@ -287,12 +284,12 @@ pub fn check_projectile_hits(
     mut commands: Commands,
     proj_query: Query<(Entity, &Projectile, &Transform, &Velocity)>,
     mut creature_query: Query<(Entity, &Transform, &mut Creature), Without<Submarine>>,
-    mut notifications: EventWriter<ShowNotification>,
+    _notifications: EventWriter<ShowNotification>,
 ) {
-    for (proj_entity, proj, proj_transform, proj_vel) in proj_query.iter() {
+    for (proj_entity, proj, proj_transform, _proj_vel) in proj_query.iter() {
         let proj_pos = proj_transform.translation.truncate();
 
-        for (creature_entity, creature_transform, mut creature) in creature_query.iter_mut() {
+        for (_creature_entity, creature_transform, mut creature) in creature_query.iter_mut() {
             if creature.health <= 0.0 { continue; }
 
             let creature_pos = creature_transform.translation.truncate();

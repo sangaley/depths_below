@@ -83,7 +83,7 @@ pub fn execute_warp_jump(
     mut commands: Commands,
     mut jump_events: EventReader<WarpJumpStarted>,
     mut galaxy: ResMut<GalaxyState>,
-    config: Res<CelestialConfig>,
+    _config: Res<CelestialConfig>,
     // Despawn old system entities
     celestial_query: Query<(Entity, &StarSystemMember)>,
     mut sub_query: Query<(&mut Transform, &mut Velocity), With<Submarine>>,

@@ -78,10 +78,10 @@ pub fn undo_redo_input(
     mut history: ResMut<BuildHistory>,
     mut commands: Commands,
     mut currency: ResMut<Currency>,
-    module_query: Query<(Entity, &Module)>,
-    hull_query: Query<(Entity, &HullSegment)>,
+    _module_query: Query<(Entity, &Module)>,
+    _hull_query: Query<(Entity, &HullSegment)>,
     mut notifications: EventWriter<ShowNotification>,
-    current_state: Res<State<BuildState>>,
+    _current_state: Res<State<BuildState>>,
 ) {
     let ctrl = keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
     if !ctrl { return; }

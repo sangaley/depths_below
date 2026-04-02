@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use crate::components::*;
 use crate::resources::*;
 use crate::events::*;
 use crate::states::BuildState;
@@ -24,7 +23,7 @@ pub fn template_input(
     mut template_state: ResMut<TemplateState>,
     build_state: Res<BuildingState>,
     occupancy: Res<GridOccupancy>,
-    mut currency: ResMut<Currency>,
+    currency: ResMut<Currency>,
     mut place_events: EventWriter<PlaceModuleRequest>,
     mut notifications: EventWriter<ShowNotification>,
     current_build_state: Res<State<BuildState>>,

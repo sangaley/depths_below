@@ -20,6 +20,8 @@ pub mod chain_reactions;
 pub mod combat_features;
 pub mod energy_weapons;
 pub mod ammo_types;
+pub mod recoil;
+pub mod limits;
 
 /// Floating damage number that drifts upward and fades out
 #[derive(Component)]
@@ -146,6 +148,7 @@ impl Plugin for CombatPlugin {
         app
             .init_resource::<targeting::TargetSelection>()
             .init_resource::<targeting::FireGroupState>()
+            .init_resource::<recoil::RecoilAccumulator>()
             .configure_set(Update, CombatSet::WeaponFire.run_if(in_state(GameState::Exploring)))
             .configure_set(Update, CombatSet::Cleanup.after(CombatSet::WeaponFire).run_if(in_state(GameState::Exploring)))
             // Target selection + fire groups (always during exploring)
@@ -155,7 +158,7 @@ impl Plugin for CombatPlugin {
                 targeting::draw_target_bracket,
                 targeting::fire_group_input,
             ).run_if(in_state(GameState::Exploring)))
-            // New combat systems
+            // Player weapons: kinetic projectiles + missiles (new physics system)
             .add_systems(Update, (
                 new_projectiles::fire_weapons_system,
                 new_projectiles::move_projectiles,
@@ -166,21 +169,18 @@ impl Plugin for CombatPlugin {
                 point_defense::intercept_missiles,
                 point_defense::pd_missile_collision,
             ).in_set(CombatSet::WeaponFire))
-            // Legacy weapon systems
+            // Creature/AI weapons: use original projectile system (different entity type)
             .add_systems(Update, (
-                weapons::crew_weapon_system,
-                weapons::manual_weapon_system,
                 effects::creature_ranged_attack,
                 projectiles::projectile_movement,
                 projectiles::projectile_collision,
-                mines::mine_system,
-                mines::mine_explosion_system,
             ).in_set(CombatSet::WeaponFire))
-            // Cleanup
+            // Cleanup + limits
             .add_systems(Update, (
                 effects::despawn_dead_creatures,
                 effects::animate_floating_damage,
                 crate::submarine::damage::cleanup_hit_effects,
+                limits::enforce_projectile_limit,
             ).in_set(CombatSet::Cleanup))
             // Fire group assignment (build mode)
             // Severance + chain reactions
@@ -205,6 +205,17 @@ impl Plugin for CombatPlugin {
                     combat_features::parasite_boarding,
                     combat_features::boarded_parasite_damage,
                     combat_features::crew_fights_boarders,
+                ).run_if(in_state(GameState::Exploring)),
+            )
+            // Recoil
+            .add_systems(
+                Update,
+                (
+                    recoil::accumulate_projectile_recoil,
+                    recoil::accumulate_missile_recoil,
+                    recoil::apply_weapon_recoil
+                        .after(recoil::accumulate_projectile_recoil)
+                        .after(recoil::accumulate_missile_recoil),
                 ).run_if(in_state(GameState::Exploring)),
             )
             // Energy weapons

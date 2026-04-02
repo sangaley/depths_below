@@ -1,7 +1,6 @@
 use bevy::prelude::*;
-use crate::components::{Module, ModuleType};
+use crate::components::ModuleType;
 use crate::building::customization::parameters::*;
-use crate::building::customization::weapons::{WeaponCategory, WeaponFamily};
 use super::framework::*;
 use super::tooltip::Tooltip;
 

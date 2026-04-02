@@ -241,7 +241,7 @@ fn handle_save_request(
     crew_query: Query<(Entity, &CrewMember)>,
 ) {
     for event in save_events.iter() {
-        let mut save_data = collect_save_data(
+        let save_data = collect_save_data(
             event.slot,
             &depth_state,
             &hull_state,

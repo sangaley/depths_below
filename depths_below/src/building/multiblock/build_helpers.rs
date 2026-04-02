@@ -42,7 +42,7 @@ pub fn draw_connection_lines(
     }
 
     // Draw new lines for each connection
-    for (module, block, global_transform) in block_query.iter() {
+    for (_module, block, global_transform) in block_query.iter() {
         if let Some(next_entity) = block.next_in_chain {
             if let Ok((_, _, next_gt)) = block_query.get(next_entity) {
                 let from = global_transform.translation().truncate();
@@ -122,7 +122,7 @@ pub fn validate_multiblock_placement(
             let source_pos = grid_pos + source_dir;
 
             if let Some(&source_entity) = occupancy.cells.get(&source_pos) {
-                if let Ok((source_module, source_block)) = block_query.get(source_entity) {
+                if let Ok((_source_module, source_block)) = block_query.get(source_entity) {
                     if source_block.role == BlockRole::Core || source_block.role == role {
                         // Valid: connected to a core or same-type chain
                         return MultiblockPlacementResult::Valid {

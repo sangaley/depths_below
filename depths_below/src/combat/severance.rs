@@ -2,7 +2,6 @@ use bevy::prelude::*;
 use crate::components::*;
 use crate::events::*;
 use crate::celestial::components::{GravityAffected, GravityForce};
-use crate::building::multiblock::components::*;
 
 // ============================================================================
 // SECTION SEVERANCE
@@ -32,7 +31,7 @@ pub fn check_section_severance(
     if destroyed_hull.is_empty() { return; }
     let Ok((sub_transform, sub_velocity)) = sub_query.get_single() else { return; };
 
-    for (hull, hull_gt) in destroyed_hull.iter() {
+    for (_hull, hull_gt) in destroyed_hull.iter() {
         let hull_pos = hull_gt.translation().truncate();
 
         // Check if any modules are now isolated (simplified check)

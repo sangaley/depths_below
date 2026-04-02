@@ -141,18 +141,6 @@ fn spawn_creatures(
             creature_type
         };
 
-        // Per-system ecosystem modifier: later systems have more dangerous creatures
-        // Galaxy system ID acts as difficulty scaling
-        let galaxy_state = world_state.seed; // Use seed as proxy for system danger
-        let system_danger = (galaxy_state as f32 / 100.0).min(3.0);
-        let creature_type = if system_danger > 1.5 && creature_type == CreatureType::VoidDrifter
-            && rand::thread_rng().gen::<f32>() < 0.3
-        {
-            CreatureType::ParasiteSwarm // Dangerous systems convert some drifters to parasites
-        } else {
-            creature_type
-        };
-
         // Check per-type population cap
         let current_count = eco_state
             .population_counts
@@ -207,12 +195,11 @@ fn spawn_creature(
     let range_factor = 1.0 + (depth / 3000.0).min(0.3);
 
     // (frame_w, frame_h, display_w, display_h, health, damage, speed, detection_range)
-    // Stats: the void is hostile. No weapons = you're prey.
     let (frame_w, frame_h, base_w, base_h, health, damage, speed, range) = match creature_type {
-        CreatureType::VoidDrifter =>     ( 64,  64,  45.0,  22.0,   8.0,  0.0,  12.0,  80.0),  // Ambient, harmless
-        CreatureType::Stalker =>         ( 64,  64, 150.0,  54.0,  75.0, 18.0,  90.0, 400.0),  // Fast, hits hard, detects far
-        CreatureType::Leviathan =>       (128,  64, 660.0, 180.0,1200.0,120.0,  35.0, 700.0),  // Tank. You need a real weapon system.
-        CreatureType::ParasiteSwarm =>   ( 64,  64,  30.0,  20.0,   4.0,  2.0,  75.0, 250.0),  // Fast, numerous, relentless
+        CreatureType::VoidDrifter =>     ( 64,  64,  45.0,  22.0,  10.0,  0.0,  15.0, 100.0),
+        CreatureType::Stalker =>         ( 64,  64, 150.0,  54.0,  50.0, 15.0,  80.0, 350.0),
+        CreatureType::Leviathan =>       (128,  64, 660.0, 180.0, 500.0,100.0,  40.0, 500.0),
+        CreatureType::ParasiteSwarm =>   ( 64,  64,  30.0,  20.0,   8.0,  2.0,  70.0, 200.0),
     };
 
     let size_scale = rng.gen_range(0.75..1.35_f32);
@@ -588,7 +575,7 @@ fn parasite_attach_system(
 
     if attached_count > 0 {
         *drain_timer = 0.0;
-        let drain_damage = attached_count as f32 * 0.8; // 0.8 per parasite per second — 10 parasites = 8 DPS. Build point defense.
+        let drain_damage = attached_count as f32 * 0.5;
         damage_events.send(SubmarineDamaged {
             source: DamageSource::Creature(Entity::PLACEHOLDER),
             amount: drain_damage,

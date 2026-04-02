@@ -1,7 +1,5 @@
 use bevy::prelude::*;
-use crate::components::*;
-use crate::events::*;
-use super::targeting::fire_groups::{InterceptMode, FireGroup};
+use super::targeting::fire_groups::InterceptMode;
 use super::new_projectiles::{MissileProjectile, Projectile};
 use super::*;
 
@@ -99,7 +97,7 @@ pub fn intercept_missiles(
         let weapon_pos = global_transform.translation().truncate();
 
         // Find closest threat in range
-        let Some((threat_entity, threat_pos, _)) = threats.iter()
+        let Some((_threat_entity, threat_pos, _)) = threats.iter()
             .find(|(_, pos, _)| weapon_pos.distance(*pos) < weapon.range)
         else { continue; };
 

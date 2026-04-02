@@ -1,8 +1,7 @@
 use bevy::prelude::*;
 use crate::components::*;
 use crate::resources::*;
-use crate::building::{ModuleRegistry, GridOccupancy};
-use crate::building::multiblock::components::*;
+use crate::building::ModuleRegistry;
 use crate::ui::windows::framework::*;
 use crate::ui::theme::*;
 
@@ -75,7 +74,7 @@ pub fn toggle_cost_summary(
         total_cost += hull.material.cost();
     }
 
-    for (module, weapon) in weapon_query.iter() {
+    for (_module, weapon) in weapon_query.iter() {
         weapon_count += 1;
         total_dps += weapon.damage * weapon.fire_rate;
     }
@@ -308,7 +307,7 @@ pub fn toggle_heat_overlay(
         commands.entity(entity).despawn();
     }
 
-    for (module, temp, gt) in temp_query.iter() {
+    for (_module, temp, gt) in temp_query.iter() {
         let pos = gt.translation().truncate();
         let heat_ratio = (temp.current / temp.max_temp).clamp(0.0, 1.0);
 

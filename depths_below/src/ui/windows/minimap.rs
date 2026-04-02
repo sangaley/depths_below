@@ -1,7 +1,6 @@
 use bevy::prelude::*;
 use crate::components::Submarine;
 use crate::celestial::components::*;
-use crate::celestial::resources::GalaxyState;
 use super::framework::*;
 
 // ============================================================================
@@ -88,7 +87,7 @@ pub fn toggle_minimap(
 /// Update minimap dots based on ship position and celestial body positions
 pub fn update_minimap(
     sub_query: Query<&Transform, With<Submarine>>,
-    body_query: Query<(Entity, &Transform, &CelestialBody)>,
+    _body_query: Query<(Entity, &Transform, &CelestialBody)>,
     mut ship_dot_query: Query<&mut Style, (With<MinimapShipDot>, Without<MinimapBodyDot>)>,
     minimap_exists: Query<Entity, With<MinimapWindow>>,
 ) {
@@ -97,7 +96,7 @@ pub fn update_minimap(
     }
 
     let Ok(sub_transform) = sub_query.get_single() else { return };
-    let sub_pos = sub_transform.translation.truncate();
+    let _sub_pos = sub_transform.translation.truncate();
 
     // Ship is always at center
     for mut style in ship_dot_query.iter_mut() {

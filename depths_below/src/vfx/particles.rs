@@ -36,7 +36,7 @@ pub fn spawn_engine_particles(
 
     let mut rng = rand::thread_rng();
 
-    for (engine, module, global_transform) in engine_query.iter() {
+    for (_engine, module, global_transform) in engine_query.iter() {
         if !module.is_active { continue; }
 
         let pos = global_transform.translation().truncate();

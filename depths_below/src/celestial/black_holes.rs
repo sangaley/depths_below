@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::components::{Submarine, Velocity};
+use crate::components::Submarine;
 use crate::events::{SubmarineDamaged, DamageSource, ShowNotification, NotificationType};
 use super::components::*;
 use super::resources::*;
@@ -81,7 +81,7 @@ pub fn process_consumption(
     mut commands: Commands,
     config: Res<CelestialConfig>,
     mut consuming_query: Query<(Entity, &mut BeingConsumed, &mut Transform, &CelestialBody)>,
-    mut bh_query: Query<(&Transform, &mut BlackHole, &mut GravityWell), Without<BeingConsumed>>,
+    bh_query: Query<(&Transform, &mut BlackHole, &mut GravityWell), Without<BeingConsumed>>,
     mut consumed_events: EventWriter<BodyConsumed>,
     mut planet_consumed_events: EventWriter<PlanetConsumed>,
     planet_query: Query<&Planet>,

@@ -1,8 +1,6 @@
 use bevy::prelude::*;
-use rand::Rng;
 use crate::components::*;
 use crate::events::*;
-use crate::resources::*;
 use crate::building::rooms::RoomMap;
 
 // ============================================================================
@@ -14,7 +12,7 @@ pub fn weapon_heat_visual(
     weapon_query: Query<(&Module, &ModuleTemperature, &Children), (With<Weapon>, Without<DestroyedModule>)>,
     mut sprite_query: Query<&mut Sprite>,
 ) {
-    for (module, temp, children) in weapon_query.iter() {
+    for (_module, temp, children) in weapon_query.iter() {
         let heat_ratio = (temp.current / temp.max_temp).clamp(0.0, 1.0);
 
         if heat_ratio < 0.3 { continue; } // Don't tint cool weapons
@@ -22,7 +20,7 @@ pub fn weapon_heat_visual(
         // Calculate heat tint: orange at 50%, bright red at 100%
         let heat_r = 0.3 + heat_ratio * 0.7;
         let heat_g = (0.4 * (1.0 - heat_ratio)).max(0.0);
-        let heat_b = 0.0;
+        let _heat_b = 0.0;
         let heat_alpha = (heat_ratio - 0.3) * 0.5; // Starts showing at 30%
 
         // Tint all child sprites (the block visual layers)
@@ -263,9 +261,9 @@ pub fn parasite_boarding(
     if *boarding_timer < 2.0 { return; } // Check every 2 seconds
     *boarding_timer = 0.0;
 
-    let Ok(sub_transform) = sub_query.get_single() else { return; };
+    let Ok(_sub_transform) = sub_query.get_single() else { return; };
 
-    for (entity, transform, creature, ai) in parasite_query.iter() {
+    for (entity, transform, creature, _ai) in parasite_query.iter() {
         if creature.creature_type != CreatureType::ParasiteSwarm { continue; }
         if creature.health <= 0.0 { continue; }
 

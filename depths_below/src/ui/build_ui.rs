@@ -4,7 +4,6 @@ use crate::resources::*;
 use crate::components::*;
 use crate::building::{GridOccupancy, ModuleRegistry};
 use crate::events::*;
-use super::theme::{ThemeColors, ThemeFonts, ThemeSpacing};
 
 // ============================================================================
 // BUILD UI COLOR PALETTE — references theme where possible, build-specific additions

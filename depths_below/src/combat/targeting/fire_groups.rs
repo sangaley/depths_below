@@ -41,7 +41,7 @@ pub fn fire_group_input(
 /// System: assign fire groups during build mode with Ctrl+1-4
 pub fn assign_fire_group(
     keyboard: Res<Input<KeyCode>>,
-    mouse: Res<Input<MouseButton>>,
+    _mouse: Res<Input<MouseButton>>,
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
     occupancy: Res<crate::building::GridOccupancy>,

@@ -140,7 +140,7 @@ pub fn ai_brain_system(
                 }
 
                 // Attack player if they're near creatures (protecting sea life)
-                if let Some((_, c_dist, c_pos, _)) = nearest_creature {
+                if let Some((_, c_dist, _c_pos, _)) = nearest_creature {
                     if let Some((_, p_pos, p_dist)) = player_info {
                         // Player near a creature = threat to sacred life
                         if p_dist < 600.0 && c_dist < 400.0 {

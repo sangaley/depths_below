@@ -1,13 +1,13 @@
 use bevy::prelude::*;
 use crate::components::*;
-use crate::celestial::components::{CelestialBody, CelestialBodyType, Planet, Star};
+use crate::celestial::components::{CelestialBody, Planet, Star};
 
 /// Gravity-aware creature behaviors.
 /// VoidDrifters gravitate toward planets for warmth.
 /// Stalkers position themselves behind celestial bodies relative to the ship.
 /// Leviathans patrol between planets.
 pub fn gravity_aware_wandering(
-    time: Res<Time>,
+    _time: Res<Time>,
     sub_query: Query<&Transform, With<Submarine>>,
     planet_query: Query<(&Transform, &CelestialBody), (With<Planet>, Without<Creature>, Without<Submarine>)>,
     star_query: Query<(&Transform, &CelestialBody), (With<Star>, Without<Creature>, Without<Submarine>)>,
@@ -22,7 +22,7 @@ pub fn gravity_aware_wandering(
         .map(|(t, body)| (t.translation.truncate(), body.radius))
         .collect();
 
-    let stars: Vec<(Vec2, f32)> = star_query.iter()
+    let _stars: Vec<(Vec2, f32)> = star_query.iter()
         .map(|(t, body)| (t.translation.truncate(), body.radius))
         .collect();
 

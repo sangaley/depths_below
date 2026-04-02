@@ -1,5 +1,4 @@
 use bevy::prelude::*;
-use crate::components::Velocity;
 use crate::events::{ShowNotification, NotificationType};
 use super::components::*;
 use super::resources::*;
@@ -46,7 +45,7 @@ pub fn destabilize_orbits(
     mut commands: Commands,
     mut star_destroyed_events: EventReader<StarDestroyed>,
     orbit_query: Query<(Entity, &OrbitalPath, &Transform)>,
-    galaxy: Res<GalaxyState>,
+    _galaxy: Res<GalaxyState>,
     config: Res<CelestialConfig>,
     mut notifications: EventWriter<ShowNotification>,
 ) {

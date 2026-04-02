@@ -403,6 +403,10 @@ fn update_ghost_preview(
             BuildSelection::Module(mt) => registry.get(mt).size,
         };
 
+        // Block limit check (250 max)
+        let block_count = module_query.iter().count() + hull_query.iter().count();
+        let under_limit = block_count < crate::combat::limits::MAX_SHIP_BLOCKS;
+
         // Check overlap using GridOccupancy (supports multi-cell)
         let no_overlap = occupancy.can_place(grid_pos, size, rotation);
 
@@ -455,7 +459,7 @@ fn update_ghost_preview(
             }
         };
 
-        let valid = no_overlap && (has_neighbor || is_first) && position_ok && can_afford && multiblock_ok;
+        let valid = no_overlap && (has_neighbor || is_first) && position_ok && can_afford && multiblock_ok && under_limit;
         build_state.is_valid_placement = valid;
         build_state.placement_reason = if valid {
             None
@@ -463,6 +467,8 @@ fn update_ghost_preview(
             Some("Overlaps existing module or hull".into())
         } else if !has_neighbor && !is_first {
             Some("Must be adjacent to existing structure".into())
+        } else if !under_limit {
+            Some(format!("Block limit reached ({}/{})", block_count, crate::combat::limits::MAX_SHIP_BLOCKS))
         } else if !position_ok {
             match &selection {
                 BuildSelection::Module(mt) => {

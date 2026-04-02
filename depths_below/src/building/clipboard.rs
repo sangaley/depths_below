@@ -52,7 +52,7 @@ pub fn clipboard_input(
     existing_highlights: Query<Entity, With<SelectionHighlight>>,
     mut notifications: EventWriter<ShowNotification>,
     current_state: Res<State<BuildState>>,
-    registry: Res<ModuleRegistry>,
+    _registry: Res<ModuleRegistry>,
 ) {
     if *current_state.get() == BuildState::Inactive { return; }
 
@@ -78,7 +78,7 @@ pub fn clipboard_input(
                 clipboard.selected.push(entity);
 
                 // Auto-select entire multi-block chain
-                if let Ok((_, module, Some(machine_block))) = module_query.get(entity) {
+                if let Ok((_, _module, Some(machine_block))) = module_query.get(entity) {
                     if machine_block.role == BlockRole::Core {
                         // Select all blocks connected to this core
                         for (other_entity, _, other_block) in module_query.iter() {
@@ -205,7 +205,7 @@ pub fn clipboard_paste(
     mut clipboard: ResMut<BuildClipboard>,
     occupancy: Res<GridOccupancy>,
     registry: Res<ModuleRegistry>,
-    mut currency: ResMut<Currency>,
+    currency: ResMut<Currency>,
     mut place_events: EventWriter<PlaceModuleRequest>,
     mut notifications: EventWriter<ShowNotification>,
 ) {

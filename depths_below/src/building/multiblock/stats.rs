@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::components::{Module, Weapon, WeaponCooldown};
+use crate::components::{Module, Weapon};
 use crate::building::customization::parameters::ModuleCustomization;
 use super::components::*;
 
@@ -49,11 +49,11 @@ pub fn calculate_machine_stats(
     mut core_query: Query<(Entity, &Module, &MachineBlock, &mut MachineStats)>,
     weapon_query: Query<&Weapon>,
     customization_query: Query<&ModuleCustomization>,
-    block_query: Query<(&MachineBlock, Option<&ModuleCustomization>)>,
+    _block_query: Query<(&MachineBlock, Option<&ModuleCustomization>)>,
 ) {
     let contrib = weapon_block_contributions();
 
-    for (entity, module, block, mut stats) in core_query.iter_mut() {
+    for (entity, _module, block, mut stats) in core_query.iter_mut() {
         if block.role != BlockRole::Core {
             continue;
         }

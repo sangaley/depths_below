@@ -12,7 +12,7 @@ pub fn accumulate_gravity(
     well_query: Query<(&Transform, &GravityWell), Without<BeingConsumed>>,
     mut affected_query: Query<(&Transform, &GravityAffected, &mut GravityForce)>,
 ) {
-    for (affected_transform, affected, mut gravity_force) in affected_query.iter_mut() {
+    for (affected_transform, _affected, mut gravity_force) in affected_query.iter_mut() {
         let pos = affected_transform.translation.truncate();
         let mut total_force = Vec2::ZERO;
 

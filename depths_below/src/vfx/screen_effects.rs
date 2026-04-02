@@ -29,7 +29,7 @@ pub fn update_screen_effects(
     mut commands: Commands,
     sub_query: Query<&Transform, With<Submarine>>,
     star_query: Query<(&Transform, &Star, &CelestialBody), Without<Submarine>>,
-    bh_query: Query<(&Transform, &BlackHole, &CelestialBody), Without<Submarine>>,
+    _bh_query: Query<(&Transform, &BlackHole, &CelestialBody), Without<Submarine>>,
     gravity_force: Query<&crate::celestial::components::GravityForce, With<Submarine>>,
     oxygen_state: Res<crate::resources::OxygenState>,
     existing_rad: Query<Entity, With<RadiationOverlay>>,
@@ -42,7 +42,7 @@ pub fn update_screen_effects(
 
     // === RADIATION PROXIMITY OVERLAY ===
     let mut max_radiation_proximity = 0.0_f32;
-    for (star_transform, star, body) in star_query.iter() {
+    for (star_transform, _star, body) in star_query.iter() {
         let dist = sub_pos.distance(star_transform.translation.truncate());
         let danger_range = body.radius * 3.0;
         if dist < danger_range {

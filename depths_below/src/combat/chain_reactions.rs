@@ -13,12 +13,12 @@ use crate::building::GridOccupancy;
 pub fn trigger_chain_reactions(
     mut commands: Commands,
     destroyed_modules: Query<(Entity, &Module, &GlobalTransform), Added<DestroyedModule>>,
-    mut adjacent_modules: Query<(&Module, &mut crate::components::Module), Without<DestroyedModule>>,
+    _adjacent_modules: Query<(&Module, &mut crate::components::Module), Without<DestroyedModule>>,
     occupancy: Res<GridOccupancy>,
     mut notifications: EventWriter<ShowNotification>,
     mut fire_events: EventWriter<FireStarted>,
 ) {
-    for (entity, module, global_transform) in destroyed_modules.iter() {
+    for (_entity, module, global_transform) in destroyed_modules.iter() {
         let pos = global_transform.translation().truncate();
         let grid_pos = module.grid_position;
 
@@ -33,7 +33,7 @@ pub fn trigger_chain_reactions(
                 });
 
                 // Damage all adjacent modules
-                let blast_damage = match module.module_type {
+                let _blast_damage = match module.module_type {
                     ModuleType::WarheadBay => 60.0, // Warheads hit harder
                     _ => 35.0,
                 };

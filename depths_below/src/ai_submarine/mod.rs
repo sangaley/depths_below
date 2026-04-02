@@ -10,8 +10,6 @@ pub mod simulation;
 
 use bevy::prelude::*;
 
-use crate::components::*;
-use crate::building::registry::ModuleRegistry;
 use crate::states::GameState;
 
 use components::*;

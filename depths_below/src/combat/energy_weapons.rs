@@ -1,7 +1,4 @@
 use bevy::prelude::*;
-use crate::components::*;
-use crate::events::*;
-use crate::resources::*;
 use crate::celestial::components::{GravityAffected, GravityForce};
 use super::targeting::{TargetSelection, FireGroupState, FireGroup};
 use super::combat_features::WeakPoint;
@@ -41,11 +38,11 @@ pub fn fire_laser_system(
         Option<&ModuleTemperature>,
     ), Without<DestroyedModule>>,
     target_query: Query<&Transform, Without<Submarine>>,
-    mut power_state: ResMut<PowerState>,
+    power_state: ResMut<PowerState>,
     mut creature_query: Query<(&Transform, &mut Creature, Option<&Velocity>, Option<&WeakPoint>), Without<Submarine>>,
     mut commands: Commands,
     existing_beams: Query<Entity, With<LaserBeamVisual>>,
-    mut notifications: EventWriter<ShowNotification>,
+    _notifications: EventWriter<ShowNotification>,
 ) {
     let dt = time.delta_seconds();
 
@@ -54,7 +51,7 @@ pub fn fire_laser_system(
         commands.entity(entity).despawn();
     }
 
-    let Ok(sub_transform) = sub_query.get_single() else { return };
+    let Ok(_sub_transform) = sub_query.get_single() else { return };
 
     for (module, weapon, fire_group, global_transform, temp) in weapon_query.iter() {
         if module.module_type != ModuleType::Laser { continue; }
@@ -323,7 +320,7 @@ pub fn update_ion_pulses(
         // Check hits
         let pulse_pos = transform.translation.truncate();
 
-        for (creature_entity, creature_transform, mut creature) in creature_query.iter_mut() {
+        for (_creature_entity, creature_transform, mut creature) in creature_query.iter_mut() {
             if creature.health <= 0.0 { continue; }
 
             let dist = pulse_pos.distance(creature_transform.translation.truncate());
@@ -523,7 +520,7 @@ pub fn emp_detonation(
             });
 
             // Disable player modules in radius
-            for (module_entity, module, module_gt) in module_query.iter_mut() {
+            for (module_entity, _module, module_gt) in module_query.iter_mut() {
                 let module_pos = module_gt.translation().truncate();
                 if module_pos.distance(missile_pos) < emp.emp_radius {
                     commands.entity(module_entity).insert(IonDisabled {

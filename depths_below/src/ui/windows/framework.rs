@@ -294,7 +294,7 @@ pub fn window_drag_system(
 
     // Continue drag
     if mouse_button.pressed(MouseButton::Left) {
-        for (mut window, mut style, _) in windows.iter_mut() {
+        for (window, mut style, _) in windows.iter_mut() {
             if window.is_dragging {
                 let new_x = (cursor_pos.x - window.drag_offset.x).max(0.0);
                 let new_y = (cursor_pos.y - window.drag_offset.y).max(0.0);
@@ -334,7 +334,7 @@ pub fn window_collapse_system(
     collapse_buttons: Query<(&WindowCollapseButton, &Interaction), Changed<Interaction>>,
     mut windows: Query<&mut FloatingWindow>,
     mut content_query: Query<(&WindowContent, &mut Style)>,
-    mut border_query: Query<&mut Style, (Without<WindowContent>, Without<FloatingWindow>)>,
+    _border_query: Query<&mut Style, (Without<WindowContent>, Without<FloatingWindow>)>,
 ) {
     for (collapse_btn, interaction) in collapse_buttons.iter() {
         if *interaction == Interaction::Pressed {

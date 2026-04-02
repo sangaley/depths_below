@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use rand::Rng;
 use crate::components::{Module, DestroyedModule};
-use crate::events::{ShowNotification, NotificationType, ModuleDestroyed, HullSegmentDestroyed};
+use crate::events::{ShowNotification, NotificationType};
 use super::components::*;
 
 // ============================================================================
@@ -22,7 +22,7 @@ pub fn process_block_destruction(
 ) {
     let mut rng = rand::thread_rng();
 
-    for (destroyed_entity, destroyed_block, destroyed_module, stress, cascade) in destroyed_blocks.iter() {
+    for (_destroyed_entity, destroyed_block, _destroyed_module, stress, cascade) in destroyed_blocks.iter() {
         // Skip if not part of a machine
         if destroyed_block.connected_core.is_none() {
             continue;
@@ -55,7 +55,7 @@ pub fn process_block_destruction(
         // === NON-CORE BLOCK DESTRUCTION ===
 
         // Find all blocks downstream (higher chain_distance, connected through this block)
-        let destroyed_distance = destroyed_block.chain_distance;
+        let _destroyed_distance = destroyed_block.chain_distance;
         let mut to_disconnect: Vec<Entity> = Vec::new();
 
         // Walk the chain forward from this block

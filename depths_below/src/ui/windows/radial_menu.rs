@@ -1,6 +1,5 @@
 use bevy::prelude::*;
 use std::f32::consts::{PI, TAU};
-use super::framework::WindowStyle;
 use crate::ui::theme::*;
 
 // ============================================================================
@@ -265,7 +264,7 @@ pub fn radial_menu_input(
                         duration: 2.0,
                     });
                 }
-                RadialAction::PowerToggle(module_entity) => {
+                RadialAction::PowerToggle(_module_entity) => {
                     notifications.send(crate::events::ShowNotification {
                         message: "Module power toggled.".into(),
                         notification_type: crate::events::NotificationType::Info,

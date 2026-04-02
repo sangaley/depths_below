@@ -174,7 +174,7 @@ pub fn attach_black_hole_visuals(
     mut commands: Commands,
     bh_query: Query<(Entity, &CelestialBody, &BlackHole), Without<HasVisualLayers>>,
 ) {
-    for (entity, body, bh) in bh_query.iter() {
+    for (entity, _body, bh) in bh_query.iter() {
         // Event horizon — pitch black center
         let horizon = commands.spawn((
             SpriteBundle {
@@ -287,7 +287,7 @@ pub fn animate_planet_atmosphere(
     mut atmo_query: Query<(&PlanetAtmosphere, &mut Sprite)>,
 ) {
     let t = time.elapsed_seconds();
-    for (atmo, mut sprite) in atmo_query.iter_mut() {
+    for (_atmo, mut sprite) in atmo_query.iter_mut() {
         let shimmer = 0.10 + (t * 0.5).sin() * 0.03;
         sprite.color.set_a(shimmer);
     }
