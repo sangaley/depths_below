@@ -39,7 +39,7 @@ pub fn tooltip_system(
     existing_popup: Query<Entity, With<TooltipPopup>>,
     windows: Query<&Window>,
 ) {
-    let cursor_pos = windows.get_single().ok()
+    let cursor_pos = windows.single().ok()
         .and_then(|w| w.cursor_position())
         .unwrap_or(Vec2::ZERO);
 
@@ -52,7 +52,7 @@ pub fn tooltip_system(
                     state.hover_timer = 0.0;
                     // Despawn existing popup
                     for popup in existing_popup.iter() {
-                        commands.entity(popup).despawn_recursive();
+                        commands.entity(popup).despawn();
                     }
                 }
             }
@@ -61,7 +61,7 @@ pub fn tooltip_system(
                     state.active_entity = None;
                     state.hover_timer = 0.0;
                     for popup in existing_popup.iter() {
-                        commands.entity(popup).despawn_recursive();
+                        commands.entity(popup).despawn();
                     }
                 }
             }
@@ -71,7 +71,7 @@ pub fn tooltip_system(
 
     // Tick hover timer and spawn tooltip after delay
     if let Some(active_entity) = state.active_entity {
-        state.hover_timer += time.delta_seconds();
+        state.hover_timer += time.delta_secs();
 
         if state.hover_timer >= TOOLTIP_DELAY {
             // Check if popup already exists
@@ -89,10 +89,10 @@ pub fn tooltip_system(
 
 /// System: keep tooltip popup near cursor
 pub fn tooltip_position_system(
-    mut popup_query: Query<&mut Style, With<TooltipPopup>>,
+    mut popup_query: Query<&mut Node, With<TooltipPopup>>,
     windows: Query<&Window>,
 ) {
-    let Some(cursor_pos) = windows.get_single().ok()
+    let Some(cursor_pos) = windows.single().ok()
         .and_then(|w| w.cursor_position())
     else {
         return;
@@ -111,8 +111,7 @@ fn spawn_tooltip_popup(
     cursor_pos: Vec2,
 ) {
     let popup = commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(cursor_pos.x + TOOLTIP_OFFSET.x),
                 top: Val::Px(cursor_pos.y + TOOLTIP_OFFSET.y),
@@ -121,32 +120,20 @@ fn spawn_tooltip_popup(
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(4.0),
                 ..default()
-            },
-            background_color: Color::rgba(0.05, 0.07, 0.12, 0.95).into(),
-            z_index: ZIndex::Global(1000), // Always on top
-            ..default()
-        },
+            }, BackgroundColor(Color::srgba(0.05, 0.07, 0.12, 0.95)), ZIndex(1000)),
         TooltipPopup,
     )).id();
 
     // Main text
     let main_text = commands.spawn(
-        TextBundle::from_section(text, TextStyle {
-            font_size: 12.0,
-            color: Color::rgb(0.85, 0.88, 0.92),
-            ..default()
-        }),
+        (Text::new(text), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(Color::srgb(0.85, 0.88, 0.92))),
     ).id();
     commands.entity(popup).add_child(main_text);
 
     // Detail text (if provided)
     if let Some(detail_str) = detail {
         let detail_text = commands.spawn(
-            TextBundle::from_section(detail_str, TextStyle {
-                font_size: 10.0,
-                color: Color::rgb(0.55, 0.58, 0.62),
-                ..default()
-            }),
+            (Text::new(detail_str), TextFont { font_size: FontSize::Px(10.0), ..default() }, TextColor(Color::srgb(0.55, 0.58, 0.62))),
         ).id();
         commands.entity(popup).add_child(detail_text);
     }

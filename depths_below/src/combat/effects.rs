@@ -2,23 +2,23 @@ use bevy::prelude::*;
 
 use super::*;
 
-/// Some creatures can fire projectiles back at the submarine
+/// Some creatures can fire projectiles back at the ship
 pub(super) fn creature_ranged_attack(
     time: Res<Time>,
-    mut creature_query: Query<(&Transform, &mut Creature, &CreatureAI), Without<Submarine>>,
-    sub_query: Query<&Transform, With<Submarine>>,
+    mut creature_query: Query<(&Transform, &mut Creature, &CreatureAI), Without<Ship>>,
+    ship_query: Query<&Transform, With<Ship>>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
-    let Ok(sub_transform) = sub_query.get_single() else { return };
-    let sub_pos = sub_transform.translation.truncate();
+    let Ok(ship_transform) = ship_query.single() else { return };
+    let ship_pos = ship_transform.translation.truncate();
 
     for (c_transform, mut creature, ai) in creature_query.iter_mut() {
-        // Only fire when actively attacking and targeting the submarine
+        // Only fire when actively attacking and targeting the ship
         if !matches!(ai.state, CreatureAIState::Attacking) {
             continue;
         }
-        if !matches!(ai.target, Some(EcoTarget::Submarine(_))) {
+        if !matches!(ai.target, Some(EcoTarget::Ship(_))) {
             continue;
         }
 
@@ -29,25 +29,25 @@ pub(super) fn creature_ranged_attack(
         };
 
         let c_pos = c_transform.translation.truncate();
-        let dist = c_pos.distance(sub_pos);
+        let dist = c_pos.distance(ship_pos);
 
         if dist > shoot_range {
             continue;
         }
 
         // Use attack_cooldown for ranged timing
-        creature.attack_cooldown -= time.delta_seconds();
+        creature.attack_cooldown -= time.delta_secs();
         if creature.attack_cooldown > 0.0 {
             continue;
         }
         creature.attack_cooldown = shoot_cooldown;
 
-        // Fire projectile at submarine
+        // Fire projectile at ship
         projectiles::spawn_projectile(
             &mut commands,
             &asset_server,
             c_pos,
-            sub_pos,
+            ship_pos,
             shoot_damage,
             PROJECTILE_SPEED * 0.6,
             false,
@@ -60,20 +60,18 @@ pub(super) fn creature_ranged_attack(
 pub(super) fn animate_floating_damage(
     mut commands: Commands,
     time: Res<Time>,
-    mut query: Query<(Entity, &mut FloatingDamage, &mut Transform, &mut Text)>,
+    mut query: Query<(Entity, &mut FloatingDamage, &mut Transform, &mut TextColor)>,
 ) {
-    for (entity, mut dmg, mut transform, mut text) in query.iter_mut() {
+    for (entity, mut dmg, mut transform, mut text_color) in query.iter_mut() {
         dmg.timer.tick(time.delta());
-        transform.translation.y += dmg.velocity * time.delta_seconds();
+        transform.translation.y += dmg.velocity * time.delta_secs();
 
         // Fade out alpha
-        let alpha = 1.0 - dmg.timer.percent();
-        for section in text.sections.iter_mut() {
-            section.style.color.set_a(alpha);
-        }
+        let alpha = 1.0 - dmg.timer.fraction();
+        text_color.0.set_alpha(alpha);
 
-        if dmg.timer.finished() {
-            commands.entity(entity).despawn_recursive();
+        if dmg.timer.is_finished() {
+            commands.entity(entity).despawn();
         }
     }
 }
@@ -82,10 +80,10 @@ pub(super) fn animate_floating_damage(
 pub(super) fn despawn_dead_creatures(
     mut commands: Commands,
     creature_query: Query<(Entity, &Transform, &Creature)>,
-    mut killed_events: EventWriter<CreatureKilled>,
+    mut killed_events: MessageWriter<CreatureKilled>,
     mut inventory: ResMut<Inventory>,
     mut statistics: ResMut<Statistics>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
     mut eco_state: ResMut<EcosystemState>,
 ) {
     for (entity, transform, creature) in creature_query.iter() {
@@ -121,20 +119,20 @@ pub(super) fn despawn_dead_creatures(
                 *count = count.saturating_sub(1);
             }
 
-            killed_events.send(CreatureKilled {
+            killed_events.write(CreatureKilled {
                 creature: entity,
                 creature_type: creature.creature_type,
                 loot: loot.clone(),
             });
 
             let loot_names: Vec<&str> = loot.iter().map(|i| i.name()).collect();
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("{:?} killed! Loot: {}", creature.creature_type, loot_names.join(", ")),
                 notification_type: NotificationType::Success,
                 duration: 3.0,
             });
 
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
 }

@@ -2,6 +2,7 @@ pub mod celestial_visuals;
 pub mod particles;
 pub mod screen_effects;
 pub mod block_visuals;
+pub mod starfield;
 
 use bevy::prelude::*;
 use crate::states::GameState;
@@ -37,6 +38,17 @@ impl Plugin for VfxPlugin {
             .add_systems(
                 Update,
                 block_visuals::attach_block_visuals,
+            )
+            // Parallax starfield — active while docked and exploring so the
+            // void reads as space and motion is always perceptible
+            .add_systems(
+                Update,
+                (
+                    starfield::spawn_starfield,
+                    starfield::update_starfield.after(starfield::spawn_starfield),
+                ).run_if(
+                    in_state(GameState::Exploring).or_else(in_state(GameState::StationDocked))
+                ),
             );
     }
 }

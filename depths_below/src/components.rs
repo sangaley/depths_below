@@ -9,9 +9,9 @@ use std::collections::HashMap;
 // SUBMARINE COMPONENTS
 // ============================================================================
 
-/// Marker for the main submarine entity
+/// Marker for the main ship entity
 #[derive(Component)]
-pub struct Submarine;
+pub struct Ship;
 
 /// Hull segment component
 #[derive(Component, Clone, Serialize, Deserialize)]
@@ -188,7 +188,7 @@ pub struct PendingDetonation {
     pub grid_position: IVec2,
 }
 
-/// Module is on fire — takes DoT, spreads to neighbors, suppressed by flooding
+/// Module is on fire — takes DoT, spreads to neighbors, suppressed by decompression
 #[derive(Component)]
 pub struct OnFire {
     pub intensity: f32,          // 0.0–1.0
@@ -200,6 +200,30 @@ pub struct OnFire {
 /// Marker for hull segments that have been fully destroyed (0 HP)
 #[derive(Component)]
 pub struct HullDestroyed;
+
+/// Stable snapshot of a hull segment's material-defined stats, taken once at
+/// spawn. apply_hull_enhancers must reset from here every frame before
+/// reapplying adjacency bonuses — same reasoning as BaseWeaponStats: without
+/// a fixed base to reset to, `hull.max_health *= 1.30` compounds forever for
+/// any tile sitting next to a reinforcement module.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct BaseHullStats {
+    pub max_health: f32,
+    pub radiation_shielding: f32,
+}
+
+/// Queued for removal from the world — the block stays in place (still
+/// tinted, still occupying its grid cell) for one short beat after being
+/// marked destroyed, then despawns, leaving a real gap. The delay isn't
+/// cosmetic: several other systems (severance, chain reactions, reactor
+/// meltdown, detonation queueing) react to the same destruction markers
+/// across different plugins with no guaranteed relative frame ordering —
+/// this guarantees all of them get to see the entity before it's gone,
+/// instead of racing an immediate despawn.
+#[derive(Component)]
+pub struct PendingRemoval {
+    pub timer: Timer,
+}
 
 // ============================================================================
 // MODULE SYSTEM
@@ -218,6 +242,12 @@ pub struct Module {
     pub size: IVec2,
     pub rotation: Rotation,
 }
+
+/// Sprite color as spawned, before any damage tinting — captured once so the
+/// gradual damage tint has a stable color to blend from/back to instead of
+/// darkening the already-darkened color further each frame.
+#[derive(Component, Clone, Copy)]
+pub struct BaseSpriteColor(pub Color);
 
 /// 4-direction rotation for modules
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, Default)]
@@ -328,12 +358,12 @@ impl ModuleCategory {
                 ModuleType::EmergencyThruster,
                 ModuleType::RudderAssembly,
                 ModuleType::VectorThruster,
-                ModuleType::TrimTank,
+                ModuleType::AttitudeThruster,
             ],
             ModuleCategory::LifeSupport => &[
                 ModuleType::OxygenScrubber,
                 ModuleType::CO2Scrubber,
-                ModuleType::WaterRecycler,
+                ModuleType::WasteRecycler,
                 ModuleType::AdvancedOxygenator,
                 ModuleType::FireSuppression,
                 ModuleType::AtmosphereMonitor,
@@ -346,6 +376,7 @@ impl ModuleCategory {
                 ModuleType::TargetingComputer,
                 ModuleType::AutopilotCore,
                 ModuleType::AICombatCore,
+                ModuleType::BridgeWing,
             ],
             ModuleCategory::Weapons => &[
                 ModuleType::Cannon,
@@ -364,9 +395,9 @@ impl ModuleCategory {
                 ModuleType::AmmoAutoloader,
             ],
             ModuleCategory::Detection => &[
-                ModuleType::SonarArray,
-                ModuleType::AdvancedSonar,
-                ModuleType::PassiveSonar,
+                ModuleType::RadarArray,
+                ModuleType::AdvancedRadar,
+                ModuleType::PassiveRadar,
                 ModuleType::DepthScanner,
                 ModuleType::HydrophoneArray,
                 ModuleType::ThermalImager,
@@ -384,6 +415,7 @@ impl ModuleCategory {
                 ModuleType::ReinforcedVault,
                 ModuleType::CryoStorage,
                 ModuleType::CreatureContainment,
+                ModuleType::BulkCargoHold,
             ],
             ModuleCategory::Crew => &[
                 ModuleType::BasicQuarters,
@@ -395,10 +427,13 @@ impl ModuleCategory {
                 ModuleType::TrainingRoom,
                 ModuleType::Brig,
                 ModuleType::EngineeringStation,
+                ModuleType::SurgicalBay,
+                ModuleType::GalleyMess,
+                ModuleType::WellnessHub,
             ],
             ModuleCategory::Utility => &[
                 ModuleType::RepairBay,
-                ModuleType::BallastTank,
+                ModuleType::ManeuverThruster,
                 ModuleType::Floodlight,
                 ModuleType::Searchlight,
                 ModuleType::AirlockChamber,
@@ -415,16 +450,18 @@ impl ModuleCategory {
                 ModuleType::ConveyorTube,
                 ModuleType::MaintenanceLocker,
                 ModuleType::FuelProcessor,
-                ModuleType::WaterPump,
+                ModuleType::HullSealer,
                 ModuleType::MineralExtractor,
                 ModuleType::ResearchLab,
+                ModuleType::DockingHub,
+                ModuleType::AngledArmorPlate,
             ],
             ModuleCategory::Structural => &[
                 ModuleType::HullBeam,
                 ModuleType::HullCorner,
                 ModuleType::Bulkhead,
                 ModuleType::PressureFrame,
-                ModuleType::FloodValve,
+                ModuleType::AirlockValve,
                 ModuleType::AccessHatch,
                 ModuleType::ViewPort,
                 ModuleType::ArmorPlate,
@@ -433,6 +470,9 @@ impl ModuleCategory {
                 ModuleType::Corridor,
                 ModuleType::LadderShaft,
                 ModuleType::MaintenanceTunnel,
+                ModuleType::CornerArmorPlate,
+                ModuleType::StaggeredArmorPlate,
+                ModuleType::AngledHullPlate,
             ],
         }
     }
@@ -465,7 +505,7 @@ pub enum ModuleType {
     // Life Support (6)
     OxygenScrubber,
     CO2Scrubber,
-    WaterRecycler,
+    WasteRecycler,
     AdvancedOxygenator,
     FireSuppression,
     AtmosphereMonitor,
@@ -493,9 +533,9 @@ pub enum ModuleType {
     EMPPulse,
 
     // Detection (7)
-    SonarArray,
-    AdvancedSonar,
-    PassiveSonar,
+    RadarArray,
+    AdvancedRadar,
+    PassiveRadar,
     DepthScanner,
     HydrophoneArray,
     ThermalImager,
@@ -522,7 +562,7 @@ pub enum ModuleType {
 
     // Utility (15)
     RepairBay,
-    BallastTank,
+    ManeuverThruster,
     Floodlight,
     Searchlight,
     AirlockChamber,
@@ -542,7 +582,7 @@ pub enum ModuleType {
     HullCorner,
     Bulkhead,
     PressureFrame,
-    FloodValve,
+    AirlockValve,
     AccessHatch,
     ViewPort,
     ArmorPlate,
@@ -552,7 +592,7 @@ pub enum ModuleType {
 
     // Propulsion (new)
     VectorThruster,
-    TrimTank,
+    AttitudeThruster,
 
     // Life Support (new)
     OxygenTank,
@@ -574,7 +614,7 @@ pub enum ModuleType {
     FuelProcessor,
 
     // Phase B: Damage Infrastructure
-    WaterPump,
+    HullSealer,
     EmergencyBulkhead,
     FirebreakWall,
     PressureSensor,
@@ -644,6 +684,18 @@ pub enum ModuleType {
     VibrationDamper,      // Reduces accuracy loss from adjacent firing
     ThermalInsulator,     // Blocks heat spread between sections
     StructuralBrace,      // Increases HP of adjacent hull/modules
+    CornerArmorPlate,     // L-shaped armor block — leaves its notch cell free for a neighbor
+
+    // Shaped modules — shape chosen for what the module does, see MODULES.md
+    BridgeWing,           // T-shaped command bridge — wings extend past the hull for docking visibility
+    SurgicalBay,          // T-shaped sickbay — narrow triage entry into a wider treatment bay
+    GalleyMess,           // L-shaped mess — long galley run + a dining nook
+    BulkCargoHold,        // L-shaped cargo hold — fills a leftover hull corner
+    DockingHub,           // Plus-shaped hub — multiple simultaneous docking connections
+    WellnessHub,          // Plus-shaped gym/training hub — one node, access from every side
+    StaggeredArmorPlate,  // S-shaped armor — no single straight seam runs through it
+    AngledHullPlate,      // Wedge-cut hull framing piece — visual taper, rotation sets which corner
+    AngledArmorPlate,     // Wedge-cut armor plate — visual taper, rotation sets which corner
 }
 
 impl ModuleType {
@@ -667,14 +719,14 @@ impl ModuleType {
             ModuleType::EmergencyThruster |
             ModuleType::RudderAssembly |
             ModuleType::VectorThruster |
-            ModuleType::TrimTank |
+            ModuleType::AttitudeThruster |
             ModuleType::Afterburner |
             ModuleType::ThrustVectoring |
             ModuleType::FuelInjector |
             ModuleType::InertialDampener => ModuleCategory::Propulsion,
 
             ModuleType::OxygenScrubber | ModuleType::CO2Scrubber |
-            ModuleType::WaterRecycler | ModuleType::AdvancedOxygenator |
+            ModuleType::WasteRecycler | ModuleType::AdvancedOxygenator |
             ModuleType::FireSuppression |
             ModuleType::AtmosphereMonitor |
             ModuleType::OxygenTank |
@@ -684,6 +736,7 @@ impl ModuleType {
             ModuleType::HelmStation |
             ModuleType::TargetingComputer |
             ModuleType::AutopilotCore |
+            ModuleType::BridgeWing |
             ModuleType::AICombatCore => ModuleCategory::Control,
 
             ModuleType::Cannon | ModuleType::Railgun |
@@ -726,10 +779,13 @@ impl ModuleType {
             ModuleType::ReinforcedJoint |
             ModuleType::VibrationDamper |
             ModuleType::ThermalInsulator |
-            ModuleType::StructuralBrace => ModuleCategory::Structural,
+            ModuleType::StructuralBrace |
+            ModuleType::CornerArmorPlate |
+            ModuleType::StaggeredArmorPlate |
+            ModuleType::AngledHullPlate => ModuleCategory::Structural,
 
-            ModuleType::SonarArray | ModuleType::AdvancedSonar |
-            ModuleType::PassiveSonar | ModuleType::DepthScanner |
+            ModuleType::RadarArray | ModuleType::AdvancedRadar |
+            ModuleType::PassiveRadar | ModuleType::DepthScanner |
             ModuleType::HydrophoneArray | ModuleType::ThermalImager |
             ModuleType::ProximityAlarm |
             ModuleType::CreatureScanner |
@@ -740,6 +796,7 @@ impl ModuleType {
             ModuleType::AmmoBay | ModuleType::FuelTank |
             ModuleType::SpecimenVault | ModuleType::ReinforcedVault |
             ModuleType::CryoStorage |
+            ModuleType::BulkCargoHold |
             ModuleType::CreatureContainment => ModuleCategory::Storage,
 
             ModuleType::BasicQuarters | ModuleType::Barracks |
@@ -747,9 +804,12 @@ impl ModuleType {
             ModuleType::RecRoom | ModuleType::OfficerQuarters |
             ModuleType::TrainingRoom |
             ModuleType::Brig |
+            ModuleType::SurgicalBay |
+            ModuleType::GalleyMess |
+            ModuleType::WellnessHub |
             ModuleType::EngineeringStation => ModuleCategory::Crew,
 
-            ModuleType::RepairBay | ModuleType::BallastTank |
+            ModuleType::RepairBay | ModuleType::ManeuverThruster |
             ModuleType::Floodlight | ModuleType::Searchlight |
             ModuleType::AirlockChamber | ModuleType::DockingPort |
             ModuleType::SalvageArm | ModuleType::AdvancedRepairBay |
@@ -761,13 +821,15 @@ impl ModuleType {
             ModuleType::ConveyorTube |
             ModuleType::MaintenanceLocker |
             ModuleType::FuelProcessor |
-            ModuleType::WaterPump |
+            ModuleType::HullSealer |
             ModuleType::MineralExtractor |
+            ModuleType::DockingHub |
+            ModuleType::AngledArmorPlate |
             ModuleType::ResearchLab => ModuleCategory::Utility,
 
             ModuleType::HullBeam | ModuleType::HullCorner |
             ModuleType::Bulkhead | ModuleType::PressureFrame |
-            ModuleType::FloodValve | ModuleType::AccessHatch |
+            ModuleType::AirlockValve | ModuleType::AccessHatch |
             ModuleType::ViewPort |
             ModuleType::ArmorPlate |
             ModuleType::EmergencyBulkhead |
@@ -799,7 +861,7 @@ impl ModuleType {
             ModuleType::RudderAssembly => "Rudder Assembly",
             ModuleType::OxygenScrubber => "O2 Scrubber",
             ModuleType::CO2Scrubber => "CO2 Scrubber",
-            ModuleType::WaterRecycler => "Waste Recycler",
+            ModuleType::WasteRecycler => "Waste Recycler",
             ModuleType::AdvancedOxygenator => "Advanced Oxygenator",
             ModuleType::FireSuppression => "Fire Suppression",
             ModuleType::AtmosphereMonitor => "Atmosphere Monitor",
@@ -818,9 +880,9 @@ impl ModuleType {
             ModuleType::MiningDrill => "Mining Drill",
             ModuleType::TractorBeam => "Tractor Beam",
             ModuleType::EMPPulse => "EMP Pulse",
-            ModuleType::SonarArray => "Radar Array",
-            ModuleType::AdvancedSonar => "Advanced Radar",
-            ModuleType::PassiveSonar => "Passive Sensor",
+            ModuleType::RadarArray => "Radar Array",
+            ModuleType::AdvancedRadar => "Advanced Radar",
+            ModuleType::PassiveRadar => "Passive Sensor",
             ModuleType::DepthScanner => "Long Range Scanner",
             ModuleType::HydrophoneArray => "Signal Interceptor",
             ModuleType::ThermalImager => "Thermal Imager",
@@ -841,7 +903,7 @@ impl ModuleType {
             ModuleType::TrainingRoom => "Training Room",
             ModuleType::Brig => "Brig",
             ModuleType::RepairBay => "Repair Bay",
-            ModuleType::BallastTank => "Maneuvering Thruster",
+            ModuleType::ManeuverThruster => "Maneuvering Thruster",
             ModuleType::Floodlight => "Spotlight",
             ModuleType::Searchlight => "Searchlight",
             ModuleType::AirlockChamber => "Airlock Chamber",
@@ -857,7 +919,7 @@ impl ModuleType {
             ModuleType::HullCorner => "Hull Corner",
             ModuleType::Bulkhead => "Bulkhead",
             ModuleType::PressureFrame => "Radiation Shield",
-            ModuleType::FloodValve => "Airlock Valve",
+            ModuleType::AirlockValve => "Airlock Valve",
             ModuleType::AccessHatch => "Access Hatch",
             ModuleType::ViewPort => "View Port",
             ModuleType::ArmorPlate => "Armor Plate",
@@ -865,7 +927,7 @@ impl ModuleType {
             ModuleType::HeatVent => "Heat Vent",
             ModuleType::Transformer => "Transformer",
             ModuleType::VectorThruster => "Vector Thruster",
-            ModuleType::TrimTank => "Attitude Thruster",
+            ModuleType::AttitudeThruster => "Attitude Thruster",
             ModuleType::OxygenTank => "Oxygen Tank",
             ModuleType::AirCirculator => "Air Circulator",
             ModuleType::CreatureScanner => "Creature Scanner",
@@ -875,7 +937,7 @@ impl ModuleType {
             ModuleType::ConveyorTube => "Conveyor Tube",
             ModuleType::MaintenanceLocker => "Maintenance Locker",
             ModuleType::FuelProcessor => "Fuel Processor",
-            ModuleType::WaterPump => "Hull Seal System",
+            ModuleType::HullSealer => "Hull Seal System",
             ModuleType::EmergencyBulkhead => "Emergency Bulkhead",
             ModuleType::FirebreakWall => "Firebreak Wall",
             ModuleType::PressureSensor => "Radiation Sensor",
@@ -932,6 +994,16 @@ impl ModuleType {
             ModuleType::VibrationDamper => "Vibration Damper",
             ModuleType::ThermalInsulator => "Thermal Insulator",
             ModuleType::StructuralBrace => "Structural Brace",
+            ModuleType::CornerArmorPlate => "Corner Armor Plate",
+            ModuleType::BridgeWing => "Bridge Wing",
+            ModuleType::SurgicalBay => "Surgical Bay",
+            ModuleType::GalleyMess => "Galley Mess",
+            ModuleType::BulkCargoHold => "Bulk Cargo Hold",
+            ModuleType::DockingHub => "Docking Hub",
+            ModuleType::WellnessHub => "Wellness Hub",
+            ModuleType::StaggeredArmorPlate => "Staggered Armor Plate",
+            ModuleType::AngledHullPlate => "Angled Hull Plate",
+            ModuleType::AngledArmorPlate => "Angled Armor Plate",
         }
     }
 }
@@ -963,7 +1035,7 @@ pub struct OxygenScrubber {
     pub output: f32,
 }
 
-/// Thruster data (replaces ballast for space maneuvering)
+/// Thruster data (replaces thruster for space maneuvering)
 #[derive(Component)]
 pub struct Thruster {
     pub thrust_power: f32,
@@ -1016,9 +1088,9 @@ pub struct MineExplosion {
     pub timer: Timer,
 }
 
-/// Sonar data
+/// Radar data
 #[derive(Component)]
-pub struct Sonar {
+pub struct Radar {
     pub range: f32,
     pub noise_on_ping: f32,
     pub is_pinging: bool,
@@ -1026,7 +1098,7 @@ pub struct Sonar {
 
 /// Light data
 #[derive(Component)]
-pub struct SubmarineLight {
+pub struct ShipLight {
     pub range: f32,
     pub intensity: f32,
     pub attracts_creatures: bool,
@@ -1100,10 +1172,10 @@ impl AmmoType {
 
     pub fn projectile_color(&self) -> Color {
         match self {
-            AmmoType::Missile => Color::rgb(1.0, 0.9, 0.3),
-            AmmoType::Bullet  => Color::rgb(1.0, 1.0, 1.0),
-            AmmoType::Charge  => Color::rgb(0.4, 0.6, 1.0),
-            AmmoType::Mine    => Color::rgb(0.6, 0.6, 0.6),
+            AmmoType::Missile => Color::srgb(1.0, 0.9, 0.3),
+            AmmoType::Bullet  => Color::srgb(1.0, 1.0, 1.0),
+            AmmoType::Charge  => Color::srgb(0.4, 0.6, 1.0),
+            AmmoType::Mine    => Color::srgb(0.6, 0.6, 0.6),
         }
     }
 
@@ -1143,10 +1215,10 @@ pub struct TargetingSystem {
 pub struct LifeSupportSystem {
     pub o2_generation: f32,
     pub co2_filtering: f32,
-    pub water_recycling: f32,
+    pub waste_recycling: f32,
 }
 
-/// Detection system (non-sonar detection)
+/// Detection system (non-radar detection)
 #[derive(Component)]
 pub struct DetectionSystem {
     pub range: f32,
@@ -1408,6 +1480,21 @@ pub enum PoiType {
     Settlement,
 }
 
+impl PoiType {
+    /// Space-appropriate display names — the enum variants keep their old
+    /// submarine-era identifiers, but nothing player-facing should ever say
+    /// "Cave" in deep space.
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            PoiType::Wreck => "Drifting Wreck",
+            PoiType::Cave => "Hollow Asteroid",
+            PoiType::Ruins => "Ancient Ruins",
+            PoiType::ThermalVent => "Plasma Vent",
+            PoiType::Settlement => "Outpost Colony",
+        }
+    }
+}
+
 /// Log entry that can be found at POIs
 #[derive(Component)]
 pub struct LogEntry {
@@ -1462,8 +1549,8 @@ pub enum CreatureType {
 /// What a creature is targeting
 #[derive(Clone, Copy, Debug)]
 pub enum EcoTarget {
-    Submarine(Entity),
-    AiSubmarine(Entity),
+    Ship(Entity),
+    AiShip(Entity),
     Creature(Entity),
     Corpse(Entity),
     Position(Vec2),
@@ -1497,7 +1584,7 @@ pub struct AttackCooldown {
     pub timer: Timer,
 }
 
-/// Weapon cooldown for submarine weapons
+/// Weapon cooldown for ship weapons
 #[derive(Component)]
 pub struct WeaponCooldown {
     pub timer: Timer,
@@ -1505,7 +1592,7 @@ pub struct WeaponCooldown {
 
 /// Radar ping visual ring
 #[derive(Component)]
-pub struct SonarPing {
+pub struct RadarPing {
     pub radius: f32,
     pub max_radius: f32,
     pub speed: f32,
@@ -1513,7 +1600,7 @@ pub struct SonarPing {
 
 /// Marks an entity as revealed by radar
 #[derive(Component)]
-pub struct SonarRevealed {
+pub struct RadarRevealed {
     pub timer: Timer,
 }
 
@@ -1570,7 +1657,7 @@ pub struct FoodChainRole {
     pub tier: FoodChainTier,
     pub prey_types: Vec<CreatureType>,
     pub threat_types: Vec<CreatureType>,
-    pub attacks_submarine: bool,
+    pub attacks_ship: bool,
 }
 
 /// Territory a creature claims and defends
@@ -1594,7 +1681,7 @@ pub struct Corpse {
 pub struct CreatureMemory {
     pub danger_zones: Vec<(Vec2, f32)>,
     pub food_locations: Vec<(Vec2, f32)>,
-    pub last_seen_sub: Option<(Vec2, f32)>,
+    pub last_seen_ship: Option<(Vec2, f32)>,
 }
 
 impl Default for CreatureMemory {
@@ -1602,7 +1689,7 @@ impl Default for CreatureMemory {
         Self {
             danger_zones: Vec::new(),
             food_locations: Vec::new(),
-            last_seen_sub: None,
+            last_seen_ship: None,
         }
     }
 }
@@ -1624,7 +1711,7 @@ pub struct MigrationPath {
     pub arrival_radius: f32,
 }
 
-/// A point in the submarine's noise trail
+/// A point in the ship's noise trail
 #[derive(Component)]
 pub struct NoiseTrailPoint {
     pub intensity: f32,
@@ -1641,9 +1728,9 @@ pub struct HungerDuration {
 // SUBMARINE PHYSICS
 // ============================================================================
 
-/// Realistic submarine physics model
+/// Realistic ship physics model
 #[derive(Component)]
-pub struct SubmarinePhysics {
+pub struct ShipPhysics {
     pub mass: f32,
     pub drag_coefficient: f32,
     pub frontal_area: f32,
@@ -1653,7 +1740,7 @@ pub struct SubmarinePhysics {
     pub rudder: f32,              // -1.0 to 1.0
 }
 
-impl Default for SubmarinePhysics {
+impl Default for ShipPhysics {
     fn default() -> Self {
         Self {
             mass: 1200.0,           // Heavier = more inertia, feels like a real ship
@@ -1746,7 +1833,7 @@ pub enum LoaderMechanism {
     Rotary,
 }
 
-/// Calculated stats (cached, recalculated when sub-components change)
+/// Calculated stats (cached, recalculated when ship-components change)
 #[derive(Component, Clone, Debug, Default)]
 pub struct CalculatedStats {
     pub weapon: Option<WeaponStats>,
@@ -1755,7 +1842,7 @@ pub struct CalculatedStats {
     pub life_support: Option<LifeSupportStats>,
 }
 
-/// Calculated weapon stats from sub-components
+/// Calculated weapon stats from ship-components
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct WeaponStats {
     pub damage: f32,
@@ -1765,7 +1852,7 @@ pub struct WeaponStats {
     pub power_cost: f32,
 }
 
-/// Calculated engine stats from sub-components
+/// Calculated engine stats from ship-components
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct EngineStats {
     pub thrust: f32,
@@ -1773,7 +1860,7 @@ pub struct EngineStats {
     pub noise: f32,
 }
 
-/// Calculated reactor stats from sub-components
+/// Calculated reactor stats from ship-components
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ReactorStats {
     pub power_output: f32,
@@ -1781,7 +1868,7 @@ pub struct ReactorStats {
     pub explosion_risk: f32,
 }
 
-/// Calculated life support stats from sub-components
+/// Calculated life support stats from ship-components
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct LifeSupportStats {
     pub o2_generation: f32,
@@ -1872,7 +1959,7 @@ pub struct CrewRoomLocation {
 // ENVIRONMENTAL HAZARD COMPONENTS
 // ============================================================================
 
-/// A zone that damages the submarine or applies forces
+/// A zone that damages the ship or applies forces
 #[derive(Component)]
 pub struct HazardZone {
     pub hazard_type: HazardType,
@@ -1929,6 +2016,12 @@ pub struct ModuleListSelection(pub usize);
 #[derive(Component)]
 pub struct BuildGhost;
 
+/// Extra ghost tile for non-rectangular footprints — the main BuildGhost
+/// sprite covers the module's first occupied cell, these cover the rest,
+/// so the ghost never visually claims a cell the module doesn't actually occupy.
+#[derive(Component)]
+pub struct BuildGhostCell(pub usize);
+
 /// Notification container
 #[derive(Component)]
 pub struct NotificationContainer;
@@ -1960,7 +2053,7 @@ pub struct AbyssalInfluence {
     pub original_state: CreatureAIState,
 }
 
-/// Fake sonar blip — not attached to any real creature
+/// Fake radar blip — not attached to any real creature
 #[derive(Component)]
 pub struct PhantomBlip {
     pub lifetime: Timer,

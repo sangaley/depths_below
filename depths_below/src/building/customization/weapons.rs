@@ -3,7 +3,7 @@ use super::parameters::*;
 
 // ============================================================================
 // WEAPON CUSTOMIZATION DEFINITIONS
-// Each weapon family has completely different sub-component trees.
+// Each weapon family has completely different ship-component trees.
 // This is where the FTD-level depth lives.
 // ============================================================================
 

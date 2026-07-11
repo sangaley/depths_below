@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::components::{Submarine, Velocity, SubmarinePhysics};
+use crate::components::{Ship, Velocity, ShipPhysics};
 use crate::events::ShowNotification;
 use super::components::*;
 use super::resources::*;
@@ -53,9 +53,9 @@ pub fn accumulate_gravity(
 /// Apply accumulated gravity to velocity for all gravity-affected entities (creatures, debris)
 pub fn apply_gravity_to_velocity(
     time: Res<Time>,
-    mut query: Query<(&GravityForce, &GravityAffected, &mut Velocity), Without<Submarine>>,
+    mut query: Query<(&GravityForce, &GravityAffected, &mut Velocity), Without<Ship>>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
     for (gravity_force, affected, mut velocity) in query.iter_mut() {
         let acceleration = gravity_force.0 / affected.mass.max(1.0);
         velocity.0 += acceleration * dt;
@@ -64,19 +64,19 @@ pub fn apply_gravity_to_velocity(
 
 /// Apply gravity to the ship — integrates with existing movement system.
 /// Also fires GravityWarning events when pull is significant.
-pub fn apply_gravity_to_submarine(
+pub fn apply_gravity_to_ship(
     time: Res<Time>,
-    mut sub_query: Query<(&GravityForce, &mut Velocity, &SubmarinePhysics), With<Submarine>>,
-    mut warnings: EventWriter<GravityWarning>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut ship_query: Query<(&GravityForce, &mut Velocity, &ShipPhysics), With<Ship>>,
+    mut warnings: MessageWriter<GravityWarning>,
+    mut notifications: MessageWriter<ShowNotification>,
     well_query: Query<(Entity, &Transform, &GravityWell)>,
-    sub_transform_query: Query<&Transform, With<Submarine>>,
+    ship_transform_query: Query<&Transform, With<Ship>>,
     mut warned_light: Local<bool>,
     mut warned_heavy: Local<bool>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
 
-    let Ok((gravity_force, mut velocity, physics)) = sub_query.get_single_mut() else {
+    let Ok((gravity_force, mut velocity, physics)) = ship_query.single_mut() else {
         return;
     };
 
@@ -89,7 +89,7 @@ pub fn apply_gravity_to_submarine(
     // Warn player when gravity is pulling them
     if force_magnitude > 100.0 && !*warned_light {
         *warned_light = true;
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: "Gravitational pull detected — watch your trajectory!".into(),
             notification_type: crate::events::NotificationType::Warning,
             duration: 3.0,
@@ -97,7 +97,7 @@ pub fn apply_gravity_to_submarine(
     }
     if force_magnitude > 400.0 && !*warned_heavy {
         *warned_heavy = true;
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: "EXTREME GRAVITY! Full thrust required to escape!".into(),
             notification_type: crate::events::NotificationType::Danger,
             duration: 4.0,
@@ -112,17 +112,17 @@ pub fn apply_gravity_to_submarine(
 
     // Fire warning events for UI
     if force_magnitude > 50.0 {
-        if let Ok(sub_transform) = sub_transform_query.get_single() {
-            let sub_pos = sub_transform.translation.truncate();
+        if let Ok(ship_transform) = ship_transform_query.single() {
+            let ship_pos = ship_transform.translation.truncate();
             // Find the strongest gravity source
             if let Some((entity, _, _)) = well_query.iter()
                 .min_by(|(_, ta, _), (_, tb, _)| {
-                    let da = ta.translation.truncate().distance(sub_pos);
-                    let db = tb.translation.truncate().distance(sub_pos);
+                    let da = ta.translation.truncate().distance(ship_pos);
+                    let db = tb.translation.truncate().distance(ship_pos);
                     da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
                 })
             {
-                warnings.send(GravityWarning {
+                warnings.write(GravityWarning {
                     source: entity,
                     pull_strength: force_magnitude,
                 });

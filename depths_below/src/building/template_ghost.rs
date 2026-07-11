@@ -40,16 +40,16 @@ pub fn update_template_ghost(
 
     // Spawn ghost for core
     let core_valid = !occupancy.cells.contains_key(&origin);
-    spawn_ghost_block(&mut commands, origin, if core_valid { Color::rgba(0.3, 0.8, 0.3, 0.3) } else { Color::rgba(0.8, 0.2, 0.2, 0.3) });
+    spawn_ghost_block(&mut commands, origin, if core_valid { Color::srgba(0.3, 0.8, 0.3, 0.3) } else { Color::srgba(0.8, 0.2, 0.2, 0.3) });
 
     // Spawn ghosts for extensions — rotate offsets based on build rotation
     for (_, offset) in &template.blocks {
         let rotated_offset = rotate_offset(*offset, rotation);
         let pos = origin + rotated_offset;
         let color = if occupancy.cells.contains_key(&pos) {
-            Color::rgba(0.8, 0.2, 0.2, 0.3)
+            Color::srgba(0.8, 0.2, 0.2, 0.3)
         } else {
-            Color::rgba(0.3, 0.8, 0.3, 0.3)
+            Color::srgba(0.3, 0.8, 0.3, 0.3)
         };
         spawn_ghost_block(&mut commands, pos, color);
     }
@@ -70,15 +70,11 @@ fn spawn_ghost_block(commands: &mut Commands, grid_pos: IVec2, color: Color) {
     let world_y = grid_pos.y as f32 * 66.0 - 33.0;
 
     commands.spawn((
-        SpriteBundle {
-            sprite: Sprite {
+        (Sprite {
                 color,
                 custom_size: Some(Vec2::splat(60.0)),
                 ..default()
-            },
-            transform: Transform::from_xyz(world_x, world_y, 0.95),
-            ..default()
-        },
+            }, Transform::from_xyz(world_x, world_y, 0.95)),
         TemplateGhostBlock,
     ));
 }
@@ -88,9 +84,9 @@ pub fn chain_delete_system(
     mut commands: Commands,
     mut removed_modules: RemovedComponents<Module>,
     block_query: Query<(Entity, &crate::building::multiblock::components::MachineBlock, &Module)>,
-    mut notifications: EventWriter<crate::events::ShowNotification>,
+    mut notifications: MessageWriter<crate::events::ShowNotification>,
 ) {
-    for removed_entity in removed_modules.iter() {
+    for removed_entity in removed_modules.read() {
         // Check if any blocks were connected to this entity as their core
         let mut to_remove: Vec<Entity> = Vec::new();
         for (entity, block, _module) in block_query.iter() {
@@ -102,9 +98,9 @@ pub fn chain_delete_system(
         if !to_remove.is_empty() {
             let count = to_remove.len();
             for entity in to_remove {
-                commands.entity(entity).despawn_recursive();
+                commands.entity(entity).despawn();
             }
-            notifications.send(crate::events::ShowNotification {
+            notifications.write(crate::events::ShowNotification {
                 message: format!("Chain deleted: {} connected blocks removed", count),
                 notification_type: crate::events::NotificationType::Info,
                 duration: 2.0,

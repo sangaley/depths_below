@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use crate::components::*;
 use crate::events::*;
-use crate::ai_submarine::components::AiSubmarine;
+use crate::ai_ship::components::AiShip;
 
 // ============================================================================
 // TARGET SELECTION SYSTEM
@@ -34,25 +34,25 @@ pub struct TargetInfoText;
 
 /// System: Tab cycles through valid targets (closest first)
 pub fn cycle_target(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut selection: ResMut<TargetSelection>,
-    sub_query: Query<&Transform, With<Submarine>>,
-    creature_query: Query<(Entity, &Transform, &Creature), Without<Submarine>>,
-    ai_sub_query: Query<(Entity, &Transform), (With<AiSubmarine>, Without<Submarine>)>,
-    mut notifications: EventWriter<ShowNotification>,
+    ship_query: Query<&Transform, With<Ship>>,
+    creature_query: Query<(Entity, &Transform, &Creature), Without<Ship>>,
+    ai_ship_query: Query<(Entity, &Transform), (With<AiShip>, Without<Ship>)>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     if !keyboard.just_pressed(KeyCode::Tab) { return; }
 
-    let Ok(sub_transform) = sub_query.get_single() else { return };
-    let sub_pos = sub_transform.translation.truncate();
+    let Ok(ship_transform) = ship_query.single() else { return };
+    let ship_pos = ship_transform.translation.truncate();
 
     // Build sorted list of all valid targets by distance
     let mut targets: Vec<(Entity, f32, &str, TargetType)> = Vec::new();
 
     for (entity, transform, creature) in creature_query.iter() {
         if creature.health <= 0.0 { continue; }
-        let dist = sub_pos.distance(transform.translation.truncate());
-        if dist > 1500.0 { continue; } // Max targeting range
+        let dist = ship_pos.distance(transform.translation.truncate());
+        if dist > 4000.0 { continue; } // Max targeting range
         let name = match creature.creature_type {
             CreatureType::VoidDrifter => "Void Drifter",
             CreatureType::Stalker => "Stalker",
@@ -62,9 +62,9 @@ pub fn cycle_target(
         targets.push((entity, dist, name, TargetType::Creature));
     }
 
-    for (entity, transform) in ai_sub_query.iter() {
-        let dist = sub_pos.distance(transform.translation.truncate());
-        if dist > 2000.0 { continue; }
+    for (entity, transform) in ai_ship_query.iter() {
+        let dist = ship_pos.distance(transform.translation.truncate());
+        if dist > 9000.0 { continue; } // Was 2000 — shorter than the new weapon/standoff ranges, couldn't lock a ship holding its own distance
         targets.push((entity, dist, "Hostile Ship", TargetType::Ship));
     }
 
@@ -74,7 +74,7 @@ pub fn cycle_target(
     if targets.is_empty() {
         selection.target = None;
         selection.target_type = TargetType::None;
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: "No targets in range".into(),
             notification_type: NotificationType::Info,
             duration: 1.5,
@@ -95,7 +95,7 @@ pub fn cycle_target(
     selection.target = Some(entity);
     selection.target_type = target_type;
 
-    notifications.send(ShowNotification {
+    notifications.write(ShowNotification {
         message: format!("Target: {} ({:.0}m)", name, dist),
         notification_type: NotificationType::Warning,
         duration: 2.0,
@@ -104,19 +104,19 @@ pub fn cycle_target(
 
 /// System: middle-click to select target under cursor
 pub fn click_select_target(
-    mouse: Res<Input<MouseButton>>,
+    mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
     mut selection: ResMut<TargetSelection>,
-    creature_query: Query<(Entity, &Transform, &Creature), Without<Submarine>>,
-    ai_sub_query: Query<(Entity, &Transform), (With<AiSubmarine>, Without<Submarine>)>,
+    creature_query: Query<(Entity, &Transform, &Creature), Without<Ship>>,
+    ai_ship_query: Query<(Entity, &Transform), (With<AiShip>, Without<Ship>)>,
 ) {
     if !mouse.just_pressed(MouseButton::Middle) { return; }
 
-    let Ok(window) = windows.get_single() else { return };
-    let Ok((camera, camera_transform)) = camera_query.get_single() else { return };
+    let Ok(window) = windows.single() else { return };
+    let Ok((camera, camera_transform)) = camera_query.single() else { return };
     let Some(cursor) = window.cursor_position()
-        .and_then(|p| camera.viewport_to_world_2d(camera_transform, p))
+        .and_then(|p| camera.viewport_to_world_2d(camera_transform, p).ok())
     else { return };
 
     let click_pos = cursor;
@@ -135,7 +135,7 @@ pub fn click_select_target(
     }
 
     // Check AI ships
-    for (entity, transform) in ai_sub_query.iter() {
+    for (entity, transform) in ai_ship_query.iter() {
         let dist = click_pos.distance(transform.translation.truncate());
         if dist < select_radius {
             if closest.map_or(true, |(_, d, _)| dist < d) {
@@ -197,8 +197,8 @@ pub fn draw_target_bracket(
     ];
 
     let bracket_color = match selection.target_type {
-        TargetType::Creature => Color::rgb(0.9, 0.3, 0.2),
-        TargetType::Ship => Color::rgb(0.9, 0.6, 0.2),
+        TargetType::Creature => Color::srgb(0.9, 0.3, 0.2),
+        TargetType::Ship => Color::srgb(0.9, 0.6, 0.2),
         TargetType::None => Color::WHITE,
     };
 
@@ -206,30 +206,22 @@ pub fn draw_target_bracket(
         // Horizontal arm
         let h_x = if is_left { offset.x + arm_length / 2.0 } else { offset.x - arm_length / 2.0 };
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
+            (Sprite {
                     color: bracket_color,
                     custom_size: Some(Vec2::new(arm_length, thickness)),
                     ..default()
-                },
-                transform: Transform::from_xyz(pos.x + h_x, pos.y + offset.y, 1.0),
-                ..default()
-            },
+                }, Transform::from_xyz(pos.x + h_x, pos.y + offset.y, 1.0)),
             TargetBracket,
         ));
 
         // Vertical arm
         let v_y = if is_top { offset.y - arm_length / 2.0 } else { offset.y + arm_length / 2.0 };
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
+            (Sprite {
                     color: bracket_color,
                     custom_size: Some(Vec2::new(thickness, arm_length)),
                     ..default()
-                },
-                transform: Transform::from_xyz(pos.x + offset.x, pos.y + v_y, 1.0),
-                ..default()
-            },
+                }, Transform::from_xyz(pos.x + offset.x, pos.y + v_y, 1.0)),
             TargetBracket,
         ));
     }

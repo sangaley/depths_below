@@ -8,27 +8,27 @@ pub(crate) struct DamageOverlayLegend;
 
 /// Toggles the damage overlay on/off when O is pressed during Exploring
 pub fn toggle_damage_overlay(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
-    sub_query: Query<(Entity, Option<&DamageOverlayVisible>), With<Submarine>>,
-    mut notifications: EventWriter<ShowNotification>,
+    ship_query: Query<(Entity, Option<&DamageOverlayVisible>), With<Ship>>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
-    if !keyboard.just_pressed(KeyCode::O) {
+    if !keyboard.just_pressed(KeyCode::KeyO) {
         return;
     }
 
-    let Ok((entity, overlay)) = sub_query.get_single() else { return };
+    let Ok((entity, overlay)) = ship_query.single() else { return };
 
     if overlay.is_some() {
         commands.entity(entity).remove::<DamageOverlayVisible>();
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: "Damage overlay OFF".into(),
             notification_type: NotificationType::Info,
             duration: 1.0,
         });
     } else {
         commands.entity(entity).insert(DamageOverlayVisible);
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: "Damage overlay ON — green=OK, yellow=damaged, red=critical, gray=destroyed".into(),
             notification_type: NotificationType::Info,
             duration: 2.5,
@@ -39,10 +39,10 @@ pub fn toggle_damage_overlay(
 /// Spawns the legend UI when overlay becomes visible
 pub fn spawn_overlay_legend(
     mut commands: Commands,
-    sub_query: Query<&DamageOverlayVisible, Added<DamageOverlayVisible>>,
+    ship_query: Query<&DamageOverlayVisible, Added<DamageOverlayVisible>>,
     existing_legend: Query<Entity, With<DamageOverlayLegend>>,
 ) {
-    if sub_query.is_empty() {
+    if ship_query.is_empty() {
         return;
     }
     // Don't double-spawn
@@ -59,8 +59,7 @@ pub fn spawn_overlay_legend(
     ];
 
     commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 position_type: PositionType::Absolute,
                 right: Val::Px(10.0),
                 top: Val::Px(60.0),
@@ -68,80 +67,53 @@ pub fn spawn_overlay_legend(
                 padding: UiRect::all(Val::Px(6.0)),
                 row_gap: Val::Px(3.0),
                 ..default()
-            },
-            background_color: Color::rgba(0.0, 0.0, 0.0, 0.7).into(),
-            ..default()
-        },
+            }, BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7))),
         DamageOverlayLegend,
     )).with_children(|parent| {
         // Title
-        parent.spawn(TextBundle::from_section(
-            "DMG OVERLAY",
-            TextStyle {
-                font_size: 12.0,
-                color: Color::WHITE,
-                ..default()
-            },
-        ));
+        parent.spawn((Text::new("DMG OVERLAY"), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(Color::WHITE)));
         for (label, color) in entries {
             // Make swatch fully opaque so it's visible in the legend
-            let swatch_color = match color {
-                Color::Rgba { red, green, blue, .. } => Color::rgba(red, green, blue, 0.9),
-                other => other,
-            };
-            parent.spawn(NodeBundle {
-                style: Style {
+            let swatch_color = color.with_alpha(0.9);
+            parent.spawn((Node {
                     flex_direction: FlexDirection::Row,
                     align_items: AlignItems::Center,
                     column_gap: Val::Px(4.0),
                     ..default()
-                },
-                ..default()
-            }).with_children(|row| {
+                })).with_children(|row| {
                 // Color swatch
-                row.spawn(NodeBundle {
-                    style: Style {
+                row.spawn((Node {
                         width: Val::Px(10.0),
                         height: Val::Px(10.0),
                         ..default()
-                    },
-                    background_color: swatch_color.into(),
-                    ..default()
-                });
+                    }, BackgroundColor(swatch_color)));
                 // Label
-                row.spawn(TextBundle::from_section(
-                    label,
-                    TextStyle {
-                        font_size: 11.0,
-                        color: Color::rgba(0.8, 0.8, 0.8, 1.0),
-                        ..default()
-                    },
-                ));
+                row.spawn((Text::new(label), TextFont { font_size: FontSize::Px(11.0), ..default() }, TextColor(Color::srgba(0.8, 0.8, 0.8, 1.0))));
             });
         }
     });
 }
 
-/// Despawns the legend UI when overlay is removed or submarine is gone.
+/// Despawns the legend UI when overlay is removed or ship is gone.
 /// Also handles cleanup on state transitions (game over, etc).
 pub fn despawn_overlay_legend(
     mut commands: Commands,
-    sub_query: Query<(Entity, Option<&DamageOverlayVisible>), With<Submarine>>,
+    ship_query: Query<(Entity, Option<&DamageOverlayVisible>), With<Ship>>,
     legend_query: Query<Entity, With<DamageOverlayLegend>>,
 ) {
     if legend_query.is_empty() {
         return; // Nothing to clean up
     }
 
-    // If no submarine exists or submarine has no overlay, remove legend
-    let should_remove = match sub_query.get_single() {
-        Ok((_, Some(_))) => false, // Submarine exists with overlay — keep legend
-        _ => true,                 // No sub or no overlay — remove legend
+    // If no ship exists or ship has no overlay, remove legend
+    let should_remove = match ship_query.single() {
+        Ok((_, Some(_))) => false, // Ship exists with overlay — keep legend
+        _ => true,                 // No ship or no overlay — remove legend
     };
 
     if should_remove {
         for entity in legend_query.iter() {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
 }
@@ -153,43 +125,43 @@ pub fn cleanup_overlay_on_exit(
     overlay_query: Query<Entity, With<DamageOverlaySprite>>,
 ) {
     for entity in legend_query.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
     for entity in overlay_query.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
 /// Updates damage overlay sprites on modules and hull segments when visible
 pub fn update_damage_overlay(
-    sub_query: Query<&Children, (With<Submarine>, With<DamageOverlayVisible>)>,
+    ship_query: Query<&Children, (With<Ship>, With<DamageOverlayVisible>)>,
     module_query: Query<(Entity, &Module), Without<DamageOverlaySprite>>,
     hull_query: Query<(Entity, &HullSegment), (Without<Module>, Without<DamageOverlaySprite>)>,
-    mut overlay_sprites: Query<(&Parent, &mut Sprite), With<DamageOverlaySprite>>,
-    existing_parents: Query<&Parent, With<DamageOverlaySprite>>,
+    mut overlay_sprites: Query<(&ChildOf, &mut Sprite), With<DamageOverlaySprite>>,
+    existing_parents: Query<&ChildOf, With<DamageOverlaySprite>>,
     mut commands: Commands,
 ) {
-    let Ok(children) = sub_query.get_single() else { return };
+    let Ok(children) = ship_query.single() else { return };
 
     // Collect which parent entities already have overlays
-    let mut parents_with_overlay: bevy::utils::HashSet<Entity> = bevy::utils::HashSet::new();
+    let mut parents_with_overlay: bevy::platform::collections::HashSet<Entity> = bevy::platform::collections::HashSet::new();
     for parent in existing_parents.iter() {
-        parents_with_overlay.insert(parent.get());
+        parents_with_overlay.insert(parent.parent());
     }
 
     // Update existing overlay colors
     for (parent, mut sprite) in overlay_sprites.iter_mut() {
-        if let Ok((_, module)) = module_query.get(parent.get()) {
+        if let Ok((_, module)) = module_query.get(parent.parent()) {
             let ratio = health_ratio(module.health, module.max_health);
             sprite.color = damage_color_smooth(ratio);
-        } else if let Ok((_, hull)) = hull_query.get(parent.get()) {
+        } else if let Ok((_, hull)) = hull_query.get(parent.parent()) {
             let ratio = health_ratio(hull.health, hull.max_health);
             sprite.color = damage_color_smooth(ratio);
         }
     }
 
     // Spawn overlays for entities that don't have one yet
-    for &child in children.iter() {
+    for child in children.iter() {
         if parents_with_overlay.contains(&child) {
             continue;
         }
@@ -207,24 +179,24 @@ pub fn update_damage_overlay(
 
 /// Removes all overlay sprites when the overlay is toggled off
 pub fn cleanup_damage_overlay(
-    sub_query: Query<&Submarine, Without<DamageOverlayVisible>>,
+    ship_query: Query<&Ship, Without<DamageOverlayVisible>>,
     overlay_query: Query<Entity, With<DamageOverlaySprite>>,
     mut commands: Commands,
     mut cleaned: Local<bool>,
 ) {
-    if sub_query.is_empty() {
-        // No submarine without overlay — either no sub or overlay is active
+    if ship_query.is_empty() {
+        // No ship without overlay — either no ship or overlay is active
         *cleaned = false;
         return;
     }
 
-    // Submarine exists without DamageOverlayVisible — clean up once
+    // Ship exists without DamageOverlayVisible — clean up once
     if *cleaned {
         return;
     }
 
     for entity in overlay_query.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
     *cleaned = true;
 }
@@ -251,19 +223,15 @@ fn spawn_overlay(commands: &mut Commands, parent: Entity, color: Color, size: IV
     let h = 60.0 + (size.y - 1).max(0) as f32 * 66.0;
 
     let overlay = commands.spawn((
-        SpriteBundle {
-            sprite: Sprite {
+        (Sprite {
                 color,
                 custom_size: Some(Vec2::new(w, h)),
                 ..default()
-            },
-            transform: Transform::from_xyz(0.0, 0.0, 0.5),
-            ..default()
-        },
+            }, Transform::from_xyz(0.0, 0.0, 0.5)),
         DamageOverlaySprite,
     )).id();
 
-    commands.entity(overlay).set_parent(parent);
+    commands.entity(overlay).insert(ChildOf(parent));
 }
 
 /// Smooth color interpolation based on health ratio.
@@ -273,13 +241,13 @@ fn damage_color_smooth(ratio: f32) -> Color {
 
     if ratio <= 0.0 {
         // Destroyed: dark gray
-        return Color::rgba(0.3, 0.3, 0.3, 0.5);
+        return Color::srgba(0.3, 0.3, 0.3, 0.5);
     }
 
     if ratio <= 0.30 {
         // 0-30%: red to yellow
         let t = ratio / 0.30;
-        return Color::rgba(
+        return Color::srgba(
             0.9,
             lerp(0.1, 0.6, t),
             0.1,
@@ -290,7 +258,7 @@ fn damage_color_smooth(ratio: f32) -> Color {
     if ratio <= 0.60 {
         // 30-60%: yellow to light green
         let t = (ratio - 0.30) / 0.30;
-        return Color::rgba(
+        return Color::srgba(
             lerp(0.9, 0.4, t),
             lerp(0.6, 0.8, t),
             lerp(0.1, 0.2, t),
@@ -300,7 +268,7 @@ fn damage_color_smooth(ratio: f32) -> Color {
 
     // 60-100%: green (fades out as health approaches full)
     let t = (ratio - 0.60) / 0.40;
-    Color::rgba(
+    Color::srgba(
         lerp(0.3, 0.1, t),
         lerp(0.8, 0.7, t),
         lerp(0.2, 0.1, t),

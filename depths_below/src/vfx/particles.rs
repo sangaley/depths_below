@@ -23,15 +23,15 @@ pub struct Particle {
 pub fn spawn_engine_particles(
     time: Res<Time>,
     engine_query: Query<(&Engine, &Module, &GlobalTransform), Without<DestroyedModule>>,
-    sub_physics: Query<&SubmarinePhysics, With<Submarine>>,
+    ship_physics: Query<&ShipPhysics, With<Ship>>,
     mut commands: Commands,
     mut spawn_timer: Local<f32>,
 ) {
-    *spawn_timer += time.delta_seconds();
+    *spawn_timer += time.delta_secs();
     if *spawn_timer < 0.05 { return; } // 20 particles/sec max per engine
     *spawn_timer = 0.0;
 
-    let Ok(physics) = sub_physics.get_single() else { return };
+    let Ok(physics) = ship_physics.single() else { return };
     if physics.throttle.abs() < 0.1 { return; } // Not thrusting
 
     let mut rng = rand::thread_rng();
@@ -58,7 +58,7 @@ pub fn spawn_engine_particles(
 
             // Color: blue-white core fading to orange
             let heat = rng.gen_range(0.5..1.0);
-            let color = Color::rgba(
+            let color = Color::srgba(
                 0.5 + heat * 0.5,
                 0.3 + heat * 0.4,
                 0.8 * (1.0 - heat * 0.5),
@@ -66,15 +66,11 @@ pub fn spawn_engine_particles(
             );
 
             commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
+                (Sprite {
                         color,
                         custom_size: Some(Vec2::splat(size)),
                         ..default()
-                    },
-                    transform: Transform::from_xyz(pos.x, pos.y, 0.5),
-                    ..default()
-                },
+                    }, Transform::from_xyz(pos.x, pos.y, 0.5)),
                 Particle {
                     velocity: vel,
                     lifetime,
@@ -94,7 +90,7 @@ pub fn spawn_breach_particles(
     mut commands: Commands,
     mut spawn_timer: Local<f32>,
 ) {
-    *spawn_timer += time.delta_seconds();
+    *spawn_timer += time.delta_secs();
     if *spawn_timer < 0.15 { return; }
     *spawn_timer = 0.0;
 
@@ -116,15 +112,11 @@ pub fn spawn_breach_particles(
 
             // White-blue air particles
             commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
-                        color: Color::rgba(0.7, 0.8, 1.0, 0.5 * intensity),
+                (Sprite {
+                        color: Color::srgba(0.7, 0.8, 1.0, 0.5 * intensity),
                         custom_size: Some(Vec2::splat(size)),
                         ..default()
-                    },
-                    transform: Transform::from_xyz(pos.x, pos.y, 0.6),
-                    ..default()
-                },
+                    }, Transform::from_xyz(pos.x, pos.y, 0.6)),
                 Particle {
                     velocity: vel,
                     lifetime,
@@ -143,7 +135,7 @@ pub fn update_particles(
     time: Res<Time>,
     mut particle_query: Query<(Entity, &mut Particle, &mut Transform, &mut Sprite)>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
 
     for (entity, mut particle, mut transform, mut sprite) in particle_query.iter_mut() {
         // Move
@@ -162,8 +154,8 @@ pub fn update_particles(
 
         // Fade
         if particle.fade {
-            let current_a = sprite.color.a().min(1.0);
-            sprite.color.set_a(life_ratio.clamp(0.0, 1.0) * current_a);
+            let current_a = sprite.color.alpha().min(1.0);
+            sprite.color.set_alpha(life_ratio.clamp(0.0, 1.0) * current_a);
         }
 
         // Shrink

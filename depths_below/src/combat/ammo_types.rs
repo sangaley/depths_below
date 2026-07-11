@@ -137,15 +137,15 @@ impl KineticAmmoType {
     /// Projectile visual color
     pub fn color(&self) -> Color {
         match self {
-            Self::AP => Color::rgb(0.8, 0.7, 0.3),      // Brass
-            Self::APHE => Color::rgb(0.9, 0.5, 0.2),    // Orange-brass
-            Self::HEFrag => Color::rgb(1.0, 0.6, 0.1),  // Bright orange
-            Self::Incendiary => Color::rgb(1.0, 0.3, 0.1), // Red-orange
-            Self::EMPShell => Color::rgb(0.4, 0.5, 0.9), // Blue
-            Self::Flak => Color::rgb(0.9, 0.9, 0.4),    // Yellow
-            Self::HEAT => Color::rgb(0.8, 0.4, 0.1),    // Dark orange
-            Self::HESH => Color::rgb(0.7, 0.7, 0.3),    // Olive
-            Self::APFSDS => Color::rgb(0.9, 0.9, 1.0),  // White-bright (fast)
+            Self::AP => Color::srgb(0.8, 0.7, 0.3),      // Brass
+            Self::APHE => Color::srgb(0.9, 0.5, 0.2),    // Orange-brass
+            Self::HEFrag => Color::srgb(1.0, 0.6, 0.1),  // Bright orange
+            Self::Incendiary => Color::srgb(1.0, 0.3, 0.1), // Red-orange
+            Self::EMPShell => Color::srgb(0.4, 0.5, 0.9), // Blue
+            Self::Flak => Color::srgb(0.9, 0.9, 0.4),    // Yellow
+            Self::HEAT => Color::srgb(0.8, 0.4, 0.1),    // Dark orange
+            Self::HESH => Color::srgb(0.7, 0.7, 0.3),    // Olive
+            Self::APFSDS => Color::srgb(0.9, 0.9, 1.0),  // White-bright (fast)
         }
     }
 }

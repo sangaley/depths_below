@@ -2,15 +2,16 @@ use bevy::prelude::*;
 use crate::components::*;
 use crate::resources::*;
 use crate::events::*;
-use crate::states::{GameState, CombatSet};
+use crate::states::{GameState, CombatSet, SpatialSet};
 
-// Re-use the public HitEffect from submarine::damage
-use crate::submarine::damage::HitEffect;
+// Re-use the public HitEffect from ship::damage
+use crate::ship::damage::HitEffect;
 
 mod weapons;
 pub(crate) mod projectiles;
 mod mines;
 mod effects;
+pub mod shields;
 pub mod targeting;
 pub mod new_projectiles;
 pub mod missiles;
@@ -22,6 +23,10 @@ pub mod energy_weapons;
 pub mod ammo_types;
 pub mod recoil;
 pub mod limits;
+
+/// Dev switch: no weapon consumes ammunition while true (player and AI).
+/// Ammo economy comes back when the combat loop is tuned.
+pub const INFINITE_AMMO: bool = true;
 
 /// Floating damage number that drifts upward and fades out
 #[derive(Component)]
@@ -58,21 +63,17 @@ pub(crate) const PROJECTILE_SPEED: f32 = 600.0;
 pub(crate) const PROJECTILE_RADIUS: f32 = 12.0;
 /// Creature collision radius
 pub(crate) const CREATURE_RADIUS: f32 = 24.0;
-/// Submarine collision radius (for enemy projectiles)
+/// Ship collision radius (for enemy projectiles)
 pub(crate) const SUBMARINE_RADIUS: f32 = 60.0;
 
 /// Spawn a visual hit-flash sprite at the given position.
 pub(crate) fn spawn_hit_effect(commands: &mut Commands, position: Vec2, color: Color, size: f32) {
     commands.spawn((
-        SpriteBundle {
-            sprite: Sprite {
+        (Sprite {
                 color,
                 custom_size: Some(Vec2::splat(size)),
                 ..default()
-            },
-            transform: Transform::from_xyz(position.x, position.y, 0.6),
-            ..default()
-        },
+            }, Transform::from_xyz(position.x, position.y, 0.6)),
         HitEffect {
             timer: Timer::from_seconds(0.2, TimerMode::Once),
         },
@@ -82,18 +83,10 @@ pub(crate) fn spawn_hit_effect(commands: &mut Commands, position: Vec2, color: C
 /// Spawn a floating damage number that drifts upward and fades out.
 pub(crate) fn spawn_floating_damage(commands: &mut Commands, position: Vec2, damage: f32, color: Color) {
     commands.spawn((
-        Text2dBundle {
-            text: Text::from_section(
-                format!("-{}", damage as i32),
-                TextStyle {
-                    font_size: 18.0,
-                    color,
-                    ..default()
-                },
-            ),
-            transform: Transform::from_xyz(position.x, position.y + 20.0, 1.0),
-            ..default()
-        },
+        Text2d::new(format!("-{}", damage as i32)),
+        TextFont { font_size: FontSize::Px(18.0), ..default() },
+        TextColor(color),
+        Transform::from_xyz(position.x, position.y + 20.0, 1.0),
         FloatingDamage {
             timer: Timer::from_seconds(0.8, TimerMode::Once),
             velocity: 40.0,
@@ -116,7 +109,7 @@ pub(crate) fn apply_accuracy_spread(origin: Vec2, target_pos: Vec2, accuracy: f3
 
 /// Checks whether a target direction falls within a weapon's firing arc
 pub(crate) fn is_in_firing_arc(
-    sub_rotation: f32,
+    ship_rotation: f32,
     module_rotation: &Rotation,
     mount: &WeaponMount,
     direction_to_target: Vec2,
@@ -125,15 +118,15 @@ pub(crate) fn is_in_firing_arc(
     match mount.mount_type {
         MountType::Turret => true,
         MountType::Fixed => {
-            let module_angle = sub_rotation + module_rotation.to_radians();
+            let module_angle = ship_rotation + module_rotation.to_radians();
             let weapon_forward = Vec2::new(module_angle.cos(), module_angle.sin());
             let dot = weapon_forward.dot(direction_to_target.normalize_or_zero());
             dot >= (mount.firing_arc / 2.0).to_radians().cos()
         }
         MountType::Broadside => {
             let perp = Vec2::new(
-                (sub_rotation + FRAC_PI_2).cos(),
-                (sub_rotation + FRAC_PI_2).sin(),
+                (ship_rotation + FRAC_PI_2).cos(),
+                (ship_rotation + FRAC_PI_2).sin(),
             );
             let dot = perp.dot(direction_to_target.normalize_or_zero()).abs();
             dot >= (mount.firing_arc / 2.0).to_radians().cos()
@@ -149,14 +142,21 @@ impl Plugin for CombatPlugin {
             .init_resource::<targeting::TargetSelection>()
             .init_resource::<targeting::FireGroupState>()
             .init_resource::<recoil::RecoilAccumulator>()
-            .configure_set(Update, CombatSet::WeaponFire.run_if(in_state(GameState::Exploring)))
-            .configure_set(Update, CombatSet::Cleanup.after(CombatSet::WeaponFire).run_if(in_state(GameState::Exploring)))
+            .configure_sets(Update, CombatSet::WeaponFire.after(SpatialSet::Update).run_if(in_state(GameState::Exploring)))
+            .configure_sets(Update, CombatSet::Cleanup.after(CombatSet::WeaponFire).run_if(in_state(GameState::Exploring)))
             // Target selection + fire groups (always during exploring)
             .add_systems(Update, (
                 targeting::cycle_target,
                 targeting::click_select_target,
                 targeting::draw_target_bracket,
                 targeting::fire_group_input,
+            ).run_if(in_state(GameState::Exploring)))
+            // Shields: attach to player + AI ships, recharge, drive bubble visuals
+            .add_systems(Update, (
+                shields::attach_player_shield,
+                shields::attach_ai_shields,
+                shields::toggle_player_shield,
+                shields::update_shields,
             ).run_if(in_state(GameState::Exploring)))
             // Player weapons: kinetic projectiles + missiles (new physics system)
             .add_systems(Update, (
@@ -179,7 +179,7 @@ impl Plugin for CombatPlugin {
             .add_systems(Update, (
                 effects::despawn_dead_creatures,
                 effects::animate_floating_damage,
-                crate::submarine::damage::cleanup_hit_effects,
+                crate::ship::damage::cleanup_hit_effects,
                 limits::enforce_projectile_limit,
             ).in_set(CombatSet::Cleanup))
             // Fire group assignment (build mode)
@@ -226,6 +226,7 @@ impl Plugin for CombatPlugin {
                     energy_weapons::fire_ion_system,
                     energy_weapons::update_ion_pulses,
                     energy_weapons::update_ion_disabled,
+                    energy_weapons::fire_plasma_system,
                     energy_weapons::fire_emp_missiles,
                     energy_weapons::emp_detonation,
                 ).run_if(in_state(GameState::Exploring)),

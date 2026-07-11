@@ -23,23 +23,23 @@ pub struct RecoilAccumulator {
 /// Uses Newton's third law: F_recoil = mass_projectile × velocity_projectile
 pub fn apply_weapon_recoil(
     mut recoil: ResMut<RecoilAccumulator>,
-    mut sub_query: Query<(&mut Velocity, &SubmarinePhysics, &Transform), With<Submarine>>,
+    mut ship_query: Query<(&mut Velocity, &ShipPhysics, &Transform), With<Ship>>,
     time: Res<Time>,
 ) {
-    let Ok((mut velocity, physics, _transform)) = sub_query.get_single_mut() else { return };
+    let Ok((mut velocity, physics, _transform)) = ship_query.single_mut() else { return };
 
     if recoil.force.length_squared() < 0.001 && recoil.torque.abs() < 0.001 {
         return;
     }
 
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
 
     // Apply linear recoil: acceleration = force / mass
     let recoil_acceleration = recoil.force / physics.mass;
     velocity.0 += recoil_acceleration * dt;
 
     // Apply angular recoil (spin from off-center weapons)
-    // This modifies angular_velocity but we'd need mutable SubmarinePhysics
+    // This modifies angular_velocity but we'd need mutable ShipPhysics
     // For now, apply as small velocity perturbation perpendicular to recoil direction
     if recoil.torque.abs() > 0.1 {
         let perp = Vec2::new(-recoil.force.y, recoil.force.x).normalize_or_zero();
@@ -55,12 +55,12 @@ pub fn apply_weapon_recoil(
 pub fn accumulate_projectile_recoil(
     new_projectiles: Query<(&Projectile, &Velocity, &Transform), Added<Projectile>>,
     _weapon_query: Query<(&Module, &GlobalTransform), With<Weapon>>,
-    sub_query: Query<&Transform, With<Submarine>>,
+    ship_query: Query<&Transform, With<Ship>>,
     recoil_absorber_query: Query<&Module, Without<DestroyedModule>>,
     mut recoil: ResMut<RecoilAccumulator>,
 ) {
-    let Ok(sub_transform) = sub_query.get_single() else { return };
-    let ship_center = sub_transform.translation.truncate();
+    let Ok(ship_transform) = ship_query.single() else { return };
+    let ship_center = ship_transform.translation.truncate();
 
     // Check for recoil absorbers (reduce recoil)
     let absorber_count = recoil_absorber_query.iter()

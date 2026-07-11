@@ -1,18 +1,18 @@
 use bevy::prelude::*;
-use bevy::sprite::TextureAtlasSprite;
 
 #[allow(unused_imports)]
 use crate::components::{
     AttackCooldown, Corpse, Creature, CreatureAI, CreatureAIState,
     CreatureAnimation, CreatureMemory, CreatureNeeds, CreatureType, EcoTarget,
-    FoodChainRole, FoodChainTier, NoiseTrailPoint, Reproductive, Submarine, Territory,
+    FoodChainRole, FoodChainTier, NoiseTrailPoint, Reproductive, Ship, Territory,
     Velocity,
 };
-use crate::ai_submarine::components::{AiSubmarine, AiSubState};
+use crate::ai_ship::components::{AiShip, AiShipState};
 use crate::events::{
     CascadeType, CreatureAteCorpse, EcosystemCascade, ShowNotification,
 };
 use crate::resources::{EcosystemConfig, EcosystemState, NoiseState};
+use crate::spatial::{AiShipGrid, CorpseGrid, CreatureGrid, NoiseTrailGrid};
 
 use super::food_chain;
 
@@ -21,7 +21,7 @@ pub fn update_creature_needs(
     time: Res<Time>,
     mut query: Query<(&mut CreatureNeeds, &CreatureAI)>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
     for (mut needs, ai) in query.iter_mut() {
         needs.hunger = (needs.hunger + needs.hunger_rate * dt).min(100.0);
 
@@ -39,12 +39,17 @@ struct PerceptionData {
     nearest_prey_creature: Option<(Entity, f32, Vec2)>,
     nearest_threat: Option<(Entity, f32, Vec2)>,
     nearest_corpse: Option<(Entity, f32, Vec2)>,
-    sub_distance: Option<(Entity, f32, Vec2)>,
-    nearest_ai_sub: Option<(Entity, f32, Vec2)>,
+    ship_distance: Option<(Entity, f32, Vec2)>,
+    nearest_ai_ship: Option<(Entity, f32, Vec2)>,
     noise_trail: Option<(Vec2, f32)>,
 }
 
-/// Scan nearby entities to build per-creature sensory data, then run priority scorer
+/// Scan nearby entities to build per-creature sensory data, then run priority scorer.
+///
+/// Perception is spatial-hash-grid accelerated (`crate::spatial`): instead of every
+/// creature scanning every other creature/corpse/noise-trail/AI-ship each frame
+/// (O(n²) and worse), each creature only checks the handful of candidates in
+/// nearby grid cells, then fetches their actual component data via `Query::get`.
 pub fn ecosystem_ai_decisions(
     mut creatures: Query<(
         Entity,
@@ -55,24 +60,19 @@ pub fn ecosystem_ai_decisions(
         &FoodChainRole,
         Option<&Territory>,
     )>,
-    other_creatures: Query<(Entity, &Transform, &Creature), Without<Submarine>>,
-    corpse_query: Query<(Entity, &Transform, &Corpse)>,
-    sub_query: Query<(Entity, &Transform), With<Submarine>>,
-    ai_sub_query: Query<(Entity, &Transform, &AiSubState), With<AiSubmarine>>,
-    trail_query: Query<(&Transform, &NoiseTrailPoint)>,
+    other_creatures: Query<(&Transform, &Creature), Without<Ship>>,
+    ship_query: Query<(Entity, &Transform), With<Ship>>,
+    ai_ship_query: Query<&AiShipState, With<AiShip>>,
+    trail_query: Query<&NoiseTrailPoint>,
+    creature_grid: Res<CreatureGrid>,
+    corpse_grid: Res<CorpseGrid>,
+    noise_trail_grid: Res<NoiseTrailGrid>,
+    ai_ship_grid: Res<AiShipGrid>,
     noise_state: Option<Res<NoiseState>>,
     eco_config: Res<EcosystemConfig>,
 ) {
-    let sub_info = sub_query.iter().next();
+    let ship_info = ship_query.iter().next();
     let noise_level = noise_state.map(|n| n.noise_level).unwrap_or(0.0);
-
-    // Collect creature data to avoid borrow conflicts
-    let creature_data: Vec<(Entity, Vec2, f32, CreatureType, f32, f32)> = creatures
-        .iter()
-        .map(|(e, t, c, _ai, needs, _, _)| {
-            (e, t.translation.truncate(), c.detection_range, c.creature_type, c.health / c.max_health, needs.hunger)
-        })
-        .collect();
 
     // For each creature, build perception and decide
     for (entity, transform, creature, mut ai, needs, role, territory) in creatures.iter_mut() {
@@ -84,20 +84,22 @@ pub fn ecosystem_ai_decisions(
             nearest_prey_creature: None,
             nearest_threat: None,
             nearest_corpse: None,
-            sub_distance: None,
-            nearest_ai_sub: None,
+            ship_distance: None,
+            nearest_ai_ship: None,
             noise_trail: None,
         };
 
-        // Check other creatures
-        for &(other_entity, other_pos, _, other_type, _, _) in &creature_data {
+        // Check other creatures (spatial grid narrows candidates to nearby cells)
+        for (other_entity, other_pos) in creature_grid.0.nearby(pos, range * 1.5) {
             if other_entity == entity {
                 continue;
             }
+            let Ok((_, other_creature)) = other_creatures.get(other_entity) else { continue };
             let dist = pos.distance(other_pos);
             if dist > range * 1.5 {
                 continue;
             }
+            let other_type = other_creature.creature_type;
 
             // Is this a threat?
             if role.threat_types.contains(&other_type) {
@@ -115,27 +117,24 @@ pub fn ecosystem_ai_decisions(
         }
 
         // Check corpses
-        {
-            for (corpse_entity, corpse_transform, _corpse) in corpse_query.iter() {
-                let corpse_pos = corpse_transform.translation.truncate();
-                let dist = pos.distance(corpse_pos);
-                if dist < range * 1.5 {
-                    if perception.nearest_corpse.map_or(true, |(_, d, _)| dist < d) {
-                        perception.nearest_corpse = Some((corpse_entity, dist, corpse_pos));
-                    }
+        for (corpse_entity, corpse_pos) in corpse_grid.0.nearby(pos, range * 1.5) {
+            let dist = pos.distance(corpse_pos);
+            if dist < range * 1.5 {
+                if perception.nearest_corpse.map_or(true, |(_, d, _)| dist < d) {
+                    perception.nearest_corpse = Some((corpse_entity, dist, corpse_pos));
                 }
             }
         }
 
-        // Check submarine
-        if role.attacks_submarine {
-            if let Some((sub_entity, sub_transform)) = sub_info {
-                let sub_pos = sub_transform.translation.truncate();
-                let dist = pos.distance(sub_pos);
+        // Check ship
+        if role.attacks_ship {
+            if let Some((ship_entity, ship_transform)) = ship_info {
+                let ship_pos = ship_transform.translation.truncate();
+                let dist = pos.distance(ship_pos);
 
-                // Territory bonus: +50% detection range if sub is in territory
+                // Territory bonus: +50% detection range if ship is in territory
                 let effective_range = if let Some(terr) = territory {
-                    if sub_pos.distance(terr.center) < terr.radius {
+                    if ship_pos.distance(terr.center) < terr.radius {
                         range * 1.5
                     } else {
                         range
@@ -145,22 +144,22 @@ pub fn ecosystem_ai_decisions(
                 };
 
                 if dist < effective_range {
-                    perception.sub_distance = Some((sub_entity, dist, sub_pos));
+                    perception.ship_distance = Some((ship_entity, dist, ship_pos));
                 }
             }
         }
 
-        // Check AI submarines
-        if role.attacks_submarine {
-            for (ai_entity, ai_transform, ai_state) in ai_sub_query.iter() {
+        // Check AI ships
+        if role.attacks_ship {
+            for (ai_entity, ai_pos) in ai_ship_grid.0.nearby(pos, range) {
+                let Ok(ai_state) = ai_ship_query.get(ai_entity) else { continue };
                 if ai_state.is_destroyed {
                     continue;
                 }
-                let ai_pos = ai_transform.translation.truncate();
                 let dist = pos.distance(ai_pos);
                 if dist < range {
-                    if perception.nearest_ai_sub.map_or(true, |(_, d, _)| dist < d) {
-                        perception.nearest_ai_sub = Some((ai_entity, dist, ai_pos));
+                    if perception.nearest_ai_ship.map_or(true, |(_, d, _)| dist < d) {
+                        perception.nearest_ai_ship = Some((ai_entity, dist, ai_pos));
                     }
                 }
             }
@@ -172,8 +171,8 @@ pub fn ecosystem_ai_decisions(
             _ => range,
         };
         let mut best_trail: Option<(Vec2, f32)> = None;
-        for (trail_transform, trail_point) in trail_query.iter() {
-            let trail_pos = trail_transform.translation.truncate();
+        for (trail_entity, trail_pos) in noise_trail_grid.0.nearby(pos, trail_range) {
+            let Ok(trail_point) = trail_query.get(trail_entity) else { continue };
             let dist = pos.distance(trail_pos);
             if dist < trail_range {
                 if best_trail.map_or(true, |(_, intensity)| trail_point.intensity > intensity) {
@@ -201,7 +200,7 @@ pub fn ecosystem_ai_decisions(
         {
             let flee_target = perception
                 .nearest_threat
-                .or(perception.sub_distance)
+                .or(perception.ship_distance)
                 .map(|(_, _, p)| EcoTarget::Position(pos + (pos - p).normalize_or_zero() * 300.0));
             actions.push(ScoredAction {
                 score: 100.0,
@@ -225,12 +224,12 @@ pub fn ecosystem_ai_decisions(
         if let Some(current_target) = &ai.target {
             let in_range = match current_target {
                 EcoTarget::Creature(e) => {
-                    other_creatures.get(*e).ok().map(|(_, t, _)| {
+                    other_creatures.get(*e).ok().map(|(t, _)| {
                         pos.distance(t.translation.truncate()) < 80.0
                     }).unwrap_or(false)
                 }
-                EcoTarget::Submarine(e) => {
-                    sub_query.get(*e).ok().map(|(_, t)| {
+                EcoTarget::Ship(e) => {
+                    ship_query.get(*e).ok().map(|(_, t)| {
                         pos.distance(t.translation.truncate()) < 100.0
                     }).unwrap_or(false)
                 }
@@ -273,25 +272,25 @@ pub fn ecosystem_ai_decisions(
             }
         }
 
-        // 6. Hunt submarine
-        if let Some((sub_e, _, _)) = perception.sub_distance {
-            if needs.hunger > eco_config.hunt_hunger_threshold && role.attacks_submarine {
+        // 6. Hunt ship
+        if let Some((ship_e, _, _)) = perception.ship_distance {
+            if needs.hunger > eco_config.hunt_hunger_threshold && role.attacks_ship {
                 let noise_factor = (noise_level / 100.0).clamp(0.1, 1.0);
                 actions.push(ScoredAction {
                     score: 60.0 * hunger_pct * noise_factor,
                     state: CreatureAIState::Hunting,
-                    target: Some(EcoTarget::Submarine(sub_e)),
+                    target: Some(EcoTarget::Ship(ship_e)),
                 });
             }
         }
 
-        // 6b. Hunt AI submarine (slightly lower priority than player sub)
-        if let Some((ai_sub_e, _, _)) = perception.nearest_ai_sub {
-            if needs.hunger > eco_config.hunt_hunger_threshold && role.attacks_submarine {
+        // 6b. Hunt AI ship (slightly lower priority than player ship)
+        if let Some((ai_ship_e, _, _)) = perception.nearest_ai_ship {
+            if needs.hunger > eco_config.hunt_hunger_threshold && role.attacks_ship {
                 actions.push(ScoredAction {
                     score: 55.0 * hunger_pct,
                     state: CreatureAIState::Hunting,
-                    target: Some(EcoTarget::AiSubmarine(ai_sub_e)),
+                    target: Some(EcoTarget::AiShip(ai_ship_e)),
                 });
             }
         }
@@ -311,13 +310,14 @@ pub fn ecosystem_ai_decisions(
         // 8. Defend territory
         if let Some(terr) = territory {
             // Check for intruders
-            for &(other_entity, other_pos, _, other_type, _, _) in &creature_data {
+            for (other_entity, other_pos) in creature_grid.0.nearby(terr.center, terr.radius) {
                 if other_entity == entity {
                     continue;
                 }
+                let Ok((_, other_creature)) = other_creatures.get(other_entity) else { continue };
                 if other_pos.distance(terr.center) < terr.radius {
                     // Same or lower tier intruder
-                    let other_role = food_chain::food_chain_role(other_type);
+                    let other_role = food_chain::food_chain_role(other_creature.creature_type);
                     if other_role.tier as u8 >= role.tier as u8 || other_role.tier == FoodChainTier::Prey {
                         actions.push(ScoredAction {
                             score: 45.0 * terr.aggression,
@@ -330,12 +330,12 @@ pub fn ecosystem_ai_decisions(
             }
 
             // Sub in territory
-            if let Some((sub_e, _, sub_pos)) = perception.sub_distance {
-                if sub_pos.distance(terr.center) < terr.radius {
+            if let Some((ship_e, _, ship_pos)) = perception.ship_distance {
+                if ship_pos.distance(terr.center) < terr.radius {
                     actions.push(ScoredAction {
                         score: 45.0 * terr.aggression,
                         state: CreatureAIState::Hunting,
-                        target: Some(EcoTarget::Submarine(sub_e)),
+                        target: Some(EcoTarget::Ship(ship_e)),
                     });
                 }
             }
@@ -379,9 +379,9 @@ pub fn feeding_system(
     mut creatures: Query<(Entity, &CreatureAI, &mut CreatureNeeds, &Creature)>,
     mut corpses: Query<(Entity, &mut Corpse)>,
     mut commands: Commands,
-    mut ate_corpse_events: EventWriter<CreatureAteCorpse>,
+    mut ate_corpse_events: MessageWriter<CreatureAteCorpse>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
     for (creature_entity, ai, mut needs, creature) in creatures.iter_mut() {
         if ai.state != CreatureAIState::Feeding {
             continue;
@@ -394,8 +394,8 @@ pub fn feeding_system(
                 needs.hunger = (needs.hunger - actual * 2.0).max(0.0);
 
                 if corpse.food_remaining <= 0.0 {
-                    commands.entity(corpse_entity).despawn_recursive();
-                    ate_corpse_events.send(CreatureAteCorpse {
+                    commands.entity(corpse_entity).despawn();
+                    ate_corpse_events.write(CreatureAteCorpse {
                         creature: creature_entity,
                         creature_type: creature.creature_type,
                         corpse_type: corpse.creature_type,
@@ -411,7 +411,7 @@ pub fn reproduction_system(
     time: Res<Time>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
+    mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     mut creatures: Query<(
         &Transform,
         &Creature,
@@ -421,7 +421,7 @@ pub fn reproduction_system(
     eco_state: Res<EcosystemState>,
     eco_config: Res<EcosystemConfig>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
     let total: u32 = eco_state.population_counts.values().sum();
 
     for (transform, creature, needs, mut repro) in creatures.iter_mut() {
@@ -483,11 +483,11 @@ pub fn reproduction_system(
                 let texture: Handle<Image> = asset_server.load(
                     sprite_map::creature_sprite_path(creature.creature_type)
                 );
-                let atlas = TextureAtlas::from_grid(
-                    texture,
-                    Vec2::new(frame_w as f32, frame_h as f32),
+                let layout = TextureAtlasLayout::from_grid(
+                    UVec2::new(frame_w, frame_h),
                     total_frames, 1, None, None,
                 );
+                let layout_handle = texture_atlas_layouts.add(layout);
 
                 // Offspring are visually smaller
                 let offspring_scale = 0.5;
@@ -499,19 +499,18 @@ pub fn reproduction_system(
                 };
 
                 let mut entity_commands = commands.spawn((
-                    SpriteSheetBundle {
-                        texture_atlas: texture_atlases.add(atlas),
-                        sprite: TextureAtlasSprite {
-                            index: 0,
+                    (Sprite {
+                            image: texture,
                             custom_size: Some(Vec2::new(
                                 base_w * offspring_scale,
                                 base_h * offspring_scale,
                             )),
+                            texture_atlas: Some(TextureAtlas {
+                                layout: layout_handle,
+                                index: 0,
+                            }),
                             ..default()
-                        },
-                        transform: Transform::from_translation(spawn_pos.extend(5.0)),
-                        ..default()
-                    },
+                        }, Transform::from_translation(spawn_pos.extend(5.0))),
                     Creature {
                         creature_type: creature.creature_type,
                         health: offspring_health,
@@ -569,24 +568,34 @@ pub fn reproduction_system(
     }
 }
 
-/// Track population counts and detect cascades
+/// Track population counts and detect cascades.
+///
+/// The population-count rebuild only runs when the creature population
+/// actually changed this frame (a spawn or despawn), via `Added<Creature>`
+/// and `RemovedComponents<Creature>` — instead of rescanning every creature
+/// every single frame regardless of whether anything changed.
 pub fn population_balance(
     time: Res<Time>,
     creature_query: Query<&Creature>,
+    added_creatures: Query<Entity, Added<Creature>>,
+    mut removed_creatures: RemovedComponents<Creature>,
     mut eco_state: ResMut<EcosystemState>,
     eco_config: Res<EcosystemConfig>,
-    mut cascade_events: EventWriter<EcosystemCascade>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut cascade_events: MessageWriter<EcosystemCascade>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
-    eco_state.total_elapsed += time.delta_seconds();
+    eco_state.total_elapsed += time.delta_secs();
 
-    // Rebuild population counts
-    eco_state.population_counts.clear();
-    for creature in creature_query.iter() {
-        *eco_state
-            .population_counts
-            .entry(creature.creature_type)
-            .or_insert(0) += 1;
+    // Rebuild population counts only when the population actually changed
+    let population_changed = !added_creatures.is_empty() || removed_creatures.read().count() > 0;
+    if population_changed {
+        eco_state.population_counts.clear();
+        for creature in creature_query.iter() {
+            *eco_state
+                .population_counts
+                .entry(creature.creature_type)
+                .or_insert(0) += 1;
+        }
     }
 
     // Clean old kill records
@@ -617,11 +626,11 @@ pub fn population_balance(
 
         if predator_kills >= eco_config.cascade_kill_count as usize {
             if let Some(last_kill) = player_kills_recent.last() {
-                cascade_events.send(EcosystemCascade {
+                cascade_events.write(EcosystemCascade {
                     cascade_type: CascadeType::ScavengerSwarm,
                     position: last_kill.position,
                 });
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: "The scavengers are swarming... your kills have drawn attention!"
                         .to_string(),
                     notification_type: crate::events::NotificationType::Warning,
@@ -640,7 +649,7 @@ pub fn starvation_system(
     mut creatures: Query<(&mut Creature, &CreatureNeeds)>,
     eco_config: Res<EcosystemConfig>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
     for (mut creature, needs) in creatures.iter_mut() {
         if needs.hunger > eco_config.starve_hunger_threshold {
             creature.health -= eco_config.starvation_damage * dt;
@@ -652,10 +661,10 @@ pub fn starvation_system(
 pub fn update_creature_memory(
     time: Res<Time>,
     mut creatures: Query<(&Transform, &CreatureAI, &mut CreatureMemory)>,
-    sub_query: Query<&Transform, With<Submarine>>,
+    ship_query: Query<&Transform, With<Ship>>,
 ) {
-    let dt = time.delta_seconds();
-    let sub_pos = sub_query.iter().next().map(|t| t.translation.truncate());
+    let dt = time.delta_secs();
+    let ship_pos = ship_query.iter().next().map(|t| t.translation.truncate());
 
     for (transform, ai, mut memory) in creatures.iter_mut() {
         let pos = transform.translation.truncate();
@@ -671,19 +680,19 @@ pub fn update_creature_memory(
         }
         memory.food_locations.retain(|l| l.1 > 0.0);
 
-        // Update last seen submarine position
+        // Update last seen ship position
         if let Some(target) = &ai.target {
-            if matches!(target, EcoTarget::Submarine(_) | EcoTarget::AiSubmarine(_)) {
-                if let Some(sp) = sub_pos {
-                    memory.last_seen_sub = Some((sp, 30.0));
+            if matches!(target, EcoTarget::Ship(_) | EcoTarget::AiShip(_)) {
+                if let Some(sp) = ship_pos {
+                    memory.last_seen_ship = Some((sp, 30.0));
                 }
             }
         }
 
-        if let Some(ref mut sub_mem) = memory.last_seen_sub {
-            sub_mem.1 -= dt;
-            if sub_mem.1 <= 0.0 {
-                memory.last_seen_sub = None;
+        if let Some(ref mut ship_mem) = memory.last_seen_ship {
+            ship_mem.1 -= dt;
+            if ship_mem.1 <= 0.0 {
+                memory.last_seen_ship = None;
             }
         }
 
@@ -691,7 +700,7 @@ pub fn update_creature_memory(
         if ai.state == CreatureAIState::Fleeing {
             if let Some(target) = &ai.target {
                 let threat_pos = match target {
-                    EcoTarget::Creature(_) | EcoTarget::Submarine(_) | EcoTarget::AiSubmarine(_) => Some(pos),
+                    EcoTarget::Creature(_) | EcoTarget::Ship(_) | EcoTarget::AiShip(_) => Some(pos),
                     EcoTarget::Position(p) => {
                         // Fleeing toward a position means danger is behind us
                         let flee_dir = (*p - pos).normalize_or_zero();

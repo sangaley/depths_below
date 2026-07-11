@@ -7,7 +7,7 @@ pub fn update_territories(
     time: Res<Time>,
     mut creatures: Query<(&mut Territory, &CreatureMemory)>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
     for (mut territory, memory) in creatures.iter_mut() {
         if memory.food_locations.is_empty() {
             continue;

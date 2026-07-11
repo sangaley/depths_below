@@ -28,19 +28,19 @@ pub struct ParameterDef {
     pub step: f32,
 }
 
-/// A sub-component slot that can be swapped between types.
-/// This is Tier 2 — picking which sub-component goes in each slot.
+/// A ship-component slot that can be swapped between types.
+/// This is Tier 2 — picking which ship-component goes in each slot.
 #[derive(Clone, Debug)]
 pub struct SubComponentSlotDef {
     pub slot_name: String,
     pub description: String,
-    /// Available sub-component types for this slot
+    /// Available ship-component types for this slot
     pub options: Vec<SubComponentOption>,
     /// Index of the default option
     pub default_option: usize,
 }
 
-/// One option for a sub-component slot
+/// One option for a ship-component slot
 #[derive(Clone, Debug)]
 pub struct SubComponentOption {
     pub name: String,

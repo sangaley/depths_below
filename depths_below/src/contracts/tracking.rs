@@ -1,8 +1,9 @@
 use bevy::prelude::*;
 
-use crate::components::{CargoHold, Module, ModuleType, ZoneType};
+use crate::components::{CargoHold, Module, ModuleType, Ship, ZoneType};
 use crate::events::*;
 use crate::resources::{Currency, DepthState, Inventory};
+use crate::world::home_base;
 use super::{ContractObjective, ContractState, ContractStatus, FactionReputation};
 
 // ============================================================================
@@ -11,9 +12,9 @@ use super::{ContractObjective, ContractState, ContractStatus, FactionReputation}
 
 pub fn track_kill_contracts(
     mut state: ResMut<ContractState>,
-    mut kills: EventReader<CreatureKilled>,
+    mut kills: MessageReader<CreatureKilled>,
 ) {
-    for event in kills.iter() {
+    for event in kills.read() {
         for contract in state.active_contracts.iter_mut() {
             if contract.status != ContractStatus::Active { continue; }
             if let ContractObjective::Kill { creature_type, current_count, .. } = &mut contract.objective {
@@ -26,14 +27,35 @@ pub fn track_kill_contracts(
 }
 
 // ============================================================================
+// DESTROY-SHIP TRACKING
+// ============================================================================
+
+pub fn track_destroy_ship_contracts(
+    mut state: ResMut<ContractState>,
+    mut destroyed: MessageReader<AiShipDestroyed>,
+) {
+    for event in destroyed.read() {
+        let Some(bounty_id) = event.bounty_id else { continue };
+        for contract in state.active_contracts.iter_mut() {
+            if contract.status != ContractStatus::Active { continue; }
+            if let ContractObjective::DestroyShip { target_id, destroyed, .. } = &mut contract.objective {
+                if *target_id == bounty_id {
+                    *destroyed = true;
+                }
+            }
+        }
+    }
+}
+
+// ============================================================================
 // POI TRACKING
 // ============================================================================
 
 pub fn track_poi_contracts(
     mut state: ResMut<ContractState>,
-    mut discoveries: EventReader<PoiDiscovered>,
+    mut discoveries: MessageReader<PoiDiscovered>,
 ) {
-    for event in discoveries.iter() {
+    for event in discoveries.read() {
         for contract in state.active_contracts.iter_mut() {
             if contract.status != ContractStatus::Active { continue; }
             if let ContractObjective::ExplorePoi { poi_type, discovered } = &mut contract.objective {
@@ -103,7 +125,7 @@ pub fn track_survey_contracts(
         if contract.status != ContractStatus::Active { continue; }
         if let ContractObjective::SurveyZone { zone: target_zone, elapsed_seconds, .. } = &mut contract.objective {
             if zone == *target_zone {
-                *elapsed_seconds += time.delta_seconds();
+                *elapsed_seconds += time.delta_secs();
             }
         }
     }
@@ -140,16 +162,16 @@ pub fn track_capture_contracts(
 
 pub fn check_contract_completion(
     mut state: ResMut<ContractState>,
-    mut completed_events: EventWriter<ContractCompleted>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut completed_events: MessageWriter<ContractCompleted>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     for contract in state.active_contracts.iter_mut() {
         if contract.status != ContractStatus::Active { continue; }
         if contract.is_objective_complete() {
             contract.status = ContractStatus::Completed;
-            completed_events.send(ContractCompleted { contract_id: contract.id });
-            notifications.send(ShowNotification {
-                message: format!("Contract complete: {}! Return to station.", contract.title),
+            completed_events.write(ContractCompleted { contract_id: contract.id });
+            notifications.write(ShowNotification {
+                message: format!("Contract complete: {}! Claim it at any station (F).", contract.title),
                 notification_type: NotificationType::Success,
                 duration: 5.0,
             });
@@ -158,15 +180,17 @@ pub fn check_contract_completion(
 }
 
 // ============================================================================
-// TURN IN (on entering StationDocked)
+// TURN IN — claimable at any station, not just the one that offered it
 // ============================================================================
 
-pub fn turn_in_contracts(
-    mut state: ResMut<ContractState>,
-    mut rep: ResMut<FactionReputation>,
-    mut currency: ResMut<Currency>,
-    mut turned_in_events: EventWriter<ContractTurnedIn>,
-    mut notifications: EventWriter<ShowNotification>,
+/// Pays out every completed active contract. Shared by the automatic
+/// Haven-docking turn-in and the proximity-based turn-in at any station.
+fn turn_in_active(
+    state: &mut ContractState,
+    rep: &mut FactionReputation,
+    currency: &mut Currency,
+    turned_in_events: &mut MessageWriter<ContractTurnedIn>,
+    notifications: &mut MessageWriter<ShowNotification>,
 ) {
     let mut completed_count = 0u32;
 
@@ -178,12 +202,12 @@ pub fn turn_in_contracts(
         rep.add(&contract.faction, rep_gain);
         contract.status = ContractStatus::TurnedIn;
 
-        turned_in_events.send(ContractTurnedIn {
+        turned_in_events.write(ContractTurnedIn {
             contract_id: contract.id,
             reward: contract.reward,
             faction: contract.faction,
         });
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: format!(
                 "{} contract turned in! +{}c, +{:.0} {} rep",
                 contract.title, contract.reward, rep_gain, contract.faction.name()
@@ -199,6 +223,39 @@ pub fn turn_in_contracts(
     state.active_contracts.retain(|c| c.status != ContractStatus::TurnedIn);
 }
 
+/// Docking at Haven always settles up any completed bounties.
+pub fn turn_in_contracts(
+    mut state: ResMut<ContractState>,
+    mut rep: ResMut<FactionReputation>,
+    mut currency: ResMut<Currency>,
+    mut turned_in_events: MessageWriter<ContractTurnedIn>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    turn_in_active(&mut state, &mut rep, &mut currency, &mut turned_in_events, &mut notifications);
+}
+
+/// Flying near any station (Haven or an outpost) and pressing F claims
+/// completed contracts too — you don't need to fly all the way back to
+/// wherever a bounty happened to be posted to collect it.
+pub fn turn_in_at_station_proximity(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    ship_query: Query<&Transform, With<Ship>>,
+    mut state: ResMut<ContractState>,
+    mut rep: ResMut<FactionReputation>,
+    mut currency: ResMut<Currency>,
+    mut turned_in_events: MessageWriter<ContractTurnedIn>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    if !keyboard.just_pressed(KeyCode::KeyF) { return; }
+    if !state.active_contracts.iter().any(|c| c.status == ContractStatus::Completed) { return; }
+
+    let Ok(transform) = ship_query.single() else { return };
+    let pos = transform.translation.truncate();
+    if home_base::nearest_station_index(pos).is_none() { return; }
+
+    turn_in_active(&mut state, &mut rep, &mut currency, &mut turned_in_events, &mut notifications);
+}
+
 // ============================================================================
 // FAILURE (on entering GameOver)
 // ============================================================================
@@ -206,8 +263,8 @@ pub fn turn_in_contracts(
 pub fn handle_contract_failure(
     mut state: ResMut<ContractState>,
     mut currency: ResMut<Currency>,
-    mut failed_events: EventWriter<ContractFailed>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut failed_events: MessageWriter<ContractFailed>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     let mut failed_count = 0u32;
 
@@ -219,20 +276,20 @@ pub fn handle_contract_failure(
 
         if contract.deposit > 0 {
             currency.credits = currency.credits.saturating_sub(contract.deposit);
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("Contract failed: {}. Lost {}c deposit.", contract.title, contract.deposit),
                 notification_type: NotificationType::Danger,
                 duration: 5.0,
             });
         } else {
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("Contract failed: {}.", contract.title),
                 notification_type: NotificationType::Warning,
                 duration: 3.0,
             });
         }
 
-        failed_events.send(ContractFailed { contract_id: contract.id });
+        failed_events.write(ContractFailed { contract_id: contract.id });
     }
 
     state.contracts_failed_total += failed_count;

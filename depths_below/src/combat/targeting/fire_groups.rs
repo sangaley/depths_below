@@ -27,43 +27,47 @@ pub struct FireGroupState {
     pub firing: [bool; 4],
 }
 
-/// System: read 1-4 keys, set fire group state
+/// System: read fire inputs, set fire group state.
+/// Space or left-click fires everything (matching the "Space: Fire" HUD
+/// hint); 1-4 fire individual groups for players who assign them.
 pub fn fire_group_input(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
     mut state: ResMut<FireGroupState>,
 ) {
-    state.firing[0] = keyboard.pressed(KeyCode::Key1);
-    state.firing[1] = keyboard.pressed(KeyCode::Key2);
-    state.firing[2] = keyboard.pressed(KeyCode::Key3);
-    state.firing[3] = keyboard.pressed(KeyCode::Key4);
+    let fire_all = keyboard.pressed(KeyCode::Space) || mouse.pressed(MouseButton::Left);
+    state.firing[0] = keyboard.pressed(KeyCode::Digit1) || fire_all;
+    state.firing[1] = keyboard.pressed(KeyCode::Digit2) || fire_all;
+    state.firing[2] = keyboard.pressed(KeyCode::Digit3) || fire_all;
+    state.firing[3] = keyboard.pressed(KeyCode::Digit4) || fire_all;
 }
 
 /// System: assign fire groups during build mode with Ctrl+1-4
 pub fn assign_fire_group(
-    keyboard: Res<Input<KeyCode>>,
-    _mouse: Res<Input<MouseButton>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    _mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
     occupancy: Res<crate::building::GridOccupancy>,
     mut weapon_query: Query<(Entity, &Module, &mut FireGroup), With<Weapon>>,
-    mut notifications: EventWriter<crate::events::ShowNotification>,
+    mut notifications: MessageWriter<crate::events::ShowNotification>,
 ) {
     let ctrl = keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
     if !ctrl { return; }
 
-    let group = if keyboard.just_pressed(KeyCode::Key1) { Some(0) }
-        else if keyboard.just_pressed(KeyCode::Key2) { Some(1) }
-        else if keyboard.just_pressed(KeyCode::Key3) { Some(2) }
-        else if keyboard.just_pressed(KeyCode::Key4) { Some(3) }
+    let group = if keyboard.just_pressed(KeyCode::Digit1) { Some(0) }
+        else if keyboard.just_pressed(KeyCode::Digit2) { Some(1) }
+        else if keyboard.just_pressed(KeyCode::Digit3) { Some(2) }
+        else if keyboard.just_pressed(KeyCode::Digit4) { Some(3) }
         else { None };
 
     let Some(group) = group else { return };
 
     // Find weapon under cursor
-    let Ok(window) = windows.get_single() else { return };
-    let Ok((camera, cam_transform)) = camera_query.get_single() else { return };
+    let Ok(window) = windows.single() else { return };
+    let Ok((camera, cam_transform)) = camera_query.single() else { return };
     let Some(cursor) = window.cursor_position()
-        .and_then(|p| camera.viewport_to_world_2d(cam_transform, p))
+        .and_then(|p| camera.viewport_to_world_2d(cam_transform, p).ok())
     else { return };
 
     let grid_pos = IVec2::new(
@@ -74,7 +78,7 @@ pub fn assign_fire_group(
     if let Some(&entity) = occupancy.cells.get(&grid_pos) {
         if let Ok((_, module, mut fire_group)) = weapon_query.get_mut(entity) {
             fire_group.group = group;
-            notifications.send(crate::events::ShowNotification {
+            notifications.write(crate::events::ShowNotification {
                 message: format!("{} assigned to Fire Group {}", module.module_type.name(), group + 1),
                 notification_type: crate::events::NotificationType::Info,
                 duration: 2.0,

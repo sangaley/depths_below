@@ -31,21 +31,21 @@ impl Plugin for CelestialPlugin {
             .init_resource::<resources::GalaxyState>()
             .init_resource::<resources::CelestialConfig>()
             // Events
-            .add_event::<events::RadiationFlare>()
-            .add_event::<events::StarDestroyed>()
-            .add_event::<events::PlanetConsumed>()
-            .add_event::<events::BodyConsumed>()
-            .add_event::<events::GravityWarning>()
-            .add_event::<events::SupernovaShockwave>()
-            .add_event::<events::WarpJumpStarted>()
-            .add_event::<events::WarpJumpCompleted>()
+            .add_message::<events::RadiationFlare>()
+            .add_message::<events::StarDestroyed>()
+            .add_message::<events::PlanetConsumed>()
+            .add_message::<events::BodyConsumed>()
+            .add_message::<events::GravityWarning>()
+            .add_message::<events::SupernovaShockwave>()
+            .add_message::<events::WarpJumpStarted>()
+            .add_message::<events::WarpJumpCompleted>()
             // System set ordering
-            .configure_set(Update, CelestialSet::Orbits.run_if(in_state(GameState::Exploring)))
-            .configure_set(Update, CelestialSet::Gravity.after(CelestialSet::Orbits).run_if(in_state(GameState::Exploring)))
-            .configure_set(Update, CelestialSet::Forces.after(CelestialSet::Gravity).run_if(in_state(GameState::Exploring)))
-            .configure_set(Update, CelestialSet::StarLogic.after(CelestialSet::Forces).run_if(in_state(GameState::Exploring)))
-            .configure_set(Update, CelestialSet::BlackHoles.after(CelestialSet::StarLogic).run_if(in_state(GameState::Exploring)))
-            .configure_set(Update, CelestialSet::Cleanup.after(CelestialSet::BlackHoles).run_if(in_state(GameState::Exploring)))
+            .configure_sets(Update, CelestialSet::Orbits.run_if(in_state(GameState::Exploring)))
+            .configure_sets(Update, CelestialSet::Gravity.after(CelestialSet::Orbits).run_if(in_state(GameState::Exploring)))
+            .configure_sets(Update, CelestialSet::Forces.after(CelestialSet::Gravity).run_if(in_state(GameState::Exploring)))
+            .configure_sets(Update, CelestialSet::StarLogic.after(CelestialSet::Forces).run_if(in_state(GameState::Exploring)))
+            .configure_sets(Update, CelestialSet::BlackHoles.after(CelestialSet::StarLogic).run_if(in_state(GameState::Exploring)))
+            .configure_sets(Update, CelestialSet::Cleanup.after(CelestialSet::BlackHoles).run_if(in_state(GameState::Exploring)))
             // Orbital mechanics
             .add_systems(Update, (
                 orbits::update_orbital_positions,
@@ -58,12 +58,16 @@ impl Plugin for CelestialPlugin {
             // Force application
             .add_systems(Update, (
                 gravity::apply_gravity_to_velocity,
-                gravity::apply_gravity_to_submarine,
+                gravity::apply_gravity_to_ship,
             ).in_set(CelestialSet::Forces))
             // Star logic
+            // stars::star_flare_buildup / apply_flare_radiation removed —
+            // radiation mechanic disabled per request. (Their damage events
+            // were already routed to a dead end: process_ship_damage skips
+            // any DamageSource::Radiation event, having been written for the
+            // old check_radiation_damage's direct-application model — so
+            // this only ever cost a misleading "radiation spike" warning.)
             .add_systems(Update, (
-                stars::star_flare_buildup,
-                stars::apply_flare_radiation.after(stars::star_flare_buildup),
                 stars::star_death_check,
                 stars::apply_supernova_damage,
                 orbits::destabilize_orbits.after(stars::star_death_check),
@@ -98,7 +102,13 @@ fn spawn_initial_system(
         return;
     }
 
-    let center = Vec2::new(0.0, -5000.0); // Below the station start area
+    // Far below-right of the station start area. Star radii run 40k-150k and
+    // their color/gravity influence extends to 4x that — the old center of
+    // (0, -5000) put the starting station INSIDE the star's body, washing
+    // the whole starting area in the star's warm tint (and rendering the
+    // station on top of the star sprite). Distance is progression: the sun
+    // is a destination, not a spawn point.
+    let center = Vec2::new(200_000.0, -450_000.0);
     let system_id = galaxy.next_system_id;
     galaxy.next_system_id += 1;
 

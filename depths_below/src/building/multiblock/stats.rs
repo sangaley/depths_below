@@ -47,7 +47,7 @@ fn weapon_block_contributions() -> BlockContribution {
 /// Runs after connection detection.
 pub fn calculate_machine_stats(
     mut core_query: Query<(Entity, &Module, &MachineBlock, &mut MachineStats)>,
-    weapon_query: Query<&Weapon>,
+    base_stats_query: Query<&BaseWeaponStats>,
     customization_query: Query<&ModuleCustomization>,
     _block_query: Query<(&MachineBlock, Option<&ModuleCustomization>)>,
 ) {
@@ -58,12 +58,16 @@ pub fn calculate_machine_stats(
             continue;
         }
 
-        // Get base weapon stats from the Weapon component (set by registry)
-        let base = if let Ok(weapon) = weapon_query.get(entity) {
+        // Base stats come from the spawn-time snapshot, never from the live
+        // Weapon component — see BaseWeaponStats docs for why (this used to
+        // read weapon.range here, which apply_machine_stats_to_weapons had
+        // just overwritten with *last frame's* output, compounding every
+        // frame toward zero).
+        let base = if let Ok(base_stats) = base_stats_query.get(entity) {
             CoreBaseStats {
-                damage: weapon.damage,
-                range: weapon.range,
-                fire_rate: weapon.fire_rate,
+                damage: base_stats.damage,
+                range: base_stats.range,
+                fire_rate: base_stats.fire_rate,
                 heat_per_shot: 10.0,
                 accuracy: 0.7,
             }

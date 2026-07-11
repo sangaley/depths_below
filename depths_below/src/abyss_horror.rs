@@ -6,7 +6,7 @@ use crate::components::*;
 use crate::creatures::ecosystem::ecosystem_ai_decisions;
 use crate::events::{NotificationType, ShowNotification};
 use crate::resources::*;
-use crate::sonar::{update_sonar_radar, SonarBlip, SonarRadarDisplay};
+use crate::radar::{update_radar, RadarBlip, RadarDisplay};
 use crate::states::GameState;
 use crate::ui::{update_hud, update_hud_secondary, DepthText, HullText, NoiseText, OxygenText, PowerText};
 
@@ -29,7 +29,7 @@ pub struct AbyssalHorror {
     // Physics distortion
     pub drift_direction: Vec2,
     pub drift_strength: f32,
-    pub buoyancy_distortion: f32,
+    pub gravity_distortion: f32,
     // Glitch state
     pub glitch_active: bool,
     pub glitch_remaining: f32,
@@ -51,7 +51,7 @@ impl Default for AbyssalHorror {
             camera_pulse_timer: Timer::from_seconds(3.0, TimerMode::Repeating),
             drift_direction: Vec2::ZERO,
             drift_strength: 0.0,
-            buoyancy_distortion: 1.0,
+            gravity_distortion: 1.0,
             glitch_active: false,
             glitch_remaining: 0.0,
             time_frozen: false,
@@ -78,7 +78,7 @@ impl Plugin for AbyssHorrorPlugin {
                     horror_time_glitch,
                     restore_time_glitch,
                     restore_creature_behavior,
-                    spawn_phantom_sonar_blips.after(update_sonar_radar),
+                    spawn_phantom_radar_blips.after(update_radar),
                     update_phantom_blips,
                     horror_instrument_glitch
                         .after(update_hud)
@@ -104,17 +104,21 @@ fn update_horror_intensity(
 ) {
     let depth = depth_state.current_depth;
 
-    // Calculate phase and intensity from depth
-    let (phase, intensity) = if depth < 500.0 {
+    // Calculate phase and intensity from distance — rescaled for space
+    // distances (old submarine thresholds made the HUD start glitching
+    // "ERR"/"Time feels wrong" a few seconds from the starting station).
+    // Horror now begins past the Asteroid Belt ring and peaks in the
+    // Black Hole ring, matching the zone progression.
+    let (phase, intensity) = if depth < 8000.0 {
         (0, 0.0)
-    } else if depth < 1000.0 {
-        (1, (depth - 500.0) / 500.0 * 0.25)
-    } else if depth < 1500.0 {
-        (2, 0.25 + (depth - 1000.0) / 500.0 * 0.25)
-    } else if depth < 2000.0 {
-        (3, 0.5 + (depth - 1500.0) / 500.0 * 0.25)
+    } else if depth < 15000.0 {
+        (1, (depth - 8000.0) / 7000.0 * 0.25)
+    } else if depth < 22000.0 {
+        (2, 0.25 + (depth - 15000.0) / 7000.0 * 0.25)
+    } else if depth < 30000.0 {
+        (3, 0.5 + (depth - 22000.0) / 8000.0 * 0.25)
     } else {
-        (4, (0.75 + (depth - 2000.0) / 1000.0 * 0.25).min(1.0))
+        (4, (0.75 + (depth - 30000.0) / 15000.0 * 0.25).min(1.0))
     };
 
     horror.intensity = intensity;
@@ -133,7 +137,7 @@ fn update_horror_intensity(
     }
 
     // Update drift direction slowly (rotating sine)
-    let t = time.elapsed_seconds();
+    let t = time.elapsed_secs();
     horror.drift_direction = Vec2::new(
         (t * 0.1).sin(),
         (t * 0.07).cos(),
@@ -147,8 +151,8 @@ fn update_horror_intensity(
         _ => 12.0 + intensity * 6.0,
     };
 
-    // Buoyancy distortion at phase 4
-    horror.buoyancy_distortion = if phase >= 4 {
+    // Gravity distortion at phase 4
+    horror.gravity_distortion = if phase >= 4 {
         let osc = (t * 0.3).sin();
         // Oscillates between 0.7 and -0.3
         0.2 + osc * 0.5
@@ -160,7 +164,7 @@ fn update_horror_intensity(
 
     // Tick glitch remaining time
     if horror.glitch_active {
-        horror.glitch_remaining -= time.delta_seconds();
+        horror.glitch_remaining -= time.delta_secs();
         if horror.glitch_remaining <= 0.0 {
             horror.glitch_active = false;
         }
@@ -174,7 +178,7 @@ fn update_horror_intensity(
 fn horror_creature_watching(
     time: Res<Time>,
     mut horror: ResMut<AbyssalHorror>,
-    sub_query: Query<Entity, With<Submarine>>,
+    ship_query: Query<Entity, With<Ship>>,
     mut creatures: Query<(Entity, &Creature, &mut CreatureAI, Option<&AbyssalInfluence>)>,
     mut commands: Commands,
 ) {
@@ -183,7 +187,7 @@ fn horror_creature_watching(
     horror.watching_check_timer.tick(time.delta());
     if !horror.watching_check_timer.just_finished() { return; }
 
-    let Ok(sub_entity) = sub_query.get_single() else { return; };
+    let Ok(ship_entity) = ship_query.single() else { return; };
     let mut rng = rand::thread_rng();
 
     for (entity, creature, mut ai, influence) in creatures.iter_mut() {
@@ -202,7 +206,7 @@ fn horror_creature_watching(
         // Save original state and switch to watching
         let original_state = ai.state;
         ai.state = CreatureAIState::Observing;
-        ai.target = Some(EcoTarget::Submarine(sub_entity));
+        ai.target = Some(EcoTarget::Ship(ship_entity));
 
         commands.entity(entity).insert(AbyssalInfluence {
             watching: true,
@@ -217,17 +221,17 @@ fn horror_creature_watching(
 
 fn enforce_abyssal_watching(
     horror: Res<AbyssalHorror>,
-    sub_query: Query<Entity, With<Submarine>>,
+    ship_query: Query<Entity, With<Ship>>,
     mut creatures: Query<(&mut CreatureAI, &AbyssalInfluence)>,
 ) {
     if horror.phase < 2 { return; }
 
-    let Ok(sub_entity) = sub_query.get_single() else { return; };
+    let Ok(ship_entity) = ship_query.single() else { return; };
 
     for (mut ai, influence) in creatures.iter_mut() {
         if influence.watching {
             ai.state = CreatureAIState::Observing;
-            ai.target = Some(EcoTarget::Submarine(sub_entity));
+            ai.target = Some(EcoTarget::Ship(ship_entity));
         }
     }
 }
@@ -242,7 +246,7 @@ fn horror_synchronized_flee(
     mut creatures: Query<(Entity, &Transform, &mut CreatureAI, Option<&AbyssalInfluence>)>,
     mut commands: Commands,
     mut camera_state: ResMut<CameraState>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     if horror.phase < 3 { return; }
 
@@ -289,7 +293,7 @@ fn horror_synchronized_flee(
             "They sense something below...",
             "A presence stirs beneath you...",
         ];
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: messages[rng.gen_range(0..messages.len())].to_string(),
             notification_type: NotificationType::Danger,
             duration: 4.0,
@@ -304,11 +308,11 @@ fn horror_synchronized_flee(
 fn horror_time_glitch(
     time: Res<Time>,
     mut horror: ResMut<AbyssalHorror>,
-    mut creatures: Query<(Entity, &mut Velocity), (With<Creature>, Without<Submarine>)>,
-    mut sub_query: Query<(Entity, &mut Velocity), With<Submarine>>,
+    mut creatures: Query<(Entity, &mut Velocity), (With<Creature>, Without<Ship>)>,
+    mut ship_query: Query<(Entity, &mut Velocity), With<Ship>>,
     mut commands: Commands,
     mut camera_state: ResMut<CameraState>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     if horror.phase < 4 { return; }
     if horror.time_frozen { return; }
@@ -329,8 +333,8 @@ fn horror_time_glitch(
         });
     }
 
-    // Freeze submarine
-    if let Ok((entity, mut velocity)) = sub_query.get_single_mut() {
+    // Freeze ship
+    if let Ok((entity, mut velocity)) = ship_query.single_mut() {
         let saved = velocity.0;
         velocity.0 = Vec2::ZERO;
         commands.entity(entity).insert(TimeGlitchFrozen {
@@ -350,7 +354,7 @@ fn horror_time_glitch(
         "Reality stuttered.",
         "The deep holds time still.",
     ];
-    notifications.send(ShowNotification {
+    notifications.write(ShowNotification {
         message: messages[rng.gen_range(0..messages.len())].to_string(),
         notification_type: NotificationType::Danger,
         duration: 3.0,
@@ -372,7 +376,7 @@ fn restore_time_glitch(
     let mut any_frozen = false;
     for (entity, mut velocity, mut frozen) in frozen_query.iter_mut() {
         frozen.duration.tick(time.delta());
-        if frozen.duration.finished() {
+        if frozen.duration.is_finished() {
             velocity.0 = frozen.saved_velocity;
             commands.entity(entity).remove::<TimeGlitchFrozen>();
         } else {
@@ -407,7 +411,7 @@ fn restore_creature_behavior(
     // Tick synchronized flee durations and restore
     for (entity, mut sync, mut ai) in sync_creatures.iter_mut() {
         sync.duration.tick(time.delta());
-        if sync.duration.finished() {
+        if sync.duration.is_finished() {
             ai.state = CreatureAIState::Wandering;
             ai.target = None;
             commands.entity(entity).remove::<SynchronizedFlee>();
@@ -419,10 +423,10 @@ fn restore_creature_behavior(
 // SYSTEM 7: SPAWN PHANTOM SONAR BLIPS
 // ============================================================================
 
-fn spawn_phantom_sonar_blips(
+fn spawn_phantom_radar_blips(
     time: Res<Time>,
     mut horror: ResMut<AbyssalHorror>,
-    radar_query: Query<Entity, With<SonarRadarDisplay>>,
+    radar_query: Query<Entity, With<RadarDisplay>>,
     mut commands: Commands,
 ) {
     if horror.phase < 1 { return; }
@@ -430,7 +434,7 @@ fn spawn_phantom_sonar_blips(
     horror.phantom_blip_timer.tick(time.delta());
     if !horror.phantom_blip_timer.just_finished() { return; }
 
-    let Ok(radar_entity) = radar_query.get_single() else { return; };
+    let Ok(radar_entity) = radar_query.single() else { return; };
 
     let mut rng = rand::thread_rng();
 
@@ -464,9 +468,9 @@ fn spawn_phantom_sonar_blips(
 
         // Color based on phase — phase 2+ can show fake red (leviathan-sized) blips
         let (color, size) = if horror.phase >= 2 && rng.gen::<f32>() < 0.3 {
-            (Color::rgba(1.0, 0.2, 0.2, 0.8), 7.0) // fake leviathan blip
+            (Color::srgba(1.0, 0.2, 0.2, 0.8), 7.0) // fake leviathan blip
         } else {
-            (Color::rgba(1.0, 1.0, 0.3, 0.7), 4.0) // normal-looking blip
+            (Color::srgba(1.0, 1.0, 0.3, 0.7), 4.0) // normal-looking blip
         };
 
         let lifetime = rng.gen_range(3.0..6.0);
@@ -477,23 +481,19 @@ fn spawn_phantom_sonar_blips(
 
         let blip_entity = commands
             .spawn((
-                NodeBundle {
-                    style: Style {
+                (Node {
                         position_type: PositionType::Absolute,
                         left: Val::Px(radar_size + x - size / 2.0),
                         top: Val::Px(radar_size - y - size / 2.0),
                         width: Val::Px(size),
                         height: Val::Px(size),
                         ..default()
-                    },
-                    background_color: color.into(),
-                    ..default()
-                },
+                    }, BackgroundColor(color)),
                 PhantomBlip {
                     lifetime: Timer::from_seconds(lifetime, TimerMode::Once),
                     drift,
                 },
-                SonarBlip {
+                RadarBlip {
                     lifetime: Timer::from_seconds(lifetime, TimerMode::Once),
                 },
             ))
@@ -510,19 +510,19 @@ fn spawn_phantom_sonar_blips(
 fn update_phantom_blips(
     time: Res<Time>,
     horror: Res<AbyssalHorror>,
-    mut blips: Query<(Entity, &mut PhantomBlip, &mut Style)>,
+    mut blips: Query<(Entity, &mut PhantomBlip, &mut Node)>,
     mut commands: Commands,
 ) {
     for (entity, mut phantom, mut style) in blips.iter_mut() {
         phantom.lifetime.tick(time.delta());
 
-        if phantom.lifetime.finished() {
-            commands.entity(entity).despawn_recursive();
+        if phantom.lifetime.is_finished() {
+            commands.entity(entity).despawn();
             continue;
         }
 
         // Apply drift
-        let dt = time.delta_seconds();
+        let dt = time.delta_secs();
         if let Val::Px(ref mut left) = style.left {
             *left += phantom.drift.x * dt;
         }
@@ -532,7 +532,7 @@ fn update_phantom_blips(
 
         // Phase 3+ pulse effect (scale oscillation via width/height)
         if horror.phase >= 3 {
-            let t = time.elapsed_seconds();
+            let t = time.elapsed_secs();
             let pulse = 1.0 + (t * 4.0).sin() * 0.3;
             let base_size = 4.0;
             style.width = Val::Px(base_size * pulse);
@@ -548,11 +548,11 @@ fn update_phantom_blips(
 fn horror_instrument_glitch(
     time: Res<Time>,
     mut horror: ResMut<AbyssalHorror>,
-    mut depth_query: Query<&mut Text, (With<DepthText>, Without<PowerText>, Without<OxygenText>, Without<HullText>, Without<NoiseText>)>,
-    mut hull_query: Query<&mut Text, (With<HullText>, Without<DepthText>, Without<PowerText>, Without<OxygenText>, Without<NoiseText>)>,
-    mut oxygen_query: Query<&mut Text, (With<OxygenText>, Without<DepthText>, Without<PowerText>, Without<HullText>, Without<NoiseText>)>,
-    mut power_query: Query<&mut Text, (With<PowerText>, Without<DepthText>, Without<OxygenText>, Without<HullText>, Without<NoiseText>)>,
-    mut noise_query: Query<&mut Text, (With<NoiseText>, Without<DepthText>, Without<PowerText>, Without<OxygenText>, Without<HullText>)>,
+    mut depth_query: Query<(&mut Text, &mut TextColor), (With<DepthText>, Without<PowerText>, Without<OxygenText>, Without<HullText>, Without<NoiseText>)>,
+    mut hull_query: Query<(&mut Text, &mut TextColor), (With<HullText>, Without<DepthText>, Without<PowerText>, Without<OxygenText>, Without<NoiseText>)>,
+    mut oxygen_query: Query<(&mut Text, &mut TextColor), (With<OxygenText>, Without<DepthText>, Without<PowerText>, Without<HullText>, Without<NoiseText>)>,
+    mut power_query: Query<(&mut Text, &mut TextColor), (With<PowerText>, Without<DepthText>, Without<OxygenText>, Without<HullText>, Without<NoiseText>)>,
+    mut noise_query: Query<(&mut Text, &mut TextColor), (With<NoiseText>, Without<DepthText>, Without<PowerText>, Without<OxygenText>, Without<HullText>)>,
 ) {
     if horror.phase < 1 { return; }
 
@@ -563,50 +563,50 @@ fn horror_instrument_glitch(
         match horror.phase {
             1 => {
                 // Subtle: depth flickers
-                if let Ok(mut text) = depth_query.get_single_mut() {
+                if let Ok((mut text, _)) = depth_query.single_mut() {
                     let fake_depth = rng.gen_range(100.0..3000.0);
-                    text.sections[0].value = format!("Depth: {:.0}m", fake_depth);
+                    text.0 = format!("Dist: {:.0}m", fake_depth);
                 }
             }
             2 => {
                 // Moderate: oxygen false alarm, depth jumps
-                if let Ok(mut text) = oxygen_query.get_single_mut() {
+                if let Ok((mut text, mut text_color)) = oxygen_query.single_mut() {
                     if rng.gen::<f32>() < 0.5 {
-                        text.sections[0].value = "O2: 0%".to_string();
-                        text.sections[0].style.color = Color::RED;
+                        text.0 = "O2: 0%".to_string();
+                        text_color.0 = Color::srgb(1.0, 0.0, 0.0);
                     }
                 }
-                if let Ok(mut text) = depth_query.get_single_mut() {
+                if let Ok((mut text, _)) = depth_query.single_mut() {
                     let fake = rng.gen_range(0.0..5000.0);
-                    text.sections[0].value = format!("Depth: {:.0}m", fake);
+                    text.0 = format!("Dist: {:.0}m", fake);
                 }
-                if let Ok(mut text) = noise_query.get_single_mut() {
-                    text.sections[0].value = "Noise: MAX".to_string();
-                    text.sections[0].style.color = Color::RED;
+                if let Ok((mut text, mut text_color)) = noise_query.single_mut() {
+                    text.0 = "Noise: MAX".to_string();
+                    text_color.0 = Color::srgb(1.0, 0.0, 0.0);
                 }
             }
             _ => {
                 // Severe: all instruments scramble
                 let glitch_strings = ["???", "ERR", "---", "NaN", "∞", "0.0̸̡"];
-                if let Ok(mut text) = depth_query.get_single_mut() {
-                    text.sections[0].value = format!("Depth: {}", glitch_strings[rng.gen_range(0..glitch_strings.len())]);
-                    text.sections[0].style.color = Color::rgba(1.0, 0.3, 0.3, 0.8);
+                if let Ok((mut text, mut text_color)) = depth_query.single_mut() {
+                    text.0 = format!("Dist: {}", glitch_strings[rng.gen_range(0..glitch_strings.len())]);
+                    text_color.0 = Color::srgba(1.0, 0.3, 0.3, 0.8);
                 }
-                if let Ok(mut text) = hull_query.get_single_mut() {
-                    text.sections[0].value = format!("Hull: {}", glitch_strings[rng.gen_range(0..glitch_strings.len())]);
-                    text.sections[0].style.color = Color::rgba(1.0, 0.3, 0.3, 0.8);
+                if let Ok((mut text, mut text_color)) = hull_query.single_mut() {
+                    text.0 = format!("Hull: {}", glitch_strings[rng.gen_range(0..glitch_strings.len())]);
+                    text_color.0 = Color::srgba(1.0, 0.3, 0.3, 0.8);
                 }
-                if let Ok(mut text) = oxygen_query.get_single_mut() {
-                    text.sections[0].value = format!("O2: {}", glitch_strings[rng.gen_range(0..glitch_strings.len())]);
-                    text.sections[0].style.color = Color::rgba(1.0, 0.3, 0.3, 0.8);
+                if let Ok((mut text, mut text_color)) = oxygen_query.single_mut() {
+                    text.0 = format!("O2: {}", glitch_strings[rng.gen_range(0..glitch_strings.len())]);
+                    text_color.0 = Color::srgba(1.0, 0.3, 0.3, 0.8);
                 }
-                if let Ok(mut text) = power_query.get_single_mut() {
-                    text.sections[0].value = format!("Power: {}", glitch_strings[rng.gen_range(0..glitch_strings.len())]);
-                    text.sections[0].style.color = Color::rgba(1.0, 0.3, 0.3, 0.8);
+                if let Ok((mut text, mut text_color)) = power_query.single_mut() {
+                    text.0 = format!("Power: {}", glitch_strings[rng.gen_range(0..glitch_strings.len())]);
+                    text_color.0 = Color::srgba(1.0, 0.3, 0.3, 0.8);
                 }
-                if let Ok(mut text) = noise_query.get_single_mut() {
-                    text.sections[0].value = format!("Noise: {}", glitch_strings[rng.gen_range(0..glitch_strings.len())]);
-                    text.sections[0].style.color = Color::rgba(1.0, 0.3, 0.3, 0.8);
+                if let Ok((mut text, mut text_color)) = noise_query.single_mut() {
+                    text.0 = format!("Noise: {}", glitch_strings[rng.gen_range(0..glitch_strings.len())]);
+                    text_color.0 = Color::srgba(1.0, 0.3, 0.3, 0.8);
                 }
             }
         }
@@ -638,12 +638,12 @@ fn horror_instrument_glitch(
 fn apply_physics_distortion(
     time: Res<Time>,
     horror: Res<AbyssalHorror>,
-    mut sub_query: Query<&mut Velocity, With<Submarine>>,
+    mut ship_query: Query<&mut Velocity, With<Ship>>,
 ) {
     if horror.phase < 2 { return; }
 
-    let Ok(mut velocity) = sub_query.get_single_mut() else { return; };
-    let dt = time.delta_seconds();
+    let Ok(mut velocity) = ship_query.single_mut() else { return; };
+    let dt = time.delta_secs();
 
     // Apply phantom drift
     velocity.0 += horror.drift_direction * horror.drift_strength * dt;
@@ -660,7 +660,7 @@ fn apply_horror_camera_effects(
 ) {
     if horror.phase < 1 { return; }
 
-    let t = time.elapsed_seconds();
+    let t = time.elapsed_secs();
 
     match horror.phase {
         1 => {
@@ -672,7 +672,7 @@ fn apply_horror_camera_effects(
         2 => {
             // Slow zoom drift
             let zoom_offset = (t * 0.3).sin() * 0.05;
-            camera_state.zoom = (camera_state.zoom + zoom_offset * time.delta_seconds()).clamp(
+            camera_state.zoom = (camera_state.zoom + zoom_offset * time.delta_secs()).clamp(
                 camera_state.min_zoom,
                 camera_state.max_zoom,
             );
@@ -685,7 +685,7 @@ fn apply_horror_camera_effects(
             // Heartbeat pulse
             horror.camera_pulse_timer.duration(); // just reference to keep consistent
             let pulse = ((t * 1.5).sin() * 0.5 + 0.5).powf(4.0); // sharp pulses
-            camera_state.zoom = (camera_state.zoom - pulse * 0.03 * time.delta_seconds()).clamp(
+            camera_state.zoom = (camera_state.zoom - pulse * 0.03 * time.delta_secs()).clamp(
                 camera_state.min_zoom,
                 camera_state.max_zoom,
             );
@@ -699,7 +699,7 @@ fn apply_horror_camera_effects(
             camera_state.shake_intensity = camera_state.shake_intensity.max(1.0 + horror.intensity);
 
             let zoom_chaos = (t * 0.7).sin() * 0.03 + (t * 1.3).cos() * 0.02;
-            camera_state.zoom = (camera_state.zoom + zoom_chaos * time.delta_seconds()).clamp(
+            camera_state.zoom = (camera_state.zoom + zoom_chaos * time.delta_secs()).clamp(
                 camera_state.min_zoom,
                 camera_state.max_zoom,
             );
@@ -718,32 +718,32 @@ fn apply_horror_background_tint(
 ) {
     if horror.phase < 2 { return; }
 
-    let t = time.elapsed_seconds();
+    let t = time.elapsed_secs();
     let color = &mut clear_color.0;
 
     match horror.phase {
         2 => {
             // Slight sickly green/purple tint
-            let r = (color.r() - 0.005).max(0.0);
-            let g = color.g();
-            let b = (color.b() + 0.008).min(0.15);
-            *color = Color::rgb(r, g, b);
+            let r = (color.to_srgba().red - 0.005).max(0.0);
+            let g = color.to_srgba().green;
+            let b = (color.to_srgba().blue + 0.008).min(0.15);
+            *color = Color::srgb(r, g, b);
         }
         3 => {
             // Pulsing dark red undertone
             let pulse = ((t * 0.5).sin() * 0.5 + 0.5) * 0.02;
-            let r = (color.r() + pulse).min(0.08);
-            let g = (color.g() - 0.002).max(0.0);
-            let b = color.b();
-            *color = Color::rgb(r, g, b);
+            let r = (color.to_srgba().red + pulse).min(0.08);
+            let g = (color.to_srgba().green - 0.002).max(0.0);
+            let b = color.to_srgba().blue;
+            *color = Color::srgb(r, g, b);
         }
         _ => {
             // Phase 4: occasional crimson flash
             let flash = ((t * 0.2).sin() * 0.5 + 0.5).powf(8.0);
-            let r = (color.r() + flash * 0.05).min(0.1);
-            let g = (color.g() * 0.98).max(0.0);
-            let b = (color.b() * 0.98).max(0.0);
-            *color = Color::rgb(r, g, b);
+            let r = (color.to_srgba().red + flash * 0.05).min(0.1);
+            let g = (color.to_srgba().green * 0.98).max(0.0);
+            let b = (color.to_srgba().blue * 0.98).max(0.0);
+            *color = Color::srgb(r, g, b);
         }
     }
 }
@@ -755,7 +755,7 @@ fn apply_horror_background_tint(
 fn horror_notifications(
     time: Res<Time>,
     mut horror: ResMut<AbyssalHorror>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     if horror.phase < 1 { return; }
 
@@ -766,7 +766,7 @@ fn horror_notifications(
 
     let messages: &[&str] = match horror.phase {
         1 => &[
-            "The sonar seems... off.",
+            "The radar seems... off.",
             "Was that shadow always there?",
             "A faint echo, from nowhere.",
             "The pressure feels wrong.",
@@ -802,7 +802,7 @@ fn horror_notifications(
         NotificationType::Warning
     };
 
-    notifications.send(ShowNotification {
+    notifications.write(ShowNotification {
         message: message.to_string(),
         notification_type: notif_type,
         duration: 4.0,

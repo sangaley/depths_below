@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use rand::Rng;
-use crate::components::Submarine;
-use crate::events::{SubmarineDamaged, DamageSource, ShowNotification, NotificationType};
+use crate::components::Ship;
+use crate::events::{ShipDamaged, DamageSource, ShowNotification, NotificationType};
 use super::components::*;
 use super::resources::*;
 use super::events::*;
@@ -12,10 +12,10 @@ pub fn star_flare_buildup(
     time: Res<Time>,
     config: Res<CelestialConfig>,
     mut star_query: Query<(Entity, &Transform, &mut Star, &CelestialBody)>,
-    mut flare_events: EventWriter<RadiationFlare>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut flare_events: MessageWriter<RadiationFlare>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
     let mut rng = rand::thread_rng();
 
     for (entity, transform, mut star, body) in star_query.iter_mut() {
@@ -36,14 +36,14 @@ pub fn star_flare_buildup(
             let intensity = star.size_class.flare_intensity_multiplier();
             let flare_radius = body.radius * 3.0 + intensity * 10_000.0;
 
-            flare_events.send(RadiationFlare {
+            flare_events.write(RadiationFlare {
                 star: entity,
                 intensity,
                 position: transform.translation.truncate(),
                 radius: flare_radius,
             });
 
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("SOLAR FLARE from {}! Radiation spike!", body.name),
                 notification_type: NotificationType::Danger,
                 duration: 4.0,
@@ -53,29 +53,29 @@ pub fn star_flare_buildup(
 }
 
 /// Apply radiation flare damage to ship if in range.
-/// Uses existing radiation damage pipeline via SubmarineDamaged events.
+/// Uses existing radiation damage pipeline via ShipDamaged events.
 pub fn apply_flare_radiation(
     time: Res<Time>,
     config: Res<CelestialConfig>,
-    mut flare_events: EventReader<RadiationFlare>,
-    sub_query: Query<&Transform, With<Submarine>>,
-    mut damage_events: EventWriter<SubmarineDamaged>,
+    mut flare_events: MessageReader<RadiationFlare>,
+    ship_query: Query<&Transform, With<Ship>>,
+    mut damage_events: MessageWriter<ShipDamaged>,
 ) {
-    let Ok(sub_transform) = sub_query.get_single() else { return };
-    let sub_pos = sub_transform.translation.truncate();
+    let Ok(ship_transform) = ship_query.single() else { return };
+    let ship_pos = ship_transform.translation.truncate();
 
-    for flare in flare_events.iter() {
-        let dist = sub_pos.distance(flare.position);
+    for flare in flare_events.read() {
+        let dist = ship_pos.distance(flare.position);
         if dist > flare.radius {
             continue;
         }
 
         // Damage falls off with distance from star
         let proximity = 1.0 - (dist / flare.radius).clamp(0.0, 1.0);
-        let damage = flare.intensity * config.flare_radiation_multiplier * proximity * time.delta_seconds();
+        let damage = flare.intensity * config.flare_radiation_multiplier * proximity * time.delta_secs();
 
         if damage > 0.1 {
-            damage_events.send(SubmarineDamaged {
+            damage_events.write(ShipDamaged {
                 source: DamageSource::Radiation,
                 amount: damage,
                 position: None,
@@ -91,14 +91,14 @@ pub fn star_death_check(
     time: Res<Time>,
     mut commands: Commands,
     mut star_query: Query<(Entity, &Transform, &mut Star, &mut CelestialBody)>,
-    mut destroyed_events: EventWriter<StarDestroyed>,
+    mut destroyed_events: MessageWriter<StarDestroyed>,
     orbit_query: Query<(Entity, &OrbitalPath)>,
     mut galaxy: ResMut<GalaxyState>,
     config: Res<CelestialConfig>,
-    mut notifications: EventWriter<ShowNotification>,
-    mut shockwave_events: EventWriter<SupernovaShockwave>,
+    mut notifications: MessageWriter<ShowNotification>,
+    mut shockwave_events: MessageWriter<SupernovaShockwave>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
 
     for (entity, transform, mut star, mut body) in star_query.iter_mut() {
         if !star.is_dying {
@@ -121,14 +121,14 @@ pub fn star_death_check(
                 .map(|(e, _)| e)
                 .collect();
 
-            destroyed_events.send(StarDestroyed {
+            destroyed_events.write(StarDestroyed {
                 star: entity,
                 position: pos,
                 supernova_radius: config.star_death_supernova_radius,
                 freed_planets: freed,
             });
 
-            shockwave_events.send(SupernovaShockwave {
+            shockwave_events.write(SupernovaShockwave {
                 origin: pos,
                 damage: config.supernova_damage,
                 radius: config.star_death_supernova_radius,
@@ -160,7 +160,7 @@ pub fn star_death_check(
                     falloff: GravityFalloff::BlackHole,
                 });
 
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: "SUPERNOVA! A black hole has formed!".into(),
                 notification_type: NotificationType::Danger,
                 duration: 6.0,
@@ -171,16 +171,16 @@ pub fn star_death_check(
 
 /// Apply supernova shockwave damage to ship
 pub fn apply_supernova_damage(
-    mut shockwave_events: EventReader<SupernovaShockwave>,
-    sub_query: Query<&Transform, With<Submarine>>,
-    mut damage_events: EventWriter<SubmarineDamaged>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut shockwave_events: MessageReader<SupernovaShockwave>,
+    ship_query: Query<&Transform, With<Ship>>,
+    mut damage_events: MessageWriter<ShipDamaged>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
-    let Ok(sub_transform) = sub_query.get_single() else { return };
-    let sub_pos = sub_transform.translation.truncate();
+    let Ok(ship_transform) = ship_query.single() else { return };
+    let ship_pos = ship_transform.translation.truncate();
 
-    for shockwave in shockwave_events.iter() {
-        let dist = sub_pos.distance(shockwave.origin);
+    for shockwave in shockwave_events.read() {
+        let dist = ship_pos.distance(shockwave.origin);
         if dist > shockwave.radius {
             continue;
         }
@@ -188,14 +188,14 @@ pub fn apply_supernova_damage(
         let proximity = 1.0 - (dist / shockwave.radius).clamp(0.0, 1.0);
         let damage = shockwave.damage * proximity;
 
-        damage_events.send(SubmarineDamaged {
+        damage_events.write(ShipDamaged {
             source: DamageSource::Radiation,
             amount: damage,
             position: Some(shockwave.origin),
-            direction: Some((sub_pos - shockwave.origin).normalize_or_zero()),
+            direction: Some((ship_pos - shockwave.origin).normalize_or_zero()),
         });
 
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: format!("Supernova shockwave! {:.0} damage!", damage),
             notification_type: NotificationType::Danger,
             duration: 4.0,

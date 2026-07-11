@@ -11,21 +11,21 @@ use super::*;
 
 /// Toggle intercept mode on a weapon during build mode
 pub fn toggle_intercept_mode(
-    keyboard: Res<Input<KeyCode>>,
-    mouse: Res<Input<MouseButton>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
     occupancy: Res<crate::building::GridOccupancy>,
     mut commands: Commands,
     weapon_query: Query<(Entity, &Module, Option<&InterceptMode>), With<Weapon>>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
-    if !keyboard.pressed(KeyCode::I) || !mouse.just_pressed(MouseButton::Left) { return; }
+    if !keyboard.pressed(KeyCode::KeyI) || !mouse.just_pressed(MouseButton::Left) { return; }
 
-    let Ok(window) = windows.get_single() else { return };
-    let Ok((camera, cam_transform)) = camera_query.get_single() else { return };
+    let Ok(window) = windows.single() else { return };
+    let Ok((camera, cam_transform)) = camera_query.single() else { return };
     let Some(cursor) = window.cursor_position()
-        .and_then(|p| camera.viewport_to_world_2d(cam_transform, p))
+        .and_then(|p| camera.viewport_to_world_2d(cam_transform, p).ok())
     else { return };
 
     let grid_pos = IVec2::new(
@@ -37,14 +37,14 @@ pub fn toggle_intercept_mode(
         if let Ok((_, module, intercept)) = weapon_query.get(entity) {
             if intercept.is_some() {
                 commands.entity(entity).remove::<InterceptMode>();
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: format!("{}: Intercept mode OFF", module.module_type.name()),
                     notification_type: NotificationType::Info,
                     duration: 2.0,
                 });
             } else {
                 commands.entity(entity).insert(InterceptMode);
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: format!("{}: Intercept mode ON — will target incoming missiles", module.module_type.name()),
                     notification_type: NotificationType::Warning,
                     duration: 2.0,
@@ -57,21 +57,21 @@ pub fn toggle_intercept_mode(
 /// Intercept system: weapons in intercept mode auto-fire at incoming missiles
 pub fn intercept_missiles(
     time: Res<Time>,
-    sub_query: Query<&Transform, With<Submarine>>,
+    ship_query: Query<&Transform, With<Ship>>,
     mut intercept_weapons: Query<(
         &Module, &mut Weapon, &mut WeaponCooldown, &GlobalTransform,
     ), (With<InterceptMode>, Without<DestroyedModule>)>,
     missile_query: Query<(Entity, &Transform, &Velocity), With<MissileProjectile>>,
     mut commands: Commands,
 ) {
-    let Ok(sub_transform) = sub_query.get_single() else { return };
-    let sub_pos = sub_transform.translation.truncate();
+    let Ok(ship_transform) = ship_query.single() else { return };
+    let ship_pos = ship_transform.translation.truncate();
 
     // Find incoming missiles (heading toward the ship)
     let mut threats: Vec<(Entity, Vec2, f32)> = Vec::new();
     for (entity, transform, velocity) in missile_query.iter() {
         let missile_pos = transform.translation.truncate();
-        let to_ship = sub_pos - missile_pos;
+        let to_ship = ship_pos - missile_pos;
         let dist = to_ship.length();
 
         // Only track missiles heading roughly toward us within 800 units
@@ -91,7 +91,7 @@ pub fn intercept_missiles(
     for (module, mut weapon, mut cooldown, global_transform) in intercept_weapons.iter_mut() {
         if !module.is_active { continue; }
         cooldown.timer.tick(time.delta());
-        if !cooldown.timer.finished() { continue; }
+        if !cooldown.timer.is_finished() { continue; }
         if weapon.ammo <= 0 { continue; }
 
         let weapon_pos = global_transform.translation().truncate();
@@ -111,19 +111,15 @@ pub fn intercept_missiles(
         let angle = direction.y.atan2(direction.x);
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(0.3, 1.0, 0.5), // Green tracers for PD
+            (Sprite {
+                    color: Color::srgb(0.3, 1.0, 0.5), 
                     custom_size: Some(Vec2::new(6.0, 2.0)),
                     ..default()
-                },
-                transform: Transform {
+                }, Transform {
                     translation: Vec3::new(weapon_pos.x, weapon_pos.y, 0.5),
                     rotation: Quat::from_rotation_z(angle),
                     ..default()
-                },
-                ..default()
-            },
+                }),
             Projectile {
                 damage: weapon.damage * 0.5, // PD rounds do less damage but only need to hit missiles
                 speed: proj_speed,
@@ -138,20 +134,23 @@ pub fn intercept_missiles(
         ));
 
         // Muzzle flash
-        spawn_hit_effect(&mut commands, weapon_pos + direction * 20.0, Color::rgb(0.3, 0.9, 0.4), 6.0);
+        spawn_hit_effect(&mut commands, weapon_pos + direction * 20.0, Color::srgb(0.3, 0.9, 0.4), 6.0);
     }
 }
 
-/// Check if PD projectiles hit incoming missiles — destroy them
+/// Check if PD projectiles hit incoming missiles — destroy them.
+/// Uses the missile spatial grid to only distance-check missiles near each PD shot.
 pub fn pd_missile_collision(
     mut commands: Commands,
     proj_query: Query<(Entity, &Projectile, &Transform)>,
-    missile_query: Query<(Entity, &MissileProjectile, &Transform)>,
+    missile_query: Query<&Transform, With<MissileProjectile>>,
+    missile_grid: Res<crate::spatial::MissileGrid>,
 ) {
     for (proj_entity, _proj, proj_transform) in proj_query.iter() {
         let proj_pos = proj_transform.translation.truncate();
 
-        for (missile_entity, _missile, missile_transform) in missile_query.iter() {
+        for (missile_entity, _) in missile_grid.0.nearby(proj_pos, 20.0) {
+            let Ok(missile_transform) = missile_query.get(missile_entity) else { continue };
             let missile_pos = missile_transform.translation.truncate();
             let dist = proj_pos.distance(missile_pos);
 
@@ -161,7 +160,7 @@ pub fn pd_missile_collision(
                 commands.entity(proj_entity).despawn();
 
                 // Small explosion
-                spawn_hit_effect(&mut commands, missile_pos, Color::rgb(1.0, 0.6, 0.2), 15.0);
+                spawn_hit_effect(&mut commands, missile_pos, Color::srgb(1.0, 0.6, 0.2), 15.0);
                 break;
             }
         }

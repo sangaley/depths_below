@@ -12,7 +12,7 @@ pub fn update_orbital_positions(
     parent_query: Query<&Transform, (With<CelestialBody>, Without<OrbitalPath>)>,
     mut orbit_query: Query<(&OrbitalPath, &mut Transform), Without<FreeFlight>>,
 ) {
-    galaxy.galaxy_time += time.delta_seconds() as f64;
+    galaxy.galaxy_time += time.delta_secs() as f64;
     let t = galaxy.galaxy_time as f32;
 
     for (orbit, mut transform) in orbit_query.iter_mut() {
@@ -43,13 +43,13 @@ pub fn update_orbital_positions(
 /// Planets go flying!
 pub fn destabilize_orbits(
     mut commands: Commands,
-    mut star_destroyed_events: EventReader<StarDestroyed>,
+    mut star_destroyed_events: MessageReader<StarDestroyed>,
     orbit_query: Query<(Entity, &OrbitalPath, &Transform)>,
     _galaxy: Res<GalaxyState>,
     config: Res<CelestialConfig>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
-    for event in star_destroyed_events.iter() {
+    for event in star_destroyed_events.read() {
         let star_pos = event.position;
 
         for (entity, orbit, transform) in orbit_query.iter() {
@@ -78,7 +78,7 @@ pub fn destabilize_orbits(
                 .insert(FreeFlight { velocity });
         }
 
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: "STAR DESTROYED! Orbital bodies destabilized!".into(),
             notification_type: NotificationType::Danger,
             duration: 5.0,
@@ -91,7 +91,7 @@ pub fn update_free_flight(
     time: Res<Time>,
     mut query: Query<(&FreeFlight, &mut Transform)>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
     for (flight, mut transform) in query.iter_mut() {
         transform.translation.x += flight.velocity.x * dt;
         transform.translation.y += flight.velocity.y * dt;

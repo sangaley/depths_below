@@ -19,13 +19,13 @@ pub struct TemplateState {
 
 /// System: T cycles templates, Enter places them
 pub fn template_input(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut template_state: ResMut<TemplateState>,
     build_state: Res<BuildingState>,
     occupancy: Res<GridOccupancy>,
     currency: ResMut<Currency>,
-    mut place_events: EventWriter<PlaceModuleRequest>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut place_events: MessageWriter<PlaceModuleRequest>,
+    mut notifications: MessageWriter<ShowNotification>,
     current_build_state: Res<State<BuildState>>,
 ) {
     if *current_build_state.get() == BuildState::Inactive { return; }
@@ -34,7 +34,7 @@ pub fn template_input(
     if templates.is_empty() { return; }
 
     // T = cycle through templates
-    if keyboard.just_pressed(KeyCode::T) {
+    if keyboard.just_pressed(KeyCode::KeyT) {
         let next = match template_state.selected_index {
             Some(i) => {
                 if i + 1 >= templates.len() { None } else { Some(i + 1) }
@@ -45,13 +45,13 @@ pub fn template_input(
 
         if let Some(idx) = next {
             let t = &templates[idx];
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("Template: {} ({}c) — {}", t.name, t.total_cost, t.description),
                 notification_type: NotificationType::Info,
                 duration: 3.0,
             });
         } else {
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: "Templates off".into(),
                 notification_type: NotificationType::Info,
                 duration: 1.5,
@@ -60,7 +60,7 @@ pub fn template_input(
     }
 
     // Enter = place selected template at ghost position
-    if keyboard.just_pressed(KeyCode::Return) {
+    if keyboard.just_pressed(KeyCode::Enter) {
         let Some(idx) = template_state.selected_index else { return };
         let template = &templates[idx];
 
@@ -69,7 +69,7 @@ pub fn template_input(
 
         // Check affordability
         if currency.credits < template.total_cost {
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("Not enough credits! Need {}c", template.total_cost),
                 notification_type: NotificationType::Warning,
                 duration: 2.0,
@@ -86,7 +86,7 @@ pub fn template_input(
             });
 
         if !all_free {
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: "Cannot place template — positions occupied".into(),
                 notification_type: NotificationType::Warning,
                 duration: 2.0,
@@ -95,7 +95,7 @@ pub fn template_input(
         }
 
         // Place core
-        place_events.send(PlaceModuleRequest {
+        place_events.write(PlaceModuleRequest {
             module_type: template.core,
             grid_position: origin,
             rotation,
@@ -106,7 +106,7 @@ pub fn template_input(
 
         // Place extension blocks
         for (block_type, offset) in &template.blocks {
-            place_events.send(PlaceModuleRequest {
+            place_events.write(PlaceModuleRequest {
                 module_type: *block_type,
                 grid_position: origin + *offset,
                 rotation,
@@ -116,7 +116,7 @@ pub fn template_input(
             });
         }
 
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: format!("Placed {} (-{}c)", template.name, template.total_cost),
             notification_type: NotificationType::Success,
             duration: 2.0,

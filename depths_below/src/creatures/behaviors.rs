@@ -8,12 +8,12 @@ use crate::celestial::components::{CelestialBody, Planet, Star};
 /// Leviathans patrol between planets.
 pub fn gravity_aware_wandering(
     _time: Res<Time>,
-    sub_query: Query<&Transform, With<Submarine>>,
-    planet_query: Query<(&Transform, &CelestialBody), (With<Planet>, Without<Creature>, Without<Submarine>)>,
-    star_query: Query<(&Transform, &CelestialBody), (With<Star>, Without<Creature>, Without<Submarine>)>,
-    mut creature_query: Query<(&Transform, &Creature, &mut CreatureAI), Without<Submarine>>,
+    ship_query: Query<&Transform, With<Ship>>,
+    planet_query: Query<(&Transform, &CelestialBody), (With<Planet>, Without<Creature>, Without<Ship>)>,
+    star_query: Query<(&Transform, &CelestialBody), (With<Star>, Without<Creature>, Without<Ship>)>,
+    mut creature_query: Query<(&Transform, &Creature, &mut CreatureAI), Without<Ship>>,
 ) {
-    let sub_pos = sub_query.get_single()
+    let ship_pos = ship_query.single()
         .map(|t| t.translation.truncate())
         .unwrap_or(Vec2::ZERO);
 
@@ -56,13 +56,13 @@ pub fn gravity_aware_wandering(
             CreatureType::Stalker => {
                 // Position behind a planet/asteroid relative to the ship — ambush position
                 if let Some((planet_pos, planet_radius)) = planets.iter()
-                    .filter(|(p, _)| p.distance(pos) < 50_000.0 && p.distance(sub_pos) < 80_000.0)
+                    .filter(|(p, _)| p.distance(pos) < 50_000.0 && p.distance(ship_pos) < 80_000.0)
                     .min_by(|(a, _), (b, _)| {
                         a.distance(pos).partial_cmp(&b.distance(pos)).unwrap_or(std::cmp::Ordering::Equal)
                     })
                 {
                     // "Behind" = opposite side of planet from ship
-                    let planet_to_ship = (sub_pos - *planet_pos).normalize_or_zero();
+                    let planet_to_ship = (ship_pos - *planet_pos).normalize_or_zero();
                     let ambush_pos = *planet_pos - planet_to_ship * (*planet_radius * 1.5);
                     ai.home_position = ambush_pos;
                 }
@@ -91,10 +91,10 @@ pub fn gravity_aware_wandering(
             }
             CreatureType::ParasiteSwarm => {
                 // Attracted to ship energy — drift toward ship when wandering
-                let dist_to_ship = pos.distance(sub_pos);
+                let dist_to_ship = pos.distance(ship_pos);
                 if dist_to_ship < 1500.0 {
                     // Slowly drift toward ship
-                    let toward_ship = sub_pos + (pos - sub_pos).normalize_or_zero() * 500.0;
+                    let toward_ship = ship_pos + (pos - ship_pos).normalize_or_zero() * 500.0;
                     ai.home_position = toward_ship;
                 }
             }

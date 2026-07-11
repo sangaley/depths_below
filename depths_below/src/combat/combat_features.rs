@@ -25,13 +25,13 @@ pub fn weapon_heat_visual(
 
         // Tint all child sprites (the block visual layers)
         for child in children.iter() {
-            if let Ok(mut sprite) = sprite_query.get_mut(*child) {
+            if let Ok(mut sprite) = sprite_query.get_mut(child) {
                 // Blend heat color onto existing color
                 let base = sprite.color;
-                sprite.color = Color::rgb(
-                    (base.r() + heat_r * heat_alpha).min(1.0),
-                    (base.g() * (1.0 - heat_alpha) + heat_g * heat_alpha).max(0.0),
-                    (base.b() * (1.0 - heat_alpha)).max(0.0),
+                sprite.color = Color::srgb(
+                    (base.to_srgba().red + heat_r * heat_alpha).min(1.0),
+                    (base.to_srgba().green * (1.0 - heat_alpha) + heat_g * heat_alpha).max(0.0),
+                    (base.to_srgba().blue * (1.0 - heat_alpha)).max(0.0),
                 );
             }
         }
@@ -53,18 +53,18 @@ pub struct DamageDirectionArrow {
 /// System: spawn damage direction arrows when ship takes damage
 pub fn spawn_damage_indicators(
     mut commands: Commands,
-    mut damage_events: EventReader<SubmarineDamaged>,
-    sub_query: Query<&Transform, With<Submarine>>,
+    mut damage_events: MessageReader<ShipDamaged>,
+    ship_query: Query<&Transform, With<Ship>>,
 ) {
-    let Ok(sub_transform) = sub_query.get_single() else { return };
-    let sub_pos = sub_transform.translation.truncate();
+    let Ok(ship_transform) = ship_query.single() else { return };
+    let ship_pos = ship_transform.translation.truncate();
 
-    for event in damage_events.iter() {
+    for event in damage_events.read() {
         // Get damage direction
         let direction = if let Some(dir) = event.direction {
             dir
         } else if let Some(pos) = event.position {
-            (pos - sub_pos).normalize_or_zero()
+            (pos - ship_pos).normalize_or_zero()
         } else {
             continue; // No direction info
         };
@@ -77,23 +77,19 @@ pub fn spawn_damage_indicators(
         let arrow_pos = Vec2::new(angle.cos() * arrow_dist, angle.sin() * arrow_dist);
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgba(1.0, 0.2, 0.1, 0.8),
+            (Sprite {
+                    color: Color::srgba(1.0, 0.2, 0.1, 0.8),
                     custom_size: Some(Vec2::new(20.0, 8.0)),
                     ..default()
-                },
-                transform: Transform {
+                }, Transform {
                     translation: Vec3::new(
-                        sub_pos.x + arrow_pos.x,
-                        sub_pos.y + arrow_pos.y,
+                        ship_pos.x + arrow_pos.x,
+                        ship_pos.y + arrow_pos.y,
                         2.0,
                     ),
                     rotation: Quat::from_rotation_z(angle),
                     ..default()
-                },
-                ..default()
-            },
+                }),
             DamageDirectionArrow {
                 direction,
                 timer: 2.0,
@@ -107,11 +103,11 @@ pub fn spawn_damage_indicators(
 pub fn update_damage_indicators(
     mut commands: Commands,
     time: Res<Time>,
-    sub_query: Query<&Transform, With<Submarine>>,
-    mut arrow_query: Query<(Entity, &mut DamageDirectionArrow, &mut Transform, &mut Sprite), Without<Submarine>>,
+    ship_query: Query<&Transform, With<Ship>>,
+    mut arrow_query: Query<(Entity, &mut DamageDirectionArrow, &mut Transform, &mut Sprite), Without<Ship>>,
 ) {
-    let dt = time.delta_seconds();
-    let sub_pos = sub_query.get_single()
+    let dt = time.delta_secs();
+    let ship_pos = ship_query.single()
         .map(|t| t.translation.truncate())
         .unwrap_or(Vec2::ZERO);
 
@@ -125,13 +121,13 @@ pub fn update_damage_indicators(
 
         // Fade out
         let alpha = (arrow.timer / arrow.max_time).clamp(0.0, 1.0) * 0.8;
-        sprite.color.set_a(alpha);
+        sprite.color.set_alpha(alpha);
 
         // Keep arrow at fixed distance from ship
         let angle = arrow.direction.y.atan2(arrow.direction.x);
         let arrow_dist = 150.0;
-        transform.translation.x = sub_pos.x + angle.cos() * arrow_dist;
-        transform.translation.y = sub_pos.y + angle.sin() * arrow_dist;
+        transform.translation.x = ship_pos.x + angle.cos() * arrow_dist;
+        transform.translation.y = ship_pos.y + angle.sin() * arrow_dist;
     }
 }
 
@@ -168,15 +164,11 @@ pub fn attach_weak_points(
 
         // Visual indicator — glowing spot
         let visual = commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgba(1.0, 0.4, 0.2, 0.6),
+            (Sprite {
+                    color: Color::srgba(1.0, 0.4, 0.2, 0.6),
                     custom_size: Some(Vec2::splat(30.0)),
                     ..default()
-                },
-                transform: Transform::from_xyz(0.0, -60.0, 0.1), // Below center
-                ..default()
-            },
+                }, Transform::from_xyz(0.0, -60.0, 0.1)),
             WeakPointVisual,
         )).id();
 
@@ -201,7 +193,7 @@ pub fn update_weak_point_visuals(
         let wp_offset = Vec2::new(wp_angle.cos() * 60.0, wp_angle.sin() * 60.0);
 
         for child in children.iter() {
-            if let Ok(mut transform) = visual_query.get_mut(*child) {
+            if let Ok(mut transform) = visual_query.get_mut(child) {
                 transform.translation.x = wp_offset.x;
                 transform.translation.y = wp_offset.y;
             }
@@ -251,17 +243,17 @@ pub fn parasite_boarding(
     mut commands: Commands,
     parasite_query: Query<(Entity, &Transform, &Creature, &CreatureAI), Without<BoardedParasite>>,
     hull_query: Query<(&HullSegment, &GlobalTransform)>,
-    sub_query: Query<&Transform, With<Submarine>>,
+    ship_query: Query<&Transform, With<Ship>>,
     room_map: Res<RoomMap>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
     mut boarding_timer: Local<f32>,
     time: Res<Time>,
 ) {
-    *boarding_timer += time.delta_seconds();
+    *boarding_timer += time.delta_secs();
     if *boarding_timer < 2.0 { return; } // Check every 2 seconds
     *boarding_timer = 0.0;
 
-    let Ok(_sub_transform) = sub_query.get_single() else { return; };
+    let Ok(_ship_transform) = ship_query.single() else { return; };
 
     for (entity, transform, creature, _ai) in parasite_query.iter() {
         if creature.creature_type != CreatureType::ParasiteSwarm { continue; }
@@ -289,7 +281,7 @@ pub fn parasite_boarding(
                 // Make the parasite invisible (it's inside now)
                 commands.entity(entity).insert(Visibility::Hidden);
 
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: "BREACH! Parasites boarding the ship!".into(),
                     notification_type: NotificationType::Danger,
                     duration: 3.0,
@@ -306,10 +298,10 @@ pub fn boarded_parasite_damage(
     time: Res<Time>,
     mut parasite_query: Query<(Entity, &mut BoardedParasite)>,
     mut crew_query: Query<&mut CrewMember>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
     mut damage_timer: Local<f32>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
     *damage_timer += dt;
     if *damage_timer < 1.0 { return; }
     *damage_timer = 0.0;
@@ -336,7 +328,7 @@ pub fn boarded_parasite_damage(
         }
 
         if boarded_count >= 3 {
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("{} parasites inside! Crew taking damage!", boarded_count),
                 notification_type: NotificationType::Danger,
                 duration: 2.0,
@@ -351,7 +343,7 @@ pub fn crew_fights_boarders(
     mut commands: Commands,
     crew_query: Query<&CrewMember>,
     mut parasite_query: Query<(Entity, &mut BoardedParasite)>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     let repairing_crew = crew_query.iter()
         .filter(|c| c.state == CrewState::Repairing && c.health > 0.0)
@@ -359,13 +351,13 @@ pub fn crew_fights_boarders(
 
     if repairing_crew == 0 { return; }
 
-    let kill_rate = repairing_crew as f32 * 2.0 * time.delta_seconds();
+    let kill_rate = repairing_crew as f32 * 2.0 * time.delta_secs();
 
     for (entity, mut parasite) in parasite_query.iter_mut() {
         parasite.health -= kill_rate;
         if parasite.health <= 0.0 {
-            commands.entity(entity).despawn_recursive();
-            notifications.send(ShowNotification {
+            commands.entity(entity).despawn();
+            notifications.write(ShowNotification {
                 message: "Crew eliminated a boarded parasite!".into(),
                 notification_type: NotificationType::Success,
                 duration: 2.0,

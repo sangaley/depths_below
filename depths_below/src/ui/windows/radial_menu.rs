@@ -62,8 +62,7 @@ pub fn spawn_radial_menu(
     if option_count == 0 { return; }
 
     let menu = commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(center.x - RADIAL_OUTER_RADIUS),
                 top: Val::Px(center.y - RADIAL_OUTER_RADIUS),
@@ -72,10 +71,7 @@ pub fn spawn_radial_menu(
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 ..default()
-            },
-            z_index: ZIndex::Global(500),
-            ..default()
-        },
+            }, ZIndex(500)),
         RadialMenu {
             center,
             options: options.clone(),
@@ -85,18 +81,14 @@ pub fn spawn_radial_menu(
 
     // Center dot
     let center_dot = commands.spawn(
-        NodeBundle {
-            style: Style {
+        (Node {
                 position_type: PositionType::Absolute,
                 width: Val::Px(8.0),
                 height: Val::Px(8.0),
                 left: Val::Px(RADIAL_OUTER_RADIUS - 4.0),
                 top: Val::Px(RADIAL_OUTER_RADIUS - 4.0),
                 ..default()
-            },
-            background_color: ThemeColors::ACCENT_BLUE.into(),
-            ..default()
-        },
+            }, BackgroundColor(ThemeColors::ACCENT_BLUE)),
     ).id();
     commands.entity(menu).add_child(center_dot);
 
@@ -109,31 +101,20 @@ pub fn spawn_radial_menu(
 
         // Slice background (positioned around the circle)
         let slice = commands.spawn((
-            NodeBundle {
-                style: Style {
+            (Node {
                     position_type: PositionType::Absolute,
                     left: Val::Px(label_x),
                     top: Val::Px(label_y),
                     padding: UiRect::new(Val::Px(6.0), Val::Px(6.0), Val::Px(3.0), Val::Px(3.0)),
                     ..default()
-                },
-                background_color: ThemeColors::BG_ELEVATED.into(),
-                ..default()
-            },
+                }, BackgroundColor(ThemeColors::BG_ELEVATED)),
             RadialSlice { index: i },
             Interaction::None,
         )).id();
 
         // Icon + label
         let text = commands.spawn(
-            TextBundle::from_section(
-                format!("{} {}", option.icon, option.label),
-                TextStyle {
-                    font_size: ThemeFonts::BODY_SMALL,
-                    color: option.color,
-                    ..default()
-                },
-            ),
+            (Text::new(format!("{} {}", option.icon, option.label)), TextFont { font_size: FontSize::Px(ThemeFonts::BODY_SMALL), ..default() }, TextColor(option.color)),
         ).id();
 
         commands.entity(slice).add_child(text);
@@ -142,16 +123,10 @@ pub fn spawn_radial_menu(
 
     // Center label (shows currently hovered option)
     let label = commands.spawn((
-        TextBundle::from_section("", TextStyle {
-            font_size: ThemeFonts::TINY,
-            color: ThemeColors::TEXT_MUTED,
-            ..default()
-        }).with_style(Style {
-            position_type: PositionType::Absolute,
+        (Text::new(""), TextFont { font_size: FontSize::Px(ThemeFonts::TINY), ..default() }, TextColor(ThemeColors::TEXT_MUTED), Node { position_type: PositionType::Absolute,
             left: Val::Px(RADIAL_OUTER_RADIUS - 40.0),
             top: Val::Px(RADIAL_OUTER_RADIUS + RADIAL_OUTER_RADIUS + 4.0),
-            ..default()
-        }),
+            ..default() }),
         RadialLabel,
     )).id();
     commands.entity(menu).add_child(label);
@@ -163,7 +138,7 @@ pub fn update_radial_menu(
     mut menu_query: Query<(&mut RadialMenu, &Children)>,
     mut slice_query: Query<(&RadialSlice, &mut BackgroundColor)>,
 ) {
-    let Some(cursor_pos) = windows.get_single().ok()
+    let Some(cursor_pos) = windows.single().ok()
         .and_then(|w| w.cursor_position())
     else { return };
 
@@ -195,7 +170,7 @@ pub fn update_radial_menu(
 /// System: spawn radial menu on right-click during Exploring
 pub fn spawn_radial_on_right_click(
     mut commands: Commands,
-    mouse: Res<Input<MouseButton>>,
+    mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     existing: Query<Entity, With<RadialMenu>>,
 ) {
@@ -203,11 +178,11 @@ pub fn spawn_radial_on_right_click(
 
     // Close existing menu if one is open
     for entity in existing.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
         return; // Don't open a new one, just close
     }
 
-    let Some(cursor_pos) = windows.get_single().ok()
+    let Some(cursor_pos) = windows.single().ok()
         .and_then(|w| w.cursor_position())
     else { return };
 
@@ -217,16 +192,16 @@ pub fn spawn_radial_on_right_click(
 /// System: close radial menu on left click or escape, execute selected action
 pub fn radial_menu_input(
     mut commands: Commands,
-    mouse: Res<Input<MouseButton>>,
-    keyboard: Res<Input<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     menu_query: Query<(Entity, &RadialMenu)>,
-    mut notifications: EventWriter<crate::events::ShowNotification>,
+    mut notifications: MessageWriter<crate::events::ShowNotification>,
 ) {
-    let Ok((entity, menu)) = menu_query.get_single() else { return };
+    let Ok((entity, menu)) = menu_query.single() else { return };
 
     // Close on escape
     if keyboard.just_pressed(KeyCode::Escape) {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
         return;
     }
 
@@ -237,49 +212,49 @@ pub fn radial_menu_input(
             match &option.action {
                 RadialAction::RadarPing => {
                     // Simulate Z key press for radar ping
-                    notifications.send(crate::events::ShowNotification {
+                    notifications.write(crate::events::ShowNotification {
                         message: "Radar ping sent! Press Z for manual ping.".into(),
                         notification_type: crate::events::NotificationType::Info,
                         duration: 2.0,
                     });
                 }
                 RadialAction::WarpCharge => {
-                    notifications.send(crate::events::ShowNotification {
+                    notifications.write(crate::events::ShowNotification {
                         message: "Hold V to charge warp drive.".into(),
                         notification_type: crate::events::NotificationType::Info,
                         duration: 3.0,
                     });
                 }
                 RadialAction::ToggleMap => {
-                    notifications.send(crate::events::ShowNotification {
+                    notifications.write(crate::events::ShowNotification {
                         message: "Press N to toggle system map.".into(),
                         notification_type: crate::events::NotificationType::Info,
                         duration: 2.0,
                     });
                 }
                 RadialAction::ToggleLog => {
-                    notifications.send(crate::events::ShowNotification {
+                    notifications.write(crate::events::ShowNotification {
                         message: "Press L to toggle event log.".into(),
                         notification_type: crate::events::NotificationType::Info,
                         duration: 2.0,
                     });
                 }
                 RadialAction::PowerToggle(_module_entity) => {
-                    notifications.send(crate::events::ShowNotification {
+                    notifications.write(crate::events::ShowNotification {
                         message: "Module power toggled.".into(),
                         notification_type: crate::events::NotificationType::Info,
                         duration: 2.0,
                     });
                 }
                 RadialAction::InspectModule(_) => {
-                    notifications.send(crate::events::ShowNotification {
+                    notifications.write(crate::events::ShowNotification {
                         message: "Right-click module in build mode to inspect.".into(),
                         notification_type: crate::events::NotificationType::Info,
                         duration: 2.0,
                     });
                 }
                 RadialAction::RepairModule(_) => {
-                    notifications.send(crate::events::ShowNotification {
+                    notifications.write(crate::events::ShowNotification {
                         message: "Crew dispatched for repair.".into(),
                         notification_type: crate::events::NotificationType::Info,
                         duration: 2.0,
@@ -288,7 +263,7 @@ pub fn radial_menu_input(
                 RadialAction::Dismiss => {}
             }
         }
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 

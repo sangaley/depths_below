@@ -74,13 +74,13 @@ impl BuildHistory {
 
 /// System: listen for Ctrl+Z / Ctrl+Y and execute undo/redo
 pub fn undo_redo_input(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut history: ResMut<BuildHistory>,
     mut commands: Commands,
     mut currency: ResMut<Currency>,
     _module_query: Query<(Entity, &Module)>,
     _hull_query: Query<(Entity, &HullSegment)>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
     _current_state: Res<State<BuildState>>,
 ) {
     let ctrl = keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
@@ -89,23 +89,23 @@ pub fn undo_redo_input(
     let shift = keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
 
     // Ctrl+Z = Undo
-    if keyboard.just_pressed(KeyCode::Z) && !shift {
+    if keyboard.just_pressed(KeyCode::KeyZ) && !shift {
         if let Some(action) = history.undo_stack.pop() {
             match &action {
                 BuildAction::PlaceModule { entity, cost, module_type, .. } => {
                     // Undo a placement = remove the module, refund cost
-                    commands.entity(*entity).despawn_recursive();
+                    commands.entity(*entity).despawn();
                     currency.credits += cost;
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: format!("Undo: removed {} (+{}c)", module_type.name(), cost),
                         notification_type: NotificationType::Info,
                         duration: 2.0,
                     });
                 }
                 BuildAction::PlaceHull { entity, cost, .. } => {
-                    commands.entity(*entity).despawn_recursive();
+                    commands.entity(*entity).despawn();
                     currency.credits += cost;
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: format!("Undo: removed hull (+{}c)", cost),
                         notification_type: NotificationType::Info,
                         duration: 2.0,
@@ -115,7 +115,7 @@ pub fn undo_redo_input(
                     // Undo a removal = we can't respawn it perfectly, just refund
                     // Full undo of removal would require storing all component data
                     currency.credits -= refund; // Take back the refund
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: format!("Undo: {} removal reversed (-{}c)", module_type.name(), refund),
                         notification_type: NotificationType::Info,
                         duration: 2.0,
@@ -127,7 +127,7 @@ pub fn undo_redo_input(
     }
 
     // Ctrl+Y or Ctrl+Shift+Z = Redo
-    if keyboard.just_pressed(KeyCode::Y) || (keyboard.just_pressed(KeyCode::Z) && shift) {
+    if keyboard.just_pressed(KeyCode::KeyY) || (keyboard.just_pressed(KeyCode::KeyZ) && shift) {
         if let Some(action) = history.redo_stack.pop() {
             match &action {
                 BuildAction::PlaceModule { cost, module_type, .. } => {
@@ -135,7 +135,7 @@ pub fn undo_redo_input(
                     // Full redo would require respawning — for now just track credits
                     if currency.credits >= *cost {
                         currency.credits -= cost;
-                        notifications.send(ShowNotification {
+                        notifications.write(ShowNotification {
                             message: format!("Redo: {} (-{}c)", module_type.name(), cost),
                             notification_type: NotificationType::Info,
                             duration: 2.0,

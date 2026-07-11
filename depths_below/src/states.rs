@@ -27,7 +27,7 @@ pub enum BuildState {
 }
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SubmarineSet {
+pub enum ShipSet {
     Input,
     Movement,
     Physics,
@@ -45,8 +45,16 @@ pub enum CombatSet {
 }
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub enum SonarSet {
+pub enum RadarSet {
     Input,
     Update,
     Visibility,
+}
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub enum SpatialSet {
+    /// Spatial hash grids are rebuilt here; anything doing "nearby entity"
+    /// queries (creature AI perception, weapon targeting, collision) should
+    /// run `.after(SpatialSet::Update)`.
+    Update,
 }

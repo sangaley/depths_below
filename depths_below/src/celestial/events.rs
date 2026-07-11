@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use super::components::PlanetType;
 
 /// A star emits a radiation flare — random timing, intensity scales with star size
-#[derive(Event)]
+#[derive(Message)]
 pub struct RadiationFlare {
     pub star: Entity,
     pub intensity: f32,
@@ -11,7 +11,7 @@ pub struct RadiationFlare {
 }
 
 /// A star has been destroyed — triggers supernova, planets go flying
-#[derive(Event)]
+#[derive(Message)]
 pub struct StarDestroyed {
     pub star: Entity,
     pub position: Vec2,
@@ -20,7 +20,7 @@ pub struct StarDestroyed {
 }
 
 /// A planet was consumed by a black hole
-#[derive(Event)]
+#[derive(Message)]
 pub struct PlanetConsumed {
     pub planet: Entity,
     pub black_hole: Entity,
@@ -28,7 +28,7 @@ pub struct PlanetConsumed {
 }
 
 /// Any body consumed by a black hole (planets, asteroids, debris)
-#[derive(Event)]
+#[derive(Message)]
 pub struct BodyConsumed {
     pub entity: Entity,
     pub black_hole: Entity,
@@ -36,14 +36,14 @@ pub struct BodyConsumed {
 }
 
 /// Warning when gravity pull becomes significant on the ship
-#[derive(Event)]
+#[derive(Message)]
 pub struct GravityWarning {
     pub source: Entity,
     pub pull_strength: f32,
 }
 
 /// Supernova shockwave expanding outward
-#[derive(Event)]
+#[derive(Message)]
 pub struct SupernovaShockwave {
     pub origin: Vec2,
     pub damage: f32,
@@ -51,13 +51,13 @@ pub struct SupernovaShockwave {
 }
 
 /// Warp jump initiated to another star system
-#[derive(Event)]
+#[derive(Message)]
 pub struct WarpJumpStarted {
     pub target_system: u32,
 }
 
 /// Warp jump completed — arrived at new system
-#[derive(Event)]
+#[derive(Message)]
 pub struct WarpJumpCompleted {
     pub system_id: u32,
 }

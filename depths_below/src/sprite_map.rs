@@ -22,7 +22,7 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         // Life Support
         ModuleType::OxygenScrubber => "sprites/modules/oxygen_scrubber.png",
         ModuleType::CO2Scrubber => "sprites/modules/life_support.png",
-        ModuleType::WaterRecycler => "sprites/modules/life_support.png",
+        ModuleType::WasteRecycler => "sprites/modules/life_support.png",
         ModuleType::AdvancedOxygenator => "sprites/modules/oxygen_scrubber.png",
         ModuleType::FireSuppression => "sprites/modules/life_support.png",
         ModuleType::AtmosphereMonitor => "sprites/modules/life_support.png",
@@ -48,8 +48,8 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::TractorBeam => "sprites/modules/mine_layer.png",
         ModuleType::EMPPulse => "sprites/modules/railgun.png",
         // Detection
-        ModuleType::SonarArray | ModuleType::AdvancedSonar => "sprites/modules/sonar_array.png",
-        ModuleType::PassiveSonar => "sprites/modules/passive_sonar.png",
+        ModuleType::RadarArray | ModuleType::AdvancedRadar => "sprites/modules/sonar_array.png",
+        ModuleType::PassiveRadar => "sprites/modules/passive_sonar.png",
         ModuleType::DepthScanner => "sprites/modules/depth_sensor.png",
         ModuleType::HydrophoneArray => "sprites/modules/passive_sonar.png",
         ModuleType::ThermalImager => "sprites/modules/depth_sensor.png",
@@ -71,7 +71,7 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::Brig => "sprites/modules/basic_quarters.png",
         // Utility
         ModuleType::RepairBay => "sprites/modules/repair_station.png",
-        ModuleType::BallastTank => "sprites/modules/ballast_tank.png",
+        ModuleType::ManeuverThruster => "sprites/modules/ballast_tank.png",
         ModuleType::Floodlight | ModuleType::Searchlight => "sprites/modules/floodlight.png",
         ModuleType::AirlockChamber => "sprites/modules/docking_port.png",
         ModuleType::DockingPort => "sprites/modules/docking_port.png",
@@ -87,7 +87,7 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::HullCorner => "sprites/modules/hull_beam.png",
         ModuleType::Bulkhead => "sprites/modules/hull_beam.png",
         ModuleType::PressureFrame => "sprites/modules/hull_beam.png",
-        ModuleType::FloodValve => "sprites/modules/docking_port.png",
+        ModuleType::AirlockValve => "sprites/modules/docking_port.png",
         ModuleType::AccessHatch => "sprites/modules/docking_port.png",
         ModuleType::ViewPort => "sprites/modules/floodlight.png",
         ModuleType::ArmorPlate => "sprites/modules/hull_beam.png",
@@ -96,7 +96,7 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::HeatVent => "sprites/modules/hull_beam.png",
         ModuleType::Transformer => "sprites/modules/battery.png",
         ModuleType::VectorThruster => "sprites/modules/standard_engine.png",
-        ModuleType::TrimTank => "sprites/modules/ballast_tank.png",
+        ModuleType::AttitudeThruster => "sprites/modules/ballast_tank.png",
         ModuleType::OxygenTank => "sprites/modules/oxygen_scrubber.png",
         ModuleType::AirCirculator => "sprites/modules/life_support.png",
         ModuleType::CreatureScanner => "sprites/modules/depth_sensor.png",
@@ -107,7 +107,7 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::ConveyorTube => "sprites/modules/battery.png",
         ModuleType::MaintenanceLocker => "sprites/modules/repair_station.png",
         ModuleType::FuelProcessor => "sprites/modules/ballast_tank.png",
-        ModuleType::WaterPump => "sprites/modules/ballast_tank.png",
+        ModuleType::HullSealer => "sprites/modules/ballast_tank.png",
         ModuleType::EmergencyBulkhead => "sprites/modules/hull_beam.png",
         ModuleType::FirebreakWall => "sprites/modules/hull_beam.png",
         ModuleType::PressureSensor => "sprites/modules/depth_sensor.png",
@@ -164,6 +164,16 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::VibrationDamper => "sprites/modules/hull_beam.png",
         ModuleType::ThermalInsulator => "sprites/modules/hull_beam.png",
         ModuleType::StructuralBrace => "sprites/modules/hull_beam.png",
+        ModuleType::CornerArmorPlate => "sprites/modules/hull_beam.png",
+        ModuleType::BridgeWing => "sprites/modules/navigation.png",
+        ModuleType::SurgicalBay => "sprites/modules/medical_bay.png",
+        ModuleType::GalleyMess => "sprites/modules/basic_quarters.png",
+        ModuleType::BulkCargoHold => "sprites/modules/cargo_hold.png",
+        ModuleType::DockingHub => "sprites/modules/docking_port.png",
+        ModuleType::WellnessHub => "sprites/modules/basic_quarters.png",
+        ModuleType::StaggeredArmorPlate => "sprites/modules/hull_beam.png",
+        ModuleType::AngledHullPlate => "sprites/modules/hull_beam.png",
+        ModuleType::AngledArmorPlate => "sprites/modules/hull_beam.png",
     })
 }
 
@@ -178,7 +188,7 @@ pub fn hull_sprite_path(material: HullMaterial) -> &'static str {
 
 pub fn creature_sprite_path(creature_type: CreatureType) -> &'static str {
     match creature_type {
-        CreatureType::VoidDrifter => "sprites/creatures/ambient/deep_fish.png",
+        CreatureType::VoidDrifter => "sprites/creatures/ambient/void_drifter.png",
         CreatureType::Stalker => "sprites/creatures/hostile/stalker.png",
         CreatureType::Leviathan => "sprites/creatures/hostile/leviathan.png",
         CreatureType::ParasiteSwarm => "sprites/creatures/hostile/parasite.png",
@@ -198,11 +208,11 @@ pub fn poi_sprite_path(poi_type: PoiType) -> &'static str {
 pub fn decoration_sprite_path(decoration_type: DecorationType) -> Option<&'static str> {
     match decoration_type {
         DecorationType::Rock => Some("sprites/environment/rock.png"),
-        DecorationType::SporeGrowth => Some("sprites/environment/kelp.png"),
-        DecorationType::Crystal => Some("sprites/environment/coral.png"),
+        DecorationType::SporeGrowth => Some("sprites/environment/spore_growth.png"),
+        DecorationType::Crystal => Some("sprites/environment/crystal_formation.png"),
         DecorationType::EnergySpot => Some("sprites/environment/bioluminescent_spot.png"),
         DecorationType::ThermalVentSmoke => None, // No sprite — keep as colored rect for smoke effect
-        DecorationType::RockDebris => Some("sprites/environment/sand_mound.png"),
+        DecorationType::RockDebris => Some("sprites/environment/rock_debris.png"),
     }
 }
 
@@ -214,7 +224,7 @@ pub fn effect_sprite_path(effect: &str) -> &'static str {
         "bubble" => "sprites/effects/bubble.png",
         "electric_shock" => "sprites/effects/electric_shock.png",
         "explosion" => "sprites/effects/explosion.png",
-        "sonar_ring" => "sprites/effects/sonar_ring.png",
+        "radar_ring" => "sprites/effects/sonar_ring.png",
         _ => "sprites/effects/torpedo_trail.png",
     }
 }

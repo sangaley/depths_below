@@ -37,14 +37,14 @@ impl Default for NotificationHistory {
 /// Record notifications into history
 pub fn record_notifications(
     mut history: ResMut<NotificationHistory>,
-    mut events: EventReader<ShowNotification>,
+    mut events: MessageReader<ShowNotification>,
     time: Res<Time>,
 ) {
-    for event in events.iter() {
+    for event in events.read() {
         history.entries.push(NotificationEntry {
             message: event.message.clone(),
             notification_type: event.notification_type,
-            timestamp: time.elapsed_seconds(),
+            timestamp: time.elapsed_secs(),
         });
 
         // Trim to max
@@ -57,16 +57,16 @@ pub fn record_notifications(
 /// Toggle notification log with L key
 pub fn toggle_notification_log(
     mut commands: Commands,
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     existing: Query<Entity, With<NotificationLogWindow>>,
     history: Res<NotificationHistory>,
 ) {
-    if !keyboard.just_pressed(KeyCode::L) {
+    if !keyboard.just_pressed(KeyCode::KeyL) {
         return;
     }
 
-    if let Ok(entity) = existing.get_single() {
-        commands.entity(entity).despawn_recursive();
+    if let Ok(entity) = existing.single() {
+        commands.entity(entity).despawn();
         return;
     }
 
@@ -83,16 +83,13 @@ pub fn toggle_notification_log(
 
     // Scrollable content
     let scroll_area = commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 width: Val::Percent(100.0),
-                flex_direction: FlexDirection::ColumnReverse, // Newest at bottom
+                flex_direction: FlexDirection::ColumnReverse, 
                 overflow: Overflow::clip_y(),
                 max_height: Val::Px(260.0),
                 ..default()
-            },
-            ..default()
-        },
+            }),
         NotificationLogContent,
     )).id();
 
@@ -100,35 +97,25 @@ pub fn toggle_notification_log(
     let start = history.entries.len().saturating_sub(30);
     for entry in &history.entries[start..] {
         let color = match entry.notification_type {
-            NotificationType::Info => Color::rgb(0.5, 0.7, 0.8),
-            NotificationType::Warning => Color::rgb(0.8, 0.7, 0.3),
-            NotificationType::Danger => Color::rgb(0.9, 0.3, 0.3),
-            NotificationType::Success => Color::rgb(0.3, 0.8, 0.4),
+            NotificationType::Info => Color::srgb(0.5, 0.7, 0.8),
+            NotificationType::Warning => Color::srgb(0.8, 0.7, 0.3),
+            NotificationType::Danger => Color::srgb(0.9, 0.3, 0.3),
+            NotificationType::Success => Color::srgb(0.3, 0.8, 0.4),
         };
 
         let minutes = (entry.timestamp / 60.0) as u32;
         let seconds = (entry.timestamp % 60.0) as u32;
 
         let row = commands.spawn(
-            NodeBundle {
-                style: Style {
+            (Node {
                     width: Val::Percent(100.0),
                     padding: UiRect::vertical(Val::Px(1.0)),
                     ..default()
-                },
-                ..default()
-            },
+                }),
         ).id();
 
         let text = commands.spawn(
-            TextBundle::from_section(
-                format!("[{:02}:{:02}] {}", minutes, seconds, entry.message),
-                TextStyle {
-                    font_size: 11.0,
-                    color,
-                    ..default()
-                },
-            ),
+            (Text::new(format!("[{:02}:{:02}] {}", minutes, seconds, entry.message)), TextFont { font_size: FontSize::Px(11.0), ..default() }, TextColor(color)),
         ).id();
 
         commands.entity(row).add_child(text);

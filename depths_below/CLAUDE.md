@@ -16,14 +16,14 @@ No test suite exists yet. No CI/CD pipeline.
 
 ## Architecture
 
-Bevy 0.11 ECS **space survival game**. 2D, sprite-based, grid-based building system (66.0 unit cells). Originally a submarine game, fully converted to space theme.
+Bevy 0.11 ECS **space survival game**. 2D, sprite-based, grid-based building system (66.0 unit cells). Originally a ship game, fully converted to space theme.
 
 ### Plugin Structure (registered in `main.rs`)
 
 | Plugin | Location | Responsibility |
 |---|---|---|
 | **EventsPlugin** | `events.rs` | Registers all game events (30+ event types) |
-| **SubmarinePlugin** | `submarine/` | Ship movement, physics, power, oxygen, radiation, hull, combat, decompression, radar |
+| **ShipPlugin** | `ship/` | Ship movement, physics, power, oxygen, radiation, hull, combat, decompression, radar |
 | **WorldPlugin** | `world/` | Chunk management, biomes, POI discovery, zone transitions, procedural generation |
 | **CreaturePlugin** | `creatures/` | Hostile creature AI/spawning, ambient life (space motes, pulsing spores, cosmic whales) |
 | **CrewPlugin** | `crew/` | Crew spawning, needs (O2/morale), AI, suffocation, death |
@@ -35,7 +35,7 @@ Bevy 0.11 ECS **space survival game**. 2D, sprite-based, grid-based building sys
 
 1. **Components** (`components.rs`): All ECS components live here. Central types: `Module`, `ModuleType` (42 variants), `ModuleCategory` (9 categories), `Rotation`, `HullSegment`, `HullMaterial`, `Creature`, `CrewMember`.
 
-2. **Resources** (`resources.rs`): Global state. Key resources: `SubmarineState`, `BuildingState`, `GameConfig`, `WorldState`, `ChunkManager`, `Inventory`, `Unlocks`, `Statistics`.
+2. **Resources** (`resources.rs`): Global state. Key resources: `ShipState`, `BuildingState`, `GameConfig`, `WorldState`, `ChunkManager`, `Inventory`, `Unlocks`, `Statistics`.
 
 3. **Events** (`events.rs`): All events registered in `EventsPlugin`. Grouped by domain: ship damage/breach, building place/remove, crew damage/death, creature spotted/attack, world/UI/save-load.
 
@@ -43,15 +43,15 @@ Bevy 0.11 ECS **space survival game**. 2D, sprite-based, grid-based building sys
 
 ### Space Theme Key Systems
 
-- **Radiation damage** (`submarine/pressure.rs`): Replaces old pressure system. Radiation intensity scales with distance from safe zones. Hull segments have `radiation_shielding` ratings per material tier.
-- **Decompression** (`submarine/flooding.rs`): Hull breaches cause air to escape (rooms have `air_level` 1.0→0.0). Drains oxygen. Crew seal breaches to restore air. Fire is extinguished by vacuum (low air).
-- **Thrusters** (`submarine/movement.rs`): Q/E controls vertical thrusters instead of ballast. Space physics with minimal drag.
+- **Radiation damage** (`ship/pressure.rs`): Replaces old pressure system. Radiation intensity scales with distance from safe zones. Hull segments have `radiation_shielding` ratings per material tier.
+- **Decompression** (`ship/flooding.rs`): Hull breaches cause air to escape (rooms have `air_level` 1.0→0.0). Drains oxygen. Crew seal breaches to restore air. Fire is extinguished by vacuum (low air).
+- **Thrusters** (`ship/movement.rs`): Q/E controls vertical thrusters instead of thruster. Space physics with minimal drag.
 - **Zones**: NearOrbit → AsteroidBelt → DeepSpace → Nebula → BlackHole
 - **Biomes**: OpenVoid, AsteroidField, CrystalFormation, VoidRift, ThermalVents, IceShells, DeadZone, AncientRuins
 
 ### Module Registry System
 
-`building/registry.rs` defines `ModuleRegistry` — a data-driven HashMap<ModuleType, ModuleDef> with stats, size, color, and `CompanionData` for each of the 42 modules. `submarine/spawner.rs::spawn_module()` reads the registry to spawn entities with the correct `Module` component plus companion components (Reactor, Engine, Weapon+WeaponCooldown+WeaponMount+TargetingSystem+AmmoStorage, Sonar, etc.).
+`building/registry.rs` defines `ModuleRegistry` — a data-driven HashMap<ModuleType, ModuleDef> with stats, size, color, and `CompanionData` for each of the 42 modules. `ship/spawner.rs::spawn_module()` reads the registry to spawn entities with the correct `Module` component plus companion components (Reactor, Engine, Weapon+WeaponCooldown+WeaponMount+TargetingSystem+AmmoStorage, Radar, etc.).
 
 **To add a new module**: Add variant to `ModuleType` enum, add it to the relevant `ModuleCategory::module_types()` list, add `ModuleDef` entry in `build_registry()`, and if needed add a new `CompanionData` variant + handling in `spawn_module()`.
 
@@ -67,7 +67,7 @@ Bevy 0.11 ECS **space survival game**. 2D, sprite-based, grid-based building sys
 ### Key Conventions
 
 - Events use typed enums (`ModuleType`, `CreatureType`) not strings
-- Existing systems query companion components (`Weapon`, `Sonar`, `Engine`, etc.) not `ModuleType` — this keeps them backward-compatible when new module types are added
+- Existing systems query companion components (`Weapon`, `Radar`, `Engine`, etc.) not `ModuleType` — this keeps them backward-compatible when new module types are added
 - Systems are `.chain()`-ed within plugins and gated by `.run_if(in_state(...))` on `GameState`/`BuildState`
 - Hull segments and modules are children of the ship entity
 - Notifications use `ShowNotification` events with `NotificationType` (Info/Warning/Danger/Success)

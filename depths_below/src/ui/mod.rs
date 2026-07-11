@@ -84,18 +84,32 @@ impl Plugin for UiPlugin {
                     windows::minimap::toggle_minimap,
                     windows::minimap::update_minimap,
                     windows::notification_log::toggle_notification_log,
-                    // Inspection & customization (exploring)
-                    windows::inspection::slot_button_click,
-                    windows::inspection::slot_button_hover,
-                    windows::inspection::customize_button_hover,
-                    windows::inspection::preset_button_hover,
-                    windows::customization::slider_click_system,
-                    windows::customization::undo_button_hover,
                     // Radial menu
                     windows::radial_menu::spawn_radial_on_right_click,
                     windows::radial_menu::update_radial_menu,
                     windows::radial_menu::radial_menu_input,
                 ).run_if(in_state(GameState::Exploring)),
+            )
+            // Inspection & customization — the window is opened while docked/building,
+            // so its buttons must stay responsive in both StationDocked and Exploring
+            // (it can be left open across the undock transition).
+            .add_systems(
+                Update,
+                (
+                    windows::inspection::slot_button_click,
+                    windows::inspection::slot_button_hover,
+                    windows::inspection::customize_button_hover,
+                    windows::inspection::preset_button_click,
+                    windows::inspection::preset_button_hover,
+                    windows::inspection::custom_preset_button_click,
+                    windows::inspection::custom_preset_button_hover,
+                    windows::inspection::save_build_button_click,
+                    windows::inspection::save_build_button_hover,
+                    windows::customization::slider_click_system,
+                    windows::customization::undo_button_hover,
+                ).run_if(
+                    in_state(GameState::Exploring).or_else(in_state(GameState::StationDocked))
+                ),
             )
             // Damage overlay (while exploring) — chained for correct ordering
             .add_systems(
@@ -165,7 +179,9 @@ impl Plugin for UiPlugin {
                         in_state(BuildState::Placing)
                             .or_else(in_state(BuildState::Deleting)),
                     ),
-                    build_ui::update_controls_help.run_if(in_state(GameState::StationDocked)),
+                    build_ui::update_controls_help.run_if(
+                        in_state(GameState::StationDocked).or_else(in_state(GameState::Exploring))
+                    ),
                     build_ui::update_module_tooltip.run_if(in_state(BuildState::Placing)),
                 ),
             )
@@ -221,11 +237,25 @@ pub struct ThrusterText;
 #[derive(Component)]
 pub struct AmmoText;
 
+/// Column container in the AMMO HUD slot — holds one AmmoLineText child per weapon.
+/// A single Text node with embedded "\n" wasn't a reliable way to show
+/// multiple weapons in a fixed-height flex row; separate stacked nodes are.
+#[derive(Component)]
+pub struct AmmoLinesContainer;
+
+#[derive(Component)]
+pub struct AmmoLineText;
+
 #[derive(Component)]
 pub struct NoiseText;
 
 #[derive(Component)]
 pub struct CreditsText;
+
+/// Dedicated top-right money counter — separate from the CRED entry buried
+/// in the crowded top stat bar, so credits are visible at a glance.
+#[derive(Component)]
+pub struct TopRightCreditsText;
 
 #[derive(Component)]
 pub struct CrewText;
@@ -260,57 +290,58 @@ pub struct GravityIndicatorText;
 pub struct MapOverlay;
 
 /// Helper to spawn a HUD bar (background + fill)
-fn spawn_hud_bar(parent: &mut ChildBuilder, kind: HudBarKind, width: f32, color: Color) {
-    parent.spawn(NodeBundle {
-        style: Style {
+fn spawn_hud_bar(parent: &mut ChildSpawnerCommands, kind: HudBarKind, width: f32, color: Color) {
+    parent.spawn((Node {
             width: Val::Px(width),
             height: Val::Px(4.0),
             ..default()
-        },
-        background_color: Color::rgba(0.10, 0.12, 0.18, 0.8).into(),
-        ..default()
-    }).with_children(|bar_bg| {
+        }, BackgroundColor(Color::srgba(0.10, 0.12, 0.18, 0.8)))).with_children(|bar_bg| {
         bar_bg.spawn((
-            NodeBundle {
-                style: Style {
+            (Node {
                     width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
                     ..default()
-                },
-                background_color: color.into(),
-                ..default()
-            },
+                }, BackgroundColor(color)),
             HudBar { kind },
         ));
     });
 }
 
+/// Short per-weapon label for the ammo HUD breakdown — full module names
+/// ("Heavy Missile Launcher") don't fit next to a clip count.
+fn ammo_hud_abbrev(module_type: ModuleType) -> &'static str {
+    match module_type {
+        ModuleType::Railgun => "RG",
+        ModuleType::Cannon => "CN",
+        ModuleType::Coilgun => "CG",
+        ModuleType::Gatling => "GT",
+        ModuleType::Laser => "LS",
+        ModuleType::IonDisruptor => "ION",
+        ModuleType::HeavyMissile => "HM",
+        ModuleType::GuidedMissile => "GM",
+        ModuleType::ClusterRocket => "CR",
+        ModuleType::EMPPulse => "EMP",
+        _ => "WPN",
+    }
+}
+
 /// Helper to spawn a HUD group with label — uses theme colors
-fn spawn_hud_group(parent: &mut ChildBuilder, label: &str, label_color: Color, children: impl FnOnce(&mut ChildBuilder)) {
-    parent.spawn(NodeBundle {
-        style: Style {
+fn spawn_hud_group(parent: &mut ChildSpawnerCommands, label: &str, label_color: Color, children: impl FnOnce(&mut ChildSpawnerCommands)) {
+    parent.spawn((Node {
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
             padding: UiRect::new(Val::Px(8.0), Val::Px(8.0), Val::Px(2.0), Val::Px(2.0)),
             row_gap: Val::Px(1.0),
             ..default()
-        },
-        ..default()
-    }).with_children(|group| {
-        group.spawn(TextBundle::from_section(label, TextStyle {
-            font_size: theme::ThemeFonts::TINY, color: label_color, ..default()
-        }));
+        })).with_children(|group| {
+        group.spawn((Text::new(label), TextFont { font_size: FontSize::Px(theme::ThemeFonts::TINY), ..default() }, TextColor(label_color)));
         children(group);
     });
 }
 
 /// Helper to spawn a HUD separator
-fn spawn_hud_separator(parent: &mut ChildBuilder) {
-    parent.spawn(NodeBundle {
-        style: Style { width: Val::Px(1.0), height: Val::Px(28.0), ..default() },
-        background_color: theme::ThemeColors::HUD_SEPARATOR.into(),
-        ..default()
-    });
+fn spawn_hud_separator(parent: &mut ChildSpawnerCommands) {
+    parent.spawn((Node { width: Val::Px(1.0), height: Val::Px(28.0), ..default() }, BackgroundColor(theme::ThemeColors::HUD_SEPARATOR)));
 }
 
 /// Sets up the UI — themed, clean layout
@@ -318,42 +349,51 @@ fn setup_ui(mut commands: Commands) {
     use theme::*;
 
     commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
                 flex_direction: FlexDirection::Column,
                 justify_content: JustifyContent::SpaceBetween,
                 ..default()
-            },
-            ..default()
-        },
+            }),
         HudRoot,
     )).with_children(|parent| {
+        // ===== TOP-RIGHT MONEY COUNTER =====
+        parent.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                top: Val::Px(ThemeSpacing::SM),
+                right: Val::Px(ThemeSpacing::LG),
+                padding: UiRect::axes(Val::Px(ThemeSpacing::MD), Val::Px(ThemeSpacing::XS)),
+                column_gap: Val::Px(ThemeSpacing::XS),
+                align_items: AlignItems::Center,
+                ..default()
+            },
+            BackgroundColor(ThemeColors::HUD_BG),
+        )).with_children(|money| {
+            money.spawn((Text::new("¤"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::ACCENT_YELLOW)));
+            money.spawn((
+                (Text::new("500"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::ACCENT_YELLOW)),
+                TopRightCreditsText,
+            ));
+        });
+
         // ===== TOP BAR — Ship Vitals =====
-        parent.spawn(NodeBundle {
-            style: Style {
+        parent.spawn((Node {
                 width: Val::Percent(100.0),
                 padding: UiRect::new(Val::Px(ThemeSpacing::LG), Val::Px(ThemeSpacing::LG), Val::Px(ThemeSpacing::SM), Val::Px(ThemeSpacing::SM)),
                 column_gap: Val::Px(ThemeSpacing::XS),
                 align_items: AlignItems::Center,
                 ..default()
-            },
-            background_color: ThemeColors::HUD_BG.into(),
-            ..default()
-        }).with_children(|top_bar| {
+            }, BackgroundColor(ThemeColors::HUD_BG))).with_children(|top_bar| {
             // -- SYSTEM + ZONE --
             spawn_hud_group(top_bar, "SYS", ThemeColors::ACCENT_PURPLE, |group| {
                 group.spawn((
-                    TextBundle::from_section("System-0", TextStyle {
-                        font_size: ThemeFonts::BODY, color: ThemeColors::ACCENT_PURPLE, ..default()
-                    }),
+                    (Text::new("System-0"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::ACCENT_PURPLE)),
                     SystemInfoText,
                 ));
                 group.spawn((
-                    TextBundle::from_section("Station Orbit", TextStyle {
-                        font_size: ThemeFonts::TINY, color: ThemeColors::ACCENT_BLUE, ..default()
-                    }),
+                    (Text::new("Station Orbit"), TextFont { font_size: FontSize::Px(ThemeFonts::TINY), ..default() }, TextColor(ThemeColors::ACCENT_BLUE)),
                     DepthZoneText,
                 ));
             });
@@ -363,9 +403,7 @@ fn setup_ui(mut commands: Commands) {
             // -- GRAVITY --
             spawn_hud_group(top_bar, "GRAV", ThemeColors::TEXT_MUTED, |group| {
                 group.spawn((
-                    TextBundle::from_section("", TextStyle {
-                        font_size: ThemeFonts::CAPTION, color: ThemeColors::TEXT_SECONDARY, ..default()
-                    }),
+                    (Text::new(""), TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() }, TextColor(ThemeColors::TEXT_SECONDARY)),
                     GravityIndicatorText,
                 ));
             });
@@ -375,9 +413,7 @@ fn setup_ui(mut commands: Commands) {
             // -- HULL --
             spawn_hud_group(top_bar, "HULL", ThemeColors::ACCENT_GREEN, |group| {
                 group.spawn((
-                    TextBundle::from_section("100%", TextStyle {
-                        font_size: ThemeFonts::H3, color: ThemeColors::ACCENT_GREEN, ..default()
-                    }),
+                    (Text::new("100%"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::ACCENT_GREEN)),
                     HullText,
                 ));
                 spawn_hud_bar(group, HudBarKind::Hull, 56.0, ThemeColors::ACCENT_GREEN);
@@ -386,9 +422,7 @@ fn setup_ui(mut commands: Commands) {
             // -- O2 --
             spawn_hud_group(top_bar, "O2", ThemeColors::ACCENT_CYAN, |group| {
                 group.spawn((
-                    TextBundle::from_section("100%", TextStyle {
-                        font_size: ThemeFonts::H3, color: ThemeColors::ACCENT_CYAN, ..default()
-                    }),
+                    (Text::new("100%"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::ACCENT_CYAN)),
                     OxygenText,
                 ));
                 spawn_hud_bar(group, HudBarKind::Oxygen, 56.0, ThemeColors::ACCENT_CYAN);
@@ -399,9 +433,7 @@ fn setup_ui(mut commands: Commands) {
             // -- POWER --
             spawn_hud_group(top_bar, "PWR", ThemeColors::ACCENT_YELLOW, |group| {
                 group.spawn((
-                    TextBundle::from_section("0/0", TextStyle {
-                        font_size: ThemeFonts::H3, color: ThemeColors::ACCENT_YELLOW, ..default()
-                    }),
+                    (Text::new("0/0"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::ACCENT_YELLOW)),
                     PowerText,
                 ));
             });
@@ -409,9 +441,7 @@ fn setup_ui(mut commands: Commands) {
             // -- FUEL --
             spawn_hud_group(top_bar, "FUEL", ThemeColors::ACCENT_ORANGE, |group| {
                 group.spawn((
-                    TextBundle::from_section("100%", TextStyle {
-                        font_size: ThemeFonts::BODY, color: ThemeColors::ACCENT_ORANGE, ..default()
-                    }),
+                    (Text::new("100%"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::ACCENT_ORANGE)),
                     FuelText,
                 ));
                 spawn_hud_bar(group, HudBarKind::Fuel, 44.0, ThemeColors::ACCENT_ORANGE);
@@ -422,9 +452,7 @@ fn setup_ui(mut commands: Commands) {
             // -- THRUSTERS --
             spawn_hud_group(top_bar, "THRS", ThemeColors::ACCENT_BLUE, |group| {
                 group.spawn((
-                    TextBundle::from_section("50%", TextStyle {
-                        font_size: ThemeFonts::BODY, color: ThemeColors::ACCENT_BLUE, ..default()
-                    }),
+                    (Text::new("50%"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::ACCENT_BLUE)),
                     ThrusterText,
                 ));
             });
@@ -432,19 +460,19 @@ fn setup_ui(mut commands: Commands) {
             // -- AMMO --
             spawn_hud_group(top_bar, "AMMO", ThemeColors::ACCENT_ORANGE, |group| {
                 group.spawn((
-                    TextBundle::from_section("-/-", TextStyle {
-                        font_size: ThemeFonts::BODY, color: ThemeColors::ACCENT_ORANGE, ..default()
-                    }),
-                    AmmoText,
+                    Node {
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    AmmoLinesContainer,
                 ));
             });
 
             // -- NOISE --
             spawn_hud_group(top_bar, "NOISE", ThemeColors::TEXT_MUTED, |group| {
                 group.spawn((
-                    TextBundle::from_section("0", TextStyle {
-                        font_size: ThemeFonts::BODY, color: ThemeColors::TEXT_SECONDARY, ..default()
-                    }),
+                    (Text::new("0"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::TEXT_SECONDARY)),
                     NoiseText,
                 ));
             });
@@ -454,9 +482,7 @@ fn setup_ui(mut commands: Commands) {
             // -- CREDITS --
             spawn_hud_group(top_bar, "CRED", ThemeColors::ACCENT_YELLOW, |group| {
                 group.spawn((
-                    TextBundle::from_section("500", TextStyle {
-                        font_size: ThemeFonts::BODY, color: ThemeColors::ACCENT_YELLOW, ..default()
-                    }),
+                    (Text::new("500"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::ACCENT_YELLOW)),
                     CreditsText,
                 ));
             });
@@ -464,9 +490,7 @@ fn setup_ui(mut commands: Commands) {
             // -- CREW --
             spawn_hud_group(top_bar, "CREW", ThemeColors::ACCENT_GREEN, |group| {
                 group.spawn((
-                    TextBundle::from_section("0/0", TextStyle {
-                        font_size: ThemeFonts::BODY, color: ThemeColors::ACCENT_GREEN, ..default()
-                    }),
+                    (Text::new("0/0"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::ACCENT_GREEN)),
                     CrewText,
                 ));
             });
@@ -474,9 +498,7 @@ fn setup_ui(mut commands: Commands) {
             // -- DISTANCE (replaces old DEPTH) --
             spawn_hud_group(top_bar, "DIST", ThemeColors::TEXT_MUTED, |group| {
                 group.spawn((
-                    TextBundle::from_section("0", TextStyle {
-                        font_size: ThemeFonts::BODY, color: ThemeColors::TEXT_PRIMARY, ..default()
-                    }),
+                    (Text::new("0"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::TEXT_PRIMARY)),
                     DepthText,
                 ));
             });
@@ -484,8 +506,7 @@ fn setup_ui(mut commands: Commands) {
 
         // ===== NOTIFICATION CONTAINER =====
         parent.spawn((
-            NodeBundle {
-                style: Style {
+            (Node {
                     position_type: PositionType::Absolute,
                     right: Val::Px(ThemeSpacing::LG),
                     top: Val::Px(48.0),
@@ -493,29 +514,20 @@ fn setup_ui(mut commands: Commands) {
                     row_gap: Val::Px(ThemeSpacing::SM),
                     max_width: Val::Px(360.0),
                     ..default()
-                },
-                ..default()
-            },
+                }),
             NotificationContainer,
         ));
 
         // ===== BOTTOM BAR — Controls =====
-        parent.spawn(NodeBundle {
-            style: Style {
+        parent.spawn((Node {
                 width: Val::Percent(100.0),
                 height: Val::Px(24.0),
                 padding: UiRect::new(Val::Px(ThemeSpacing::XL), Val::Px(ThemeSpacing::XL), Val::Px(ThemeSpacing::SM), Val::Px(ThemeSpacing::SM)),
                 align_items: AlignItems::Center,
                 ..default()
-            },
-            background_color: ThemeColors::HUD_BG.into(),
-            ..default()
-        }).with_children(|bar| {
+            }, BackgroundColor(ThemeColors::HUD_BG))).with_children(|bar| {
             bar.spawn((
-                TextBundle::from_section(
-                    "WASD Move  Q/E Thrust  SPACE Fire  Z Radar  V Warp  N Map  L Log  B Build  ESC Pause",
-                    TextStyle { font_size: ThemeFonts::CAPTION, color: ThemeColors::TEXT_MUTED, ..default() },
-                ),
+                (Text::new("WASD Move  Q/E Thrust  SPACE Fire  Z Radar  V Warp  N Map  L Log  B Build  ESC Pause"), TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() }, TextColor(ThemeColors::TEXT_MUTED)),
                 build_ui::ControlsHelpText,
             ));
         });
@@ -525,36 +537,36 @@ fn setup_ui(mut commands: Commands) {
 /// Updates celestial HUD elements: system name, gravity pull, nearest star distance
 pub fn update_celestial_hud(
     galaxy: Res<crate::celestial::resources::GalaxyState>,
-    sub_query: Query<&Transform, With<Submarine>>,
+    ship_query: Query<&Transform, With<Ship>>,
     star_query: Query<(&Transform, &crate::celestial::components::CelestialBody), With<crate::celestial::components::Star>>,
     bh_query: Query<(&Transform, &crate::celestial::components::CelestialBody), With<crate::celestial::components::BlackHole>>,
-    gravity_query: Query<&crate::celestial::components::GravityForce, With<Submarine>>,
+    gravity_query: Query<&crate::celestial::components::GravityForce, With<Ship>>,
     mut system_text_query: Query<&mut Text, (With<SystemInfoText>, Without<GravityIndicatorText>)>,
-    mut gravity_text_query: Query<&mut Text, (With<GravityIndicatorText>, Without<SystemInfoText>)>,
+    mut gravity_text_query: Query<(&mut Text, &mut TextColor), (With<GravityIndicatorText>, Without<SystemInfoText>)>,
 ) {
     // System name
-    if let Ok(mut text) = system_text_query.get_single_mut() {
-        text.sections[0].value = format!("System-{}", galaxy.current_system);
+    if let Ok(mut text) = system_text_query.single_mut() {
+        text.0 = format!("System-{}", galaxy.current_system);
     }
 
-    let sub_pos = sub_query.get_single()
+    let ship_pos = ship_query.single()
         .map(|t| t.translation.truncate())
         .unwrap_or(Vec2::ZERO);
 
     // Gravity indicator
-    if let Ok(mut text) = gravity_text_query.get_single_mut() {
-        let gravity_force = gravity_query.get_single()
+    if let Ok((mut text, mut text_color)) = gravity_text_query.single_mut() {
+        let gravity_force = gravity_query.single()
             .map(|gf| gf.0.length())
             .unwrap_or(0.0);
 
         if gravity_force > 10.0 {
             // Find what's pulling us
             let nearest_star = star_query.iter()
-                .map(|(t, body)| (t.translation.truncate().distance(sub_pos), &body.name))
+                .map(|(t, body)| (t.translation.truncate().distance(ship_pos), &body.name))
                 .min_by(|(a, _), (b, _)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
             let nearest_bh = bh_query.iter()
-                .map(|(t, body)| (t.translation.truncate().distance(sub_pos), &body.name))
+                .map(|(t, body)| (t.translation.truncate().distance(ship_pos), &body.name))
                 .min_by(|(a, _), (b, _)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
             let source_name = match (nearest_star, nearest_bh) {
@@ -574,27 +586,28 @@ pub fn update_celestial_hud(
                 "Weak"
             };
 
-            text.sections[0].value = format!("Grav: {} ({})", intensity, source_name);
-            text.sections[0].style.color = if gravity_force > 400.0 {
-                Color::RED
+            text.0 = format!("Grav: {} ({})", intensity, source_name);
+            text_color.0 = if gravity_force > 400.0 {
+                Color::srgb(1.0, 0.0, 0.0)
             } else if gravity_force > 200.0 {
-                Color::YELLOW
+                Color::srgb(1.0, 1.0, 0.0)
             } else {
-                Color::rgb(0.8, 0.4, 0.3)
+                Color::srgb(0.8, 0.4, 0.3)
             };
         } else {
-            text.sections[0].value = String::new();
+            text.0 = String::new();
         }
     }
 }
 
 /// Returns the space zone name for a given distance
+// Thresholds must match world::depth_to_zone (radial distance rings)
 fn depth_zone_name(depth: f32) -> &'static str {
-    if depth < 50.0 { "Station Orbit" }
-    else if depth < 200.0 { "Near Space" }
-    else if depth < 500.0 { "Asteroid Belt" }
-    else if depth < 1000.0 { "Deep Space" }
-    else if depth < 2000.0 { "Nebula" }
+    if depth < 600.0 { "Station Orbit" }
+    else if depth < 3000.0 { "Near Space" }
+    else if depth < 8000.0 { "Asteroid Belt" }
+    else if depth < 16000.0 { "Deep Space" }
+    else if depth < 30000.0 { "Nebula" }
     else { "Black Hole Proximity" }
 }
 
@@ -605,39 +618,39 @@ pub fn update_hud(
     oxygen_state: Res<OxygenState>,
     hull_state: Res<HullState>,
     time: Res<Time>,
-    mut depth_query: Query<&mut Text, (With<DepthText>, Without<PowerText>, Without<OxygenText>, Without<HullText>, Without<DepthZoneText>)>,
+    mut depth_query: Query<(&mut Text, &mut TextColor), (With<DepthText>, Without<PowerText>, Without<OxygenText>, Without<HullText>, Without<DepthZoneText>)>,
     mut depth_zone_query: Query<&mut Text, (With<DepthZoneText>, Without<DepthText>, Without<PowerText>, Without<OxygenText>, Without<HullText>)>,
-    mut power_query: Query<&mut Text, (With<PowerText>, Without<DepthText>, Without<OxygenText>, Without<HullText>, Without<DepthZoneText>)>,
-    mut oxygen_query: Query<&mut Text, (With<OxygenText>, Without<DepthText>, Without<PowerText>, Without<HullText>, Without<DepthZoneText>)>,
-    mut hull_query: Query<&mut Text, (With<HullText>, Without<DepthText>, Without<PowerText>, Without<OxygenText>, Without<DepthZoneText>)>,
-    mut bar_query: Query<(&HudBar, &mut Style, &mut BackgroundColor)>,
+    mut power_query: Query<(&mut Text, &mut TextColor), (With<PowerText>, Without<DepthText>, Without<OxygenText>, Without<HullText>, Without<DepthZoneText>)>,
+    mut oxygen_query: Query<(&mut Text, &mut TextColor), (With<OxygenText>, Without<DepthText>, Without<PowerText>, Without<HullText>, Without<DepthZoneText>)>,
+    mut hull_query: Query<(&mut Text, &mut TextColor), (With<HullText>, Without<DepthText>, Without<PowerText>, Without<OxygenText>, Without<DepthZoneText>)>,
+    mut bar_query: Query<(&HudBar, &mut Node, &mut BackgroundColor)>,
 ) {
     // Depth
-    if let Ok(mut text) = depth_query.get_single_mut() {
-        text.sections[0].value = format!("{:.0}m", depth_state.current_depth);
-        text.sections[0].style.color = if depth_state.current_depth > 1000.0 {
-            Color::rgb(1.0, 0.4, 0.4)
+    if let Ok((mut text, mut text_color)) = depth_query.single_mut() {
+        text.0 = format!("{:.0}m", depth_state.current_depth);
+        text_color.0 = if depth_state.current_depth > 1000.0 {
+            Color::srgb(1.0, 0.4, 0.4)
         } else if depth_state.current_depth > 500.0 {
-            Color::rgb(0.7, 0.7, 1.0)
+            Color::srgb(0.7, 0.7, 1.0)
         } else {
             Color::WHITE
         };
     }
-    if let Ok(mut text) = depth_zone_query.get_single_mut() {
-        text.sections[0].value = depth_zone_name(depth_state.current_depth).to_string();
+    if let Ok(mut text) = depth_zone_query.single_mut() {
+        text.0 = depth_zone_name(depth_state.current_depth).to_string();
     }
 
     // Power
-    if let Ok(mut text) = power_query.get_single_mut() {
+    if let Ok((mut text, mut text_color)) = power_query.single_mut() {
         let gen = power_state.total_power_generation;
         let con = power_state.total_power_consumption;
-        text.sections[0].value = format!("{:.0}/{:.0}", gen, con);
+        text.0 = format!("{:.0}/{:.0}", gen, con);
         if power_state.power_balance < 0.0 {
             // Blink red when power deficit
-            let blink = (time.elapsed_seconds() * 4.0).sin() > 0.0;
-            text.sections[0].style.color = if blink { Color::RED } else { Color::rgb(0.6, 0.2, 0.2) };
+            let blink = (time.elapsed_secs() * 4.0).sin() > 0.0;
+            text_color.0 = if blink { Color::srgb(1.0, 0.0, 0.0) } else { Color::srgb(0.6, 0.2, 0.2) };
         } else {
-            text.sections[0].style.color = Color::YELLOW;
+            text_color.0 = Color::srgb(1.0, 1.0, 0.0);
         }
     }
 
@@ -646,30 +659,30 @@ pub fn update_hud(
         oxygen_state.current_oxygen / oxygen_state.max_oxygen
     } else { 1.0 };
     let o2_pct_i = (o2_pct * 100.0) as i32;
-    if let Ok(mut text) = oxygen_query.get_single_mut() {
-        text.sections[0].value = format!("{}%", o2_pct_i);
+    if let Ok((mut text, mut text_color)) = oxygen_query.single_mut() {
+        text.0 = format!("{}%", o2_pct_i);
         if o2_pct_i < 20 {
-            let blink = (time.elapsed_seconds() * 5.0).sin() > 0.0;
-            text.sections[0].style.color = if blink { Color::RED } else { Color::rgb(0.5, 0.1, 0.1) };
+            let blink = (time.elapsed_secs() * 5.0).sin() > 0.0;
+            text_color.0 = if blink { Color::srgb(1.0, 0.0, 0.0) } else { Color::srgb(0.5, 0.1, 0.1) };
         } else if o2_pct_i < 50 {
-            text.sections[0].style.color = Color::YELLOW;
+            text_color.0 = Color::srgb(1.0, 1.0, 0.0);
         } else {
-            text.sections[0].style.color = Color::CYAN;
+            text_color.0 = Color::srgb(0.0, 1.0, 1.0);
         }
     }
 
     // Hull
     let hull_pct = hull_state.hull_integrity;
     let hull_pct_i = (hull_pct * 100.0) as i32;
-    if let Ok(mut text) = hull_query.get_single_mut() {
-        text.sections[0].value = format!("{}%", hull_pct_i);
+    if let Ok((mut text, mut text_color)) = hull_query.single_mut() {
+        text.0 = format!("{}%", hull_pct_i);
         if hull_pct_i < 20 {
-            let blink = (time.elapsed_seconds() * 5.0).sin() > 0.0;
-            text.sections[0].style.color = if blink { Color::RED } else { Color::rgb(0.5, 0.1, 0.1) };
+            let blink = (time.elapsed_secs() * 5.0).sin() > 0.0;
+            text_color.0 = if blink { Color::srgb(1.0, 0.0, 0.0) } else { Color::srgb(0.5, 0.1, 0.1) };
         } else if hull_pct_i < 50 {
-            text.sections[0].style.color = Color::YELLOW;
+            text_color.0 = Color::srgb(1.0, 1.0, 0.0);
         } else {
-            text.sections[0].style.color = Color::GREEN;
+            text_color.0 = Color::srgb(0.0, 1.0, 0.0);
         }
     }
 
@@ -677,11 +690,11 @@ pub fn update_hud(
     for (bar, mut style, mut bg) in bar_query.iter_mut() {
         let (pct, color) = match bar.kind {
             HudBarKind::Hull => {
-                let c = if hull_pct < 0.3 { Color::RED } else if hull_pct < 0.6 { Color::YELLOW } else { Color::GREEN };
+                let c = if hull_pct < 0.3 { Color::srgb(1.0, 0.0, 0.0) } else if hull_pct < 0.6 { Color::srgb(1.0, 1.0, 0.0) } else { Color::srgb(0.0, 1.0, 0.0) };
                 (hull_pct, c)
             }
             HudBarKind::Oxygen => {
-                let c = if o2_pct < 0.3 { Color::RED } else if o2_pct < 0.5 { Color::YELLOW } else { Color::CYAN };
+                let c = if o2_pct < 0.3 { Color::srgb(1.0, 0.0, 0.0) } else if o2_pct < 0.5 { Color::srgb(1.0, 1.0, 0.0) } else { Color::srgb(0.0, 1.0, 1.0) };
                 (o2_pct, c)
             }
             HudBarKind::Fuel => continue, // handled in update_hud_secondary
@@ -698,30 +711,40 @@ pub fn update_hud_secondary(
     currency: Res<Currency>,
     staffing_state: Res<StaffingState>,
     time: Res<Time>,
-    thruster_query: Query<&Thruster>,
-    weapon_query: Query<&Weapon>,
-    mut fuel_query: Query<&mut Text, (With<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>,
-    mut thruster_text_query: Query<&mut Text, (With<ThrusterText>, Without<FuelText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>,
-    mut ammo_query: Query<&mut Text, (With<AmmoText>, Without<FuelText>, Without<ThrusterText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>,
-    mut noise_query: Query<&mut Text, (With<NoiseText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<CreditsText>, Without<CrewText>)>,
+    ship_query: Query<Entity, With<Ship>>,
+    thruster_query: Query<(&Thruster, &ChildOf)>,
+    weapon_query: Query<(&Weapon, &Module, &ChildOf)>,
+    mut fuel_query: Query<(&mut Text, &mut TextColor), (With<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>,
+    mut thruster_text_query: Query<(&mut Text, &mut TextColor), (With<ThrusterText>, Without<FuelText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>,
+    mut ammo_ui: (
+        Query<(Entity, Option<&Children>), With<AmmoLinesContainer>>,
+        Query<&AmmoLineText>,
+        Commands,
+        Local<Vec<(u32, u32)>>,
+    ),
+    mut noise_query: Query<(&mut Text, &mut TextColor), (With<NoiseText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<CreditsText>, Without<CrewText>)>,
     mut credits_query: Query<&mut Text, (With<CreditsText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CrewText>)>,
-    mut crew_query_hud: Query<&mut Text, (With<CrewText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>)>,
-    mut bar_query: Query<(&HudBar, &mut Style, &mut BackgroundColor)>,
+    mut top_right_credits_query: Query<&mut Text, (With<TopRightCreditsText>, Without<CreditsText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CrewText>)>,
+    mut crew_query_hud: Query<(&mut Text, &mut TextColor), (With<CrewText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>)>,
+    mut bar_query: Query<(&HudBar, &mut Node, &mut BackgroundColor)>,
 ) {
+    let (ammo_container_query, ammo_line_query, mut commands, mut last_ammo_snapshot) = ammo_ui;
+    let Ok(player_ship) = ship_query.single() else { return };
+
     // Fuel
     let fuel_pct = if fuel_state.max_fuel > 0.0 {
         fuel_state.current_fuel / fuel_state.max_fuel
     } else { 1.0 };
     let fuel_pct_i = (fuel_pct * 100.0) as i32;
-    if let Ok(mut text) = fuel_query.get_single_mut() {
-        text.sections[0].value = format!("{}%", fuel_pct_i);
+    if let Ok((mut text, mut text_color)) = fuel_query.single_mut() {
+        text.0 = format!("{}%", fuel_pct_i);
         if fuel_pct_i < 15 {
-            let blink = (time.elapsed_seconds() * 4.0).sin() > 0.0;
-            text.sections[0].style.color = if blink { Color::RED } else { Color::rgb(0.5, 0.1, 0.1) };
+            let blink = (time.elapsed_secs() * 4.0).sin() > 0.0;
+            text_color.0 = if blink { Color::srgb(1.0, 0.0, 0.0) } else { Color::srgb(0.5, 0.1, 0.1) };
         } else if fuel_pct_i < 30 {
-            text.sections[0].style.color = Color::YELLOW;
+            text_color.0 = Color::srgb(1.0, 1.0, 0.0);
         } else {
-            text.sections[0].style.color = Color::rgb(1.0, 0.6, 0.2);
+            text_color.0 = Color::srgb(1.0, 0.6, 0.2);
         }
     }
 
@@ -729,74 +752,104 @@ pub fn update_hud_secondary(
     for (bar, mut style, mut bg) in bar_query.iter_mut() {
         if bar.kind == HudBarKind::Fuel {
             style.width = Val::Percent(fuel_pct * 100.0);
-            *bg = if fuel_pct < 0.25 { Color::RED } else { Color::rgb(1.0, 0.6, 0.2) }.into();
+            *bg = if fuel_pct < 0.25 { Color::srgb(1.0, 0.0, 0.0) } else { Color::srgb(1.0, 0.6, 0.2) }.into();
         }
     }
 
     // Thrusters
-    if let Ok(mut text) = thruster_text_query.get_single_mut() {
-        let outputs: Vec<f32> = thruster_query.iter().map(|t| t.current_output).collect();
+    if let Ok((mut text, mut text_color)) = thruster_text_query.single_mut() {
+        let outputs: Vec<f32> = thruster_query.iter()
+            .filter(|(_, parent)| parent.parent() == player_ship)
+            .map(|(t, _)| t.current_output)
+            .collect();
         if outputs.is_empty() {
-            text.sections[0].value = "N/A".to_string();
-            text.sections[0].style.color = Color::GRAY;
+            text.0 = "N/A".to_string();
+            text_color.0 = Color::srgb(0.5, 0.5, 0.5);
         } else {
             let avg = outputs.iter().sum::<f32>() / outputs.len() as f32;
             let pct = (avg * 100.0) as i32;
-            text.sections[0].value = format!("{}%", pct);
-            text.sections[0].style.color = Color::rgb(0.3, 0.5, 1.0);
+            text.0 = format!("{}%", pct);
+            text_color.0 = Color::srgb(0.3, 0.5, 1.0);
         }
     }
 
-    // Ammo
-    if let Ok(mut text) = ammo_query.get_single_mut() {
-        let mut total_ammo = 0u32;
-        let mut total_max = 0u32;
-        for weapon in weapon_query.iter() {
-            total_ammo += weapon.ammo;
-            total_max += weapon.max_ammo;
+    // Ammo — one line per weapon on the player's own ship, not a
+    // world-wide total (this used to sum every ship's weapons, player and
+    // AI alike, into one misleading number). Rendered as separate stacked
+    // UI nodes rather than "\n" inside one Text — a single Text node in
+    // this fixed-height top-bar row wasn't reliably showing more than the
+    // first line for a 7-weapon loadout.
+    if let Ok((container, children)) = ammo_container_query.single() {
+        let mut entries: Vec<(ModuleType, u32, u32)> = Vec::new();
+        for (weapon, module, parent) in weapon_query.iter() {
+            if parent.parent() != player_ship { continue; }
+            entries.push((module.module_type, weapon.ammo, weapon.max_ammo));
         }
-        if total_max == 0 {
-            text.sections[0].value = "N/A".to_string();
-            text.sections[0].style.color = Color::GRAY;
-        } else {
-            text.sections[0].value = format!("{}/{}", total_ammo, total_max);
-            let pct = total_ammo as f32 / total_max as f32;
-            if pct < 0.15 {
-                let blink = (time.elapsed_seconds() * 3.0).sin() > 0.0;
-                text.sections[0].style.color = if blink { Color::RED } else { Color::rgb(0.5, 0.1, 0.1) };
-            } else if pct < 0.3 {
-                text.sections[0].style.color = Color::RED;
+        let snapshot: Vec<(u32, u32)> = entries.iter().map(|(_, a, m)| (*a, *m)).collect();
+
+        if snapshot != *last_ammo_snapshot {
+            *last_ammo_snapshot = snapshot;
+
+            // Clear old lines
+            if let Some(children) = children {
+                for child in children.iter() {
+                    if ammo_line_query.get(child).is_ok() {
+                        commands.entity(child).despawn();
+                    }
+                }
+            }
+
+            if entries.is_empty() {
+                commands.entity(container).with_children(|c| {
+                    c.spawn((
+                        (Text::new("N/A"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(Color::srgb(0.5, 0.5, 0.5))),
+                        AmmoLineText,
+                    ));
+                });
             } else {
-                text.sections[0].style.color = Color::rgb(0.9, 0.7, 0.3);
+                commands.entity(container).with_children(|c| {
+                    for (module_type, ammo, max_ammo) in entries {
+                        let pct = if max_ammo > 0 { ammo as f32 / max_ammo as f32 } else { 1.0 };
+                        let color = if pct < 0.3 { Color::srgb(1.0, 0.0, 0.0) } else { Color::srgb(0.9, 0.7, 0.3) };
+                        c.spawn((
+                            (Text::new(format!("{} {}/{}", ammo_hud_abbrev(module_type), ammo, max_ammo)),
+                                TextFont { font_size: FontSize::Px(theme::ThemeFonts::TINY), ..default() }, TextColor(color)),
+                            AmmoLineText,
+                        ));
+                    }
+                });
             }
         }
     }
 
     // Noise
-    if let Ok(mut text) = noise_query.get_single_mut() {
+    if let Ok((mut text, mut text_color)) = noise_query.single_mut() {
         let noise = noise_state.noise_level as i32;
-        text.sections[0].value = format!("{}", noise);
-        text.sections[0].style.color = if noise > 80 {
-            Color::RED
+        text.0 = format!("{}", noise);
+        text_color.0 = if noise > 80 {
+            Color::srgb(1.0, 0.0, 0.0)
         } else if noise > 50 {
-            Color::YELLOW
+            Color::srgb(1.0, 1.0, 0.0)
         } else {
-            Color::rgb(0.5, 0.5, 0.5)
+            Color::srgb(0.5, 0.5, 0.5)
         };
     }
 
     // Credits
-    if let Ok(mut text) = credits_query.get_single_mut() {
-        text.sections[0].value = format!("{}", currency.credits);
+    if let Ok(mut text) = credits_query.single_mut() {
+        text.0 = format!("{}", currency.credits);
+    }
+    if let Ok(mut text) = top_right_credits_query.single_mut() {
+        text.0 = format!("{}", currency.credits);
     }
 
     // Crew staffing
-    if let Ok(mut text) = crew_query_hud.get_single_mut() {
-        text.sections[0].value = format!("{}/{}", staffing_state.total_crew, staffing_state.total_berths);
-        text.sections[0].style.color = if staffing_state.total_crew > staffing_state.total_berths {
-            Color::RED
+    if let Ok((mut text, mut text_color)) = crew_query_hud.single_mut() {
+        text.0 = format!("{}/{}", staffing_state.total_crew, staffing_state.total_berths);
+        text_color.0 = if staffing_state.total_crew > staffing_state.total_berths {
+            Color::srgb(1.0, 0.0, 0.0)
         } else {
-            Color::rgb(0.7, 0.9, 0.7)
+            Color::srgb(0.7, 0.9, 0.7)
         };
     }
 }
@@ -809,22 +862,22 @@ const NOTIFICATION_DEDUP_SECS: f32 = 3.0;
 /// Spawns toast notifications from events, with deduplication and cap
 fn handle_notifications(
     mut commands: Commands,
-    mut notification_events: EventReader<ShowNotification>,
+    mut notification_events: MessageReader<ShowNotification>,
     container_query: Query<Entity, With<NotificationContainer>>,
     existing_toasts: Query<(Entity, &Text), With<NotificationToast>>,
     mut recent_messages: Local<Vec<(String, f32)>>,
     time: Res<Time>,
 ) {
-    let Ok(container) = container_query.get_single() else { return };
+    let Ok(container) = container_query.single() else { return };
 
     // Clean up expired dedup entries
-    let now = time.elapsed_seconds();
+    let now = time.elapsed_secs();
     recent_messages.retain(|(_, t)| now - *t < NOTIFICATION_DEDUP_SECS);
 
     // Count existing toasts
     let mut toast_count = existing_toasts.iter().count();
 
-    for event in notification_events.iter() {
+    for event in notification_events.read() {
         // Skip duplicate messages within the dedup window
         if recent_messages.iter().any(|(msg, _)| msg == &event.message) {
             continue;
@@ -833,7 +886,7 @@ fn handle_notifications(
         // Cap max visible notifications - remove oldest if at limit
         if toast_count >= MAX_NOTIFICATIONS {
             if let Some((oldest_entity, _)) = existing_toasts.iter().next() {
-                commands.entity(oldest_entity).despawn_recursive();
+                commands.entity(oldest_entity).despawn();
                 toast_count -= 1;
             }
         }
@@ -862,16 +915,12 @@ fn handle_notifications(
         };
         let msg = format!("{}{}", prefix, event.message);
         commands.spawn((
-            TextBundle::from_section(&msg, TextStyle {
-                font_size: theme::ThemeFonts::BODY, color, ..default()
-            }).with_style(Style {
-                margin: UiRect::bottom(Val::Px(theme::ThemeSpacing::XS)),
+            Text::new(&msg), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(color), Node { margin: UiRect::bottom(Val::Px(theme::ThemeSpacing::XS)),
                 padding: UiRect::new(Val::Px(10.0), Val::Px(10.0), Val::Px(5.0), Val::Px(5.0)),
                 max_width: Val::Px(340.0),
-                ..default()
-            }).with_background_color(bg_color),
+                ..default() }, BackgroundColor(bg_color),
             NotificationToast { timer: Timer::from_seconds(event.duration, TimerMode::Once) },
-        )).set_parent(container);
+        )).insert(ChildOf(container));
 
         recent_messages.push((event.message.clone(), now));
         toast_count += 1;
@@ -882,33 +931,31 @@ fn handle_notifications(
 fn update_notifications(
     mut commands: Commands,
     time: Res<Time>,
-    mut toast_query: Query<(Entity, &mut NotificationToast, &mut Text)>,
+    mut toast_query: Query<(Entity, &mut NotificationToast, &mut TextColor)>,
 ) {
-    for (entity, mut toast, mut text) in toast_query.iter_mut() {
+    for (entity, mut toast, mut text_color) in toast_query.iter_mut() {
         toast.timer.tick(time.delta());
         let remaining = toast.timer.remaining_secs() / toast.timer.duration().as_secs_f32();
         if remaining < 0.3 {
             let alpha = remaining / 0.3;
-            for section in text.sections.iter_mut() {
-                let c = section.style.color;
-                section.style.color = Color::rgba(c.r(), c.g(), c.b(), alpha);
-            }
+            text_color.0.set_alpha(alpha);
         }
-        if toast.timer.finished() {
-            commands.entity(entity).despawn_recursive();
+        if toast.timer.is_finished() {
+            commands.entity(entity).despawn();
         }
     }
 }
 
 /// Handles menu input
 fn handle_menu_input(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     current_state: Res<State<GameState>>,
     build_state: Res<State<BuildState>>,
     customization_state: Res<CustomizationState>,
+    mission_board_open: Res<crate::contracts::MissionBoardOpen>,
     mut next_state: ResMut<NextState<GameState>>,
     mut pre_pause: ResMut<PrePauseState>,
-    mut load_events: EventWriter<LoadGameRequest>,
+    mut load_events: MessageWriter<LoadGameRequest>,
     module_panel: Query<Entity, With<ModulePanelOverlay>>,
     upgrade_shop: Query<Entity, With<UpgradeShopOverlay>>,
 ) {
@@ -934,30 +981,34 @@ fn handle_menu_input(
     }
 
     // Load from main menu: L+1/2/3/0
-    if *current_state.get() == GameState::MainMenu && keyboard.pressed(KeyCode::L) {
-        if keyboard.just_pressed(KeyCode::Key1) {
-            load_events.send(LoadGameRequest { slot: 0 });
+    if *current_state.get() == GameState::MainMenu && keyboard.pressed(KeyCode::KeyL) {
+        if keyboard.just_pressed(KeyCode::Digit1) {
+            load_events.write(LoadGameRequest { slot: 0 });
         }
-        if keyboard.just_pressed(KeyCode::Key2) {
-            load_events.send(LoadGameRequest { slot: 1 });
+        if keyboard.just_pressed(KeyCode::Digit2) {
+            load_events.write(LoadGameRequest { slot: 1 });
         }
-        if keyboard.just_pressed(KeyCode::Key3) {
-            load_events.send(LoadGameRequest { slot: 2 });
+        if keyboard.just_pressed(KeyCode::Digit3) {
+            load_events.write(LoadGameRequest { slot: 2 });
         }
-        if keyboard.just_pressed(KeyCode::Key0) {
-            load_events.send(LoadGameRequest { slot: 99 });
+        if keyboard.just_pressed(KeyCode::Digit0) {
+            load_events.write(LoadGameRequest { slot: 99 });
         }
     }
 
-    // Don't process Enter for state transitions while module panel, building, or customizing is active
+    // Don't process Enter for state transitions while module panel, building,
+    // customizing, or the mission board is active — the mission board also
+    // binds Enter to "accept contract", and without this guard accepting a
+    // contract simultaneously launched the ship out of the station.
     let is_building = *build_state.get() != BuildState::Inactive;
     let is_customizing = customization_state.active;
 
-    if keyboard.just_pressed(KeyCode::Return)
+    if keyboard.just_pressed(KeyCode::Enter)
         && module_panel.is_empty()
         && upgrade_shop.is_empty()
         && !is_building
         && !is_customizing
+        && !mission_board_open.0
     {
         match current_state.get() {
             GameState::MainMenu => next_state.set(GameState::StationDocked),
@@ -973,25 +1024,25 @@ fn handle_menu_input(
 
 /// Reads from currently-silent events and sends ShowNotification
 fn handle_game_event_notifications(
-    mut power_events: EventReader<PowerStateChanged>,
-    mut oxygen_events: EventReader<OxygenStateChanged>,
-    mut breach_events: EventReader<HullBreached>,
-    mut crew_damage_events: EventReader<CrewDamaged>,
+    mut power_events: MessageReader<PowerStateChanged>,
+    mut oxygen_events: MessageReader<OxygenStateChanged>,
+    mut breach_events: MessageReader<HullBreached>,
+    mut crew_damage_events: MessageReader<CrewDamaged>,
     crew_query: Query<&CrewMember>,
     weapon_query: Query<&Weapon>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
     mut low_ammo_warned: Local<bool>,
 ) {
     // Power state changes
-    for event in power_events.iter() {
+    for event in power_events.read() {
         if event.is_critical {
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: "WARNING: Power deficit! Systems failing!".into(),
                 notification_type: NotificationType::Danger,
                 duration: 4.0,
             });
         } else {
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: "Power restored. Systems nominal.".into(),
                 notification_type: NotificationType::Success,
                 duration: 3.0,
@@ -1000,9 +1051,9 @@ fn handle_game_event_notifications(
     }
 
     // Oxygen state changes
-    for event in oxygen_events.iter() {
+    for event in oxygen_events.read() {
         if event.is_critical {
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("OXYGEN CRITICAL! ({:.0}%) Crew suffocating!", event.new_level * 100.0),
                 notification_type: NotificationType::Danger,
                 duration: 4.0,
@@ -1011,8 +1062,8 @@ fn handle_game_event_notifications(
     }
 
     // Hull breaches
-    for event in breach_events.iter() {
-        notifications.send(ShowNotification {
+    for event in breach_events.read() {
+        notifications.write(ShowNotification {
             message: format!("HULL BREACH! Decompression in progress! (Severity: {:.0}%)", event.severity * 100.0),
             notification_type: NotificationType::Danger,
             duration: 4.0,
@@ -1020,9 +1071,9 @@ fn handle_game_event_notifications(
     }
 
     // Crew damage
-    for event in crew_damage_events.iter() {
+    for event in crew_damage_events.read() {
         if let Ok(crew) = crew_query.get(event.crew) {
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("{} taking damage! ({:?}, -{:.0})", crew.name, event.source, event.amount),
                 notification_type: NotificationType::Warning,
                 duration: 2.5,
@@ -1036,7 +1087,7 @@ fn handle_game_event_notifications(
     });
     if any_low_ammo && !*low_ammo_warned {
         *low_ammo_warned = true;
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: "Low ammo! Weapons below 25% capacity.".into(),
             notification_type: NotificationType::Warning,
             duration: 3.0,
@@ -1053,19 +1104,19 @@ fn handle_game_event_notifications(
 /// Toggles crew management overlay with C key
 fn toggle_crew_menu(
     mut commands: Commands,
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     existing_menu: Query<Entity, With<CrewMenuOverlay>>,
     crew_query: Query<(Entity, &CrewMember)>,
     station_query: Query<(&CrewStation, &Module)>,
     staffing_state: Res<StaffingState>,
 ) {
-    if !keyboard.just_pressed(KeyCode::C) {
+    if !keyboard.just_pressed(KeyCode::KeyC) {
         return;
     }
 
     // Toggle off if already open
-    if let Ok(entity) = existing_menu.get_single() {
-        commands.entity(entity).despawn_recursive();
+    if let Ok(entity) = existing_menu.single() {
+        commands.entity(entity).despawn();
         return;
     }
 
@@ -1079,8 +1130,7 @@ fn toggle_crew_menu(
 
     // Spawn crew management panel
     commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(10.0),
                 top: Val::Px(60.0),
@@ -1089,18 +1139,12 @@ fn toggle_crew_menu(
                 padding: UiRect::all(Val::Px(10.0)),
                 row_gap: Val::Px(6.0),
                 ..default()
-            },
-            background_color: Color::rgba(0.0, 0.0, 0.1, 0.85).into(),
-            ..default()
-        },
+            }, BackgroundColor(Color::srgba(0.0, 0.0, 0.1, 0.85))),
         CrewMenuOverlay,
     )).with_children(|parent| {
-        parent.spawn(TextBundle::from_section(
-            format!("CREW MANAGEMENT - {}/{} berths - {}/{} stations",
+        parent.spawn((Text::new(format!("CREW MANAGEMENT - {}/{} berths - {}/{} stations",
                 staffing_state.total_crew, staffing_state.total_berths,
-                staffing_state.staffed_stations, staffing_state.total_stations),
-            TextStyle { font_size: 20.0, color: Color::WHITE, ..default() },
-        ));
+                staffing_state.staffed_stations, staffing_state.total_stations)), TextFont { font_size: FontSize::Px(20.0), ..default() }, TextColor(Color::WHITE)));
 
         for (entity, crew) in crew_query.iter() {
             let status = if crew.health <= 0.0 {
@@ -1111,29 +1155,23 @@ fn toggle_crew_menu(
                 format!("{:?} (Idle)", crew.state)
             };
 
-            parent.spawn(TextBundle::from_section(
-                format!("{} | HP:{:.0} O2:{:.0} Morale:{:.0} | {}",
-                    crew.name, crew.health, crew.oxygen, crew.morale, status),
-                TextStyle { font_size: 15.0, color: Color::rgb(0.8, 0.8, 0.8), ..default() },
-            ));
+            parent.spawn((Text::new(format!("{} | HP:{:.0} O2:{:.0} Morale:{:.0} | {}",
+                    crew.name, crew.health, crew.oxygen, crew.morale, status)), TextFont { font_size: FontSize::Px(15.0), ..default() }, TextColor(Color::srgb(0.8, 0.8, 0.8))));
         }
 
-        parent.spawn(TextBundle::from_section(
-            "Press C to close",
-            TextStyle { font_size: 12.0, color: Color::DARK_GRAY, ..default() },
-        ));
+        parent.spawn((Text::new("Press C to close"), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(Color::srgb(0.25, 0.25, 0.25))));
     });
 }
 
 /// Stub for crew assignment input — press 1 to manually assign idle crew to first unstaffed weapon
 fn crew_menu_assign_input(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     crew_query: Query<(Entity, &CrewMember)>,
     mut station_query: Query<(&mut CrewStation, &Module), With<Weapon>>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     // Press 1 to assign first idle crew to first unstaffed weapon station
-    if keyboard.just_pressed(KeyCode::Key1) {
+    if keyboard.just_pressed(KeyCode::Digit1) {
         // Find crew entities already assigned to any station
         let assigned_crew: std::collections::HashSet<Entity> = station_query
             .iter()
@@ -1149,7 +1187,7 @@ fn crew_menu_assign_input(
         if let (Some((crew_entity, crew)), Some((mut cs, _module))) = (first_idle, first_unstaffed) {
             cs.assigned_crew = Some(crew_entity);
             cs.manually_assigned = true;
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("{} assigned to weapon", crew.name),
                 notification_type: NotificationType::Success,
                 duration: 2.0,
@@ -1162,97 +1200,203 @@ fn crew_menu_assign_input(
 // MAP / INVENTORY OVERLAY (M key)
 // ============================================================================
 
+/// World-units-to-map-pixels scale. Covers -MAP_WORLD_RANGE..MAP_WORLD_RANGE
+/// on each axis, centered on world origin (where the player starts) — big
+/// enough to fit every faction territory (25k-175k out) and the first star
+/// system (star at ~492k out, planets orbiting another 25k-45k+ beyond it).
+const MAP_WORLD_RANGE: f32 = 600_000.0;
+
+/// Converts a world position to a pixel offset within a square map panel of
+/// the given size (top-left origin, Y flipped since world +Y is up but UI
+/// +Y is down).
+fn world_to_map_px(world_pos: Vec2, panel_size: f32) -> (f32, f32) {
+    let half = panel_size / 2.0;
+    let x = half + (world_pos.x / MAP_WORLD_RANGE) * half;
+    let y = half - (world_pos.y / MAP_WORLD_RANGE) * half;
+    (x.clamp(0.0, panel_size), y.clamp(0.0, panel_size))
+}
+
 fn toggle_map_overlay(
     mut commands: Commands,
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     existing: Query<Entity, With<MapOverlay>>,
     discovered: Res<DiscoveredLocations>,
     inventory: Res<Inventory>,
     statistics: Res<Statistics>,
+    player_query: Query<&Transform, With<Ship>>,
+    ai_ship_query: Query<&Transform, With<crate::ai_ship::components::AiShip>>,
+    sim: Res<crate::ai_ship::components::WorldSimulation>,
+    star_query: Query<&Transform, With<crate::celestial::components::Star>>,
+    planet_query: Query<&Transform, With<crate::celestial::components::Planet>>,
+    windows: Query<&Window>,
+    mut virtual_time: ResMut<Time<Virtual>>,
 ) {
-    if !keyboard.just_pressed(KeyCode::M) {
+    if !keyboard.just_pressed(KeyCode::KeyM) {
         return;
     }
 
-    if let Ok(entity) = existing.get_single() {
-        commands.entity(entity).despawn_recursive();
+    if let Ok(entity) = existing.single() {
+        commands.entity(entity).despawn();
+        virtual_time.unpause();
         return;
     }
+
+    // Full-screen map pauses the simulation — ships, timers, damage, fuel
+    // burn etc. all read Time<Virtual>, so this freezes everything except
+    // UI input (which doesn't depend on Time) with no extra state juggling.
+    virtual_time.pause();
+
+    let player_pos = player_query.single().map(|t| t.translation.truncate()).unwrap_or(Vec2::ZERO);
+    let (win_w, win_h) = windows.single().map(|w| (w.width(), w.height())).unwrap_or((1280.0, 800.0));
+    let panel_size = (win_w.min(win_h) * 0.85).max(200.0);
 
     commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 position_type: PositionType::Absolute,
-                right: Val::Px(10.0),
-                top: Val::Px(60.0),
-                width: Val::Px(300.0),
-                flex_direction: FlexDirection::Column,
-                padding: UiRect::all(Val::Px(10.0)),
-                row_gap: Val::Px(6.0),
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                column_gap: Val::Px(20.0),
+                padding: UiRect::all(Val::Px(20.0)),
                 ..default()
-            },
-            background_color: Color::rgba(0.0, 0.0, 0.1, 0.85).into(),
-            ..default()
-        },
+            }, BackgroundColor(Color::srgba(0.0, 0.0, 0.05, 0.97)), ZIndex(50)),
         MapOverlay,
     )).with_children(|parent| {
-        parent.spawn(TextBundle::from_section("MAP & INVENTORY", TextStyle {
-            font_size: 22.0, color: Color::WHITE, ..default()
-        }));
-
-        // Discovered locations
-        parent.spawn(TextBundle::from_section(
-            format!("Wrecks found: {}", discovered.wrecks.len()),
-            TextStyle { font_size: 16.0, color: Color::rgb(0.8, 0.6, 0.4), ..default() },
-        ));
-        parent.spawn(TextBundle::from_section(
-            format!("Caves found: {}", discovered.caves.len()),
-            TextStyle { font_size: 16.0, color: Color::rgb(0.6, 0.6, 0.6), ..default() },
-        ));
-        parent.spawn(TextBundle::from_section(
-            format!("Settlements: {}", discovered.settlements.len()),
-            TextStyle { font_size: 16.0, color: Color::rgb(0.4, 0.8, 0.4), ..default() },
-        ));
-
-        // Inventory
-        parent.spawn(TextBundle::from_section("--- Inventory ---", TextStyle {
-            font_size: 18.0, color: Color::YELLOW, ..default()
-        }));
-
-        if inventory.items.is_empty() {
-            parent.spawn(TextBundle::from_section("(empty)", TextStyle {
-                font_size: 14.0, color: Color::GRAY, ..default()
-            }));
-        } else {
-            for (item_type, count) in &inventory.items {
-                parent.spawn(TextBundle::from_section(
-                    format!("{}: x{}", item_type.name(), count),
-                    TextStyle { font_size: 14.0, color: Color::WHITE, ..default() },
+        // Solar system map: fixed world-anchored frame (not recentered on
+        // the player) so position relative to the whole map is legible.
+        parent.spawn((
+            Node {
+                width: Val::Px(panel_size),
+                height: Val::Px(panel_size),
+                position_type: PositionType::Relative,
+                overflow: Overflow::clip(),
+                flex_shrink: 0.0,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.02, 0.03, 0.08, 1.0)),
+        )).with_children(|map| {
+            // Star(s)
+            for star_transform in star_query.iter() {
+                let (x, y) = world_to_map_px(star_transform.translation.truncate(), panel_size);
+                map.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(x - 7.0),
+                        top: Val::Px(y - 7.0),
+                        width: Val::Px(14.0),
+                        height: Val::Px(14.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(1.0, 0.9, 0.4)),
                 ));
             }
-        }
-
-        parent.spawn(TextBundle::from_section(
-            format!("Weight: {:.0}/{:.0}", inventory.current_weight, inventory.max_capacity),
-            TextStyle { font_size: 14.0, color: Color::GRAY, ..default() },
-        ));
-
-        // Logs found
-        if !statistics.logs_found.is_empty() {
-            parent.spawn(TextBundle::from_section("--- Logs ---", TextStyle {
-                font_size: 18.0, color: Color::CYAN, ..default()
-            }));
-            for log in &statistics.logs_found {
-                parent.spawn(TextBundle::from_section(log, TextStyle {
-                    font_size: 14.0, color: Color::rgb(0.7, 0.7, 0.8), ..default()
-                }));
+            // Planets
+            for planet_transform in planet_query.iter() {
+                let (x, y) = world_to_map_px(planet_transform.translation.truncate(), panel_size);
+                map.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(x - 3.5),
+                        top: Val::Px(y - 3.5),
+                        width: Val::Px(7.0),
+                        height: Val::Px(7.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.5, 0.6, 0.8)),
+                ));
             }
-        }
+            // Enemies: real (in render range) entities...
+            for ai_transform in ai_ship_query.iter() {
+                let (x, y) = world_to_map_px(ai_transform.translation.truncate(), panel_size);
+                map.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(x - 2.0),
+                        top: Val::Px(y - 2.0),
+                        width: Val::Px(4.0),
+                        height: Val::Px(4.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(1.0, 0.15, 0.15)),
+                ));
+            }
+            // ...and still-off-screen simulated ones (most ships, most of the time)
+            for sim_ship in sim.ships.iter().filter(|s| !s.spawned && s.behavior != crate::ai_ship::components::SimBehavior::Dead) {
+                let (x, y) = world_to_map_px(sim_ship.position, panel_size);
+                map.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(x - 2.0),
+                        top: Val::Px(y - 2.0),
+                        width: Val::Px(4.0),
+                        height: Val::Px(4.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(1.0, 0.15, 0.15)),
+                ));
+            }
 
-        parent.spawn(TextBundle::from_section(
-            "Press M to close",
-            TextStyle { font_size: 12.0, color: Color::DARK_GRAY, ..default() },
-        ));
+            // Player marker on top, slightly bigger so it's easy to find
+            let (px, py) = world_to_map_px(player_pos, panel_size);
+            map.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(px - 3.5),
+                    top: Val::Px(py - 3.5),
+                    width: Val::Px(7.0),
+                    height: Val::Px(7.0),
+                    ..default()
+                },
+                BackgroundColor(Color::WHITE),
+            ));
+        });
+
+        // Sidebar: inventory / discovered locations / logs
+        parent.spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                width: Val::Px(300.0),
+                height: Val::Percent(90.0),
+                padding: UiRect::all(Val::Px(10.0)),
+                row_gap: Val::Px(6.0),
+                overflow: Overflow::clip_y(),
+                flex_shrink: 0.0,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.1, 0.85)),
+        )).with_children(|parent| {
+            parent.spawn((Text::new("MAP & INVENTORY"), TextFont { font_size: FontSize::Px(22.0), ..default() }, TextColor(Color::WHITE)));
+
+            // Discovered locations
+            parent.spawn((Text::new(format!("Wrecks found: {}", discovered.wrecks.len())), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.8, 0.6, 0.4))));
+            parent.spawn((Text::new(format!("Caves found: {}", discovered.caves.len())), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.6, 0.6, 0.6))));
+            parent.spawn((Text::new(format!("Settlements: {}", discovered.settlements.len())), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.4, 0.8, 0.4))));
+
+            // Inventory
+            parent.spawn((Text::new("--- Inventory ---"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(1.0, 1.0, 0.0))));
+
+            if inventory.items.is_empty() {
+                parent.spawn((Text::new("(empty)"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.5, 0.5, 0.5))));
+            } else {
+                for (item_type, count) in &inventory.items {
+                    parent.spawn((Text::new(format!("{}: x{}", item_type.name(), count)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::WHITE)));
+                }
+            }
+
+            parent.spawn((Text::new(format!("Weight: {:.0}/{:.0}", inventory.current_weight, inventory.max_capacity)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.5, 0.5, 0.5))));
+
+            // Logs found
+            if !statistics.logs_found.is_empty() {
+                parent.spawn((Text::new("--- Logs ---"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(0.0, 1.0, 1.0))));
+                for log in &statistics.logs_found {
+                    parent.spawn((Text::new(log), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.7, 0.7, 0.8))));
+                }
+            }
+
+            parent.spawn((Text::new("Press M to close"), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(Color::srgb(0.25, 0.25, 0.25))));
+        });
     });
 }
 
@@ -1264,8 +1408,7 @@ fn spawn_main_menu(mut commands: Commands) {
     use theme::*;
 
     commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
                 justify_content: JustifyContent::Center,
@@ -1273,95 +1416,57 @@ fn spawn_main_menu(mut commands: Commands) {
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(ThemeSpacing::SECTION),
                 ..default()
-            },
-            background_color: ThemeColors::BG_VOID.into(),
-            z_index: ZIndex::Global(100),
-            ..default()
-        },
+            }, BackgroundColor(ThemeColors::BG_VOID), ZIndex(100)),
         MainMenuOverlay,
     )).with_children(|parent| {
         // Title container
-        parent.spawn(NodeBundle {
-            style: Style {
+        parent.spawn((Node {
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 padding: UiRect::new(Val::Px(80.0), Val::Px(80.0), Val::Px(ThemeSpacing::XXL), Val::Px(ThemeSpacing::XXL)),
                 row_gap: Val::Px(ThemeSpacing::MD),
                 ..default()
-            },
-            ..default()
-        }).with_children(|title_box| {
+            })).with_children(|title_box| {
             // Top accent line
-            title_box.spawn(NodeBundle {
-                style: Style { width: Val::Px(240.0), height: Val::Px(1.0), margin: UiRect::bottom(Val::Px(ThemeSpacing::LG)), ..default() },
-                background_color: ThemeColors::BORDER_BRIGHT.into(),
-                ..default()
-            });
+            title_box.spawn((Node { width: Val::Px(240.0), height: Val::Px(1.0), margin: UiRect::bottom(Val::Px(ThemeSpacing::LG)), ..default() }, BackgroundColor(ThemeColors::BORDER_BRIGHT)));
 
-            title_box.spawn(TextBundle::from_section("DEPTHS BELOW", TextStyle {
-                font_size: ThemeFonts::DISPLAY, color: ThemeColors::ACCENT_BLUE, ..default()
-            }));
+            title_box.spawn((Text::new("DEPTHS BELOW"), TextFont { font_size: FontSize::Px(ThemeFonts::DISPLAY), ..default() }, TextColor(ThemeColors::ACCENT_BLUE)));
 
-            title_box.spawn(TextBundle::from_section("Into the Void", TextStyle {
-                font_size: ThemeFonts::H3, color: ThemeColors::TEXT_SECONDARY, ..default()
-            }));
+            title_box.spawn((Text::new("Into the Void"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::TEXT_SECONDARY)));
 
             // Bottom accent line
-            title_box.spawn(NodeBundle {
-                style: Style { width: Val::Px(240.0), height: Val::Px(1.0), margin: UiRect::top(Val::Px(ThemeSpacing::LG)), ..default() },
-                background_color: ThemeColors::BORDER_BRIGHT.into(),
-                ..default()
-            });
+            title_box.spawn((Node { width: Val::Px(240.0), height: Val::Px(1.0), margin: UiRect::top(Val::Px(ThemeSpacing::LG)), ..default() }, BackgroundColor(ThemeColors::BORDER_BRIGHT)));
         });
 
         // Actions container
-        parent.spawn(NodeBundle {
-            style: Style {
+        parent.spawn((Node {
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::Center,
                 row_gap: Val::Px(ThemeSpacing::LG),
                 ..default()
-            },
-            ..default()
-        }).with_children(|actions| {
+            })).with_children(|actions| {
             // New game button
-            actions.spawn(NodeBundle {
-                style: Style {
+            actions.spawn((Node {
                     padding: UiRect::new(Val::Px(ThemeSpacing::XXL), Val::Px(ThemeSpacing::XXL), Val::Px(ThemeSpacing::MD), Val::Px(ThemeSpacing::MD)),
                     ..default()
-                },
-                background_color: ThemeColors::BG_ELEVATED.into(),
-                ..default()
-            }).with_children(|btn| {
-                btn.spawn(TextBundle::from_section("ENTER — New Expedition", TextStyle {
-                    font_size: ThemeFonts::H2, color: ThemeColors::TEXT_PRIMARY, ..default()
-                }));
+                }, BackgroundColor(ThemeColors::BG_ELEVATED))).with_children(|btn| {
+                btn.spawn((Text::new("ENTER — New Expedition"), TextFont { font_size: FontSize::Px(ThemeFonts::H2), ..default() }, TextColor(ThemeColors::TEXT_PRIMARY)));
             });
 
             // Saved games
             let slots = crate::meta::get_save_slots();
             let has_saves = slots.iter().any(|(_, info)| info.is_some());
             if has_saves {
-                actions.spawn(NodeBundle {
-                    style: Style {
+                actions.spawn((Node {
                         flex_direction: FlexDirection::Column,
                         align_items: AlignItems::Center,
                         padding: UiRect::all(Val::Px(ThemeSpacing::XL)),
                         row_gap: Val::Px(ThemeSpacing::SM),
                         ..default()
-                    },
-                    background_color: ThemeColors::BG_CARD.into(),
-                    ..default()
-                }).with_children(|save_box| {
-                    save_box.spawn(TextBundle::from_section("SAVED EXPEDITIONS", TextStyle {
-                        font_size: ThemeFonts::CAPTION, color: ThemeColors::TEXT_MUTED, ..default()
-                    }));
+                    }, BackgroundColor(ThemeColors::BG_CARD))).with_children(|save_box| {
+                    save_box.spawn((Text::new("SAVED EXPEDITIONS"), TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() }, TextColor(ThemeColors::TEXT_MUTED)));
 
-                    save_box.spawn(NodeBundle {
-                        style: Style { width: Val::Px(180.0), height: Val::Px(1.0), ..default() },
-                        background_color: ThemeColors::BORDER_SUBTLE.into(),
-                        ..default()
-                    });
+                    save_box.spawn((Node { width: Val::Px(180.0), height: Val::Px(1.0), ..default() }, BackgroundColor(ThemeColors::BORDER_SUBTLE)));
 
                     for (slot, info) in &slots {
                         if let Some(info) = info {
@@ -1369,11 +1474,8 @@ fn spawn_main_menu(mut commands: Commands) {
                             let key = if *slot == 99 { "L+0" } else { match slot { 0 => "L+1", 1 => "L+2", 2 => "L+3", _ => "L+?" } };
                             let time_min = (info.play_time / 60.0) as i32;
                             let time_sec = (info.play_time % 60.0) as i32;
-                            save_box.spawn(TextBundle::from_section(
-                                format!("[{}]  {} — {:.0} distance, {}:{:02} played",
-                                    key, label, info.depth, time_min, time_sec),
-                                TextStyle { font_size: ThemeFonts::BODY, color: ThemeColors::ACCENT_GREEN, ..default() },
-                            ));
+                            save_box.spawn((Text::new(format!("[{}]  {} — {:.0} distance, {}:{:02} played",
+                                    key, label, info.depth, time_min, time_sec)), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::ACCENT_GREEN)));
                         }
                     }
                 });
@@ -1381,16 +1483,10 @@ fn spawn_main_menu(mut commands: Commands) {
         });
 
         // Tagline
-        parent.spawn(TextBundle::from_section(
-            "Build your ship. Explore the void. Survive.",
-            TextStyle { font_size: ThemeFonts::BODY, color: ThemeColors::TEXT_MUTED, ..default() },
-        ));
+        parent.spawn((Text::new("Build your ship. Explore the void. Survive."), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::TEXT_MUTED)));
 
         // Version / flavor
-        parent.spawn(TextBundle::from_section(
-            "The void remembers those who dare to venture deeper.",
-            TextStyle { font_size: ThemeFonts::BODY_SMALL, color: Color::rgba(0.25, 0.28, 0.35, 0.6), ..default() },
-        ));
+        parent.spawn((Text::new("The void remembers those who dare to venture deeper."), TextFont { font_size: FontSize::Px(ThemeFonts::BODY_SMALL), ..default() }, TextColor(Color::srgba(0.25, 0.28, 0.35, 0.6))));
     });
 }
 
@@ -1399,7 +1495,7 @@ fn despawn_main_menu(
     query: Query<Entity, With<MainMenuOverlay>>,
 ) {
     for entity in query.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
@@ -1411,14 +1507,14 @@ fn spawn_game_over_screen(
     mut commands: Commands,
     statistics: Res<Statistics>,
     victory_state: Res<VictoryState>,
+    death_cause: Res<crate::resources::DeathCause>,
 ) {
     use theme::*;
 
     let is_victory = victory_state.achieved;
 
     commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
                 justify_content: JustifyContent::Center,
@@ -1426,52 +1522,39 @@ fn spawn_game_over_screen(
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(ThemeSpacing::XXL),
                 ..default()
-            },
-            background_color: ThemeColors::BG_VOID.into(),
-            ..default()
-        },
+            }, BackgroundColor(ThemeColors::BG_VOID)),
         GameOverOverlay,
     )).with_children(|parent| {
         // Title
         if is_victory {
-            parent.spawn(TextBundle::from_section("VICTORY", TextStyle {
-                font_size: ThemeFonts::DISPLAY, color: ThemeColors::ACCENT_GREEN, ..default()
-            }));
-            parent.spawn(TextBundle::from_section(
-                "You reached the deepest void and uncovered the truth.",
-                TextStyle { font_size: ThemeFonts::H3, color: ThemeColors::TEXT_TITLE, ..default() },
-            ));
+            parent.spawn((Text::new("VICTORY"), TextFont { font_size: FontSize::Px(ThemeFonts::DISPLAY), ..default() }, TextColor(ThemeColors::ACCENT_GREEN)));
+            parent.spawn((Text::new("You reached the deepest void and uncovered the truth."), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::TEXT_TITLE)));
         } else {
-            parent.spawn(TextBundle::from_section("LOST IN SPACE", TextStyle {
-                font_size: ThemeFonts::DISPLAY, color: ThemeColors::ACCENT_RED, ..default()
-            }));
-            parent.spawn(TextBundle::from_section(
-                "The void claims another vessel.",
-                TextStyle { font_size: ThemeFonts::H3, color: ThemeColors::TEXT_SECONDARY, ..default() },
-            ));
+            parent.spawn((Text::new("LOST IN SPACE"), TextFont { font_size: FontSize::Px(ThemeFonts::DISPLAY), ..default() }, TextColor(ThemeColors::ACCENT_RED)));
+            parent.spawn((Text::new("The void claims another vessel."), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::TEXT_SECONDARY)));
+
+            // What actually killed the player — the single most useful line
+            // on this screen.
+            if let Some(cause) = &death_cause.cause {
+                parent.spawn((
+                    Text::new(cause.clone()),
+                    TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() },
+                    TextColor(ThemeColors::ACCENT_ORANGE),
+                ));
+            }
         }
 
         // Stats panel
-        parent.spawn(NodeBundle {
-            style: Style {
+        parent.spawn((Node {
                 flex_direction: FlexDirection::Column,
                 align_items: AlignItems::FlexStart,
                 padding: UiRect::all(Val::Px(ThemeSpacing::XXL)),
                 row_gap: Val::Px(ThemeSpacing::MD),
                 ..default()
-            },
-            background_color: ThemeColors::BG_CARD.into(),
-            ..default()
-        }).with_children(|stats| {
-            stats.spawn(TextBundle::from_section("EXPEDITION LOG", TextStyle {
-                font_size: ThemeFonts::CAPTION, color: ThemeColors::TEXT_MUTED, ..default()
-            }));
+            }, BackgroundColor(ThemeColors::BG_CARD))).with_children(|stats| {
+            stats.spawn((Text::new("EXPEDITION LOG"), TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() }, TextColor(ThemeColors::TEXT_MUTED)));
 
-            stats.spawn(NodeBundle {
-                style: Style { width: Val::Px(200.0), height: Val::Px(1.0), ..default() },
-                background_color: ThemeColors::BORDER_SUBTLE.into(),
-                ..default()
-            });
+            stats.spawn((Node { width: Val::Px(200.0), height: Val::Px(1.0), ..default() }, BackgroundColor(ThemeColors::BORDER_SUBTLE)));
 
             let time_min = (statistics.play_time_seconds / 60.0) as i32;
             let time_sec = (statistics.play_time_seconds % 60.0) as i32;
@@ -1484,32 +1567,20 @@ fn spawn_game_over_screen(
             ];
 
             for (text, color) in stat_items {
-                stats.spawn(TextBundle::from_section(text, TextStyle {
-                    font_size: ThemeFonts::H3, color, ..default()
-                }));
+                stats.spawn((Text::new(text), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(color)));
             }
 
             if !statistics.logs_found.is_empty() {
-                stats.spawn(TextBundle::from_section(
-                    format!("Logs Found       {}", statistics.logs_found.len()),
-                    TextStyle { font_size: ThemeFonts::H3, color: ThemeColors::ACCENT_CYAN, ..default() },
-                ));
+                stats.spawn((Text::new(format!("Logs Found       {}", statistics.logs_found.len())), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::ACCENT_CYAN)));
             }
         });
 
         // Return prompt
-        parent.spawn(NodeBundle {
-            style: Style {
+        parent.spawn((Node {
                 padding: UiRect::new(Val::Px(ThemeSpacing::XXL), Val::Px(ThemeSpacing::XXL), Val::Px(ThemeSpacing::MD), Val::Px(ThemeSpacing::MD)),
                 ..default()
-            },
-            background_color: ThemeColors::BG_ELEVATED.into(),
-            ..default()
-        }).with_children(|btn| {
-            btn.spawn(TextBundle::from_section(
-                "ENTER — Return to Station",
-                TextStyle { font_size: ThemeFonts::BODY, color: ThemeColors::TEXT_PRIMARY, ..default() },
-            ));
+            }, BackgroundColor(ThemeColors::BG_ELEVATED))).with_children(|btn| {
+            btn.spawn((Text::new("ENTER — Return to Station"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::TEXT_PRIMARY)));
         });
     });
 }
@@ -1519,15 +1590,15 @@ fn despawn_game_over_screen(
     query: Query<Entity, With<GameOverOverlay>>,
 ) {
     for entity in query.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
 fn game_over_input(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
-    if keyboard.just_pressed(KeyCode::Return) {
+    if keyboard.just_pressed(KeyCode::Enter) {
         next_state.set(GameState::MainMenu);
     }
 }
@@ -1558,8 +1629,7 @@ fn spawn_pause_menu(
     info!("Spawning pause menu, modules found: {}", module_query.iter().count());
 
     commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
                 justify_content: JustifyContent::Center,
@@ -1567,31 +1637,22 @@ fn spawn_pause_menu(
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(10.0),
                 ..default()
-            },
-            background_color: theme::ThemeColors::BG_VOID.into(),
-            z_index: ZIndex::Global(100),
-            ..default()
-        },
+            }, BackgroundColor(theme::ThemeColors::BG_VOID), ZIndex(100)),
         PauseMenuOverlay,
     )).with_children(|parent| {
         // Header
-        parent.spawn(TextBundle::from_section("PAUSED", TextStyle {
-            font_size: theme::ThemeFonts::H1, color: theme::ThemeColors::TEXT_TITLE, ..default()
-        }));
+        parent.spawn((Text::new("PAUSED"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H1), ..default() }, TextColor(theme::ThemeColors::TEXT_TITLE)));
 
         // Vitals line
         let o2_pct = if oxygen_state.max_oxygen > 0.0 {
             (oxygen_state.current_oxygen / oxygen_state.max_oxygen * 100.0) as i32
         } else { 100 };
         let hull_pct = (hull_state.hull_integrity * 100.0) as i32;
-        parent.spawn(TextBundle::from_section(
-            format!(
-                "Depth: {:.0}m  Hull: {}%  O2: {}%  Power: {:.0}/{:.0}",
+        parent.spawn((Text::new(format!(
+                "Distance: {:.0}m  Hull: {}%  O2: {}%  Power: {:.0}/{:.0}",
                 depth_state.current_depth, hull_pct, o2_pct,
                 power_state.total_power_generation, power_state.total_power_consumption,
-            ),
-            TextStyle { font_size: 18.0, color: Color::rgb(0.8, 0.8, 0.8), ..default() },
-        ));
+            )), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(0.8, 0.8, 0.8))));
 
         // Module counts by category
         for cat in ModuleCategory::ALL {
@@ -1599,23 +1660,17 @@ fn spawn_pause_menu(
             if total == 0 { continue; }
             let active = cat_active.get(cat).copied().unwrap_or(0);
             let color = if active == total {
-                Color::GREEN
+                Color::srgb(0.0, 1.0, 0.0)
             } else if active > 0 {
-                Color::YELLOW
+                Color::srgb(1.0, 1.0, 0.0)
             } else {
-                Color::RED
+                Color::srgb(1.0, 0.0, 0.0)
             };
-            parent.spawn(TextBundle::from_section(
-                format!("  {}: {}/{} active", cat.name(), active, total),
-                TextStyle { font_size: 16.0, color, ..default() },
-            ));
+            parent.spawn((Text::new(format!("  {}: {}/{} active", cat.name(), active, total)), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(color)));
         }
 
         // Save/Load section
-        parent.spawn(TextBundle::from_section(
-            "--- SAVE/LOAD ---",
-            TextStyle { font_size: 18.0, color: Color::rgb(0.6, 0.8, 1.0), ..default() },
-        ));
+        parent.spawn((Text::new("--- SAVE/LOAD ---"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(0.6, 0.8, 1.0))));
 
         // Show save slot info
         let slots = crate::meta::get_save_slots();
@@ -1627,7 +1682,7 @@ fn spawn_pause_menu(
             };
 
             let status = if let Some(info) = info {
-                format!("{}: Depth {:.0}m, {:.0}s played, Hull {:.0}%",
+                format!("{}: Distance {:.0}m, {:.0}s played, Hull {:.0}%",
                     label, info.depth, info.play_time, info.hull_integrity * 100.0)
             } else {
                 format!("{}: [Empty]", label)
@@ -1639,21 +1694,11 @@ fn spawn_pause_menu(
                 format!("F{}: Save  |  L+{}: Load", slot + 1, slot + 1)
             };
 
-            parent.spawn(TextBundle::from_section(
-                format!("  {} ({})", status, key),
-                TextStyle {
-                    font_size: 14.0,
-                    color: if info.is_some() { Color::rgb(0.7, 0.9, 0.7) } else { Color::GRAY },
-                    ..default()
-                },
-            ));
+            parent.spawn((Text::new(format!("  {} ({})", status, key)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(if info.is_some() { Color::srgb(0.7, 0.9, 0.7) } else { Color::srgb(0.5, 0.5, 0.5) })));
         }
 
         // Hint
-        parent.spawn(TextBundle::from_section(
-            "ESC: Resume | P: Modules | F1-F3: Save | L+1-3: Load",
-            TextStyle { font_size: 16.0, color: Color::GRAY, ..default() },
-        ));
+        parent.spawn((Text::new("ESC: Resume | P: Modules | F1-F3: Save | L+1-3: Load"), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.5, 0.5, 0.5))));
     });
 }
 
@@ -1663,10 +1708,10 @@ fn despawn_pause_menu(
     panel_query: Query<Entity, With<ModulePanelOverlay>>,
 ) {
     for entity in query.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
     for entity in panel_query.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
@@ -1676,38 +1721,38 @@ fn despawn_pause_menu(
 
 /// Handle F1-F3 to save, L+1-3 to load (also L+0 for auto-save)
 fn save_load_input(
-    keyboard: Res<Input<KeyCode>>,
-    mut save_events: EventWriter<SaveGameRequest>,
-    mut load_events: EventWriter<LoadGameRequest>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut save_events: MessageWriter<SaveGameRequest>,
+    mut load_events: MessageWriter<LoadGameRequest>,
 ) {
-    let l_held = keyboard.pressed(KeyCode::L);
+    let l_held = keyboard.pressed(KeyCode::KeyL);
 
     // Save: F1, F2, F3
     if !l_held {
         if keyboard.just_pressed(KeyCode::F1) {
-            save_events.send(SaveGameRequest { slot: 0 });
+            save_events.write(SaveGameRequest { slot: 0 });
         }
         if keyboard.just_pressed(KeyCode::F2) {
-            save_events.send(SaveGameRequest { slot: 1 });
+            save_events.write(SaveGameRequest { slot: 1 });
         }
         if keyboard.just_pressed(KeyCode::F3) {
-            save_events.send(SaveGameRequest { slot: 2 });
+            save_events.write(SaveGameRequest { slot: 2 });
         }
     }
 
     // Load: L+1, L+2, L+3, L+0 (auto-save)
     if l_held {
-        if keyboard.just_pressed(KeyCode::Key1) {
-            load_events.send(LoadGameRequest { slot: 0 });
+        if keyboard.just_pressed(KeyCode::Digit1) {
+            load_events.write(LoadGameRequest { slot: 0 });
         }
-        if keyboard.just_pressed(KeyCode::Key2) {
-            load_events.send(LoadGameRequest { slot: 1 });
+        if keyboard.just_pressed(KeyCode::Digit2) {
+            load_events.write(LoadGameRequest { slot: 1 });
         }
-        if keyboard.just_pressed(KeyCode::Key3) {
-            load_events.send(LoadGameRequest { slot: 2 });
+        if keyboard.just_pressed(KeyCode::Digit3) {
+            load_events.write(LoadGameRequest { slot: 2 });
         }
-        if keyboard.just_pressed(KeyCode::Key0) {
-            load_events.send(LoadGameRequest { slot: 99 }); // Auto-save slot
+        if keyboard.just_pressed(KeyCode::Digit0) {
+            load_events.write(LoadGameRequest { slot: 99 }); // Auto-save slot
         }
     }
 }
@@ -1719,20 +1764,20 @@ fn save_load_input(
 /// Toggles the module management panel on/off with P key
 fn toggle_module_panel(
     mut commands: Commands,
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     existing_panel: Query<Entity, With<ModulePanelOverlay>>,
     module_query: Query<(Entity, &Module)>,
 ) {
-    if !keyboard.just_pressed(KeyCode::P) {
+    if !keyboard.just_pressed(KeyCode::KeyP) {
         return;
     }
 
     info!("P pressed - toggling module panel");
 
     // Toggle off if already open
-    if let Ok(entity) = existing_panel.get_single() {
+    if let Ok(entity) = existing_panel.single() {
         info!("Closing module panel");
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
         return;
     }
 
@@ -1745,8 +1790,7 @@ fn toggle_module_panel(
     info!("Opening module panel, {} modules found", module_query.iter().count());
 
     commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(10.0),
                 top: Val::Px(60.0),
@@ -1756,27 +1800,18 @@ fn toggle_module_panel(
                 padding: UiRect::all(Val::Px(10.0)),
                 row_gap: Val::Px(4.0),
                 ..default()
-            },
-            background_color: Color::rgba(0.0, 0.05, 0.15, 0.95).into(),
-            z_index: ZIndex::Global(110),
-            ..default()
-        },
+            }, BackgroundColor(Color::srgba(0.0, 0.05, 0.15, 0.95)), ZIndex(110)),
         ModulePanelOverlay,
         ModuleListSelection(0),
     )).with_children(|parent| {
-        parent.spawn(TextBundle::from_section("MODULE MANAGEMENT", TextStyle {
-            font_size: 22.0, color: Color::WHITE, ..default()
-        }));
+        parent.spawn((Text::new("MODULE MANAGEMENT"), TextFont { font_size: FontSize::Px(22.0), ..default() }, TextColor(Color::WHITE)));
 
         let mut row_index: usize = 0;
         for cat in ModuleCategory::ALL {
             let Some(modules) = by_cat.get(cat) else { continue };
 
             // Category header
-            parent.spawn(TextBundle::from_section(
-                format!("--- {} ---", cat.name()),
-                TextStyle { font_size: 16.0, color: Color::YELLOW, ..default() },
-            ));
+            parent.spawn((Text::new(format!("--- {} ---", cat.name())), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(1.0, 1.0, 0.0))));
 
             for &(entity, module) in modules {
                 let status = if module.is_active { "[ON] " } else { "[OFF]" };
@@ -1794,15 +1829,13 @@ fn toggle_module_panel(
                     module.health, module.max_health, pwr,
                 );
                 let color = if module.is_active {
-                    Color::GREEN
+                    Color::srgb(0.0, 1.0, 0.0)
                 } else {
-                    Color::rgb(0.6, 0.3, 0.3)
+                    Color::srgb(0.6, 0.3, 0.3)
                 };
 
                 parent.spawn((
-                    TextBundle::from_section(&text, TextStyle {
-                        font_size: 15.0, color, ..default()
-                    }),
+                    (Text::new(&text), TextFont { font_size: FontSize::Px(15.0), ..default() }, TextColor(color)),
                     ModuleListItem(entity),
                 ));
                 row_index += 1;
@@ -1810,51 +1843,46 @@ fn toggle_module_panel(
         }
 
         if row_index == 0 {
-            parent.spawn(TextBundle::from_section("No modules installed", TextStyle {
-                font_size: 16.0, color: Color::GRAY, ..default()
-            }));
+            parent.spawn((Text::new("No modules installed"), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.5, 0.5, 0.5))));
         }
 
-        parent.spawn(TextBundle::from_section(
-            "Up/Down: Select  Enter: Toggle  P: Close",
-            TextStyle { font_size: 12.0, color: Color::DARK_GRAY, ..default() },
-        ));
+        parent.spawn((Text::new("Up/Down: Select  Enter: Toggle  P: Close"), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(Color::srgb(0.25, 0.25, 0.25))));
     });
 }
 
 /// Handles Up/Down/Enter input on the module panel
 fn module_panel_input(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut panel_query: Query<&mut ModuleListSelection, With<ModulePanelOverlay>>,
-    mut item_query: Query<(&ModuleListItem, &mut Text)>,
+    mut item_query: Query<(&ModuleListItem, &mut Text, &mut TextColor)>,
     mut module_query: Query<&mut Module>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
-    let Ok(mut selection) = panel_query.get_single_mut() else { return };
+    let Ok(mut selection) = panel_query.single_mut() else { return };
 
-    let items: Vec<Entity> = item_query.iter().map(|(item, _)| item.0).collect();
+    let items: Vec<Entity> = item_query.iter().map(|(item, _, _)| item.0).collect();
     let count = items.len();
     if count == 0 { return; }
 
     let old_idx = selection.0;
     let mut changed = false;
 
-    if keyboard.just_pressed(KeyCode::Up) {
+    if keyboard.just_pressed(KeyCode::ArrowUp) {
         selection.0 = if old_idx == 0 { count - 1 } else { old_idx - 1 };
         changed = true;
     }
-    if keyboard.just_pressed(KeyCode::Down) {
+    if keyboard.just_pressed(KeyCode::ArrowDown) {
         selection.0 = if old_idx + 1 >= count { 0 } else { old_idx + 1 };
         changed = true;
     }
 
     // Toggle is_active on Enter
-    if keyboard.just_pressed(KeyCode::Return) {
+    if keyboard.just_pressed(KeyCode::Enter) {
         let target_entity = items[selection.0];
         if let Ok(mut module) = module_query.get_mut(target_entity) {
             module.is_active = !module.is_active;
             let state_str = if module.is_active { "ON" } else { "OFF" };
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("{} turned {}", module.module_type.name(), state_str),
                 notification_type: NotificationType::Info,
                 duration: 2.0,
@@ -1867,7 +1895,7 @@ fn module_panel_input(
 
     // Rebuild text for all rows
     let new_idx = selection.0;
-    for (i, (item, mut text)) in item_query.iter_mut().enumerate() {
+    for (i, (item, mut text, mut text_color)) in item_query.iter_mut().enumerate() {
         let Ok(module) = module_query.get(item.0) else { continue };
         let cursor = if i == new_idx { "> " } else { "  " };
         let status = if module.is_active { "[ON] " } else { "[OFF]" };
@@ -1878,15 +1906,15 @@ fn module_panel_input(
         } else {
             "Pwr:0".to_string()
         };
-        text.sections[0].value = format!(
+        text.0 = format!(
             "{}{} {} - HP:{:.0}/{:.0} {}",
             cursor, status, module.module_type.name(),
             module.health, module.max_health, pwr,
         );
-        text.sections[0].style.color = if module.is_active {
-            Color::GREEN
+        text_color.0 = if module.is_active {
+            Color::srgb(0.0, 1.0, 0.0)
         } else {
-            Color::rgb(0.6, 0.3, 0.3)
+            Color::srgb(0.6, 0.3, 0.3)
         };
     }
 }
@@ -2014,8 +2042,7 @@ fn spawn_docking_menu(
     let services = get_docking_services(&hull_state, &oxygen_state, &fuel_state, &weapon_query, crew_count, staffing_state.total_berths, &inventory);
 
     commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
                 justify_content: JustifyContent::Center,
@@ -2023,26 +2050,15 @@ fn spawn_docking_menu(
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(8.0),
                 ..default()
-            },
-            background_color: theme::ThemeColors::BG_VOID.into(),
-            z_index: ZIndex::Global(100),
-            ..default()
-        },
+            }, BackgroundColor(theme::ThemeColors::BG_VOID), ZIndex(100)),
         DockingOverlay,
         DockingMenuSelection(0),
     )).with_children(|parent| {
-        parent.spawn(TextBundle::from_section("OUTPOST", TextStyle {
-            font_size: theme::ThemeFonts::H1, color: theme::ThemeColors::ACCENT_CYAN, ..default()
-        }));
+        parent.spawn((Text::new("OUTPOST"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H1), ..default() }, TextColor(theme::ThemeColors::ACCENT_CYAN)));
 
-        parent.spawn(TextBundle::from_section(
-            format!("Credits: {}", currency.credits),
-            TextStyle { font_size: theme::ThemeFonts::H2, color: theme::ThemeColors::ACCENT_YELLOW, ..default() },
-        ));
+        parent.spawn((Text::new(format!("Credits: {}", currency.credits)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() }, TextColor(theme::ThemeColors::ACCENT_YELLOW)));
 
-        parent.spawn(TextBundle::from_section("", TextStyle {
-            font_size: 8.0, ..default()
-        }));
+        parent.spawn((Text::new(""), TextFont { font_size: FontSize::Px(8.0), ..default() }, TextColor(Color::WHITE)));
 
         for (i, service) in services.iter().enumerate() {
             let cursor = if i == 0 { "> " } else { "  " };
@@ -2053,36 +2069,30 @@ fn spawn_docking_menu(
             };
 
             let color = if !service.available {
-                Color::rgb(0.4, 0.4, 0.4)
+                Color::srgb(0.4, 0.4, 0.4)
             } else if i == 0 {
                 Color::WHITE
             } else {
-                Color::rgb(0.8, 0.8, 0.8)
+                Color::srgb(0.8, 0.8, 0.8)
             };
 
             parent.spawn((
-                TextBundle::from_sections([
-                    TextSection::new(
-                        format!("{}{}{}\n", cursor, service.name, cost_str),
-                        TextStyle { font_size: 20.0, color, ..default() },
-                    ),
-                    TextSection::new(
-                        format!("    {}", service.description),
-                        TextStyle { font_size: 14.0, color: Color::rgb(0.6, 0.6, 0.7), ..default() },
-                    ),
-                ]),
+                Text::new(format!("{}{}{}\n", cursor, service.name, cost_str)),
+                TextFont { font_size: FontSize::Px(20.0), ..default() },
+                TextColor(color),
                 DockingServiceItem(i),
-            ));
+            )).with_children(|section| {
+                section.spawn((
+                    TextSpan::new(format!("    {}", service.description)),
+                    TextFont { font_size: FontSize::Px(14.0), ..default() },
+                    TextColor(Color::srgb(0.6, 0.6, 0.7)),
+                ));
+            });
         }
 
-        parent.spawn(TextBundle::from_section("", TextStyle {
-            font_size: 8.0, ..default()
-        }));
+        parent.spawn((Text::new(""), TextFont { font_size: FontSize::Px(8.0), ..default() }, TextColor(Color::WHITE)));
 
-        parent.spawn(TextBundle::from_section(
-            "Up/Down: Select | Enter: Purchase | ESC: Undock",
-            TextStyle { font_size: 14.0, color: Color::DARK_GRAY, ..default() },
-        ));
+        parent.spawn((Text::new("Up/Down: Select | Enter: Purchase | ESC: Undock"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.25, 0.25, 0.25))));
     });
 }
 
@@ -2091,44 +2101,42 @@ fn despawn_docking_menu(
     query: Query<Entity, With<DockingOverlay>>,
 ) {
     for entity in query.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
 fn docking_menu_input(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
     mut menu_query: Query<&mut DockingMenuSelection, With<DockingOverlay>>,
-    mut item_query: Query<(&DockingServiceItem, &mut Text)>,
-    mut hull_state: ResMut<HullState>,
-    mut oxygen_state: ResMut<OxygenState>,
-    mut fuel_state: ResMut<FuelState>,
+    mut item_query: Query<(&DockingServiceItem, &mut Text, &mut TextColor, &Children)>,
+    mut span_query: Query<&mut TextSpan>,
+    econ_state: (ResMut<HullState>, ResMut<OxygenState>, ResMut<FuelState>, ResMut<Currency>, ResMut<Inventory>),
     mut weapon_query: Query<&mut Weapon, Without<Creature>>,
-    mut currency: ResMut<Currency>,
-    mut inventory: ResMut<Inventory>,
     crew_query: Query<&CrewMember>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
     mut next_state: ResMut<NextState<GameState>>,
     mut hull_query: Query<&mut HullSegment>,
     staffing_state: Res<StaffingState>,
     mut module_query: Query<&mut Module>,
 ) {
-    let Ok(mut selection) = menu_query.get_single_mut() else { return };
+    let (mut hull_state, mut oxygen_state, mut fuel_state, mut currency, mut inventory) = econ_state;
+    let Ok(mut selection) = menu_query.single_mut() else { return };
 
     let service_count = 8usize;
     let old_idx = selection.0;
     let mut changed = false;
 
-    if keyboard.just_pressed(KeyCode::Up) {
+    if keyboard.just_pressed(KeyCode::ArrowUp) {
         selection.0 = if old_idx == 0 { service_count - 1 } else { old_idx - 1 };
         changed = true;
     }
-    if keyboard.just_pressed(KeyCode::Down) {
+    if keyboard.just_pressed(KeyCode::ArrowDown) {
         selection.0 = if old_idx + 1 >= service_count { 0 } else { old_idx + 1 };
         changed = true;
     }
 
-    if keyboard.just_pressed(KeyCode::Return) {
+    if keyboard.just_pressed(KeyCode::Enter) {
         let crew_count = crew_query.iter().count();
         let weapon_read_query_hack: Vec<_> = weapon_query.iter().map(|w| (w.ammo, w.max_ammo)).collect();
 
@@ -2138,7 +2146,7 @@ fn docking_menu_input(
                 let hull_damage = 1.0 - hull_state.hull_integrity;
                 let cost = (hull_damage * 500.0) as u32;
                 if hull_damage < 0.01 {
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: "Hull already at full integrity".into(),
                         notification_type: NotificationType::Info,
                         duration: 2.0,
@@ -2152,14 +2160,14 @@ fn docking_menu_input(
                         segment.is_depressurized = false;
                         segment.depressurization_level = 0.0;
                     }
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: format!("Hull repaired! (-{}c)", cost),
                         notification_type: NotificationType::Success,
                         duration: 3.0,
                     });
                     changed = true;
                 } else {
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: format!("Not enough credits (need {}c, have {}c)", cost, currency.credits),
                         notification_type: NotificationType::Warning,
                         duration: 2.0,
@@ -2171,7 +2179,7 @@ fn docking_menu_input(
                 let o2_missing = oxygen_state.max_oxygen - oxygen_state.current_oxygen;
                 let cost = (o2_missing * 2.0) as u32;
                 if o2_missing < 1.0 {
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: "Oxygen tanks are full".into(),
                         notification_type: NotificationType::Info,
                         duration: 2.0,
@@ -2179,14 +2187,14 @@ fn docking_menu_input(
                 } else if currency.credits >= cost {
                     currency.credits -= cost;
                     oxygen_state.current_oxygen = oxygen_state.max_oxygen;
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: format!("Oxygen refilled! (-{}c)", cost),
                         notification_type: NotificationType::Success,
                         duration: 3.0,
                     });
                     changed = true;
                 } else {
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: format!("Not enough credits (need {}c, have {}c)", cost, currency.credits),
                         notification_type: NotificationType::Warning,
                         duration: 2.0,
@@ -2197,7 +2205,7 @@ fn docking_menu_input(
                 // Refuel - first consume FuelCells from inventory (free), then charge for rest
                 let fuel_missing = fuel_state.max_fuel - fuel_state.current_fuel;
                 if fuel_missing < 1.0 {
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: "Fuel tanks are full".into(),
                         notification_type: NotificationType::Info,
                         duration: 2.0,
@@ -2212,7 +2220,7 @@ fn docking_menu_input(
                         fuel_state.current_fuel += fuel_from_cells;
                         fuel_added += fuel_from_cells;
                         inventory.remove_item(ItemType::FuelCell, cells_needed);
-                        notifications.send(ShowNotification {
+                        notifications.write(ShowNotification {
                             message: format!("Used {} FuelCells (+{:.0} fuel)", cells_needed, fuel_from_cells),
                             notification_type: NotificationType::Info,
                             duration: 2.0,
@@ -2225,20 +2233,20 @@ fn docking_menu_input(
                         if currency.credits >= cost {
                             currency.credits -= cost;
                             fuel_state.current_fuel = fuel_state.max_fuel;
-                            notifications.send(ShowNotification {
+                            notifications.write(ShowNotification {
                                 message: format!("Fuel tanks refilled! (-{}c)", cost),
                                 notification_type: NotificationType::Success,
                                 duration: 3.0,
                             });
                         } else {
-                            notifications.send(ShowNotification {
+                            notifications.write(ShowNotification {
                                 message: format!("Not enough credits for full refuel (need {}c)", cost),
                                 notification_type: NotificationType::Warning,
                                 duration: 2.0,
                             });
                         }
                     } else if fuel_added > 0.0 {
-                        notifications.send(ShowNotification {
+                        notifications.write(ShowNotification {
                             message: "Fuel tanks full from FuelCells!".into(),
                             notification_type: NotificationType::Success,
                             duration: 2.0,
@@ -2256,7 +2264,7 @@ fn docking_menu_input(
                     }
                 }
                 if ammo_needed == 0 {
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: "All weapons fully loaded".into(),
                         notification_type: NotificationType::Info,
                         duration: 2.0,
@@ -2268,7 +2276,7 @@ fn docking_menu_input(
                     let ammo_from_crates = (crates_needed * 10).min(ammo_needed);
                     if crates_needed > 0 {
                         inventory.remove_item(ItemType::AmmoCrate, crates_needed);
-                        notifications.send(ShowNotification {
+                        notifications.write(ShowNotification {
                             message: format!("Used {} AmmoCrates (+{} rounds)", crates_needed, ammo_from_crates),
                             notification_type: NotificationType::Info,
                             duration: 2.0,
@@ -2278,7 +2286,7 @@ fn docking_menu_input(
                     let remaining_ammo = ammo_needed - ammo_from_crates;
                     let cost = remaining_ammo * 5;
                     if remaining_ammo > 0 && currency.credits < cost {
-                        notifications.send(ShowNotification {
+                        notifications.write(ShowNotification {
                             message: format!("Not enough credits for full rearm (need {}c)", cost),
                             notification_type: NotificationType::Warning,
                             duration: 2.0,
@@ -2293,7 +2301,7 @@ fn docking_menu_input(
                         } else {
                             format!("Weapons rearmed from AmmoCrates! {} rounds", ammo_needed)
                         };
-                        notifications.send(ShowNotification {
+                        notifications.write(ShowNotification {
                             message: msg,
                             notification_type: NotificationType::Success,
                             duration: 3.0,
@@ -2306,7 +2314,7 @@ fn docking_menu_input(
                 // Hire Crew — gated by available berths
                 let total_berths = staffing_state.total_berths as usize;
                 if crew_count >= total_berths {
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: "No available berths! Build more quarters.".into(),
                         notification_type: NotificationType::Warning,
                         duration: 2.0,
@@ -2320,21 +2328,17 @@ fn docking_menu_input(
                         let name = crew_names[crew_count % crew_names.len()].to_string();
 
                         // Spawn with SpriteBundle; reconcile_hired_crew system
-                        // will parent to submarine and add to CrewRoster
+                        // will parent to ship and add to CrewRoster
                         commands.spawn((
-                            SpriteBundle {
-                                sprite: Sprite {
-                                    color: Color::rgb(0.8, 0.6, 0.5),
+                            (Sprite {
+                                    color: Color::srgb(0.8, 0.6, 0.5),
                                     custom_size: Some(Vec2::new(16.0, 16.0)),
                                     ..default()
-                                },
-                                transform: Transform::from_xyz(
+                                }, Transform::from_xyz(
                                     (crew_count as f32 - 3.5) * 20.0,
                                     0.0,
                                     0.5,
-                                ),
-                                ..default()
-                            },
+                                )),
                             CrewMember {
                                 name: name.clone(),
                                 health: 100.0,
@@ -2345,7 +2349,7 @@ fn docking_menu_input(
                             },
                         ));
 
-                        notifications.send(ShowNotification {
+                        notifications.write(ShowNotification {
                             message: format!("{} joined the crew! (-{}c) ({}/{} berths)",
                                 name, cost, crew_count + 1, total_berths),
                             notification_type: NotificationType::Success,
@@ -2353,7 +2357,7 @@ fn docking_menu_input(
                         });
                         changed = true;
                     } else {
-                        notifications.send(ShowNotification {
+                        notifications.write(ShowNotification {
                             message: format!("Not enough credits (need {}c, have {}c)", cost, currency.credits),
                             notification_type: NotificationType::Warning,
                             duration: 2.0,
@@ -2381,7 +2385,7 @@ fn docking_menu_input(
                 }
 
                 if total_value == 0 {
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: "No cargo to sell".into(),
                         notification_type: NotificationType::Info,
                         duration: 2.0,
@@ -2390,7 +2394,7 @@ fn docking_menu_input(
                     currency.credits += total_value;
                     inventory.items.clear();
                     inventory.current_weight = 0.0;
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: format!("Sold all cargo for {}c!", total_value),
                         notification_type: NotificationType::Success,
                         duration: 3.0,
@@ -2408,7 +2412,7 @@ fn docking_menu_input(
                 }
                 let cost = (total_damage * 5.0) as u32;
                 if total_damage < 0.1 {
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: "All modules at full health".into(),
                         notification_type: NotificationType::Info,
                         duration: 2.0,
@@ -2421,14 +2425,14 @@ fn docking_menu_input(
                             module.is_active = true;
                         }
                     }
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: format!("All modules repaired! (-{}c)", cost),
                         notification_type: NotificationType::Success,
                         duration: 3.0,
                     });
                     changed = true;
                 } else {
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: format!("Not enough credits (need {}c, have {}c)", cost, currency.credits),
                         notification_type: NotificationType::Warning,
                         duration: 2.0,
@@ -2438,7 +2442,7 @@ fn docking_menu_input(
             7 => {
                 // Undock
                 next_state.set(GameState::Exploring);
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: "Undocking...".into(),
                     notification_type: NotificationType::Info,
                     duration: 2.0,
@@ -2512,7 +2516,7 @@ fn docking_menu_input(
         ("Undock", "Return to exploring".to_string(), 0, true),
     ];
 
-    for (item, mut text) in item_query.iter_mut() {
+    for (item, mut text, mut text_color, children) in item_query.iter_mut() {
         let idx = item.0;
         if idx >= service_info.len() { continue; }
         let (name, desc, cost, available) = &service_info[idx];
@@ -2520,16 +2524,20 @@ fn docking_menu_input(
         let cursor = if idx == new_idx { "> " } else { "  " };
         let cost_str = if *cost > 0 { format!(" [{}c]", cost) } else { String::new() };
         let color = if !available {
-            Color::rgb(0.4, 0.4, 0.4)
+            Color::srgb(0.4, 0.4, 0.4)
         } else if idx == new_idx {
             Color::WHITE
         } else {
-            Color::rgb(0.8, 0.8, 0.8)
+            Color::srgb(0.8, 0.8, 0.8)
         };
 
-        text.sections[0].value = format!("{}{}{}\n", cursor, name, cost_str);
-        text.sections[0].style.color = color;
-        text.sections[1].value = format!("    {}", desc);
+        text.0 = format!("{}{}{}\n", cursor, name, cost_str);
+        text_color.0 = color;
+        for child in children.iter() {
+            if let Ok(mut span) = span_query.get_mut(child) {
+                span.0 = format!("    {}", desc);
+            }
+        }
     }
 }
 
@@ -2546,10 +2554,10 @@ struct UpgradeDef {
 }
 
 const UPGRADE_DEFS: &[UpgradeDef] = &[
-    UpgradeDef { name: "Titanium Hull", cost: 800, unlock_category: "hull_types", unlock_key: "titanium", description: "Depth rating: 500m" },
-    UpgradeDef { name: "Composite Hull", cost: 2000, unlock_category: "hull_types", unlock_key: "composite", description: "Depth rating: 1000m" },
-    UpgradeDef { name: "Abyssal Alloy Hull", cost: 5000, unlock_category: "hull_types", unlock_key: "abyssal_alloy", description: "Depth rating: 2500m" },
-    UpgradeDef { name: "Advanced Radar Package", cost: 600, unlock_category: "modules", unlock_key: "advanced_sonar", description: "Unlocks advanced radar modules" },
+    UpgradeDef { name: "Titanium Hull", cost: 800, unlock_category: "hull_types", unlock_key: "titanium", description: "+50% hull strength" },
+    UpgradeDef { name: "Composite Hull", cost: 2000, unlock_category: "hull_types", unlock_key: "composite", description: "+100% hull strength" },
+    UpgradeDef { name: "Abyssal Alloy Hull", cost: 5000, unlock_category: "hull_types", unlock_key: "abyssal_alloy", description: "+200% hull strength" },
+    UpgradeDef { name: "Advanced Radar Package", cost: 600, unlock_category: "modules", unlock_key: "advanced_radar", description: "Unlocks advanced radar modules" },
     UpgradeDef { name: "Heavy Weapons Package", cost: 1200, unlock_category: "modules", unlock_key: "heavy_weapons", description: "Unlocks heavy weapon modules" },
     UpgradeDef { name: "Silent Drive Technology", cost: 1500, unlock_category: "modules", unlock_key: "silent_drive", description: "Unlocks silent propulsion" },
 ];
@@ -2565,13 +2573,13 @@ fn is_upgrade_owned(upgrade: &UpgradeDef, unlocks: &Unlocks) -> bool {
 
 fn toggle_upgrade_shop(
     mut commands: Commands,
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     existing: Query<Entity, With<UpgradeShopOverlay>>,
     currency: Res<Currency>,
     unlocks: Res<Unlocks>,
     build_state: Res<State<BuildState>>,
 ) {
-    if !keyboard.just_pressed(KeyCode::U) {
+    if !keyboard.just_pressed(KeyCode::KeyU) {
         return;
     }
 
@@ -2581,14 +2589,13 @@ fn toggle_upgrade_shop(
     }
 
     // Toggle off if already open
-    if let Ok(entity) = existing.get_single() {
-        commands.entity(entity).despawn_recursive();
+    if let Ok(entity) = existing.single() {
+        commands.entity(entity).despawn();
         return;
     }
 
     commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
                 justify_content: JustifyContent::Center,
@@ -2596,78 +2603,62 @@ fn toggle_upgrade_shop(
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(8.0),
                 ..default()
-            },
-            background_color: Color::rgba(0.02, 0.05, 0.12, 0.92).into(),
-            z_index: ZIndex::Global(100),
-            ..default()
-        },
+            }, BackgroundColor(Color::srgba(0.02, 0.05, 0.12, 0.92)), ZIndex(100)),
         UpgradeShopOverlay,
         UpgradeShopSelection(0),
     )).with_children(|parent| {
-        parent.spawn(TextBundle::from_section("UPGRADE SHOP", TextStyle {
-            font_size: 48.0, color: Color::rgb(0.4, 0.8, 1.0), ..default()
-        }));
+        parent.spawn((Text::new("UPGRADE SHOP"), TextFont { font_size: FontSize::Px(48.0), ..default() }, TextColor(Color::srgb(0.4, 0.8, 1.0))));
 
-        parent.spawn(TextBundle::from_section(
-            format!("Credits: {}", currency.credits),
-            TextStyle { font_size: 22.0, color: Color::YELLOW, ..default() },
-        ));
+        parent.spawn((Text::new(format!("Credits: {}", currency.credits)), TextFont { font_size: FontSize::Px(22.0), ..default() }, TextColor(Color::srgb(1.0, 1.0, 0.0))));
 
-        parent.spawn(TextBundle::from_section("", TextStyle {
-            font_size: 8.0, ..default()
-        }));
+        parent.spawn((Text::new(""), TextFont { font_size: FontSize::Px(8.0), ..default() }, TextColor(Color::WHITE)));
 
         for (i, upgrade) in UPGRADE_DEFS.iter().enumerate() {
             let owned = is_upgrade_owned(upgrade, &unlocks);
             let cursor = if i == 0 { "> " } else { "  " };
 
             let (label, color) = if owned {
-                (format!("{}{} [OWNED]", cursor, upgrade.name), Color::rgb(0.4, 0.7, 0.4))
+                (format!("{}{} [OWNED]", cursor, upgrade.name), Color::srgb(0.4, 0.7, 0.4))
             } else {
                 (format!("{}{} [{}c]", cursor, upgrade.name, upgrade.cost),
-                 if i == 0 { Color::WHITE } else { Color::rgb(0.8, 0.8, 0.8) })
+                 if i == 0 { Color::WHITE } else { Color::srgb(0.8, 0.8, 0.8) })
             };
 
             parent.spawn((
-                TextBundle::from_sections([
-                    TextSection::new(
-                        format!("{}\n", label),
-                        TextStyle { font_size: 20.0, color, ..default() },
-                    ),
-                    TextSection::new(
-                        format!("    {}", upgrade.description),
-                        TextStyle { font_size: 14.0, color: Color::rgb(0.6, 0.6, 0.7), ..default() },
-                    ),
-                ]),
+                Text::new(format!("{}\n", label)),
+                TextFont { font_size: FontSize::Px(20.0), ..default() },
+                TextColor(color),
                 UpgradeShopItem(i),
-            ));
+            )).with_children(|section| {
+                section.spawn((
+                    TextSpan::new(format!("    {}", upgrade.description)),
+                    TextFont { font_size: FontSize::Px(14.0), ..default() },
+                    TextColor(Color::srgb(0.6, 0.6, 0.7)),
+                ));
+            });
         }
 
-        parent.spawn(TextBundle::from_section("", TextStyle {
-            font_size: 8.0, ..default()
-        }));
+        parent.spawn((Text::new(""), TextFont { font_size: FontSize::Px(8.0), ..default() }, TextColor(Color::WHITE)));
 
-        parent.spawn(TextBundle::from_section(
-            "Up/Down: Select | Enter: Purchase | U/ESC: Close",
-            TextStyle { font_size: 14.0, color: Color::DARK_GRAY, ..default() },
-        ));
+        parent.spawn((Text::new("Up/Down: Select | Enter: Purchase | U/ESC: Close"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.25, 0.25, 0.25))));
     });
 }
 
 fn upgrade_shop_input(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
     mut shop_query: Query<(Entity, &mut UpgradeShopSelection), With<UpgradeShopOverlay>>,
-    mut item_query: Query<(&UpgradeShopItem, &mut Text)>,
+    mut item_query: Query<(&UpgradeShopItem, &mut Text, &mut TextColor, &Children)>,
+    mut span_query: Query<&mut TextSpan>,
     mut currency: ResMut<Currency>,
     mut unlocks: ResMut<Unlocks>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
-    let Ok((shop_entity, mut selection)) = shop_query.get_single_mut() else { return };
+    let Ok((shop_entity, mut selection)) = shop_query.single_mut() else { return };
 
     // Close on U or ESC
-    if keyboard.just_pressed(KeyCode::U) || keyboard.just_pressed(KeyCode::Escape) {
-        commands.entity(shop_entity).despawn_recursive();
+    if keyboard.just_pressed(KeyCode::KeyU) || keyboard.just_pressed(KeyCode::Escape) {
+        commands.entity(shop_entity).despawn();
         return;
     }
 
@@ -2675,19 +2666,19 @@ fn upgrade_shop_input(
     let old_idx = selection.0;
     let mut changed = false;
 
-    if keyboard.just_pressed(KeyCode::Up) {
+    if keyboard.just_pressed(KeyCode::ArrowUp) {
         selection.0 = if old_idx == 0 { count - 1 } else { old_idx - 1 };
         changed = true;
     }
-    if keyboard.just_pressed(KeyCode::Down) {
+    if keyboard.just_pressed(KeyCode::ArrowDown) {
         selection.0 = if old_idx + 1 >= count { 0 } else { old_idx + 1 };
         changed = true;
     }
 
-    if keyboard.just_pressed(KeyCode::Return) {
+    if keyboard.just_pressed(KeyCode::Enter) {
         let upgrade = &UPGRADE_DEFS[selection.0];
         if is_upgrade_owned(upgrade, &unlocks) {
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("{} already owned!", upgrade.name),
                 notification_type: NotificationType::Info,
                 duration: 2.0,
@@ -2700,14 +2691,14 @@ fn upgrade_shop_input(
                 _ => &mut unlocks.upgrades,
             };
             list.push(upgrade.unlock_key.to_string());
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("Purchased {}! (-{}c)", upgrade.name, upgrade.cost),
                 notification_type: NotificationType::Success,
                 duration: 3.0,
             });
             changed = true;
         } else {
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("Not enough credits (need {}c, have {}c)", upgrade.cost, currency.credits),
                 notification_type: NotificationType::Warning,
                 duration: 2.0,
@@ -2719,7 +2710,7 @@ fn upgrade_shop_input(
 
     // Rebuild text
     let new_idx = selection.0;
-    for (item, mut text) in item_query.iter_mut() {
+    for (item, mut text, mut text_color, children) in item_query.iter_mut() {
         let i = item.0;
         if i >= UPGRADE_DEFS.len() { continue; }
         let upgrade = &UPGRADE_DEFS[i];
@@ -2727,15 +2718,19 @@ fn upgrade_shop_input(
         let cursor = if i == new_idx { "> " } else { "  " };
 
         let (label, color) = if owned {
-            (format!("{}{} [OWNED]", cursor, upgrade.name), Color::rgb(0.4, 0.7, 0.4))
+            (format!("{}{} [OWNED]", cursor, upgrade.name), Color::srgb(0.4, 0.7, 0.4))
         } else {
             (format!("{}{} [{}c]", cursor, upgrade.name, upgrade.cost),
-             if i == new_idx { Color::WHITE } else { Color::rgb(0.8, 0.8, 0.8) })
+             if i == new_idx { Color::WHITE } else { Color::srgb(0.8, 0.8, 0.8) })
         };
 
-        text.sections[0].value = format!("{}\n", label);
-        text.sections[0].style.color = color;
-        text.sections[1].value = format!("    {}", upgrade.description);
+        text.0 = format!("{}\n", label);
+        text_color.0 = color;
+        for child in children.iter() {
+            if let Ok(mut span) = span_query.get_mut(child) {
+                span.0 = format!("    {}", upgrade.description);
+            }
+        }
     }
 }
 
@@ -2759,30 +2754,26 @@ fn update_hull_warning_overlay(
 
     if critical {
         let camera_pos = camera_query.iter().next().map(|t| t.translation).unwrap_or(Vec3::ZERO);
-        if let Ok((_, mut sprite, mut transform)) = overlay_query.get_single_mut() {
+        if let Ok((_, mut sprite, mut transform)) = overlay_query.single_mut() {
             // Pulse alpha and follow camera
-            let alpha = 0.1 + 0.05 * (time.elapsed_seconds() * 6.0).sin();
-            sprite.color = Color::rgba(1.0, 0.0, 0.0, alpha);
+            let alpha = 0.1 + 0.05 * (time.elapsed_secs() * 6.0).sin();
+            sprite.color = Color::srgba(1.0, 0.0, 0.0, alpha);
             transform.translation = Vec3::new(camera_pos.x, camera_pos.y, 10.0);
         } else {
             // Spawn the overlay at camera position
             commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
-                        color: Color::rgba(1.0, 0.0, 0.0, 0.1),
+                (Sprite {
+                        color: Color::srgba(1.0, 0.0, 0.0, 0.1),
                         custom_size: Some(Vec2::new(2560.0, 1440.0)),
                         ..default()
-                    },
-                    transform: Transform::from_xyz(camera_pos.x, camera_pos.y, 10.0),
-                    ..default()
-                },
+                    }, Transform::from_xyz(camera_pos.x, camera_pos.y, 10.0)),
                 HullWarningOverlay,
             ));
         }
     } else {
         // Despawn if hull is healthy
         for (entity, _, _) in overlay_query.iter() {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
 }

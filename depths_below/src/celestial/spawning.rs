@@ -26,20 +26,16 @@ pub fn spawn_star_system(
 
     // Spawn star
     let star_entity = commands.spawn((
-        SpriteBundle {
-            sprite: Sprite {
+        (Sprite {
                 color: match star_class {
-                    StarSizeClass::Dwarf => Color::rgb(1.0, 0.6, 0.3),
-                    StarSizeClass::Main => Color::rgb(1.0, 0.95, 0.8),
-                    StarSizeClass::Giant => Color::rgb(1.0, 0.8, 0.4),
-                    StarSizeClass::Supergiant => Color::rgb(0.7, 0.8, 1.0),
+                    StarSizeClass::Dwarf => Color::srgb(1.0, 0.6, 0.3),
+                    StarSizeClass::Main => Color::srgb(1.0, 0.95, 0.8),
+                    StarSizeClass::Giant => Color::srgb(1.0, 0.8, 0.4),
+                    StarSizeClass::Supergiant => Color::srgb(0.7, 0.8, 1.0),
                 },
                 custom_size: Some(Vec2::splat(star_radius * 2.0)),
                 ..default()
-            },
-            transform: Transform::from_xyz(center.x, center.y, -1.0),
-            ..default()
-        },
+            }, Transform::from_xyz(center.x, center.y, -1.0)),
         CelestialBody {
             body_type: CelestialBodyType::Star,
             mass: star_mass,
@@ -85,11 +81,11 @@ pub fn spawn_star_system(
         let clockwise = rng.gen_bool(0.5);
 
         let planet_color = match planet_type {
-            PlanetType::Rocky => Color::rgb(0.5 + rng.gen_range(-0.1..0.1), 0.4, 0.35),
-            PlanetType::Gas => Color::rgb(0.7, 0.6 + rng.gen_range(-0.1..0.1), 0.4),
-            PlanetType::Ice => Color::rgb(0.7, 0.85, 0.95 + rng.gen_range(-0.05..0.05)),
-            PlanetType::Lava => Color::rgb(0.9, 0.3 + rng.gen_range(-0.1..0.1), 0.1),
-            PlanetType::Shattered => Color::rgb(0.4, 0.35, 0.3),
+            PlanetType::Rocky => Color::srgb(0.5 + rng.gen_range(-0.1..0.1), 0.4, 0.35),
+            PlanetType::Gas => Color::srgb(0.7, 0.6 + rng.gen_range(-0.1..0.1), 0.4),
+            PlanetType::Ice => Color::srgb(0.7, 0.85, 0.95 + rng.gen_range(-0.05..0.05)),
+            PlanetType::Lava => Color::srgb(0.9, 0.3 + rng.gen_range(-0.1..0.1), 0.1),
+            PlanetType::Shattered => Color::srgb(0.4, 0.35, 0.3),
         };
 
         // Initial position on orbit
@@ -97,15 +93,11 @@ pub fn spawn_star_system(
         let initial_y = center.y + orbit_distance * phase.sin();
 
         let planet_entity = commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
+            (Sprite {
                     color: planet_color,
                     custom_size: Some(Vec2::splat(planet_radius * 2.0)),
                     ..default()
-                },
-                transform: Transform::from_xyz(initial_x, initial_y, -0.9),
-                ..default()
-            },
+                }, Transform::from_xyz(initial_x, initial_y, -0.9)),
             CelestialBody {
                 body_type: CelestialBodyType::Planet,
                 mass: planet_mass,
@@ -166,15 +158,11 @@ pub fn spawn_asteroid_field(
         let gray = rng.gen_range(0.25..0.45);
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(gray, gray - 0.05, gray - 0.08),
+            (Sprite {
+                    color: Color::srgb(gray, gray - 0.05, gray - 0.08),
                     custom_size: Some(Vec2::splat(size)),
                     ..default()
-                },
-                transform: Transform::from_xyz(pos.x, pos.y, -0.5),
-                ..default()
-            },
+                }, Transform::from_xyz(pos.x, pos.y, -0.5)),
             CelestialBody {
                 body_type: CelestialBodyType::Asteroid,
                 mass,

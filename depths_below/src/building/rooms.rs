@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use crate::components::*;  // includes BulkheadSealed
 use crate::resources::PowerGraph;
 
-/// A detected room inside the submarine
+/// A detected room inside the ship
 #[derive(Debug, Clone)]
 pub struct Room {
     pub id: usize,
@@ -35,17 +35,24 @@ pub fn transform_to_grid(t: &Transform) -> IVec2 {
 /// Flood-fill to detect enclosed rooms from inner hull tiles.
 /// A "room" is a connected group of empty interior cells bounded by inner hull.
 /// For now: any Module grid_position that is surrounded by hull = part of a room.
+/// PLAYER SHIP ONLY: hull/module queries span every ship in the world (grid
+/// positions are ship-local, so an AI ship's tiles routinely collide
+/// numerically with the player's). Unscoped, AI hull/modules leaked into the
+/// player's flood-fill — a wall from a ship the player has never seen could
+/// block a room, or an AI module could get counted as player interior space.
 pub fn detect_rooms(
-    hull_query: &Query<(&HullSegment, &Transform, &Parent)>,
-    module_query: &Query<(&Module, &Transform)>,
+    hull_query: &Query<(&HullSegment, &Transform, &ChildOf)>,
+    module_query: &Query<(&Module, &Transform, &ChildOf)>,
     sealed_positions: &HashSet<IVec2>,
+    player_ship: Entity,
 ) -> RoomMap {
     // Collect all hull tile positions by layer
     let mut inner_hull_positions: HashSet<IVec2> = HashSet::new();
     let mut outer_hull_positions: HashSet<IVec2> = HashSet::new();
     let mut all_hull_positions: HashSet<IVec2> = HashSet::new();
 
-    for (hull, transform, _parent) in hull_query.iter() {
+    for (hull, transform, parent) in hull_query.iter() {
+        if parent.parent() != player_ship { continue; }
         let grid = transform_to_grid(transform);
         all_hull_positions.insert(grid);
         match hull.hull_layer {
@@ -63,7 +70,8 @@ pub fn detect_rooms(
 
     // Collect all module positions as "interior" cells
     let mut module_positions: HashSet<IVec2> = HashSet::new();
-    for (module, _transform) in module_query.iter() {
+    for (module, _transform, parent) in module_query.iter() {
+        if parent.parent() != player_ship { continue; }
         module_positions.insert(module.grid_position);
     }
 
@@ -126,15 +134,19 @@ pub fn detect_rooms(
 /// Uses tile-set intersection: each tile remembers its old room's flood state,
 /// and the new room inherits the worst (highest water) state from overlapping tiles.
 pub fn update_room_map(
-    hull_query: Query<(&HullSegment, &Transform, &Parent)>,
-    module_query: Query<(&Module, &Transform)>,
-    sealed_query: Query<(&HullSegment, &Transform), With<BulkheadSealed>>,
+    ship_query: Query<Entity, With<Ship>>,
+    hull_query: Query<(&HullSegment, &Transform, &ChildOf)>,
+    module_query: Query<(&Module, &Transform, &ChildOf)>,
+    sealed_query: Query<(&HullSegment, &Transform, &ChildOf), With<BulkheadSealed>>,
     mut room_map: ResMut<RoomMap>,
 ) {
+    let Ok(player_ship) = ship_query.single() else { return };
+
     // Build set of sealed bulkhead positions
     let sealed_positions: HashSet<IVec2> = sealed_query
         .iter()
-        .map(|(_, transform)| transform_to_grid(transform))
+        .filter(|(_, _, parent)| parent.parent() == player_ship)
+        .map(|(_, transform, _)| transform_to_grid(transform))
         .collect();
 
     // Save air state for every tile in every room
@@ -147,7 +159,7 @@ pub fn update_room_map(
         }
     }
 
-    *room_map = detect_rooms(&hull_query, &module_query, &sealed_positions);
+    *room_map = detect_rooms(&hull_query, &module_query, &sealed_positions, player_ship);
 
     // Restore air state: new room inherits the lowest air level from any
     // overlapping old tile, and is_breached if any overlapping tile was breached.

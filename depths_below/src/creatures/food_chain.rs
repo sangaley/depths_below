@@ -26,7 +26,7 @@ pub fn food_chain_role(creature_type: CreatureType) -> FoodChainRole {
                 CreatureType::VoidDrifter,
             ],
             threat_types: vec![],
-            attacks_submarine: true,
+            attacks_ship: true,
         },
         CreatureType::Stalker => FoodChainRole {
             tier: FoodChainTier::Predator,
@@ -35,13 +35,13 @@ pub fn food_chain_role(creature_type: CreatureType) -> FoodChainRole {
                 CreatureType::ParasiteSwarm,
             ],
             threat_types: vec![CreatureType::Leviathan],
-            attacks_submarine: true,
+            attacks_ship: true,
         },
         CreatureType::ParasiteSwarm => FoodChainRole {
             tier: FoodChainTier::Scavenger,
             prey_types: vec![],
             threat_types: vec![CreatureType::Stalker, CreatureType::Leviathan],
-            attacks_submarine: true,
+            attacks_ship: true,
         },
         CreatureType::VoidDrifter => FoodChainRole {
             tier: FoodChainTier::Prey,
@@ -50,7 +50,7 @@ pub fn food_chain_role(creature_type: CreatureType) -> FoodChainRole {
                 CreatureType::Stalker,
                 CreatureType::Leviathan,
             ],
-            attacks_submarine: false,
+            attacks_ship: false,
         },
     }
 }

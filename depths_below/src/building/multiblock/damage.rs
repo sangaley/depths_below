@@ -14,15 +14,21 @@ use super::components::*;
 
 /// When a MachineBlock is destroyed, disconnect everything past it in the chain.
 /// Also roll for cascade explosion.
+/// Notifications only fire for the player's own ship (via ChildOf) — AI ships
+/// losing a weapon core is not something the player needs to be alarmed about.
 pub fn process_block_destruction(
     mut commands: Commands,
-    destroyed_blocks: Query<(Entity, &MachineBlock, &Module, Option<&BarrelStress>, Option<&CascadeRisk>), Added<DestroyedModule>>,
+    destroyed_blocks: Query<(Entity, &MachineBlock, &Module, Option<&BarrelStress>, Option<&CascadeRisk>, &ChildOf), (Added<DestroyedModule>, With<DestroyedModule>)>,
     mut chain_blocks: Query<(Entity, &mut MachineBlock, &mut Module), Without<DestroyedModule>>,
-    mut notifications: EventWriter<ShowNotification>,
+    ship_query: Query<Entity, With<crate::components::Ship>>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     let mut rng = rand::thread_rng();
+    let player_ship = ship_query.single().ok();
 
-    for (_destroyed_entity, destroyed_block, _destroyed_module, stress, cascade) in destroyed_blocks.iter() {
+    for (_destroyed_entity, destroyed_block, _destroyed_module, stress, cascade, parent) in destroyed_blocks.iter() {
+        let is_player_ship = Some(parent.parent()) == player_ship;
+
         // Skip if not part of a machine
         if destroyed_block.connected_core.is_none() {
             continue;
@@ -32,11 +38,13 @@ pub fn process_block_destruction(
 
         // === CORE DESTRUCTION = CATASTROPHIC ===
         if destroyed_block.role == BlockRole::Core {
-            notifications.send(ShowNotification {
-                message: "MACHINE CORE DESTROYED! Full system failure!".into(),
-                notification_type: NotificationType::Danger,
-                duration: 4.0,
-            });
+            if is_player_ship {
+                notifications.write(ShowNotification {
+                    message: "MACHINE CORE DESTROYED! Full system failure!".into(),
+                    notification_type: NotificationType::Danger,
+                    duration: 4.0,
+                });
+            }
 
             // Disconnect ALL blocks connected to this core
             for (entity, mut block, mut module) in chain_blocks.iter_mut() {
@@ -46,7 +54,10 @@ pub fn process_block_destruction(
                     block.next_in_chain = None;
                     block.prev_in_chain = None;
                     module.is_active = false;
-                    commands.entity(entity).insert(Disconnected);
+                    // try_insert: unscoped to all ships (AI included). The
+                    // destroyed core may belong to a ship whose reactor also
+                    // died this frame and got recursively despawned already.
+                    commands.entity(entity).try_insert(Disconnected);
                 }
             }
             continue;
@@ -78,12 +89,12 @@ pub fn process_block_destruction(
                 block.next_in_chain = None;
                 block.prev_in_chain = None;
                 module.is_active = false;
-                commands.entity(*entity).insert(Disconnected);
+                commands.entity(*entity).try_insert(Disconnected);
             }
         }
 
-        if disconnected_count > 0 {
-            notifications.send(ShowNotification {
+        if disconnected_count > 0 && is_player_ship {
+            notifications.write(ShowNotification {
                 message: format!("Block destroyed! {} connected blocks lost!", disconnected_count + 1),
                 notification_type: NotificationType::Danger,
                 duration: 3.0,
@@ -107,11 +118,13 @@ pub fn process_block_destruction(
                         prev_module.health = 0.0;
                     }
 
-                    notifications.send(ShowNotification {
-                        message: "CASCADE! Explosion spreading toward core!".into(),
-                        notification_type: NotificationType::Danger,
-                        duration: 3.0,
-                    });
+                    if is_player_ship {
+                        notifications.write(ShowNotification {
+                            message: "CASCADE! Explosion spreading toward core!".into(),
+                            notification_type: NotificationType::Danger,
+                            duration: 3.0,
+                        });
+                    }
                 }
             }
         }

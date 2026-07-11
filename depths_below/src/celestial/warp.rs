@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 use rand::Rng;
-use crate::components::{Submarine, Velocity};
+use crate::components::{Ship, Velocity};
 use crate::events::{ShowNotification, NotificationType};
 use super::components::*;
 use super::resources::*;
@@ -11,26 +11,26 @@ use super::spawning;
 /// When charge completes, jump to a new star system.
 pub fn warp_input_system(
     mut commands: Commands,
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     config: Res<CelestialConfig>,
     galaxy: Res<GalaxyState>,
-    sub_query: Query<Entity, (With<Submarine>, Without<WarpCharging>)>,
-    mut charging_query: Query<(Entity, &mut WarpCharging), With<Submarine>>,
-    mut notifications: EventWriter<ShowNotification>,
-    mut jump_events: EventWriter<WarpJumpStarted>,
+    ship_query: Query<Entity, (With<Ship>, Without<WarpCharging>)>,
+    mut charging_query: Query<(Entity, &mut WarpCharging), With<Ship>>,
+    mut notifications: MessageWriter<ShowNotification>,
+    mut jump_events: MessageWriter<WarpJumpStarted>,
 ) {
     // Start charging when V is pressed
-    if keyboard.just_pressed(KeyCode::V) {
-        if let Ok(sub_entity) = sub_query.get_single() {
+    if keyboard.just_pressed(KeyCode::KeyV) {
+        if let Ok(ship_entity) = ship_query.single() {
             let target_system = galaxy.next_system_id;
 
-            commands.entity(sub_entity).insert(WarpCharging {
+            commands.entity(ship_entity).insert(WarpCharging {
                 target_system,
                 charge_timer: Timer::from_seconds(config.warp_charge_time, TimerMode::Once),
             });
 
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: "Warp drive charging... hold V to jump!".into(),
                 notification_type: NotificationType::Info,
                 duration: config.warp_charge_time + 1.0,
@@ -39,11 +39,11 @@ pub fn warp_input_system(
     }
 
     // Cancel if V is released before charge completes
-    if keyboard.just_released(KeyCode::V) {
-        if let Ok((entity, charging)) = charging_query.get_single() {
-            if !charging.charge_timer.finished() {
+    if keyboard.just_released(KeyCode::KeyV) {
+        if let Ok((entity, charging)) = charging_query.single() {
+            if !charging.charge_timer.is_finished() {
                 commands.entity(entity).remove::<WarpCharging>();
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: "Warp cancelled.".into(),
                     notification_type: NotificationType::Info,
                     duration: 2.0,
@@ -53,13 +53,13 @@ pub fn warp_input_system(
     }
 
     // Tick charge timer
-    if let Ok((entity, mut charging)) = charging_query.get_single_mut() {
+    if let Ok((entity, mut charging)) = charging_query.single_mut() {
         charging.charge_timer.tick(time.delta());
 
         // Progress notifications
-        let pct = charging.charge_timer.percent();
+        let pct = charging.charge_timer.fraction();
         if pct > 0.5 && pct < 0.55 {
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: "Warp drive at 50%...".into(),
                 notification_type: NotificationType::Warning,
                 duration: 1.5,
@@ -67,11 +67,11 @@ pub fn warp_input_system(
         }
 
         // Jump when charge completes
-        if charging.charge_timer.finished() {
+        if charging.charge_timer.is_finished() {
             let target = charging.target_system;
             commands.entity(entity).remove::<WarpCharging>();
 
-            jump_events.send(WarpJumpStarted {
+            jump_events.write(WarpJumpStarted {
                 target_system: target,
             });
         }
@@ -81,17 +81,17 @@ pub fn warp_input_system(
 /// Execute the warp jump: despawn old system, spawn new one, move ship
 pub fn execute_warp_jump(
     mut commands: Commands,
-    mut jump_events: EventReader<WarpJumpStarted>,
+    mut jump_events: MessageReader<WarpJumpStarted>,
     mut galaxy: ResMut<GalaxyState>,
     _config: Res<CelestialConfig>,
     // Despawn old system entities
     celestial_query: Query<(Entity, &StarSystemMember)>,
-    mut sub_query: Query<(&mut Transform, &mut Velocity), With<Submarine>>,
-    mut notifications: EventWriter<ShowNotification>,
-    mut completed_events: EventWriter<WarpJumpCompleted>,
+    mut ship_query: Query<(&mut Transform, &mut Velocity), With<Ship>>,
+    mut notifications: MessageWriter<ShowNotification>,
+    mut completed_events: MessageWriter<WarpJumpCompleted>,
 ) {
-    for event in jump_events.iter() {
-        let Ok((mut sub_transform, mut sub_velocity)) = sub_query.get_single_mut() else {
+    for event in jump_events.read() {
+        let Ok((mut ship_transform, mut ship_velocity)) = ship_query.single_mut() else {
             continue;
         };
 
@@ -99,7 +99,7 @@ pub fn execute_warp_jump(
         let current_system = galaxy.current_system;
         for (entity, member) in celestial_query.iter() {
             if member.system_id == current_system {
-                commands.entity(entity).despawn_recursive();
+                commands.entity(entity).despawn();
             }
         }
 
@@ -145,20 +145,20 @@ pub fn execute_warp_jump(
             arrival_angle.sin() * safe_distance,
         );
 
-        sub_transform.translation.x = arrival_pos.x;
-        sub_transform.translation.y = arrival_pos.y;
-        sub_velocity.0 = Vec2::ZERO; // Kill momentum on arrival
+        ship_transform.translation.x = arrival_pos.x;
+        ship_transform.translation.y = arrival_pos.y;
+        ship_velocity.0 = Vec2::ZERO; // Kill momentum on arrival
 
         // Update galaxy state
         galaxy.systems.push(system_info);
         galaxy.current_system = new_id;
         galaxy.next_system_id = new_id + 1;
 
-        completed_events.send(WarpJumpCompleted {
+        completed_events.write(WarpJumpCompleted {
             system_id: new_id,
         });
 
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: format!("Warp complete! Arrived in System-{}", new_id),
             notification_type: NotificationType::Success,
             duration: 4.0,
@@ -168,14 +168,14 @@ pub fn execute_warp_jump(
 
 /// When warp completes, notify the player about the new system
 pub fn on_warp_complete(
-    mut completed_events: EventReader<WarpJumpCompleted>,
+    mut completed_events: MessageReader<WarpJumpCompleted>,
     galaxy: Res<GalaxyState>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
-    for event in completed_events.iter() {
+    for event in completed_events.read() {
         if let Some(system) = galaxy.systems.iter().find(|s| s.id == event.system_id) {
             let planet_count = system.planet_entities.len();
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("System scan: {} planets detected. Proceed with caution.", planet_count),
                 notification_type: NotificationType::Info,
                 duration: 5.0,

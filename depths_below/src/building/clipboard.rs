@@ -41,8 +41,8 @@ pub struct SelectionHighlight;
 
 /// System: Ctrl+click to toggle select modules, Ctrl+C to copy, Ctrl+V to paste
 pub fn clipboard_input(
-    keyboard: Res<Input<KeyCode>>,
-    mouse: Res<Input<MouseButton>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
     mut clipboard: ResMut<BuildClipboard>,
@@ -50,7 +50,7 @@ pub fn clipboard_input(
     module_query: Query<(Entity, &Module, Option<&MachineBlock>)>,
     mut commands: Commands,
     existing_highlights: Query<Entity, With<SelectionHighlight>>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
     current_state: Res<State<BuildState>>,
     _registry: Res<ModuleRegistry>,
 ) {
@@ -60,10 +60,10 @@ pub fn clipboard_input(
 
     // === CTRL+CLICK: Toggle select ===
     if ctrl && mouse.just_pressed(MouseButton::Left) && !clipboard.paste_mode {
-        let Ok(window) = windows.get_single() else { return };
-        let Ok((camera, camera_transform)) = camera_query.get_single() else { return };
+        let Ok(window) = windows.single() else { return };
+        let Ok((camera, camera_transform)) = camera_query.single() else { return };
         let Some(cursor) = window.cursor_position()
-            .and_then(|p| camera.viewport_to_world_2d(camera_transform, p))
+            .and_then(|p| camera.viewport_to_world_2d(camera_transform, p).ok())
         else { return };
 
         let grid_pos = IVec2::new(
@@ -103,19 +103,15 @@ pub fn clipboard_input(
             if let Ok((_, module, _)) = module_query.get(entity) {
                 let pos = module.grid_position;
                 commands.spawn((
-                    SpriteBundle {
-                        sprite: Sprite {
-                            color: Color::rgba(0.3, 0.6, 1.0, 0.3),
+                    (Sprite {
+                            color: Color::srgba(0.3, 0.6, 1.0, 0.3),
                             custom_size: Some(Vec2::splat(64.0)),
                             ..default()
-                        },
-                        transform: Transform::from_xyz(
+                        }, Transform::from_xyz(
                             pos.x as f32 * 66.0,
                             pos.y as f32 * 66.0 - 33.0,
                             0.9,
-                        ),
-                        ..default()
-                    },
+                        )),
                     SelectionHighlight,
                 ));
             }
@@ -124,7 +120,7 @@ pub fn clipboard_input(
     }
 
     // === CTRL+C: Copy selection ===
-    if ctrl && keyboard.just_pressed(KeyCode::C) && !clipboard.selected.is_empty() {
+    if ctrl && keyboard.just_pressed(KeyCode::KeyC) && !clipboard.selected.is_empty() {
         // Collect data first to avoid borrow conflicts
         let selected_entities: Vec<Entity> = clipboard.selected.clone();
 
@@ -154,7 +150,7 @@ pub fn clipboard_input(
         clipboard.copied = entries;
         clipboard.copy_origin = min_pos;
 
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: format!("Copied {} modules", count),
             notification_type: NotificationType::Success,
             duration: 2.0,
@@ -162,9 +158,9 @@ pub fn clipboard_input(
     }
 
     // === CTRL+V: Enter paste mode ===
-    if ctrl && keyboard.just_pressed(KeyCode::V) && !clipboard.copied.is_empty() {
+    if ctrl && keyboard.just_pressed(KeyCode::KeyV) && !clipboard.copied.is_empty() {
         clipboard.paste_mode = true;
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: "Paste mode — click to place, Escape to cancel".into(),
             notification_type: NotificationType::Info,
             duration: 3.0,
@@ -184,12 +180,12 @@ pub fn clipboard_input(
     }
 
     // === CTRL+A: Select all ===
-    if ctrl && keyboard.just_pressed(KeyCode::A) {
+    if ctrl && keyboard.just_pressed(KeyCode::KeyA) {
         clipboard.selected.clear();
         for (entity, _, _) in module_query.iter() {
             clipboard.selected.push(entity);
         }
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: format!("Selected all {} modules", clipboard.selected.len()),
             notification_type: NotificationType::Info,
             duration: 2.0,
@@ -199,23 +195,23 @@ pub fn clipboard_input(
 
 /// System: execute paste when clicking during paste mode
 pub fn clipboard_paste(
-    mouse: Res<Input<MouseButton>>,
+    mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
     mut clipboard: ResMut<BuildClipboard>,
     occupancy: Res<GridOccupancy>,
     registry: Res<ModuleRegistry>,
     currency: ResMut<Currency>,
-    mut place_events: EventWriter<PlaceModuleRequest>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut place_events: MessageWriter<PlaceModuleRequest>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     if !clipboard.paste_mode { return; }
     if !mouse.just_pressed(MouseButton::Left) { return; }
 
-    let Ok(window) = windows.get_single() else { return };
-    let Ok((camera, camera_transform)) = camera_query.get_single() else { return };
+    let Ok(window) = windows.single() else { return };
+    let Ok((camera, camera_transform)) = camera_query.single() else { return };
     let Some(cursor) = window.cursor_position()
-        .and_then(|p| camera.viewport_to_world_2d(camera_transform, p))
+        .and_then(|p| camera.viewport_to_world_2d(camera_transform, p).ok())
     else { return };
 
     let grid_pos = IVec2::new(
@@ -229,7 +225,7 @@ pub fn clipboard_paste(
         .sum();
 
     if currency.credits < total_cost {
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: format!("Not enough credits! Need {}c, have {}c", total_cost, currency.credits),
             notification_type: NotificationType::Warning,
             duration: 3.0,
@@ -244,7 +240,7 @@ pub fn clipboard_paste(
     });
 
     if !all_free {
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: "Cannot paste — some positions are occupied".into(),
             notification_type: NotificationType::Warning,
             duration: 2.0,
@@ -256,7 +252,7 @@ pub fn clipboard_paste(
     let mut placed = 0u32;
     for entry in &clipboard.copied {
         let target = grid_pos + entry.offset;
-        place_events.send(PlaceModuleRequest {
+        place_events.write(PlaceModuleRequest {
             module_type: entry.module_type,
             grid_position: target,
             rotation: entry.rotation,
@@ -268,7 +264,7 @@ pub fn clipboard_paste(
     }
 
     clipboard.paste_mode = false;
-    notifications.send(ShowNotification {
+    notifications.write(ShowNotification {
         message: format!("Pasted {} modules (-{}c)", placed, total_cost),
         notification_type: NotificationType::Success,
         duration: 2.0,
@@ -295,10 +291,10 @@ pub fn paste_ghost_preview(
 
     if !clipboard.paste_mode || clipboard.copied.is_empty() { return; }
 
-    let Ok(window) = windows.get_single() else { return };
-    let Ok((camera, camera_transform)) = camera_query.get_single() else { return };
+    let Ok(window) = windows.single() else { return };
+    let Ok((camera, camera_transform)) = camera_query.single() else { return };
     let Some(cursor) = window.cursor_position()
-        .and_then(|p| camera.viewport_to_world_2d(camera_transform, p))
+        .and_then(|p| camera.viewport_to_world_2d(camera_transform, p).ok())
     else { return };
 
     let grid_pos = IVec2::new(
@@ -312,21 +308,17 @@ pub fn paste_ghost_preview(
         let world_y = pos.y as f32 * 66.0 - 33.0;
 
         let color = if occupancy.cells.contains_key(&pos) {
-            Color::rgba(0.8, 0.2, 0.2, 0.3)
+            Color::srgba(0.8, 0.2, 0.2, 0.3)
         } else {
-            Color::rgba(0.3, 0.7, 1.0, 0.3)
+            Color::srgba(0.3, 0.7, 1.0, 0.3)
         };
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
+            (Sprite {
                     color,
                     custom_size: Some(Vec2::splat(60.0)),
                     ..default()
-                },
-                transform: Transform::from_xyz(world_x, world_y, 0.95),
-                ..default()
-            },
+                }, Transform::from_xyz(world_x, world_y, 0.95)),
             PasteGhostBlock,
         ));
     }

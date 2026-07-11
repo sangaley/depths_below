@@ -1,6 +1,7 @@
 use bevy::prelude::*;
 use rand::prelude::*;
 
+use crate::ai_ship::components::{faction_power, AiShipType, WorldSimulation};
 use crate::components::{CreatureType, PoiType, ZoneType};
 use crate::resources::ItemType;
 use super::{
@@ -19,18 +20,21 @@ fn weighted_contract_types(faction: &Faction) -> Vec<(ContractType, u32)> {
             (ContractType::ExplorePoi, 25),
             (ContractType::SurveyZone, 25),
             (ContractType::Kill, 20),
+            (ContractType::DestroyShip, 10),
         ],
         Faction::Navy => vec![
-            (ContractType::Kill, 40),
-            (ContractType::ReachDepth, 25),
-            (ContractType::SurveyZone, 20),
-            (ContractType::ExplorePoi, 15),
+            (ContractType::Kill, 30),
+            (ContractType::DestroyShip, 30),
+            (ContractType::ReachDepth, 20),
+            (ContractType::SurveyZone, 15),
+            (ContractType::ExplorePoi, 10),
         ],
         Faction::SalvageGuild => vec![
-            (ContractType::RetrieveSalvage, 40),
-            (ContractType::ExplorePoi, 30),
-            (ContractType::ReachDepth, 20),
+            (ContractType::RetrieveSalvage, 35),
+            (ContractType::ExplorePoi, 25),
+            (ContractType::ReachDepth, 15),
             (ContractType::Kill, 10),
+            (ContractType::DestroyShip, 15),
         ],
     }
 }
@@ -126,20 +130,86 @@ fn poi_types() -> &'static [PoiType] {
 }
 
 // ============================================================================
+// DESTROY-SHIP BOUNTIES — one specific tagged ship, reward scales with how
+// far it actually is from Haven Station and how tough its faction is.
+// ============================================================================
+
+/// Hostile factions available as bounty targets at each star rating, roughly
+/// ordered by how far their territory sits from Haven Station (see
+/// `ai_ship::components::faction_territories`) so higher-star contracts (which
+/// need more faction rep to unlock) point at farther, tougher targets.
+fn ship_factions_for_star(star: u8) -> &'static [AiShipType] {
+    match star {
+        1 => &[AiShipType::RustSwarm],
+        2 => &[AiShipType::RustSwarm, AiShipType::Leviathan, AiShipType::Drowned],
+        3 => &[AiShipType::AbyssalCult, AiShipType::GlassEye, AiShipType::Blackwater],
+        4 => &[AiShipType::Blackwater, AiShipType::IronTide],
+        _ => &[AiShipType::IronTide, AiShipType::PressureKing],
+    }
+}
+
+/// Reward for a ship bounty: base star reward, scaled up by how far the
+/// *actual tagged ship* currently is from spawn and by its faction's combat
+/// power rating — the two factors the player asked for ("farther and more
+/// difficult").
+fn destroy_ship_reward(star: u8, ship_type: AiShipType, distance: f32, rng: &mut impl Rng) -> u32 {
+    let (lo, hi) = base_reward_range(star);
+    let base = rng.gen_range(lo..=hi) as f32;
+
+    // 1x near spawn, up to 3x at ~350,000 units out (roughly the farthest territory).
+    let distance_mult = 1.0 + (distance / 175_000.0).min(2.0);
+
+    // 0.6x for the weakest faction (GlassEye) up to 1.8x for the strongest (IronTide).
+    let power_mult = 0.6 + faction_power(ship_type) * 0.4;
+
+    (base * distance_mult * power_mult).round() as u32
+}
+
+/// Tries each candidate faction for this star tier (in random order) until
+/// one still has an untagged living ship to mark as the bounty target.
+/// Returns None if every candidate faction is fully claimed/dead right now.
+fn tag_destroy_ship_target(star: u8, sim: &mut WorldSimulation, rng: &mut impl Rng) -> Option<(AiShipType, u32, f32)> {
+    let mut factions: Vec<AiShipType> = ship_factions_for_star(star).to_vec();
+    factions.shuffle(rng);
+    for faction in factions {
+        if let Some((bounty_id, distance)) = sim.tag_bounty_target(faction, rng) {
+            return Some((faction, bounty_id, distance));
+        }
+    }
+    None
+}
+
+fn ship_display_name(ship_type: AiShipType) -> &'static str {
+    match ship_type {
+        AiShipType::Leviathan => "Leviathan Rider",
+        AiShipType::AbyssalCult => "Abyssal Cult",
+        AiShipType::Drowned => "Drowned",
+        AiShipType::PressureKing => "Pressure King",
+        AiShipType::GlassEye => "Glass Eye",
+        AiShipType::IronTide => "Iron Tide",
+        AiShipType::Blackwater => "Blackwater",
+        AiShipType::RustSwarm => "Rust Swarm",
+    }
+}
+
+// ============================================================================
 // CONTRACT GENERATION
 // ============================================================================
 
+/// Builds one contract. Returns None only for DestroyShip when no eligible
+/// ship is currently available to tag (every candidate faction fully claimed
+/// or dead) — the caller should just skip that board slot.
 fn generate_single_contract(
     faction: Faction,
     star: u8,
     contract_type: ContractType,
     id: u32,
+    sim: &mut WorldSimulation,
     rng: &mut impl Rng,
-) -> Contract {
+) -> Option<Contract> {
     let zone = zone_for_star(star);
     let (reward_lo, reward_hi) = base_reward_range(star);
-    let reward = rng.gen_range(reward_lo..=reward_hi);
-    let deposit = if star >= 3 { reward / 4 } else { 0 };
+    let mut reward = rng.gen_range(reward_lo..=reward_hi);
 
     let (title, description, objective) = match contract_type {
         ContractType::Kill => {
@@ -196,9 +266,23 @@ fn generate_single_contract(
                 ContractObjective::SurveyZone { zone, required_seconds: seconds, elapsed_seconds: 0.0 },
             )
         }
+        ContractType::DestroyShip => {
+            let Some((ship_type, target_id, distance)) = tag_destroy_ship_target(star, sim, rng) else {
+                return None;
+            };
+            reward = destroy_ship_reward(star, ship_type, distance, rng);
+            let name = ship_display_name(ship_type);
+            (
+                format!("Bounty: {} vessel", name),
+                format!("A {} vessel has been marked on your map — hunt it down and destroy it. Higher-value bounty for a distant, dangerous target.", name),
+                ContractObjective::DestroyShip { ship_type, target_id, destroyed: false },
+            )
+        }
     };
 
-    Contract {
+    let deposit = if star >= 3 { reward / 4 } else { 0 };
+
+    Some(Contract {
         id,
         faction,
         contract_type,
@@ -210,13 +294,16 @@ fn generate_single_contract(
         star_rating: star,
         depth_zone: zone,
         status: ContractStatus::Available,
-    }
+    })
 }
 
-/// Generates 2-3 contracts per faction (6-9 total) and fills the board.
-pub fn generate_contract_board(
+/// Generates 2-3 contracts per faction (6-9 total) for one station's board.
+/// DestroyShip slots that fail to find an eligible ship to tag are simply
+/// skipped, so the board may come back slightly smaller than requested.
+pub fn generate_station_board(
     rep: &FactionReputation,
     next_id: &mut u32,
+    sim: &mut WorldSimulation,
 ) -> Vec<Contract> {
     let mut rng = rand::thread_rng();
     let mut contracts = Vec::new();
@@ -229,29 +316,29 @@ pub fn generate_contract_board(
             let star = rng.gen_range(1..=max_star);
             let weights = weighted_contract_types(faction);
             let contract_type = pick_weighted(&weights, &mut rng);
-            let contract = generate_single_contract(*faction, star, contract_type, *next_id, &mut rng);
-            *next_id += 1;
-            contracts.push(contract);
+            if let Some(contract) = generate_single_contract(*faction, star, contract_type, *next_id, sim, &mut rng) {
+                *next_id += 1;
+                contracts.push(contract);
+            }
         }
     }
 
     contracts
 }
 
-// ============================================================================
-// SYSTEM: generate board on entering StationDocked
-// ============================================================================
-
-pub fn generate_initial_board(
-    mut state: ResMut<ContractState>,
-    rep: Res<FactionReputation>,
+/// Ensures the given station's board is populated, generating one if it's
+/// currently empty (fresh start, or every contract on it was already taken).
+/// Called lazily whenever the mission board is opened near a station — see
+/// ui::toggle_mission_board.
+pub fn ensure_station_board(
+    station: usize,
+    state: &mut ContractState,
+    rep: &FactionReputation,
+    sim: &mut WorldSimulation,
 ) {
-    // Only regenerate if the available board is empty (fresh start or all taken).
-    // Keep available contracts if some remain so the player can re-visit the board.
-    if !state.available_contracts.is_empty() {
+    if !state.board_mut(station).is_empty() {
         return;
     }
-
-    let contracts = generate_contract_board(&rep, &mut state.next_id);
-    state.available_contracts = contracts;
+    let contracts = generate_station_board(rep, &mut state.next_id, sim);
+    *state.board_mut(station) = contracts;
 }

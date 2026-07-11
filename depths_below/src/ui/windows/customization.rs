@@ -5,7 +5,7 @@ use super::tooltip::Tooltip;
 
 // ============================================================================
 // DEEP CUSTOMIZATION WINDOW (Tier 3)
-// Click a sub-component → floating window with parameter sliders.
+// Click a ship-component → floating window with parameter sliders.
 // Green zone indicators, live stat preview, presets, undo, warnings.
 // ============================================================================
 
@@ -58,7 +58,7 @@ pub struct UndoButton {
     pub slot_name: String,
 }
 
-/// Spawn a deep customization window for a specific sub-component slot
+/// Spawn a deep customization window for a specific ship-component slot
 pub fn spawn_deep_customization_window(
     commands: &mut Commands,
     module_entity: Entity,
@@ -85,25 +85,18 @@ pub fn spawn_deep_customization_window(
 
     // Option description
     let desc = commands.spawn(
-        TextBundle::from_section(
-            &option.description,
-            TextStyle { font_size: 11.0, color: WindowStyle::TEXT_DIM, ..default() },
-        ),
+        (Text::new(&option.description), TextFont { font_size: FontSize::Px(11.0), ..default() }, TextColor(WindowStyle::TEXT_DIM)),
     ).id();
     commands.entity(content).add_child(desc);
 
     // Separator
     let sep = commands.spawn(
-        NodeBundle {
-            style: Style {
+        (Node {
                 width: Val::Percent(100.0),
                 height: Val::Px(1.0),
                 margin: UiRect::vertical(Val::Px(4.0)),
                 ..default()
-            },
-            background_color: WindowStyle::BORDER_COLOR.into(),
-            ..default()
-        },
+            }, BackgroundColor(WindowStyle::BORDER_COLOR)),
     ).id();
     commands.entity(content).add_child(sep);
 
@@ -122,29 +115,22 @@ pub fn spawn_deep_customization_window(
 
     // Bottom bar: Undo + Reset to Defaults
     let bottom_bar = commands.spawn(
-        NodeBundle {
-            style: Style {
+        (Node {
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Row,
                 justify_content: JustifyContent::FlexEnd,
                 column_gap: Val::Px(6.0),
                 margin: UiRect::top(Val::Px(8.0)),
                 ..default()
-            },
-            ..default()
-        },
+            }),
     ).id();
 
     // Reset button
     let reset_btn = commands.spawn((
-        ButtonBundle {
-            style: Style {
+        (Node {
                 padding: UiRect::new(Val::Px(10.0), Val::Px(10.0), Val::Px(4.0), Val::Px(4.0)),
                 ..default()
-            },
-            background_color: Color::rgba(0.15, 0.12, 0.10, 1.0).into(),
-            ..default()
-        },
+            }, BackgroundColor(Color::srgba(0.15, 0.12, 0.10, 1.0))),
         UndoButton {
             module_entity,
             slot_name: slot_name.to_string(),
@@ -156,10 +142,7 @@ pub fn spawn_deep_customization_window(
     )).id();
 
     let reset_text = commands.spawn(
-        TextBundle::from_section(
-            "Reset to Default",
-            TextStyle { font_size: 11.0, color: Color::rgb(0.7, 0.5, 0.4), ..default() },
-        ),
+        (Text::new("Reset to Default"), TextFont { font_size: FontSize::Px(11.0), ..default() }, TextColor(Color::srgb(0.7, 0.5, 0.4))),
     ).id();
 
     commands.entity(reset_btn).add_child(reset_text);
@@ -180,35 +163,26 @@ fn spawn_parameter_slider(
 
     // Container for this parameter
     let container = commands.spawn(
-        NodeBundle {
-            style: Style {
+        (Node {
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Column,
                 margin: UiRect::vertical(Val::Px(3.0)),
                 ..default()
-            },
-            ..default()
-        },
+            }),
     ).id();
 
     // Top row: param name + current value
     let top_row = commands.spawn(
-        NodeBundle {
-            style: Style {
+        (Node {
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Row,
                 justify_content: JustifyContent::SpaceBetween,
                 ..default()
-            },
-            ..default()
-        },
+            }),
     ).id();
 
     let name_text = commands.spawn((
-        TextBundle::from_section(
-            &param_def.name,
-            TextStyle { font_size: 11.0, color: WindowStyle::TEXT_COLOR, ..default() },
-        ),
+        (Text::new(&param_def.name), TextFont { font_size: FontSize::Px(11.0), ..default() }, TextColor(WindowStyle::TEXT_COLOR)),
         Tooltip {
             text: param_def.description.clone(),
             detail: Some(format!("Affects: {}", param_def.affects)),
@@ -218,33 +192,26 @@ fn spawn_parameter_slider(
     // Determine value color based on optimal range
     let is_optimal = current_value >= param_def.optimal_min && current_value <= param_def.optimal_max;
     let value_color = if is_optimal {
-        Color::rgb(0.4, 0.8, 0.5) // Green — in range
+        Color::srgb(0.4, 0.8, 0.5) // Green — in range
     } else {
-        Color::rgb(0.9, 0.7, 0.3) // Yellow — outside optimal
+        Color::srgb(0.9, 0.7, 0.3) // Yellow — outside optimal
     };
 
     let value_text = commands.spawn((
-        TextBundle::from_section(
-            format!("{:.1}{}", current_value, param_def.unit),
-            TextStyle { font_size: 11.0, color: value_color, ..default() },
-        ),
+        (Text::new(format!("{:.1}{}", current_value, param_def.unit)), TextFont { font_size: FontSize::Px(11.0), ..default() }, TextColor(value_color)),
         ParameterValueText { param_key: param_key_str.clone() },
     )).id();
 
-    commands.entity(top_row).push_children(&[name_text, value_text]);
+    commands.entity(top_row).add_children(&[name_text, value_text]);
 
     // Slider bar
     let slider_bar = commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 width: Val::Percent(100.0),
                 height: Val::Px(16.0),
                 position_type: PositionType::Relative,
                 ..default()
-            },
-            background_color: Color::rgba(0.05, 0.06, 0.10, 1.0).into(),
-            ..default()
-        },
+            }, BackgroundColor(Color::srgba(0.05, 0.06, 0.10, 1.0))),
         ParameterSlider {
             param_key: param_key_str.clone(),
             min: param_def.min,
@@ -261,101 +228,77 @@ fn spawn_parameter_slider(
     let green_width = green_end - green_start;
 
     let green_zone = commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 position_type: PositionType::Absolute,
                 left: Val::Percent(green_start * 100.0),
                 width: Val::Percent(green_width * 100.0),
                 height: Val::Percent(100.0),
                 ..default()
-            },
-            background_color: Color::rgba(0.2, 0.5, 0.3, 0.2).into(),
-            ..default()
-        },
+            }, BackgroundColor(Color::srgba(0.2, 0.5, 0.3, 0.2))),
         GreenZoneBar { param_key: param_key_str.clone() },
     )).id();
 
     // Fill bar (shows current value position)
     let fill = commands.spawn(
-        NodeBundle {
-            style: Style {
+        (Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(0.0),
                 width: Val::Percent(normalized * 100.0),
                 height: Val::Percent(100.0),
                 ..default()
-            },
-            background_color: Color::rgba(0.3, 0.5, 0.8, 0.5).into(),
-            ..default()
-        },
+            }, BackgroundColor(Color::srgba(0.3, 0.5, 0.8, 0.5))),
     ).id();
 
     // Handle (draggable)
     let handle = commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 position_type: PositionType::Absolute,
                 left: Val::Percent(normalized * 100.0 - 1.5),
                 width: Val::Px(6.0),
                 height: Val::Percent(100.0),
                 ..default()
-            },
-            background_color: Color::rgb(0.7, 0.8, 1.0).into(),
-            ..default()
-        },
+            }, BackgroundColor(Color::srgb(0.7, 0.8, 1.0))),
         SliderHandle {
             param_key: param_key_str.clone(),
             is_dragging: false,
         },
     )).id();
 
-    commands.entity(slider_bar).push_children(&[green_zone, fill, handle]);
+    commands.entity(slider_bar).add_children(&[green_zone, fill, handle]);
 
     // Min/max labels
     let range_row = commands.spawn(
-        NodeBundle {
-            style: Style {
+        (Node {
                 width: Val::Percent(100.0),
                 flex_direction: FlexDirection::Row,
                 justify_content: JustifyContent::SpaceBetween,
                 ..default()
-            },
-            ..default()
-        },
+            }),
     ).id();
 
     let min_label = commands.spawn(
-        TextBundle::from_section(
-            format!("{:.0}", param_def.min),
-            TextStyle { font_size: 9.0, color: Color::rgba(0.4, 0.4, 0.5, 0.7), ..default() },
-        ),
+        (Text::new(format!("{:.0}", param_def.min)), TextFont { font_size: FontSize::Px(9.0), ..default() }, TextColor(Color::srgba(0.4, 0.4, 0.5, 0.7))),
     ).id();
 
     let max_label = commands.spawn(
-        TextBundle::from_section(
-            format!("{:.0}", param_def.max),
-            TextStyle { font_size: 9.0, color: Color::rgba(0.4, 0.4, 0.5, 0.7), ..default() },
-        ),
+        (Text::new(format!("{:.0}", param_def.max)), TextFont { font_size: FontSize::Px(9.0), ..default() }, TextColor(Color::srgba(0.4, 0.4, 0.5, 0.7))),
     ).id();
 
-    commands.entity(range_row).push_children(&[min_label, max_label]);
+    commands.entity(range_row).add_children(&[min_label, max_label]);
 
     // Warning text (hidden unless outside optimal)
     if !is_optimal {
         let warning = commands.spawn((
-            TextBundle::from_section(
-                if current_value < param_def.optimal_min {
+            (Text::new(if current_value < param_def.optimal_min {
                     format!("⚠ Below recommended ({:.0}{})", param_def.optimal_min, param_def.unit)
                 } else {
                     format!("⚠ Above recommended ({:.0}{})", param_def.optimal_max, param_def.unit)
-                },
-                TextStyle { font_size: 9.0, color: Color::rgb(0.9, 0.6, 0.2), ..default() },
-            ),
+                }), TextFont { font_size: FontSize::Px(9.0), ..default() }, TextColor(Color::srgb(0.9, 0.6, 0.2))),
             ParameterWarning { param_key: param_key_str },
         )).id();
-        commands.entity(container).push_children(&[top_row, slider_bar, range_row, warning]);
+        commands.entity(container).add_children(&[top_row, slider_bar, range_row, warning]);
     } else {
-        commands.entity(container).push_children(&[top_row, slider_bar, range_row]);
+        commands.entity(container).add_children(&[top_row, slider_bar, range_row]);
     }
 
     commands.entity(parent).add_child(container);
@@ -364,13 +307,13 @@ fn spawn_parameter_slider(
 /// System: handle slider bar clicks to set parameter values.
 /// Writes the new value to the ModuleCustomization component on the module entity.
 pub fn slider_click_system(
-    sliders: Query<(&ParameterSlider, &Interaction, &Node, &GlobalTransform)>,
+    sliders: Query<(&ParameterSlider, &Interaction, &ComputedNode, &GlobalTransform)>,
     windows: Query<&Window>,
     deep_windows: Query<&DeepCustomizationWindow>,
     mut customization_query: Query<&mut crate::building::customization::parameters::ModuleCustomization>,
-    mut value_text_query: Query<(&ParameterValueText, &mut Text)>,
+    mut value_text_query: Query<(&ParameterValueText, &mut Text, &mut TextColor)>,
 ) {
-    let Some(cursor_pos) = windows.get_single().ok()
+    let Some(cursor_pos) = windows.single().ok()
         .and_then(|w| w.cursor_position())
     else {
         return;
@@ -397,14 +340,14 @@ pub fn slider_click_system(
         }
 
         // Update the value display text
-        for (value_text, mut text) in value_text_query.iter_mut() {
+        for (value_text, mut text, mut text_color) in value_text_query.iter_mut() {
             if value_text.param_key == slider.param_key {
                 let is_optimal = value >= slider.optimal_min && value <= slider.optimal_max;
-                text.sections[0].value = format!("{:.1}", value);
-                text.sections[0].style.color = if is_optimal {
-                    Color::rgb(0.4, 0.8, 0.5)
+                text.0 = format!("{:.1}", value);
+                text_color.0 = if is_optimal {
+                    Color::srgb(0.4, 0.8, 0.5)
                 } else {
-                    Color::rgb(0.9, 0.7, 0.3)
+                    Color::srgb(0.9, 0.7, 0.3)
                 };
             }
         }
@@ -417,9 +360,9 @@ pub fn undo_button_hover(
 ) {
     for (interaction, mut bg) in buttons.iter_mut() {
         *bg = match interaction {
-            Interaction::Hovered => Color::rgba(0.22, 0.18, 0.15, 1.0).into(),
-            Interaction::Pressed => Color::rgba(0.30, 0.22, 0.18, 1.0).into(),
-            Interaction::None => Color::rgba(0.15, 0.12, 0.10, 1.0).into(),
+            Interaction::Hovered => Color::srgba(0.22, 0.18, 0.15, 1.0).into(),
+            Interaction::Pressed => Color::srgba(0.30, 0.22, 0.18, 1.0).into(),
+            Interaction::None => Color::srgba(0.15, 0.12, 0.10, 1.0).into(),
         };
     }
 }

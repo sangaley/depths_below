@@ -34,7 +34,7 @@ pub struct HeatOverlayTile;
 /// Toggle cost summary with I key during build mode
 pub fn toggle_cost_summary(
     mut commands: Commands,
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     existing: Query<Entity, With<CostSummaryWindow>>,
     module_query: Query<&Module, Without<DestroyedModule>>,
     hull_query: Query<&HullSegment>,
@@ -43,11 +43,11 @@ pub fn toggle_cost_summary(
     registry: Res<ModuleRegistry>,
     currency: Res<Currency>,
 ) {
-    if !keyboard.just_pressed(KeyCode::I) { return; }
+    if !keyboard.just_pressed(KeyCode::KeyI) { return; }
 
     // Toggle off if exists
-    if let Ok(entity) = existing.get_single() {
-        commands.entity(entity).despawn_recursive();
+    if let Ok(entity) = existing.single() {
+        commands.entity(entity).despawn();
         return;
     }
 
@@ -114,11 +114,7 @@ pub fn toggle_cost_summary(
     for (label, value, color) in &stats {
         if label.is_empty() {
             // Divider
-            let div = commands.spawn(NodeBundle {
-                style: Style { width: Val::Percent(100.0), height: Val::Px(1.0), margin: UiRect::vertical(Val::Px(2.0)), ..default() },
-                background_color: ThemeColors::BORDER_SUBTLE.into(),
-                ..default()
-            }).id();
+            let div = commands.spawn((Node { width: Val::Percent(100.0), height: Val::Px(1.0), margin: UiRect::vertical(Val::Px(2.0)), ..default() }, BackgroundColor(ThemeColors::BORDER_SUBTLE))).id();
             commands.entity(content).add_child(div);
         } else {
             spawn_window_row(&mut commands, content, label, value, ThemeColors::TEXT_SECONDARY, *color);
@@ -181,37 +177,29 @@ pub fn update_center_of_mass(
     // Spawn crosshair at center of mass
     let off_center = com.length();
     let color = if off_center < 30.0 {
-        Color::rgba(0.3, 0.8, 0.4, 0.5) // Green — well balanced
+        Color::srgba(0.3, 0.8, 0.4, 0.5) // Green — well balanced
     } else if off_center < 80.0 {
-        Color::rgba(0.8, 0.7, 0.2, 0.5) // Yellow — slightly off
+        Color::srgba(0.8, 0.7, 0.2, 0.5) // Yellow — slightly off
     } else {
-        Color::rgba(0.8, 0.2, 0.2, 0.5) // Red — unbalanced
+        Color::srgba(0.8, 0.2, 0.2, 0.5) // Red — unbalanced
     };
 
     // Horizontal line
     commands.spawn((
-        SpriteBundle {
-            sprite: Sprite {
+        (Sprite {
                 color,
                 custom_size: Some(Vec2::new(20.0, 2.0)),
                 ..default()
-            },
-            transform: Transform::from_xyz(com.x, com.y, 0.8),
-            ..default()
-        },
+            }, Transform::from_xyz(com.x, com.y, 0.8)),
         CenterOfMassIndicator,
     ));
     // Vertical line
     commands.spawn((
-        SpriteBundle {
-            sprite: Sprite {
+        (Sprite {
                 color,
                 custom_size: Some(Vec2::new(2.0, 20.0)),
                 ..default()
-            },
-            transform: Transform::from_xyz(com.x, com.y, 0.8),
-            ..default()
-        },
+            }, Transform::from_xyz(com.x, com.y, 0.8)),
         CenterOfMassIndicator,
     ));
 }
@@ -223,7 +211,7 @@ pub fn update_center_of_mass(
 /// Toggle power overlay with P+O keys (hold P then press O)
 pub fn toggle_power_overlay(
     mut commands: Commands,
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     module_query: Query<(&Module, &GlobalTransform), Without<DestroyedModule>>,
     power_graph: Res<crate::resources::PowerGraph>,
     existing: Query<Entity, With<PowerOverlayTile>>,
@@ -254,25 +242,21 @@ pub fn toggle_power_overlay(
         let is_powered = power_graph.powered_tiles.contains(&module.grid_position);
 
         let color = if module.power_generation > 0.0 {
-            Color::rgba(0.9, 0.8, 0.2, 0.25) // Yellow = generator
+            Color::srgba(0.9, 0.8, 0.2, 0.25) // Yellow = generator
         } else if is_powered && module.is_active {
-            Color::rgba(0.2, 0.8, 0.3, 0.20) // Green = powered + active
+            Color::srgba(0.2, 0.8, 0.3, 0.20) // Green = powered + active
         } else if is_powered {
-            Color::rgba(0.3, 0.5, 0.7, 0.15) // Blue = powered but inactive
+            Color::srgba(0.3, 0.5, 0.7, 0.15) // Blue = powered but inactive
         } else {
-            Color::rgba(0.8, 0.2, 0.2, 0.30) // Red = no power
+            Color::srgba(0.8, 0.2, 0.2, 0.30) // Red = no power
         };
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
+            (Sprite {
                     color,
                     custom_size: Some(Vec2::splat(60.0)),
                     ..default()
-                },
-                transform: Transform::from_xyz(pos.x, pos.y, 0.7),
-                ..default()
-            },
+                }, Transform::from_xyz(pos.x, pos.y, 0.7)),
             PowerOverlayTile,
         ));
     }
@@ -285,7 +269,7 @@ pub fn toggle_power_overlay(
 /// Toggle heat overlay with F3
 pub fn toggle_heat_overlay(
     mut commands: Commands,
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     temp_query: Query<(&Module, &ModuleTemperature, &GlobalTransform), Without<DestroyedModule>>,
     existing: Query<Entity, With<HeatOverlayTile>>,
     mut active: Local<bool>,
@@ -313,25 +297,21 @@ pub fn toggle_heat_overlay(
 
         // Blue → Yellow → Red gradient
         let color = if heat_ratio < 0.3 {
-            Color::rgba(0.1, 0.2, 0.6, 0.15) // Cool blue
+            Color::srgba(0.1, 0.2, 0.6, 0.15) // Cool blue
         } else if heat_ratio < 0.6 {
-            Color::rgba(0.7, 0.6, 0.1, 0.20) // Warm yellow
+            Color::srgba(0.7, 0.6, 0.1, 0.20) // Warm yellow
         } else if heat_ratio < 0.85 {
-            Color::rgba(0.8, 0.3, 0.1, 0.25) // Hot orange
+            Color::srgba(0.8, 0.3, 0.1, 0.25) // Hot orange
         } else {
-            Color::rgba(0.9, 0.1, 0.1, 0.35) // Critical red
+            Color::srgba(0.9, 0.1, 0.1, 0.35) // Critical red
         };
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
+            (Sprite {
                     color,
                     custom_size: Some(Vec2::splat(60.0)),
                     ..default()
-                },
-                transform: Transform::from_xyz(pos.x, pos.y, 0.7),
-                ..default()
-            },
+                }, Transform::from_xyz(pos.x, pos.y, 0.7)),
             HeatOverlayTile,
         ));
     }

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::components::Submarine;
+use crate::components::Ship;
 use crate::celestial::components::*;
 
 // ============================================================================
@@ -27,64 +27,28 @@ pub struct OxygenWarningOverlay;
 /// Master system: updates all screen overlays based on proximity to hazards
 pub fn update_screen_effects(
     mut commands: Commands,
-    sub_query: Query<&Transform, With<Submarine>>,
-    star_query: Query<(&Transform, &Star, &CelestialBody), Without<Submarine>>,
-    _bh_query: Query<(&Transform, &BlackHole, &CelestialBody), Without<Submarine>>,
-    gravity_force: Query<&crate::celestial::components::GravityForce, With<Submarine>>,
+    ship_query: Query<&Transform, With<Ship>>,
+    star_query: Query<(&Transform, &Star, &CelestialBody), Without<Ship>>,
+    _bh_query: Query<(&Transform, &BlackHole, &CelestialBody), Without<Ship>>,
+    gravity_force: Query<&crate::celestial::components::GravityForce, With<Ship>>,
     oxygen_state: Res<crate::resources::OxygenState>,
     existing_rad: Query<Entity, With<RadiationOverlay>>,
     existing_grav: Query<Entity, With<GravityOverlay>>,
     existing_o2: Query<Entity, With<OxygenWarningOverlay>>,
     time: Res<Time>,
 ) {
-    let Ok(sub_transform) = sub_query.get_single() else { return };
-    let sub_pos = sub_transform.translation.truncate();
+    let Ok(ship_transform) = ship_query.single() else { return };
+    let ship_pos = ship_transform.translation.truncate();
+    let _ = &star_query; // kept as a system param; radiation mechanic disabled per request
 
-    // === RADIATION PROXIMITY OVERLAY ===
-    let mut max_radiation_proximity = 0.0_f32;
-    for (star_transform, _star, body) in star_query.iter() {
-        let dist = sub_pos.distance(star_transform.translation.truncate());
-        let danger_range = body.radius * 3.0;
-        if dist < danger_range {
-            let proximity = 1.0 - (dist / danger_range).clamp(0.0, 1.0);
-            max_radiation_proximity = max_radiation_proximity.max(proximity);
-        }
-    }
-
-    // Spawn or update radiation overlay
-    if max_radiation_proximity > 0.05 {
-        if existing_rad.is_empty() {
-            commands.spawn((
-                NodeBundle {
-                    style: Style {
-                        position_type: PositionType::Absolute,
-                        width: Val::Percent(100.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    },
-                    background_color: Color::rgba(0.0, 0.0, 0.0, 0.0).into(),
-                    z_index: ZIndex::Global(5),
-                    ..default()
-                },
-                RadiationOverlay,
-            ));
-        }
-    }
-    // Update radiation overlay alpha
+    // Radiation overlay removed along with check_radiation_damage — clean up
+    // any leftover overlay entity from before this change (e.g. a loaded save).
     for entity in existing_rad.iter() {
-        if max_radiation_proximity < 0.02 {
-            commands.entity(entity).despawn();
-        } else {
-            // Yellow-orange tint at edges, intensity scales with proximity
-            let alpha = max_radiation_proximity * 0.25;
-            commands.entity(entity).insert(
-                BackgroundColor(Color::rgba(0.8, 0.4, 0.1, alpha))
-            );
-        }
+        commands.entity(entity).despawn();
     }
 
     // === GRAVITY PROXIMITY OVERLAY ===
-    let gravity_strength = gravity_force.get_single()
+    let gravity_strength = gravity_force.single()
         .map(|gf| gf.0.length())
         .unwrap_or(0.0);
 
@@ -93,17 +57,12 @@ pub fn update_screen_effects(
     if gravity_intensity > 0.1 {
         if existing_grav.is_empty() {
             commands.spawn((
-                NodeBundle {
-                    style: Style {
+                (Node {
                         position_type: PositionType::Absolute,
                         width: Val::Percent(100.0),
                         height: Val::Percent(100.0),
                         ..default()
-                    },
-                    background_color: Color::rgba(0.0, 0.0, 0.0, 0.0).into(),
-                    z_index: ZIndex::Global(4),
-                    ..default()
-                },
+                    }, BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.0)), ZIndex(4)),
                 GravityOverlay,
             ));
         }
@@ -115,7 +74,7 @@ pub fn update_screen_effects(
             // Dark purple-red vignette for gravity
             let alpha = gravity_intensity * 0.20;
             commands.entity(entity).insert(
-                BackgroundColor(Color::rgba(0.3, 0.05, 0.1, alpha))
+                BackgroundColor(Color::srgba(0.3, 0.05, 0.1, alpha))
             );
         }
     }
@@ -130,17 +89,12 @@ pub fn update_screen_effects(
     if o2_pct < 0.25 {
         if existing_o2.is_empty() {
             commands.spawn((
-                NodeBundle {
-                    style: Style {
+                (Node {
                         position_type: PositionType::Absolute,
                         width: Val::Percent(100.0),
                         height: Val::Percent(100.0),
                         ..default()
-                    },
-                    background_color: Color::rgba(0.0, 0.0, 0.0, 0.0).into(),
-                    z_index: ZIndex::Global(6),
-                    ..default()
-                },
+                    }, BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.0)), ZIndex(6)),
                 OxygenWarningOverlay,
             ));
         }
@@ -150,11 +104,11 @@ pub fn update_screen_effects(
             commands.entity(entity).despawn();
         } else {
             // Pulsing red-black vignette when suffocating
-            let pulse = (time.elapsed_seconds() * 3.0).sin() * 0.5 + 0.5;
+            let pulse = (time.elapsed_secs() * 3.0).sin() * 0.5 + 0.5;
             let severity = 1.0 - (o2_pct / 0.25).clamp(0.0, 1.0);
             let alpha = severity * 0.3 * pulse;
             commands.entity(entity).insert(
-                BackgroundColor(Color::rgba(0.5, 0.0, 0.0, alpha))
+                BackgroundColor(Color::srgba(0.5, 0.0, 0.0, alpha))
             );
         }
     }

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
-use crate::components::Submarine;
-use crate::events::{SubmarineDamaged, DamageSource, ShowNotification, NotificationType};
+use crate::components::Ship;
+use crate::events::{ShipDamaged, DamageSource, ShowNotification, NotificationType};
 use super::components::*;
 use super::resources::*;
 use super::events::*;
@@ -11,9 +11,9 @@ pub fn check_event_horizon(
     mut commands: Commands,
     bh_query: Query<(Entity, &Transform, &BlackHole)>,
     body_query: Query<(Entity, &Transform, &CelestialBody), (Without<BlackHole>, Without<BeingConsumed>)>,
-    sub_query: Query<&Transform, With<Submarine>>,
-    mut damage_events: EventWriter<SubmarineDamaged>,
-    mut notifications: EventWriter<ShowNotification>,
+    ship_query: Query<&Transform, With<Ship>>,
+    mut damage_events: MessageWriter<ShipDamaged>,
+    mut notifications: MessageWriter<ShowNotification>,
     config: Res<CelestialConfig>,
     time: Res<Time>,
 ) {
@@ -32,7 +32,7 @@ pub fn check_event_horizon(
                     progress: 0.0,
                 });
 
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: format!("{} crossing event horizon!", body.name),
                     notification_type: NotificationType::Danger,
                     duration: 4.0,
@@ -41,9 +41,9 @@ pub fn check_event_horizon(
         }
 
         // Check ship — gradual crush damage, not instant death
-        if let Ok(sub_transform) = sub_query.get_single() {
-            let sub_pos = sub_transform.translation.truncate();
-            let dist = sub_pos.distance(bh_pos);
+        if let Ok(ship_transform) = ship_query.single() {
+            let ship_pos = ship_transform.translation.truncate();
+            let dist = ship_pos.distance(bh_pos);
 
             // Crush damage in accretion disk zone
             if dist < bh.accretion_disk_radius {
@@ -51,21 +51,21 @@ pub fn check_event_horizon(
                 let damage = config.black_hole_crush_damage_rate
                     * proximity * proximity  // Quadratic ramp
                     * bh.tidal_force_multiplier
-                    * time.delta_seconds();
+                    * time.delta_secs();
 
                 if damage > 0.1 {
-                    damage_events.send(SubmarineDamaged {
+                    damage_events.write(ShipDamaged {
                         source: DamageSource::Radiation,
                         amount: damage,
                         position: None,
-                        direction: Some((bh_pos - sub_pos).normalize_or_zero()),
+                        direction: Some((bh_pos - ship_pos).normalize_or_zero()),
                     });
                 }
             }
 
             // Critical warning at event horizon
             if dist < bh.event_horizon_radius * 1.5 {
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: "EVENT HORIZON! ESCAPE NOW OR BE CONSUMED!".into(),
                     notification_type: NotificationType::Danger,
                     duration: 2.0,
@@ -82,12 +82,12 @@ pub fn process_consumption(
     config: Res<CelestialConfig>,
     mut consuming_query: Query<(Entity, &mut BeingConsumed, &mut Transform, &CelestialBody)>,
     bh_query: Query<(&Transform, &mut BlackHole, &mut GravityWell), Without<BeingConsumed>>,
-    mut consumed_events: EventWriter<BodyConsumed>,
-    mut planet_consumed_events: EventWriter<PlanetConsumed>,
+    mut consumed_events: MessageWriter<BodyConsumed>,
+    mut planet_consumed_events: MessageWriter<PlanetConsumed>,
     planet_query: Query<&Planet>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
 
     for (entity, mut consuming, mut transform, body) in consuming_query.iter_mut() {
         consuming.progress += config.black_hole_consume_speed * dt;
@@ -113,36 +113,36 @@ pub fn process_consumption(
 
             // Check if it's a planet
             if let Ok(planet) = planet_query.get(entity) {
-                planet_consumed_events.send(PlanetConsumed {
+                planet_consumed_events.write(PlanetConsumed {
                     planet: entity,
                     black_hole: consuming.by_black_hole,
                     planet_type: planet.planet_type,
                 });
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: format!("{} consumed by black hole!", body.name),
                     notification_type: NotificationType::Danger,
                     duration: 5.0,
                 });
             }
 
-            consumed_events.send(BodyConsumed {
+            consumed_events.write(BodyConsumed {
                 entity,
                 black_hole: consuming.by_black_hole,
                 mass_gained: mass,
             });
 
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
 }
 
 /// Black holes grow stronger as they consume mass.
 pub fn grow_black_hole(
-    mut consumed_events: EventReader<BodyConsumed>,
+    mut consumed_events: MessageReader<BodyConsumed>,
     mut bh_query: Query<(&mut BlackHole, &mut GravityWell, &mut CelestialBody)>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
-    for event in consumed_events.iter() {
+    for event in consumed_events.read() {
         if let Ok((mut bh, mut well, mut body)) = bh_query.get_mut(event.black_hole) {
             bh.consumed_mass += event.mass_gained;
             body.mass += event.mass_gained;
@@ -154,7 +154,7 @@ pub fn grow_black_hole(
             well.strength *= 1.0 + growth_factor * 0.15;
             well.influence_radius *= 1.0 + growth_factor * 0.05;
 
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: "Black hole growing stronger...".into(),
                 notification_type: crate::events::NotificationType::Warning,
                 duration: 3.0,

@@ -11,7 +11,7 @@ use crate::states::BuildState;
 // DATA MODEL
 // ============================================================================
 
-/// A saved submarine blueprint
+/// A saved ship blueprint
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Blueprint {
     pub name: String,
@@ -139,32 +139,32 @@ fn write_blueprint_to_disk(bp: &Blueprint) -> Result<PathBuf, String> {
 // SYSTEMS
 // ============================================================================
 
-/// Ctrl+S: save current submarine's hull & modules as a named blueprint.
-/// Only saves entities that are children of the Submarine entity.
+/// Ctrl+S: save current ship's hull & modules as a named blueprint.
+/// Only saves entities that are children of the Ship entity.
 pub fn save_blueprint_system(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
-    sub_query: Query<&Children, With<Submarine>>,
+    ship_query: Query<&Children, With<Ship>>,
     hull_query: Query<&HullSegment>,
     module_query: Query<&Module>,
     mut resource: ResMut<BlueprintResource>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     // Tick cooldown
     resource.save_cooldown.tick(time.delta());
 
     let ctrl = keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
-    if !(ctrl && keyboard.just_pressed(KeyCode::S)) {
+    if !(ctrl && keyboard.just_pressed(KeyCode::KeyS)) {
         return;
     }
 
     // Prevent rapid-fire saves
-    if !resource.save_cooldown.finished() {
+    if !resource.save_cooldown.is_finished() {
         return;
     }
 
-    let Ok(children) = sub_query.get_single() else {
-        notifications.send(ShowNotification {
+    let Ok(children) = ship_query.single() else {
+        notifications.write(ShowNotification {
             message: "No ship to save.".into(),
             notification_type: NotificationType::Warning,
             duration: 2.0,
@@ -172,9 +172,9 @@ pub fn save_blueprint_system(
         return;
     };
 
-    // Only save entities that are children of the submarine
+    // Only save entities that are children of the ship
     let hull_cells: Vec<BlueprintHullCell> = children.iter()
-        .filter_map(|&child| hull_query.get(child).ok())
+        .filter_map(|child| hull_query.get(child).ok())
         .map(|h| BlueprintHullCell {
             grid_pos: h.grid_position,
             layer: h.hull_layer,
@@ -183,7 +183,7 @@ pub fn save_blueprint_system(
         .collect();
 
     let modules: Vec<BlueprintModule> = children.iter()
-        .filter_map(|&child| module_query.get(child).ok())
+        .filter_map(|child| module_query.get(child).ok())
         .map(|m| BlueprintModule {
             module_type: m.module_type,
             grid_pos: m.grid_position,
@@ -192,7 +192,7 @@ pub fn save_blueprint_system(
         .collect();
 
     if hull_cells.is_empty() && modules.is_empty() {
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: "Nothing to save — build some hull/modules first.".into(),
             notification_type: NotificationType::Warning,
             duration: 2.0,
@@ -219,14 +219,14 @@ pub fn save_blueprint_system(
             scan_blueprints(&mut resource);
             resource.save_cooldown.reset();
 
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("Saved '{}' ({})", name, summary),
                 notification_type: NotificationType::Success,
                 duration: 3.0,
             });
         }
         Err(e) => {
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("Save failed: {}", e),
                 notification_type: NotificationType::Danger,
                 duration: 3.0,
@@ -238,18 +238,18 @@ pub fn save_blueprint_system(
 /// Ctrl+L: cycle through and load a saved blueprint.
 /// Despawns existing hull, modules, and crew. Places blueprint contents for free.
 pub fn load_blueprint_system(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
     mut resource: ResMut<BlueprintResource>,
     hull_entities: Query<Entity, With<HullSegment>>,
     module_entities: Query<Entity, With<Module>>,
     crew_entities: Query<Entity, With<CrewMember>>,
-    mut place_hull_events: EventWriter<PlaceHullRequest>,
-    mut place_module_events: EventWriter<PlaceModuleRequest>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut place_hull_events: MessageWriter<PlaceHullRequest>,
+    mut place_module_events: MessageWriter<PlaceModuleRequest>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     let ctrl = keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
-    if !(ctrl && keyboard.just_pressed(KeyCode::L)) {
+    if !(ctrl && keyboard.just_pressed(KeyCode::KeyL)) {
         return;
     }
 
@@ -259,7 +259,7 @@ pub fn load_blueprint_system(
     }
 
     if resource.blueprints.is_empty() {
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: "No blueprints found. Save one first with Ctrl+S.".into(),
             notification_type: NotificationType::Warning,
             duration: 2.5,
@@ -274,18 +274,18 @@ pub fn load_blueprint_system(
 
     // Clear existing hull, modules, and crew
     for entity in hull_entities.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
     for entity in module_entities.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
     for entity in crew_entities.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 
     // Rebuild from blueprint — free placement (no cost, no per-item notifications)
     for hull_cell in &blueprint.hull_cells {
-        place_hull_events.send(PlaceHullRequest {
+        place_hull_events.write(PlaceHullRequest {
             layer: hull_cell.layer,
             material: hull_cell.material,
             grid_position: hull_cell.grid_pos,
@@ -294,7 +294,7 @@ pub fn load_blueprint_system(
     }
 
     for module in &blueprint.modules {
-        place_module_events.send(PlaceModuleRequest {
+        place_module_events.write(PlaceModuleRequest {
             module_type: module.module_type,
             grid_position: module.grid_pos,
             rotation: module.rotation,
@@ -307,7 +307,7 @@ pub fn load_blueprint_system(
     let summary = blueprint.summary();
     let position = format!("{}/{}", idx + 1, count);
 
-    notifications.send(ShowNotification {
+    notifications.write(ShowNotification {
         message: format!("Loaded '{}' [{}] ({})", blueprint.name, position, summary),
         notification_type: NotificationType::Success,
         duration: 3.0,
@@ -316,13 +316,13 @@ pub fn load_blueprint_system(
 
 /// Ctrl+D: delete the currently selected blueprint (only works in build mode)
 pub fn delete_blueprint_system(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     build_state: Res<State<BuildState>>,
     mut resource: ResMut<BlueprintResource>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     let ctrl = keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
-    if !(ctrl && keyboard.just_pressed(KeyCode::D)) {
+    if !(ctrl && keyboard.just_pressed(KeyCode::KeyD)) {
         return;
     }
 
@@ -349,14 +349,14 @@ pub fn delete_blueprint_system(
     if path.exists() {
         match fs::remove_file(&path) {
             Ok(_) => {
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: format!("Deleted blueprint '{}'", bp_name),
                     notification_type: NotificationType::Warning,
                     duration: 2.0,
                 });
             }
             Err(e) => {
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: format!("Failed to delete '{}': {}", bp_name, e),
                     notification_type: NotificationType::Danger,
                     duration: 3.0,

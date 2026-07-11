@@ -22,33 +22,29 @@ pub struct SymmetryCenterLine;
 
 /// Toggle symmetry with Y key
 pub fn toggle_symmetry(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut symmetry: ResMut<SymmetryState>,
     mut commands: Commands,
     existing_line: Query<Entity, With<SymmetryCenterLine>>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
     current_state: Res<State<BuildState>>,
 ) {
     if *current_state.get() == BuildState::Inactive { return; }
 
-    if keyboard.just_pressed(KeyCode::Y) {
+    if keyboard.just_pressed(KeyCode::KeyY) {
         symmetry.enabled = !symmetry.enabled;
 
         if symmetry.enabled {
             // Spawn center line
             commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
-                        color: Color::rgba(0.3, 0.6, 1.0, 0.2),
-                        custom_size: Some(Vec2::new(2.0, 5000.0)), // Tall vertical line
+                (Sprite {
+                        color: Color::srgba(0.3, 0.6, 1.0, 0.2),
+                        custom_size: Some(Vec2::new(2.0, 5000.0)), 
                         ..default()
-                    },
-                    transform: Transform::from_xyz(0.0, 0.0, 0.3),
-                    ..default()
-                },
+                    }, Transform::from_xyz(0.0, 0.0, 0.3)),
                 SymmetryCenterLine,
             ));
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: "Symmetry mode ON — modules mirror across center".into(),
                 notification_type: NotificationType::Info,
                 duration: 2.0,
@@ -58,7 +54,7 @@ pub fn toggle_symmetry(
             for entity in existing_line.iter() {
                 commands.entity(entity).despawn();
             }
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: "Symmetry mode OFF".into(),
                 notification_type: NotificationType::Info,
                 duration: 2.0,

@@ -53,25 +53,21 @@ pub fn draw_connection_lines(
                 let angle = diff.y.atan2(diff.x);
 
                 let color = if block.connected_core.is_some() {
-                    Color::rgba(0.2, 0.8, 0.3, 0.5) // Green = connected
+                    Color::srgba(0.2, 0.8, 0.3, 0.5) // Green = connected
                 } else {
-                    Color::rgba(0.8, 0.2, 0.2, 0.5) // Red = disconnected
+                    Color::srgba(0.8, 0.2, 0.2, 0.5) // Red = disconnected
                 };
 
                 commands.spawn((
-                    SpriteBundle {
-                        sprite: Sprite {
+                    (Sprite {
                             color,
                             custom_size: Some(Vec2::new(length, 3.0)),
                             ..default()
-                        },
-                        transform: Transform {
+                        }, Transform {
                             translation: Vec3::new(midpoint.x, midpoint.y, 0.15),
                             rotation: Quat::from_rotation_z(angle),
                             ..default()
-                        },
-                        ..default()
-                    },
+                        }),
                     ConnectionLine,
                 ));
             }
@@ -81,15 +77,11 @@ pub fn draw_connection_lines(
         if block.connected_core.is_none() && block.role != BlockRole::Core {
             let pos = global_transform.translation().truncate();
             commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
-                        color: Color::rgba(0.8, 0.1, 0.1, 0.3),
+                (Sprite {
+                        color: Color::srgba(0.8, 0.1, 0.1, 0.3),
                         custom_size: Some(Vec2::splat(64.0)),
                         ..default()
-                    },
-                    transform: Transform::from_xyz(pos.x, pos.y, 0.16),
-                    ..default()
-                },
+                    }, Transform::from_xyz(pos.x, pos.y, 0.16)),
                 ConnectionLine,
             ));
         }

@@ -92,6 +92,26 @@ pub struct MachineStats {
     pub effective_accuracy: f32,
 }
 
+/// Stable snapshot of a weapon core's registry-defined stats, taken once at
+/// spawn. calculate_machine_stats must read its "base" numbers from here —
+/// never from the live Weapon component, and never from MachineStats itself.
+/// MachineStats gets fully overwritten every frame by rebuild_machine_connections
+/// (`*core_stats = stats.clone()` from a freshly Default::default()'d
+/// accumulator), and apply_machine_stats_to_weapons writes the *computed*
+/// numbers straight back into Weapon. Using either of those live values as
+/// the calculation's input made every frame's output the next frame's input:
+/// for a bare core with no barrels (effective_range *= 0.6), range decayed
+/// by 0.6x every single frame — to a denormalized float within a couple of
+/// seconds. That's why kinetic weapons "aimed at their own muzzle" (range
+/// clamped the aim point back to weapon_pos) and appeared frozen or wild.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct BaseWeaponStats {
+    pub damage: f32,
+    pub range: f32,
+    pub fire_rate: f32,
+    pub max_ammo: u32,
+}
+
 /// Marks a block as disconnected from its core (barrel chain severed)
 #[derive(Component)]
 pub struct Disconnected;

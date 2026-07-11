@@ -64,15 +64,11 @@ pub fn spawn_system_pois(
         let pos = system_center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(0.35, 0.30, 0.28),
+            (Sprite {
+                    color: Color::srgb(0.35, 0.30, 0.28),
                     custom_size: Some(Vec2::new(200.0, 80.0)),
                     ..default()
-                },
-                transform: Transform::from_xyz(pos.x, pos.y, -0.3),
-                ..default()
-            },
+                }, Transform::from_xyz(pos.x, pos.y, -0.3)),
             SpacePoi {
                 poi_type: SpacePoiType::DerelictShip,
                 looted: false,
@@ -101,22 +97,18 @@ pub fn spawn_system_pois(
             };
 
             let color = match resource {
-                ResourceNodeType::MetalOre => Color::rgb(0.45, 0.40, 0.35),
-                ResourceNodeType::RareCrystal => Color::rgb(0.40, 0.50, 0.70),
-                ResourceNodeType::FuelDeposit => Color::rgb(0.50, 0.40, 0.20),
-                ResourceNodeType::ExoticMatter => Color::rgb(0.50, 0.35, 0.60),
+                ResourceNodeType::MetalOre => Color::srgb(0.45, 0.40, 0.35),
+                ResourceNodeType::RareCrystal => Color::srgb(0.40, 0.50, 0.70),
+                ResourceNodeType::FuelDeposit => Color::srgb(0.50, 0.40, 0.20),
+                ResourceNodeType::ExoticMatter => Color::srgb(0.50, 0.35, 0.60),
             };
 
             commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
+                (Sprite {
                         color,
                         custom_size: Some(Vec2::splat(rng.gen_range(400.0..1000.0))),
                         ..default()
-                    },
-                    transform: Transform::from_xyz(pos.x, pos.y, -0.4),
-                    ..default()
-                },
+                    }, Transform::from_xyz(pos.x, pos.y, -0.4)),
                 SpacePoi {
                     poi_type: SpacePoiType::AsteroidNode,
                     looted: false,
@@ -140,15 +132,11 @@ pub fn spawn_system_pois(
         let pos = system_center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgba(0.5, 0.3, 0.8, 0.6),
+            (Sprite {
+                    color: Color::srgba(0.5, 0.3, 0.8, 0.6),
                     custom_size: Some(Vec2::splat(300.0)),
                     ..default()
-                },
-                transform: Transform::from_xyz(pos.x, pos.y, -0.3),
-                ..default()
-            },
+                }, Transform::from_xyz(pos.x, pos.y, -0.3)),
             SpacePoi {
                 poi_type: SpacePoiType::Anomaly,
                 looted: false,
@@ -168,15 +156,11 @@ pub fn spawn_system_pois(
         let pos = *planet_pos + station_offset;
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(0.45, 0.50, 0.55),
+            (Sprite {
+                    color: Color::srgb(0.45, 0.50, 0.55),
                     custom_size: Some(Vec2::splat(150.0)),
                     ..default()
-                },
-                transform: Transform::from_xyz(pos.x, pos.y, -0.2),
-                ..default()
-            },
+                }, Transform::from_xyz(pos.x, pos.y, -0.2)),
             SpacePoi {
                 poi_type: SpacePoiType::SpaceStation,
                 looted: false,
@@ -191,16 +175,16 @@ pub fn spawn_system_pois(
 /// Mining system: when ship is near a MineableResource and has a Mining Drill, extract resources
 pub fn mining_system(
     time: Res<Time>,
-    sub_query: Query<&Transform, With<Submarine>>,
+    ship_query: Query<&Transform, With<Ship>>,
     drill_query: Query<&Module, Without<DestroyedModule>>,
-    mut resource_query: Query<(&Transform, &mut MineableResource, &mut SpacePoi), Without<Submarine>>,
+    mut resource_query: Query<(&Transform, &mut MineableResource, &mut SpacePoi), Without<Ship>>,
     mut inventory: ResMut<Inventory>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
     mut last_notify: Local<f32>,
 ) {
-    let Ok(sub_transform) = sub_query.get_single() else { return };
-    let sub_pos = sub_transform.translation.truncate();
-    let dt = time.delta_seconds();
+    let Ok(ship_transform) = ship_query.single() else { return };
+    let ship_pos = ship_transform.translation.truncate();
+    let dt = time.delta_secs();
 
     // Check if ship has active mining drill
     let has_drill = drill_query.iter()
@@ -210,7 +194,7 @@ pub fn mining_system(
     *last_notify += dt;
 
     for (res_transform, mut resource, mut poi) in resource_query.iter_mut() {
-        let dist = sub_pos.distance(res_transform.translation.truncate());
+        let dist = ship_pos.distance(res_transform.translation.truncate());
 
         // Mining range
         if dist > 500.0 || resource.resource_remaining <= 0.0 { continue; }
@@ -234,7 +218,7 @@ pub fn mining_system(
         // Notify periodically
         if *last_notify > 3.0 {
             *last_notify = 0.0;
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("Mining {:?}... {:.0} remaining", resource.resource_type, resource.resource_remaining),
                 notification_type: NotificationType::Info,
                 duration: 2.0,
@@ -243,7 +227,7 @@ pub fn mining_system(
 
         if resource.resource_remaining <= 0.0 {
             poi.looted = true;
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("{} depleted", poi.name),
                 notification_type: NotificationType::Info,
                 duration: 3.0,
@@ -254,27 +238,27 @@ pub fn mining_system(
 
 /// Loot derelict ships when close
 pub fn loot_derelict_system(
-    sub_query: Query<&Transform, With<Submarine>>,
-    mut poi_query: Query<(&Transform, &mut SpacePoi), Without<Submarine>>,
+    ship_query: Query<&Transform, With<Ship>>,
+    mut poi_query: Query<(&Transform, &mut SpacePoi), Without<Ship>>,
     mut currency: ResMut<Currency>,
-    mut notifications: EventWriter<ShowNotification>,
-    keyboard: Res<Input<KeyCode>>,
+    mut notifications: MessageWriter<ShowNotification>,
+    keyboard: Res<ButtonInput<KeyCode>>,
 ) {
-    if !keyboard.just_pressed(KeyCode::E) { return; }
+    if !keyboard.just_pressed(KeyCode::KeyE) { return; }
 
-    let Ok(sub_transform) = sub_query.get_single() else { return };
-    let sub_pos = sub_transform.translation.truncate();
+    let Ok(ship_transform) = ship_query.single() else { return };
+    let ship_pos = ship_transform.translation.truncate();
 
     for (poi_transform, mut poi) in poi_query.iter_mut() {
         if poi.looted { continue; }
         if !matches!(poi.poi_type, SpacePoiType::DerelictShip | SpacePoiType::Anomaly) { continue; }
 
-        let dist = sub_pos.distance(poi_transform.translation.truncate());
+        let dist = ship_pos.distance(poi_transform.translation.truncate());
         if dist > 300.0 { continue; }
 
         poi.looted = true;
         currency.credits += poi.loot_value;
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: format!("Looted {}! +{}c", poi.name, poi.loot_value),
             notification_type: NotificationType::Success,
             duration: 3.0,

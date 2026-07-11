@@ -23,8 +23,7 @@ struct ConnectionResult {
 /// Rebuild all machine connections each frame.
 pub fn rebuild_machine_connections(
     mut commands: Commands,
-    block_query: Query<(Entity, &Module, &MachineBlock)>,
-    mut writable_blocks: Query<&mut MachineBlock>,
+    mut machine_query: Query<(Entity, &Module, &mut MachineBlock)>,
     mut core_stats: Query<&mut MachineStats>,
 ) {
     // Build position → entity lookup
@@ -34,7 +33,7 @@ pub fn rebuild_machine_connections(
     let mut cores: Vec<(Entity, IVec2)> = Vec::new();
     let mut all_machine_entities: HashSet<Entity> = HashSet::new();
 
-    for (entity, module, block) in block_query.iter() {
+    for (entity, module, block) in machine_query.iter_mut() {
         pos_to_entity.insert(module.grid_position, entity);
         entity_to_pos.insert(entity, module.grid_position);
         entity_roles.insert(entity, block.role);
@@ -131,7 +130,7 @@ pub fn rebuild_machine_connections(
 
     // === PASS 2: Apply connection data ===
     for conn in &connections {
-        if let Ok(mut block) = writable_blocks.get_mut(conn.entity) {
+        if let Ok((_, _, mut block)) = machine_query.get_mut(conn.entity) {
             block.connected_core = Some(conn.core);
             block.chain_distance = conn.distance;
             block.prev_in_chain = conn.prev;
@@ -149,7 +148,7 @@ pub fn rebuild_machine_connections(
     // Mark disconnected blocks
     for entity in &all_machine_entities {
         if !connected_this_frame.contains(entity) {
-            if let Ok(mut block) = writable_blocks.get_mut(*entity) {
+            if let Ok((_, _, mut block)) = machine_query.get_mut(*entity) {
                 block.connected_core = None;
                 block.chain_distance = 0;
                 block.next_in_chain = None;

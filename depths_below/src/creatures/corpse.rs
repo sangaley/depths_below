@@ -39,7 +39,7 @@ pub fn spawn_corpse_on_death(
                 .iter()
                 .min_by(|a, b| a.1.decay_timer.partial_cmp(&b.1.decay_timer).unwrap_or(std::cmp::Ordering::Equal))
             {
-                commands.entity(oldest_entity).despawn_recursive();
+                commands.entity(oldest_entity).despawn();
             }
         }
 
@@ -48,21 +48,17 @@ pub fn spawn_corpse_on_death(
 
         // Use the creature's actual sprite, tinted dark brownish-red
         commands.spawn((
-            SpriteBundle {
-                texture: asset_server.load(sprite_map::creature_sprite_path(creature.creature_type)),
-                sprite: Sprite {
-                    color: Color::rgba(0.3, 0.2, 0.15, 0.7),
+            (Sprite {
+                    image: asset_server.load(sprite_map::creature_sprite_path(creature.creature_type)),
+                    color: Color::srgba(0.3, 0.2, 0.15, 0.7),
                     custom_size: Some(size),
                     ..default()
-                },
-                transform: Transform {
-                    translation: Vec3::new(pos.x, pos.y, -0.1), // slightly below living creatures
-                    // Corpses tilt slightly to look "dead"
+                }, Transform {
+                    translation: Vec3::new(pos.x, pos.y, -0.1), 
+                    
                     rotation: Quat::from_rotation_z(0.3),
                     ..default()
-                },
-                ..default()
-            },
+                }),
             Corpse {
                 creature_type: creature.creature_type,
                 food_remaining: eco_stats.food_value,
@@ -78,16 +74,16 @@ pub fn decay_corpses(
     mut commands: Commands,
     mut corpses: Query<(Entity, &mut Corpse, &mut Sprite)>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
     for (entity, mut corpse, mut sprite) in corpses.iter_mut() {
         corpse.decay_timer -= dt;
 
         // Fade out as corpse decays
         let alpha = (corpse.decay_timer / 120.0).clamp(0.0, 0.7);
-        sprite.color.set_a(alpha);
+        sprite.color.set_alpha(alpha);
 
         if corpse.decay_timer <= 0.0 || corpse.food_remaining <= 0.0 {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
 }

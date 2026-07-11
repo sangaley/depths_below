@@ -5,10 +5,11 @@ use crate::states::{GameState, BuildState};
 use crate::components::*;
 use crate::resources::*;
 use crate::events::*;
-use crate::submarine::spawn_module;
+use crate::ship::spawn_module;
 use crate::sprite_map;
 
 pub mod customization;
+pub mod footprints;
 pub mod inspection;
 pub mod multiblock;
 pub mod build_history;
@@ -32,7 +33,7 @@ pub struct BuildingPlugin;
 impl Plugin for BuildingPlugin {
     fn build(&self, app: &mut App) {
         app
-            .add_state::<BuildState>()
+            .init_state::<BuildState>()
             .init_resource::<BuildingState>()
             .init_resource::<rooms::RoomMap>()
             .init_resource::<GridOccupancy>()
@@ -48,6 +49,8 @@ impl Plugin for BuildingPlugin {
                 customization::weapons::register_weapon_customizations(&mut reg);
                 reg
             })
+            .init_resource::<customization::custom_presets::CustomPresetLibrary>()
+            .add_systems(Startup, customization::custom_presets::load_custom_presets)
             .add_systems(
                 Update,
                 (
@@ -103,7 +106,12 @@ impl Plugin for BuildingPlugin {
                 (
                     multiblock::enhancers::apply_weapon_enhancers,
                     multiblock::enhancers::apply_hull_enhancers,
-                    multiblock::enhancers::apply_utility_enhancers,
+                    // Must run after update_ship_state recomputes noise_level
+                    // from scratch each frame, or the SignalJammer reduction
+                    // below gets silently overwritten depending on schedule
+                    // order (both run under GameState::Exploring).
+                    multiblock::enhancers::apply_utility_enhancers
+                        .after(crate::ship::update_ship_state),
                     multiblock::enhancers::emergency_o2_system,
                     multiblock::enhancers::emergency_shutdown_system,
                     multiblock::enhancers::afterburner_system,
@@ -143,20 +151,34 @@ pub struct GridOccupancy {
 impl GridOccupancy {
     /// Get all grid cells a module occupies given origin, size, and rotation.
     /// Uses SmallVec to avoid heap allocation for modules up to 2x2.
-    pub fn cells_for(origin: IVec2, size: IVec2, rotation: Rotation) -> SmallVec<[IVec2; 4]> {
+    ///
+    /// `footprint` overrides the plain WxH rectangle with an explicit set of
+    /// relative offsets (see `footprints::footprint_override`) for modules
+    /// with a non-rectangular shape. `None` reproduces the original
+    /// rectangle behavior exactly.
+    pub fn cells_for(origin: IVec2, size: IVec2, rotation: Rotation, footprint: Option<&[IVec2]>) -> SmallVec<[IVec2; 4]> {
         let mut cells = SmallVec::new();
-        for x in 0..size.x {
-            for y in 0..size.y {
-                let offset = rotation.rotate_offset(IVec2::new(x, y));
-                cells.push(origin + offset);
+        match footprint {
+            Some(offsets) => {
+                for &offset in offsets {
+                    cells.push(origin + rotation.rotate_offset(offset));
+                }
+            }
+            None => {
+                for x in 0..size.x {
+                    for y in 0..size.y {
+                        let offset = rotation.rotate_offset(IVec2::new(x, y));
+                        cells.push(origin + offset);
+                    }
+                }
             }
         }
         cells
     }
 
     /// Check if all cells for a module placement are free
-    pub fn can_place(&self, origin: IVec2, size: IVec2, rotation: Rotation) -> bool {
-        for cell in Self::cells_for(origin, size, rotation) {
+    pub fn can_place(&self, origin: IVec2, size: IVec2, rotation: Rotation, footprint: Option<&[IVec2]>) -> bool {
+        for cell in Self::cells_for(origin, size, rotation, footprint) {
             if self.cells.contains_key(&cell) {
                 return false;
             }
@@ -165,16 +187,25 @@ impl GridOccupancy {
     }
 }
 
-/// Rebuilds grid occupancy from all modules and hull segments.
+/// Rebuilds grid occupancy from the PLAYER ship's modules and hull segments.
 /// Skips rebuild when entity count hasn't changed (cheap change detection).
+///
+/// Scoped to the player ship only: AI ships reuse the same local grid
+/// coordinates (their modules also sit at positions like (1,0)), so mixing
+/// them into one global map made an AI ship's explosion at *its* (1,0)
+/// damage the player's module at (1,0). Grid coordinates are only
+/// meaningful per-ship.
 fn update_grid_occupancy(
     module_query: Query<(Entity, &Module), Or<(Changed<Module>, Added<Module>)>>,
     hull_query: Query<(Entity, &HullSegment, &Transform), Or<(Changed<HullSegment>, Added<HullSegment>)>>,
-    all_modules: Query<(Entity, &Module)>,
-    all_hulls: Query<(Entity, &HullSegment, &Transform)>,
+    all_modules: Query<(Entity, &Module, &ChildOf)>,
+    all_hulls: Query<(Entity, &HullSegment, &Transform, &ChildOf)>,
+    ship_query: Query<Entity, With<Ship>>,
     mut occupancy: ResMut<GridOccupancy>,
     mut last_count: Local<usize>,
 ) {
+    let Ok(player_ship) = ship_query.single() else { return };
+
     let current_count = all_modules.iter().count() + all_hulls.iter().count();
     let has_changes = !module_query.is_empty() || !hull_query.is_empty();
     if current_count == *last_count && !occupancy.cells.is_empty() && !has_changes {
@@ -184,14 +215,17 @@ fn update_grid_occupancy(
 
     occupancy.cells.clear();
 
-    for (entity, module) in all_modules.iter() {
-        let cells = GridOccupancy::cells_for(module.grid_position, module.size, module.rotation);
+    for (entity, module, parent) in all_modules.iter() {
+        if parent.parent() != player_ship { continue; }
+        let footprint = footprints::footprint_override(module.module_type);
+        let cells = GridOccupancy::cells_for(module.grid_position, module.size, module.rotation, footprint);
         for cell in cells {
             occupancy.cells.insert(cell, entity);
         }
     }
 
-    for (entity, _hull, transform) in all_hulls.iter() {
+    for (entity, _hull, transform, parent) in all_hulls.iter() {
+        if parent.parent() != player_ship { continue; }
         let grid = rooms::transform_to_grid(transform);
         occupancy.cells.insert(grid, entity);
     }
@@ -213,7 +247,7 @@ fn is_hull_material_unlocked(material: HullMaterial, unlocks: &crate::resources:
 
 /// Handles building mode input
 fn handle_build_input(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut build_state: ResMut<BuildingState>,
     mut next_state: ResMut<NextState<BuildState>>,
     current_state: Res<State<BuildState>>,
@@ -221,10 +255,10 @@ fn handle_build_input(
     mut placement_state: ResMut<ComponentPlacementState>,
     registry: Res<ModuleRegistry>,
     unlocks: Res<crate::resources::Unlocks>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     // B: Toggle build mode
-    if keyboard.just_pressed(KeyCode::B) {
+    if keyboard.just_pressed(KeyCode::KeyB) {
         match current_state.get() {
             BuildState::Inactive => next_state.set(BuildState::Placing),
             _ => next_state.set(BuildState::Inactive),
@@ -256,14 +290,14 @@ fn handle_build_input(
     }
 
     // R: Rotate (manual override, disables auto-rotation until ghost moves)
-    if keyboard.just_pressed(KeyCode::R) {
+    if keyboard.just_pressed(KeyCode::KeyR) {
         build_state.rotation = build_state.rotation.rotate_cw();
         build_state.auto_rotated = false;
         info!("Rotation: {:?}", build_state.rotation);
     }
 
     // M: Cycle hull material (only in Hull category), skipping locked materials
-    if keyboard.just_pressed(KeyCode::M) {
+    if keyboard.just_pressed(KeyCode::KeyM) {
         let materials = [
             HullMaterial::Steel,
             HullMaterial::Titanium,
@@ -281,7 +315,7 @@ fn handle_build_input(
             }
         }
         if !found {
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: "No other hull materials unlocked. Buy upgrades at the shop (U key at surface).".into(),
                 notification_type: NotificationType::Warning,
                 duration: 3.0,
@@ -291,7 +325,7 @@ fn handle_build_input(
     }
 
     // X: Toggle deletion mode
-    if keyboard.just_pressed(KeyCode::X) {
+    if keyboard.just_pressed(KeyCode::KeyX) {
         match current_state.get() {
             BuildState::Deleting => next_state.set(BuildState::Placing),
             _ => next_state.set(BuildState::Deleting),
@@ -299,18 +333,18 @@ fn handle_build_input(
     }
 
     // G: Open customization panel for current selection (if customizable)
-    if keyboard.just_pressed(KeyCode::G) {
+    if keyboard.just_pressed(KeyCode::KeyG) {
         if let BuildSelection::Module(module_type) = build_state.current_selection() {
             let module_def = registry.get(module_type);
             if module_def.customizable {
                 customization_state.start_customizing(module_type);
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: format!("⚙ Quick Customizing {}", module_type.name()),
                     notification_type: NotificationType::Info,
                     duration: 2.0,
                 });
             } else {
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: format!("{} is not customizable", module_type.name()),
                     notification_type: NotificationType::Info,
                     duration: 1.5,
@@ -320,19 +354,19 @@ fn handle_build_input(
     }
 
     // P: Open component placement panel for current selection (if customizable)
-    if keyboard.just_pressed(KeyCode::P) {
+    if keyboard.just_pressed(KeyCode::KeyP) {
         if let BuildSelection::Module(module_type) = build_state.current_selection() {
             let module_def = registry.get(module_type);
             if module_def.customizable {
                 placement_state.start_placing(module_type);
                 next_state.set(BuildState::PlacingComponent);
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: format!("🔧 Component Builder: {} - Click pieces to assemble", module_type.name()),
                     notification_type: NotificationType::Info,
                     duration: 3.0,
                 });
             } else {
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: format!("{} cannot be built from components", module_type.name()),
                     notification_type: NotificationType::Info,
                     duration: 1.5,
@@ -351,11 +385,12 @@ fn handle_build_input(
 fn update_ghost_preview(
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
+    ship_query: Query<&GlobalTransform, (With<Ship>, Without<Camera>)>,
     mut build_state: ResMut<BuildingState>,
     current_state: Res<State<BuildState>>,
     occupancy: Res<GridOccupancy>,
     module_query: Query<&Module>,
-    hull_query: Query<(&HullSegment, &Transform, &Parent)>,
+    hull_query: Query<(&HullSegment, &Transform, &ChildOf)>,
     registry: Res<ModuleRegistry>,
     currency: Res<Currency>,
 ) {
@@ -365,16 +400,31 @@ fn update_ghost_preview(
         return;
     }
 
-    let Ok(window) = windows.get_single() else { return };
-    let Ok((camera, camera_transform)) = camera_query.get_single() else { return };
+    let Ok(window) = windows.single() else { return };
+    let Ok((camera, camera_transform)) = camera_query.single() else { return };
+    let Ok(ship_gt) = ship_query.single() else { return };
 
     if let Some(cursor_pos) = window.cursor_position()
-        .and_then(|p| camera.viewport_to_world_2d(camera_transform, p))
+        .and_then(|p| camera.viewport_to_world_2d(camera_transform, p).ok())
     {
+        // Grid coordinates are ship-local (hull/module tiles are children of
+        // the ship, positioned relative to it — see spawn_module /
+        // process_hull_placement / rooms::transform_to_grid, all of which
+        // use `grid_y * 66 - 33` as the local Y). The cursor position from
+        // viewport_to_world_2d is in WORLD space, so it has to be
+        // transformed into the ship's local space first — dividing world
+        // coordinates directly by grid_size (the old code) only produced
+        // the right cell when the ship happened to be sitting exactly at
+        // world origin with zero rotation, which is essentially never true
+        // once you've actually flown anywhere. That's why the grid overlay
+        // never lined up with the ship, and why placement kept failing:
+        // clicks were resolving to the wrong cell relative to the hull.
         let grid_size = 66.0;
+        let cursor_world = Vec3::new(cursor_pos.x, cursor_pos.y, 0.0);
+        let local = ship_gt.rotation().inverse() * (cursor_world - ship_gt.translation());
         let grid_pos = IVec2::new(
-            (cursor_pos.x / grid_size).round() as i32,
-            (cursor_pos.y / grid_size).round() as i32,
+            (local.x / grid_size).round() as i32,
+            ((local.y + 33.0) / grid_size).round() as i32,
         );
 
         let ghost_moved = build_state.ghost_position != grid_pos;
@@ -402,17 +452,21 @@ fn update_ghost_preview(
             BuildSelection::Hull(_) => IVec2::new(1, 1),
             BuildSelection::Module(mt) => registry.get(mt).size,
         };
+        let footprint = match selection {
+            BuildSelection::Hull(_) => None,
+            BuildSelection::Module(mt) => footprints::footprint_override(mt),
+        };
 
         // Block limit check (250 max)
         let block_count = module_query.iter().count() + hull_query.iter().count();
         let under_limit = block_count < crate::combat::limits::MAX_SHIP_BLOCKS;
 
         // Check overlap using GridOccupancy (supports multi-cell)
-        let no_overlap = occupancy.can_place(grid_pos, size, rotation);
+        let no_overlap = occupancy.can_place(grid_pos, size, rotation, footprint);
 
         // Adjacency check - at least one cell of the new module must be adjacent
         // to an existing module or hull segment
-        let placement_cells = GridOccupancy::cells_for(grid_pos, size, rotation);
+        let placement_cells = GridOccupancy::cells_for(grid_pos, size, rotation, footprint);
         let has_neighbor = placement_cells.iter().any(|&cell| {
             for offset in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
                 let neighbor = cell + offset;
@@ -493,10 +547,10 @@ fn update_ghost_preview(
     }
 }
 
-/// Auto-rotates a module to face outward from the submarine.
+/// Auto-rotates a module to face outward from the ship.
 /// Checks the 4 cardinal directions from `grid_pos`; the direction with the
 /// fewest occupied neighbors is considered "outward".  Ties are broken by
-/// preferring the direction away from the submarine's center (0, 0).
+/// preferring the direction away from the ship's center (0, 0).
 fn auto_rotate(grid_pos: IVec2, occupancy: &GridOccupancy) -> Option<Rotation> {
     // Directions: (offset, Rotation that makes the module face that direction)
     let directions: [(IVec2, Rotation); 4] = [
@@ -573,16 +627,26 @@ fn check_position_rules(
 
 /// Handles placing new modules/hull via click
 fn handle_module_placement(
-    mouse: Res<Input<MouseButton>>,
+    mouse: Res<ButtonInput<MouseButton>>,
     build_state: Res<BuildingState>,
     current_state: Res<State<BuildState>>,
-    mut place_module_events: EventWriter<PlaceModuleRequest>,
-    mut place_hull_events: EventWriter<PlaceHullRequest>,
+    mut place_module_events: MessageWriter<PlaceModuleRequest>,
+    mut place_hull_events: MessageWriter<PlaceHullRequest>,
     symmetry_state: Res<symmetry::SymmetryState>,
     occupancy: Res<GridOccupancy>,
 ) {
     if *current_state.get() != BuildState::Placing {
         return;
+    }
+
+    // TEMP [DEBUG_BUILD]: diagnosing a report of placement silently failing
+    // after returning from combat. Remove once root-caused.
+    if mouse.just_pressed(MouseButton::Left) {
+        info!(
+            "[DEBUG_BUILD] click at grid_pos={:?} rotation={:?} selection={:?} valid={} reason={:?} occupancy_len={}",
+            build_state.ghost_position, build_state.rotation, build_state.current_selection(),
+            build_state.is_valid_placement, build_state.placement_reason, occupancy.cells.len()
+        );
     }
 
     if mouse.just_pressed(MouseButton::Left) && build_state.is_valid_placement {
@@ -591,7 +655,7 @@ fn handle_module_placement(
 
         match build_state.current_selection() {
             BuildSelection::Hull(layer) => {
-                place_hull_events.send(PlaceHullRequest {
+                place_hull_events.write(PlaceHullRequest {
                     layer,
                     material: build_state.hull_material,
                     grid_position: pos,
@@ -601,7 +665,7 @@ fn handle_module_placement(
                 if symmetry_state.enabled {
                     let mirror_pos = symmetry::mirror_position(pos);
                     if mirror_pos != pos && !occupancy.cells.contains_key(&mirror_pos) {
-                        place_hull_events.send(PlaceHullRequest {
+                        place_hull_events.write(PlaceHullRequest {
                             layer,
                             material: build_state.hull_material,
                             grid_position: mirror_pos,
@@ -611,7 +675,7 @@ fn handle_module_placement(
                 }
             }
             BuildSelection::Module(module_type) => {
-                place_module_events.send(PlaceModuleRequest {
+                place_module_events.write(PlaceModuleRequest {
                     module_type,
                     grid_position: pos,
                     rotation: rot,
@@ -624,7 +688,7 @@ fn handle_module_placement(
                     let mirror_pos = symmetry::mirror_position(pos);
                     let mirror_rot = symmetry::mirror_rotation(rot);
                     if mirror_pos != pos && !occupancy.cells.contains_key(&mirror_pos) {
-                        place_module_events.send(PlaceModuleRequest {
+                        place_module_events.write(PlaceModuleRequest {
                             module_type,
                             grid_position: mirror_pos,
                             rotation: mirror_rot,
@@ -641,12 +705,12 @@ fn handle_module_placement(
 
 /// Handles removing modules
 fn handle_module_removal(
-    mouse: Res<Input<MouseButton>>,
+    mouse: Res<ButtonInput<MouseButton>>,
     build_state: Res<BuildingState>,
     current_state: Res<State<BuildState>>,
     occupancy: Res<GridOccupancy>,
     module_query: Query<(Entity, &Module)>,
-    mut remove_events: EventWriter<RemoveModuleRequest>,
+    mut remove_events: MessageWriter<RemoveModuleRequest>,
 ) {
     let state = *current_state.get();
     let in_deleting = state == BuildState::Deleting;
@@ -673,7 +737,7 @@ fn handle_module_removal(
                         return;
                     }
                 }
-                remove_events.send(RemoveModuleRequest { module: entity });
+                remove_events.write(RemoveModuleRequest { module: entity });
             }
         }
     }
@@ -687,41 +751,42 @@ fn handle_module_removal(
 fn process_hull_placement(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut events: EventReader<PlaceHullRequest>,
-    sub_query: Query<Entity, With<Submarine>>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut events: MessageReader<PlaceHullRequest>,
+    ship_query: Query<Entity, With<Ship>>,
+    mut notifications: MessageWriter<ShowNotification>,
     mut currency: ResMut<Currency>,
 ) {
-    let Ok(submarine) = sub_query.get_single() else { return };
+    let Ok(ship) = ship_query.single() else { return };
 
-    for event in events.iter() {
+    for event in events.read() {
         let grid_pos = event.grid_position;
         let material = event.material;
 
         // Tint by layer type for visual distinction
         let color = match event.layer {
             HullLayer::Outer => Color::WHITE,
-            HullLayer::Inner => Color::rgb(0.9, 0.9, 0.9),
-            HullLayer::Void => Color::rgb(0.5, 0.5, 0.6),
-            HullLayer::BulkheadDoor => Color::rgb(0.9, 0.8, 0.7),
+            HullLayer::Inner => Color::srgb(0.9, 0.9, 0.9),
+            HullLayer::Void => Color::srgb(0.5, 0.5, 0.6),
+            HullLayer::BulkheadDoor => Color::srgb(0.9, 0.8, 0.7),
         };
 
         let texture = asset_server.load(sprite_map::hull_sprite_path(material));
 
         commands.spawn((
-            SpriteBundle {
-                texture,
-                sprite: Sprite {
+            (Sprite {
+                    image: texture,
                     color,
                     custom_size: Some(Vec2::new(64.0, 64.0)),
                     ..default()
-                },
-                transform: Transform::from_xyz(
+                }, Transform::from_xyz(
                     grid_pos.x as f32 * 66.0,
                     grid_pos.y as f32 * 66.0 - 33.0,
                     0.1,
-                ),
-                ..default()
+                )),
+            BaseSpriteColor(color),
+            BaseHullStats {
+                max_health: 100.0 * material.health_multiplier(),
+                radiation_shielding: material.radiation_shielding(),
             },
             HullSegment {
                 hull_layer: event.layer,
@@ -732,7 +797,7 @@ fn process_hull_placement(
                 grid_position: grid_pos,
                 ..default()
             },
-        )).set_parent(submarine);
+        )).insert(ChildOf(ship));
 
         let layer_name = match event.layer {
             HullLayer::Outer => "Outer Hull",
@@ -745,7 +810,7 @@ fn process_hull_placement(
             let cost = material.cost();
             currency.credits = currency.credits.saturating_sub(cost);
 
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("Placed {} ({}) -{}c", layer_name, material.name(), cost),
                 notification_type: NotificationType::Success,
                 duration: 1.5,
@@ -758,23 +823,23 @@ fn process_hull_placement(
 fn process_module_placement(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut events: EventReader<PlaceModuleRequest>,
-    sub_query: Query<Entity, With<Submarine>>,
+    mut events: MessageReader<PlaceModuleRequest>,
+    ship_query: Query<Entity, With<Ship>>,
     registry: Res<ModuleRegistry>,
-    mut placed_events: EventWriter<ModulePlaced>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut placed_events: MessageWriter<ModulePlaced>,
+    mut notifications: MessageWriter<ShowNotification>,
     mut currency: ResMut<Currency>,
 ) {
-    let Ok(submarine) = sub_query.get_single() else { return };
+    let Ok(ship) = ship_query.single() else { return };
 
-    for event in events.iter() {
+    for event in events.read() {
         // Check if this is a custom module
         let entity = if let (Some(custom_name), Some(subcomponents)) = (&event.custom_name, &event.subcomponents) {
-            // Spawn custom module with sub-components
-            crate::submarine::spawn_custom_module(
+            // Spawn custom module with ship-components
+            crate::ship::spawn_custom_module(
                 &mut commands,
                 &asset_server,
-                submarine,
+                ship,
                 event.module_type,
                 custom_name.clone(),
                 event.grid_position,
@@ -787,7 +852,7 @@ fn process_module_placement(
             spawn_module(
                 &mut commands,
                 &asset_server,
-                submarine,
+                ship,
                 event.module_type,
                 event.grid_position,
                 event.rotation,
@@ -795,7 +860,7 @@ fn process_module_placement(
             )
         };
 
-        placed_events.send(ModulePlaced {
+        placed_events.write(ModulePlaced {
             module: entity,
             module_type: event.module_type,
             grid_position: event.grid_position,
@@ -811,7 +876,7 @@ fn process_module_placement(
                 format!("Placed {} -{}c", event.module_type.name(), cost)
             };
 
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message,
                 notification_type: NotificationType::Success,
                 duration: 1.5,
@@ -823,31 +888,31 @@ fn process_module_placement(
 /// Processes RemoveModuleRequest events
 fn process_module_removal(
     mut commands: Commands,
-    mut events: EventReader<RemoveModuleRequest>,
+    mut events: MessageReader<RemoveModuleRequest>,
     module_query: Query<&Module>,
-    mut removed_events: EventWriter<ModuleRemoved>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut removed_events: MessageWriter<ModuleRemoved>,
+    mut notifications: MessageWriter<ShowNotification>,
     mut currency: ResMut<Currency>,
     registry: Res<ModuleRegistry>,
 ) {
-    for event in events.iter() {
+    for event in events.read() {
         if let Ok(module) = module_query.get(event.module) {
             let cost = registry.get(module.module_type).cost;
             let refund = (cost as f32 * 0.75) as u32;
             currency.credits += refund;
 
-            removed_events.send(ModuleRemoved {
+            removed_events.write(ModuleRemoved {
                 module_type: module.module_type,
                 grid_position: module.grid_position,
             });
 
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("Removed {} +{}c refund", module.module_type.name(), refund),
                 notification_type: NotificationType::Warning,
                 duration: 1.5,
             });
 
-            commands.entity(event.module).despawn_recursive();
+            commands.entity(event.module).despawn();
         }
     }
 }
@@ -856,7 +921,7 @@ fn process_module_removal(
 // CUSTOM MODULE STAT RECALCULATION
 // ============================================================================
 
-/// Recalculates stats for custom modules when their sub-components change
+/// Recalculates stats for custom modules when their ship-components change
 fn recalculate_custom_module_stats(
     mut commands: Commands,
     changed_modules: Query<
@@ -867,9 +932,9 @@ fn recalculate_custom_module_stats(
     registry: Res<ModuleRegistry>,
 ) {
     for (entity, custom_module, children) in changed_modules.iter() {
-        // Collect all sub-component types from children
+        // Collect all ship-component types from children
         let subcomponents: Vec<SubComponentType> = children.iter()
-            .filter_map(|&child| subcomponent_query.get(child).ok())
+            .filter_map(|child| subcomponent_query.get(child).ok())
             .map(|sc| sc.subcomponent_type.clone())
             .collect();
 

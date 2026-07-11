@@ -21,7 +21,7 @@ pub fn check_migration(
     )>,
     other_creatures: Query<(Entity, &Transform, &Creature), Without<MigrationPath>>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
 
     for (entity, transform, creature, needs, role, hunger_dur, existing_path) in creatures.iter_mut()
     {

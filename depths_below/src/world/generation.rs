@@ -101,10 +101,7 @@ pub fn generate_chunk(
     let chunk_world_y = chunk_pos.y as f32 * 512.0;
 
     let chunk = commands.spawn((
-        SpatialBundle {
-            transform: Transform::from_xyz(chunk_world_x, chunk_world_y, 0.0),
-            ..default()
-        },
+        Transform::from_xyz(chunk_world_x, chunk_world_y, 0.0),
         Chunk {
             position: chunk_pos,
             is_explored: false,
@@ -189,17 +186,13 @@ fn spawn_void_particles(
         let alpha = rng.gen_range(0.15..0.4_f32);
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgba(brightness, brightness + 0.05, brightness + 0.1, alpha),
+            (Sprite {
+                    color: Color::srgba(brightness, brightness + 0.05, brightness + 0.1, alpha),
                     custom_size: Some(Vec2::new(size, size)),
                     ..default()
-                },
-                transform: Transform::from_xyz(x, y, -0.1),
-                ..default()
-            },
+                }, Transform::from_xyz(x, y, -0.1)),
             WorldDecoration { decoration_type: DecorationType::EnergySpot },
-        )).set_parent(parent);
+        )).insert(ChildOf(parent));
     }
 
     // Occasional larger debris/silt clouds
@@ -211,21 +204,17 @@ fn spawn_void_particles(
         let brightness = (0.25 - depth_level as f32 * 0.02).max(0.05);
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgba(brightness, brightness, brightness + 0.03, 0.15),
+            (Sprite {
+                    color: Color::srgba(brightness, brightness, brightness + 0.03, 0.15),
                     custom_size: Some(Vec2::new(w, h)),
                     ..default()
-                },
-                transform: Transform {
+                }, Transform {
                     translation: Vec3::new(x, y, -0.1),
                     rotation: Quat::from_rotation_z(rng.gen_range(0.0..std::f32::consts::TAU)),
                     ..default()
-                },
-                ..default()
-            },
+                }),
             WorldDecoration { decoration_type: DecorationType::RockDebris },
-        )).set_parent(parent);
+        )).insert(ChildOf(parent));
     }
 }
 
@@ -243,26 +232,22 @@ fn spawn_poi(
     );
 
     let (color, size) = match poi_type {
-        PoiType::Wreck => (Color::rgb(0.5, 0.4, 0.3), Vec2::new(400.0, 180.0)),
-        PoiType::Cave => (Color::rgb(0.15, 0.15, 0.18), Vec2::new(350.0, 280.0)),
-        PoiType::Ruins => (Color::rgb(0.35, 0.35, 0.45), Vec2::new(450.0, 300.0)),
-        PoiType::ThermalVent => (Color::rgb(0.8, 0.3, 0.1), Vec2::new(200.0, 320.0)),
-        PoiType::Settlement => (Color::rgb(0.3, 0.7, 0.4), Vec2::new(500.0, 350.0)),
+        PoiType::Wreck => (Color::srgb(0.5, 0.4, 0.3), Vec2::new(400.0, 180.0)),
+        PoiType::Cave => (Color::srgb(0.15, 0.15, 0.18), Vec2::new(350.0, 280.0)),
+        PoiType::Ruins => (Color::srgb(0.35, 0.35, 0.45), Vec2::new(450.0, 300.0)),
+        PoiType::ThermalVent => (Color::srgb(0.8, 0.3, 0.1), Vec2::new(200.0, 320.0)),
+        PoiType::Settlement => (Color::srgb(0.3, 0.7, 0.4), Vec2::new(500.0, 350.0)),
     };
 
     let texture = asset_server.load(sprite_map::poi_sprite_path(poi_type));
 
     let mut entity_commands = commands.spawn((
-        SpriteBundle {
-            texture,
-            sprite: Sprite {
+        (Sprite {
+                image: texture,
                 color,
                 custom_size: Some(size),
                 ..default()
-            },
-            transform: Transform::from_xyz(offset.x, offset.y, -0.1),
-            ..default()
-        },
+            }, Transform::from_xyz(offset.x, offset.y, -0.1)),
         PointOfInterest {
             poi_type,
             discovered: false,
@@ -303,7 +288,7 @@ fn spawn_poi(
         }
     }
 
-    entity_commands.set_parent(parent);
+    entity_commands.insert(ChildOf(parent));
 }
 
 struct DecorationConfig {
@@ -325,7 +310,7 @@ const DECORATION_CONFIGS: &[DecorationConfig] = &[
     DecorationConfig {
         decoration_type: DecorationType::Rock,
         base_count: 4, depth_multiplier: 0.5, min_depth: 0, max_depth: 0,
-        color: Color::rgb(0.38, 0.36, 0.32),
+        color: Color::srgb(0.38, 0.36, 0.32),
         width_min: 50.0, width_max: 120.0, height_min: 40.0, height_max: 90.0,
         can_rotate: true,
     },
@@ -333,7 +318,7 @@ const DECORATION_CONFIGS: &[DecorationConfig] = &[
     DecorationConfig {
         decoration_type: DecorationType::Rock,
         base_count: 1, depth_multiplier: 0.3, min_depth: 1, max_depth: 0,
-        color: Color::rgb(0.30, 0.28, 0.25),
+        color: Color::srgb(0.30, 0.28, 0.25),
         width_min: 120.0, width_max: 250.0, height_min: 100.0, height_max: 200.0,
         can_rotate: false,
     },
@@ -341,7 +326,7 @@ const DECORATION_CONFIGS: &[DecorationConfig] = &[
     DecorationConfig {
         decoration_type: DecorationType::SporeGrowth,
         base_count: 6, depth_multiplier: 0.2, min_depth: 0, max_depth: 4,
-        color: Color::rgb(0.15, 0.40, 0.12),
+        color: Color::srgb(0.15, 0.40, 0.12),
         width_min: 12.0, width_max: 25.0, height_min: 80.0, height_max: 180.0,
         can_rotate: false,
     },
@@ -349,7 +334,7 @@ const DECORATION_CONFIGS: &[DecorationConfig] = &[
     DecorationConfig {
         decoration_type: DecorationType::SporeGrowth,
         base_count: 2, depth_multiplier: 0.1, min_depth: 0, max_depth: 3,
-        color: Color::rgb(0.10, 0.35, 0.08),
+        color: Color::srgb(0.10, 0.35, 0.08),
         width_min: 20.0, width_max: 40.0, height_min: 200.0, height_max: 350.0,
         can_rotate: false,
     },
@@ -357,7 +342,7 @@ const DECORATION_CONFIGS: &[DecorationConfig] = &[
     DecorationConfig {
         decoration_type: DecorationType::Crystal,
         base_count: 4, depth_multiplier: 0.2, min_depth: 0, max_depth: 6,
-        color: Color::rgb(0.75, 0.35, 0.45),
+        color: Color::srgb(0.75, 0.35, 0.45),
         width_min: 40.0, width_max: 100.0, height_min: 30.0, height_max: 80.0,
         can_rotate: false,
     },
@@ -365,7 +350,7 @@ const DECORATION_CONFIGS: &[DecorationConfig] = &[
     DecorationConfig {
         decoration_type: DecorationType::Crystal,
         base_count: 1, depth_multiplier: 0.15, min_depth: 1, max_depth: 5,
-        color: Color::rgb(0.8, 0.5, 0.3),
+        color: Color::srgb(0.8, 0.5, 0.3),
         width_min: 130.0, width_max: 220.0, height_min: 80.0, height_max: 150.0,
         can_rotate: false,
     },
@@ -373,7 +358,7 @@ const DECORATION_CONFIGS: &[DecorationConfig] = &[
     DecorationConfig {
         decoration_type: DecorationType::EnergySpot,
         base_count: 0, depth_multiplier: 2.0, min_depth: 5, max_depth: 0,
-        color: Color::rgb(0.1, 0.8, 0.9),
+        color: Color::srgb(0.1, 0.8, 0.9),
         width_min: 20.0, width_max: 60.0, height_min: 20.0, height_max: 60.0,
         can_rotate: false,
     },
@@ -381,7 +366,7 @@ const DECORATION_CONFIGS: &[DecorationConfig] = &[
     DecorationConfig {
         decoration_type: DecorationType::ThermalVentSmoke,
         base_count: 0, depth_multiplier: 0.4, min_depth: 8, max_depth: 0,
-        color: Color::rgb(0.55, 0.3, 0.1),
+        color: Color::srgb(0.55, 0.3, 0.1),
         width_min: 40.0, width_max: 100.0, height_min: 200.0, height_max: 400.0,
         can_rotate: false,
     },
@@ -447,37 +432,27 @@ fn spawn_decorations(
         // Does NOT extend below the chunk - prevents stacking
         let col_h = height + 4.0; // slight extra to fill gaps at bottom
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(r, g, b),
+            (Sprite {
+                    color: Color::srgb(r, g, b),
                     custom_size: Some(Vec2::new(col_width + overlap, col_h)),
-                    anchor: Anchor::TopCenter,
                     ..default()
-                },
-                transform: Transform::from_xyz(local_x, -256.0 + height, -0.45),
-                ..default()
-            },
+                }, Anchor::TOP_CENTER, Transform::from_xyz(local_x, -256.0 + height, -0.45)),
             WorldDecoration { decoration_type: DecorationType::RockDebris },
-        )).set_parent(parent);
+        )).insert(ChildOf(parent));
 
         // Surface highlight - thin lighter strip at the terrain top
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(
+            (Sprite {
+                    color: Color::srgb(
                         (r + 0.10).min(0.5),
                         (g + 0.08).min(0.4),
                         (b + 0.05).min(0.3),
                     ),
                     custom_size: Some(Vec2::new(col_width + overlap, 4.0)),
-                    anchor: Anchor::TopCenter,
                     ..default()
-                },
-                transform: Transform::from_xyz(local_x, -256.0 + height, -0.44),
-                ..default()
-            },
+                }, Anchor::TOP_CENTER, Transform::from_xyz(local_x, -256.0 + height, -0.44)),
             WorldDecoration { decoration_type: DecorationType::RockDebris },
-        )).set_parent(parent);
+        )).insert(ChildOf(parent));
     }
 
     // --- Step 3: Rock formations sitting on terrain surface ---
@@ -495,22 +470,17 @@ fn spawn_decorations(
         let b = 0.26 + rng.gen_range(-0.05..0.05_f32) - depth_darken;
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(r.max(0.05), g.max(0.05), b.max(0.05)),
+            (Sprite {
+                    color: Color::srgb(r.max(0.05), g.max(0.05), b.max(0.05)),
                     custom_size: Some(Vec2::new(w, h)),
-                    anchor: Anchor::BottomCenter,
                     ..default()
-                },
-                transform: Transform {
+                }, Anchor::BOTTOM_CENTER, Transform {
                     translation: Vec3::new(x, ground_y, -0.3),
                     rotation: Quat::from_rotation_z(rng.gen_range(-0.1..0.1)),
                     ..default()
-                },
-                ..default()
-            },
+                }),
             WorldDecoration { decoration_type: DecorationType::Rock },
-        )).set_parent(parent);
+        )).insert(ChildOf(parent));
     }
 
     // --- Step 4: Large cliff/boulder features (rare, impressive) ---
@@ -525,26 +495,21 @@ fn spawn_decorations(
 
         // Dark rock cliff
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(
+            (Sprite {
+                    color: Color::srgb(
                         (0.20 - depth_darken).max(0.04),
                         (0.18 - depth_darken).max(0.03),
                         (0.16 - depth_darken).max(0.03),
                     ),
                     custom_size: Some(Vec2::new(w, h)),
-                    anchor: Anchor::BottomCenter,
                     ..default()
-                },
-                transform: Transform {
+                }, Anchor::BOTTOM_CENTER, Transform {
                     translation: Vec3::new(x, ground_y, -0.32),
                     rotation: Quat::from_rotation_z(rng.gen_range(-0.08..0.08)),
                     ..default()
-                },
-                ..default()
-            },
+                }),
             WorldDecoration { decoration_type: DecorationType::Rock },
-        )).set_parent(parent);
+        )).insert(ChildOf(parent));
     }
 
     // --- Step 5: Cave openings (dark holes in the terrain) ---
@@ -559,37 +524,27 @@ fn spawn_decorations(
 
         // Dark cave interior
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(0.02, 0.015, 0.025),
+            (Sprite {
+                    color: Color::srgb(0.02, 0.015, 0.025),
                     custom_size: Some(Vec2::new(w, h)),
-                    anchor: Anchor::BottomCenter,
                     ..default()
-                },
-                transform: Transform::from_xyz(x, ground_y - h * 0.3, -0.28),
-                ..default()
-            },
+                }, Anchor::BOTTOM_CENTER, Transform::from_xyz(x, ground_y - h * 0.3, -0.28)),
             WorldDecoration { decoration_type: DecorationType::Rock },
-        )).set_parent(parent);
+        )).insert(ChildOf(parent));
 
         // Cave arch - rock rim above the opening
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(
+            (Sprite {
+                    color: Color::srgb(
                         (0.25 - depth_darken).max(0.05),
                         (0.22 - depth_darken).max(0.04),
                         (0.18 - depth_darken).max(0.03),
                     ),
                     custom_size: Some(Vec2::new(w + 40.0, 20.0)),
-                    anchor: Anchor::BottomCenter,
                     ..default()
-                },
-                transform: Transform::from_xyz(x, ground_y + 5.0, -0.27),
-                ..default()
-            },
+                }, Anchor::BOTTOM_CENTER, Transform::from_xyz(x, ground_y + 5.0, -0.27)),
             WorldDecoration { decoration_type: DecorationType::Rock },
-        )).set_parent(parent);
+        )).insert(ChildOf(parent));
     }
 
     // --- Step 6: Vegetation anchored to terrain surface ---
@@ -609,22 +564,17 @@ fn spawn_decorations(
 
             let green = 0.30 + rng.gen_range(-0.1..0.1_f32);
             commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
-                        color: Color::rgba(0.10, green, 0.08, 0.8),
+                (Sprite {
+                        color: Color::srgba(0.10, green, 0.08, 0.8),
                         custom_size: Some(Vec2::new(w, h)),
-                        anchor: Anchor::BottomCenter,
                         ..default()
-                    },
-                    transform: Transform {
+                    }, Anchor::BOTTOM_CENTER, Transform {
                         translation: Vec3::new(x, ground_y, -0.2),
                         rotation: Quat::from_rotation_z(sway),
                         ..default()
-                    },
-                    ..default()
-                },
+                    }),
                 WorldDecoration { decoration_type: DecorationType::SporeGrowth },
-            )).set_parent(parent);
+            )).insert(ChildOf(parent));
         }
     }
 
@@ -643,24 +593,19 @@ fn spawn_decorations(
             // Crystal colors: pinks, oranges, purples
             let hue = rng.gen_range(0..3);
             let color = match hue {
-                0 => Color::rgb(0.75 + rng.gen_range(-0.1..0.1), 0.30, 0.40),
-                1 => Color::rgb(0.80, 0.50 + rng.gen_range(-0.1..0.1), 0.25),
-                _ => Color::rgb(0.55, 0.30, 0.65 + rng.gen_range(-0.1..0.1)),
+                0 => Color::srgb(0.75 + rng.gen_range(-0.1..0.1), 0.30, 0.40),
+                1 => Color::srgb(0.80, 0.50 + rng.gen_range(-0.1..0.1), 0.25),
+                _ => Color::srgb(0.55, 0.30, 0.65 + rng.gen_range(-0.1..0.1)),
             };
 
             commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
+                (Sprite {
                         color,
                         custom_size: Some(Vec2::new(w, h)),
-                        anchor: Anchor::BottomCenter,
                         ..default()
-                    },
-                    transform: Transform::from_xyz(x, ground_y, -0.22),
-                    ..default()
-                },
+                    }, Anchor::BOTTOM_CENTER, Transform::from_xyz(x, ground_y, -0.22)),
                 WorldDecoration { decoration_type: DecorationType::Crystal },
-            )).set_parent(parent);
+            )).insert(ChildOf(parent));
         }
     }
 
@@ -673,23 +618,19 @@ fn spawn_decorations(
             let size = rng.gen_range(15.0..50.0_f32);
 
             let color = if rng.gen::<f32>() < 0.5 {
-                Color::rgba(0.1, 0.7, 0.9, 0.5)  // cyan glow
+                Color::srgba(0.1, 0.7, 0.9, 0.5)  // cyan glow
             } else {
-                Color::rgba(0.2, 0.9, 0.4, 0.4)  // green glow
+                Color::srgba(0.2, 0.9, 0.4, 0.4)  // green glow
             };
 
             commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
+                (Sprite {
                         color,
                         custom_size: Some(Vec2::new(size, size)),
                         ..default()
-                    },
-                    transform: Transform::from_xyz(x, y, -0.15),
-                    ..default()
-                },
+                    }, Transform::from_xyz(x, y, -0.15)),
                 WorldDecoration { decoration_type: DecorationType::EnergySpot },
-            )).set_parent(parent);
+            )).insert(ChildOf(parent));
         }
     }
 
@@ -704,17 +645,12 @@ fn spawn_decorations(
         let h = rng.gen_range(150.0..350.0_f32);
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgba(0.5, 0.25, 0.1, 0.4),
+            (Sprite {
+                    color: Color::srgba(0.5, 0.25, 0.1, 0.4),
                     custom_size: Some(Vec2::new(w, h)),
-                    anchor: Anchor::BottomCenter,
                     ..default()
-                },
-                transform: Transform::from_xyz(x, ground_y, -0.18),
-                ..default()
-            },
+                }, Anchor::BOTTOM_CENTER, Transform::from_xyz(x, ground_y, -0.18)),
             WorldDecoration { decoration_type: DecorationType::ThermalVentSmoke },
-        )).set_parent(parent);
+        )).insert(ChildOf(parent));
     }
 }

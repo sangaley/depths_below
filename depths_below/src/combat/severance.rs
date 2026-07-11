@@ -21,26 +21,34 @@ pub struct DetachedSection {
 }
 
 /// System: detect when hull segments are destroyed and check for section severance
+/// Scoped to the player's own ship only (via ChildOf) — hull/module destruction
+/// on AI ships is not this system's concern and must never be attributed to the
+/// player's ship center, or AI ship modules get ejected with the player's velocity.
 pub fn check_section_severance(
     mut commands: Commands,
-    destroyed_hull: Query<(&HullSegment, &GlobalTransform), Added<crate::components::HullDestroyed>>,
-    module_query: Query<(Entity, &Module, &GlobalTransform), Without<DestroyedModule>>,
-    sub_query: Query<(&Transform, &Velocity), With<Submarine>>,
-    mut notifications: EventWriter<ShowNotification>,
+    destroyed_hull: Query<(&HullSegment, &GlobalTransform, &ChildOf), Added<crate::components::HullDestroyed>>,
+    module_query: Query<(Entity, &Module, &GlobalTransform, &ChildOf), Without<DestroyedModule>>,
+    ship_query: Query<(Entity, &Transform, &Velocity), With<Ship>>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     if destroyed_hull.is_empty() { return; }
-    let Ok((sub_transform, sub_velocity)) = sub_query.get_single() else { return; };
+    let Ok((ship_entity, ship_transform, ship_velocity)) = ship_query.single() else { return; };
 
-    for (_hull, hull_gt) in destroyed_hull.iter() {
+    for (_hull, hull_gt, hull_parent) in destroyed_hull.iter() {
+        // Only the player's own ship's hull triggers severance checks here.
+        if hull_parent.parent() != ship_entity { continue; }
+
         let hull_pos = hull_gt.translation().truncate();
 
         // Check if any modules are now isolated (simplified check)
         // Full implementation would use flood-fill from ship core
         // For now: modules far from center that lost adjacent hull = at risk
 
-        let ship_center = sub_transform.translation.truncate();
+        let ship_center = ship_transform.translation.truncate();
 
-        for (module_entity, module, module_gt) in module_query.iter() {
+        for (module_entity, module, module_gt, module_parent) in module_query.iter() {
+            // Only consider modules that belong to the player's own ship.
+            if module_parent.parent() != ship_entity { continue; }
             let module_pos = module_gt.translation().truncate();
             let dist_to_hull = module_pos.distance(hull_pos);
 
@@ -65,11 +73,11 @@ pub fn check_section_severance(
                 // Calculate ejection velocity: ship velocity + impact kick
                 let impact_dir = (module_pos - hull_pos).normalize_or_zero();
                 let kick = impact_dir * 80.0;
-                let eject_velocity = sub_velocity.0 + kick;
+                let eject_velocity = ship_velocity.0 + kick;
 
                 // Detach the module from the ship
                 commands.entity(module_entity)
-                    .remove_parent()
+                    .remove::<ChildOf>()
                     .insert(DetachedSection {
                         has_reactor,
                         has_ammo,
@@ -81,14 +89,14 @@ pub fn check_section_severance(
                     .insert(GravityAffected { mass: 50.0 })
                     .insert(GravityForce::default());
 
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: format!("SECTION SEVERED! {} detached!", module.module_type.name()),
                     notification_type: NotificationType::Danger,
                     duration: 4.0,
                 });
 
                 if has_reactor {
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: "WARNING: Severed section contains reactor! Meltdown in 10s!".into(),
                         notification_type: NotificationType::Danger,
                         duration: 5.0,
@@ -104,9 +112,9 @@ pub fn move_detached_sections(
     time: Res<Time>,
     mut commands: Commands,
     mut section_query: Query<(Entity, &mut DetachedSection, &mut Transform, &Velocity, &GravityForce)>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
 
     for (entity, mut section, mut transform, velocity, gravity) in section_query.iter_mut() {
         // Move
@@ -121,29 +129,29 @@ pub fn move_detached_sections(
             *timer -= dt;
             if *timer <= 0.0 {
                 // BOOM
-                notifications.send(ShowNotification {
+                notifications.write(ShowNotification {
                     message: "Severed reactor EXPLODED!".into(),
                     notification_type: NotificationType::Danger,
                     duration: 3.0,
                 });
 
                 let pos = transform.translation.truncate();
-                super::spawn_hit_effect(&mut commands, pos, Color::rgb(1.0, 0.5, 0.1), 200.0);
+                super::spawn_hit_effect(&mut commands, pos, Color::srgb(1.0, 0.5, 0.1), 200.0);
 
-                commands.entity(entity).despawn_recursive();
+                commands.entity(entity).despawn();
             }
         }
 
         // Ammo cook-off (random chance each second)
         if section.has_ammo && rand::random::<f32>() < 0.02 * dt {
             let pos = transform.translation.truncate();
-            super::spawn_hit_effect(&mut commands, pos, Color::rgb(1.0, 0.4, 0.1), 80.0);
-            notifications.send(ShowNotification {
+            super::spawn_hit_effect(&mut commands, pos, Color::srgb(1.0, 0.4, 0.1), 80.0);
+            notifications.write(ShowNotification {
                 message: "Ammo cook-off in debris!".into(),
                 notification_type: NotificationType::Warning,
                 duration: 2.0,
             });
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
 }
@@ -171,11 +179,11 @@ pub fn debris_collision(
                 let impact_damage = speed * section.mass * 0.01;
                 creature.health -= impact_damage;
 
-                super::spawn_hit_effect(&mut commands, section_pos, Color::rgb(0.8, 0.6, 0.2), 20.0);
-                super::spawn_floating_damage(&mut commands, section_pos, impact_damage, Color::rgb(0.7, 0.5, 0.2));
+                super::spawn_hit_effect(&mut commands, section_pos, Color::srgb(0.8, 0.6, 0.2), 20.0);
+                super::spawn_floating_damage(&mut commands, section_pos, impact_damage, Color::srgb(0.7, 0.5, 0.2));
 
                 // Destroy the debris on impact
-                commands.entity(section_entity).despawn_recursive();
+                commands.entity(section_entity).despawn();
                 break;
             }
         }

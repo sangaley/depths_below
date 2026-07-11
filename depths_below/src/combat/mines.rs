@@ -5,16 +5,12 @@ use super::*;
 /// Spawn a mine entity at the given position
 pub(super) fn spawn_mine(commands: &mut Commands, asset_server: &AssetServer, position: Vec2, damage: f32) {
     commands.spawn((
-        SpriteBundle {
-            texture: asset_server.load(crate::sprite_map::effect_sprite_path("explosion")),
-            sprite: Sprite {
-                color: Color::rgb(0.6, 0.6, 0.6),
+        (Sprite {
+                image: asset_server.load(crate::sprite_map::effect_sprite_path("explosion")),
+                color: Color::srgb(0.6, 0.6, 0.6),
                 custom_size: Some(Vec2::splat(14.0)),
                 ..default()
-            },
-            transform: Transform::from_xyz(position.x, position.y, 0.4),
-            ..default()
-        },
+            }, Transform::from_xyz(position.x, position.y, 0.4)),
         Mine {
             damage,
             detection_radius: 80.0,
@@ -37,13 +33,13 @@ pub(super) fn mine_system(
         mine.lifetime.tick(time.delta());
 
         // Despawn expired mines
-        if mine.lifetime.finished() {
-            commands.entity(mine_entity).despawn_recursive();
+        if mine.lifetime.is_finished() {
+            commands.entity(mine_entity).despawn();
             continue;
         }
 
         // Only check proximity once armed
-        if !mine.arm_timer.finished() {
+        if !mine.arm_timer.is_finished() {
             continue;
         }
 
@@ -54,18 +50,14 @@ pub(super) fn mine_system(
             if mine_pos.distance(c_pos) < mine.detection_radius {
                 // Detonate: despawn mine, spawn explosion entity
                 let damage = mine.damage;
-                commands.entity(mine_entity).despawn_recursive();
+                commands.entity(mine_entity).despawn();
                 commands.spawn((
-                    SpriteBundle {
-                        texture: asset_server.load(crate::sprite_map::effect_sprite_path("explosion")),
-                        sprite: Sprite {
-                            color: Color::rgb(1.0, 0.6, 0.2),
+                    (Sprite {
+                            image: asset_server.load(crate::sprite_map::effect_sprite_path("explosion")),
+                            color: Color::srgb(1.0, 0.6, 0.2),
                             custom_size: Some(Vec2::splat(40.0)),
                             ..default()
-                        },
-                        transform: Transform::from_xyz(mine_pos.x, mine_pos.y, 0.6),
-                        ..default()
-                    },
+                        }, Transform::from_xyz(mine_pos.x, mine_pos.y, 0.6)),
                     MineExplosion {
                         damage,
                         blast_radius: 120.0,
@@ -99,15 +91,15 @@ pub(super) fn mine_explosion_system(
                 if exp_pos.distance(c_pos) < explosion.blast_radius {
                     creature.health -= explosion.damage;
 
-                    spawn_floating_damage(&mut commands, c_pos, explosion.damage, Color::rgb(1.0, 0.5, 0.2));
-                    spawn_hit_effect(&mut commands, c_pos, Color::rgb(1.0, 0.6, 0.2), 24.0);
+                    spawn_floating_damage(&mut commands, c_pos, explosion.damage, Color::srgb(1.0, 0.5, 0.2));
+                    spawn_hit_effect(&mut commands, c_pos, Color::srgb(1.0, 0.6, 0.2), 24.0);
                 }
             }
         }
 
         // Despawn after timer
-        if explosion.timer.finished() {
-            commands.entity(exp_entity).despawn_recursive();
+        if explosion.timer.is_finished() {
+            commands.entity(exp_entity).despawn();
         }
     }
 }

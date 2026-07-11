@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use smallvec::SmallVec;
 use crate::states::BuildState;
 use crate::resources::*;
 use crate::components::*;
@@ -9,29 +10,29 @@ use crate::events::*;
 // BUILD UI COLOR PALETTE — references theme where possible, build-specific additions
 // ============================================================================
 
-pub const COLOR_BG_DARK: Color = Color::rgb(0.06, 0.07, 0.12);
-pub const COLOR_BG_PANEL: Color = Color::rgb(0.08, 0.10, 0.16);
-pub const COLOR_BG_PANEL_LIGHT: Color = Color::rgb(0.10, 0.13, 0.20);
-pub const COLOR_BORDER: Color = Color::rgb(0.22, 0.26, 0.35);
-pub const COLOR_BORDER_LIGHT: Color = Color::rgb(0.30, 0.35, 0.45);
-pub const COLOR_TITLE_BAR: Color = Color::rgb(0.08, 0.10, 0.16);
-pub const COLOR_BUTTON: Color = Color::rgb(0.10, 0.13, 0.22);
-pub const COLOR_BUTTON_HOVER: Color = Color::rgb(0.14, 0.17, 0.28);
-pub const COLOR_BUTTON_PRESSED: Color = Color::rgb(0.18, 0.22, 0.35);
-pub const COLOR_BUTTON_ACTIVE: Color = Color::rgb(0.30, 0.55, 1.0);
-pub const COLOR_GRID_EMPTY: Color = Color::rgb(0.06, 0.07, 0.12);
-pub const _COLOR_GRID_OCCUPIED: Color = Color::rgb(0.15, 0.40, 0.25);
-pub const COLOR_GRID_HOVER: Color = Color::rgb(0.14, 0.17, 0.28);
-pub const COLOR_TEXT_PRIMARY: Color = Color::rgb(0.88, 0.90, 0.95);
-pub const COLOR_TEXT_SECONDARY: Color = Color::rgb(0.60, 0.64, 0.70);
-pub const COLOR_TEXT_ACTIVE: Color = Color::rgb(0.30, 0.55, 1.0);
-pub const _COLOR_WARNING: Color = Color::rgb(0.90, 0.55, 0.20);
-pub const _COLOR_SUCCESS: Color = Color::rgb(0.30, 0.80, 0.45);
-pub const COLOR_DANGER: Color = Color::rgb(0.90, 0.25, 0.25);
-pub const COLOR_COMPONENT_WEAPON: Color = Color::rgb(0.85, 0.35, 0.25);
-pub const COLOR_COMPONENT_ENGINE: Color = Color::rgb(0.35, 0.65, 0.85);
-pub const COLOR_COMPONENT_REACTOR: Color = Color::rgb(0.85, 0.75, 0.25);
-pub const COLOR_COMPONENT_LIFE: Color = Color::rgb(0.35, 0.85, 0.55);
+pub const COLOR_BG_DARK: Color = Color::srgb(0.06, 0.07, 0.12);
+pub const COLOR_BG_PANEL: Color = Color::srgb(0.08, 0.10, 0.16);
+pub const COLOR_BG_PANEL_LIGHT: Color = Color::srgb(0.10, 0.13, 0.20);
+pub const COLOR_BORDER: Color = Color::srgb(0.22, 0.26, 0.35);
+pub const COLOR_BORDER_LIGHT: Color = Color::srgb(0.30, 0.35, 0.45);
+pub const COLOR_TITLE_BAR: Color = Color::srgb(0.08, 0.10, 0.16);
+pub const COLOR_BUTTON: Color = Color::srgb(0.10, 0.13, 0.22);
+pub const COLOR_BUTTON_HOVER: Color = Color::srgb(0.14, 0.17, 0.28);
+pub const COLOR_BUTTON_PRESSED: Color = Color::srgb(0.18, 0.22, 0.35);
+pub const COLOR_BUTTON_ACTIVE: Color = Color::srgb(0.30, 0.55, 1.0);
+pub const COLOR_GRID_EMPTY: Color = Color::srgb(0.06, 0.07, 0.12);
+pub const _COLOR_GRID_OCCUPIED: Color = Color::srgb(0.15, 0.40, 0.25);
+pub const COLOR_GRID_HOVER: Color = Color::srgb(0.14, 0.17, 0.28);
+pub const COLOR_TEXT_PRIMARY: Color = Color::srgb(0.88, 0.90, 0.95);
+pub const COLOR_TEXT_SECONDARY: Color = Color::srgb(0.60, 0.64, 0.70);
+pub const COLOR_TEXT_ACTIVE: Color = Color::srgb(0.30, 0.55, 1.0);
+pub const _COLOR_WARNING: Color = Color::srgb(0.90, 0.55, 0.20);
+pub const _COLOR_SUCCESS: Color = Color::srgb(0.30, 0.80, 0.45);
+pub const COLOR_DANGER: Color = Color::srgb(0.90, 0.25, 0.25);
+pub const COLOR_COMPONENT_WEAPON: Color = Color::srgb(0.85, 0.35, 0.25);
+pub const COLOR_COMPONENT_ENGINE: Color = Color::srgb(0.35, 0.65, 0.85);
+pub const COLOR_COMPONENT_REACTOR: Color = Color::srgb(0.85, 0.75, 0.25);
+pub const COLOR_COMPONENT_LIFE: Color = Color::srgb(0.35, 0.85, 0.55);
 
 // ============================================================================
 // MARKER COMPONENTS
@@ -177,7 +178,10 @@ pub fn spawn_build_ghost(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     build_state: Res<BuildingState>,
+    ship_query: Query<Entity, With<Ship>>,
 ) {
+    let Ok(ship) = ship_query.single() else { return };
+
     let path = match build_state.current_selection() {
         BuildSelection::Hull(_) => {
             Some(crate::sprite_map::hull_sprite_path(build_state.hull_material))
@@ -188,60 +192,76 @@ pub fn spawn_build_ghost(
     };
     let texture = path.map(|p| asset_server.load(p)).unwrap_or_default();
 
+    // Parented to the ship (same fix as the grid lines — see
+    // spawn_build_grid_lines) so ghost_pos-based positioning below lands on
+    // the ship's actual local grid instead of world-space-absolute
+    // coordinates that only lined up when the ship sat at world origin.
     commands.spawn((
-        SpriteBundle {
-            texture,
-            sprite: Sprite {
-                color: Color::rgba(0.0, 1.0, 0.0, 0.4),
+        (Sprite {
+                image: texture,
+                color: Color::srgba(0.0, 1.0, 0.0, 0.4),
                 custom_size: Some(Vec2::new(48.0, 48.0)),
                 ..default()
-            },
-            transform: Transform::from_xyz(0.0, 0.0, 0.3),
-            visibility: Visibility::Hidden,
-            ..default()
-        },
+            }, Transform::from_xyz(0.0, 0.0, 0.3), Visibility::Hidden),
         BuildGhost,
+        ChildOf(ship),
     ));
 
-    // Validation reason text (world-space, follows ghost)
+    // Extra tiles for non-rectangular footprints (see BuildGhostCell) — hidden
+    // unless the current selection has a footprint override with more cells.
+    // Supports up to 5-cell shapes (the plus-pentomino) — 1 main + 4 extra.
+    for i in 1..5 {
+        commands.spawn((
+            (Sprite {
+                    color: Color::srgba(0.0, 1.0, 0.0, 0.4),
+                    custom_size: Some(Vec2::new(60.0, 60.0)),
+                    ..default()
+                }, Transform::from_xyz(0.0, 0.0, 0.3), Visibility::Hidden),
+            BuildGhostCell(i),
+            ChildOf(ship),
+        ));
+    }
+
+    // Validation reason text (ship-local, follows ghost)
     commands.spawn((
-        Text2dBundle {
-            text: Text::from_section("", TextStyle {
-                font_size: 13.0,
-                color: Color::rgb(1.0, 0.4, 0.4),
-                ..default()
-            }),
-            transform: Transform::from_xyz(0.0, -40.0, 0.35),
-            visibility: Visibility::Hidden,
-            ..default()
-        },
+        Text2d::new(""),
+        TextFont { font_size: FontSize::Px(13.0), ..default() },
+        TextColor(Color::srgb(1.0, 0.4, 0.4)),
+        Transform::from_xyz(0.0, -40.0, 0.35),
+        Visibility::Hidden,
         BuildValidationText,
+        ChildOf(ship),
     ));
 }
 
 pub fn despawn_build_ghost(
     mut commands: Commands,
     query: Query<Entity, With<BuildGhost>>,
+    cell_query: Query<Entity, With<BuildGhostCell>>,
     validation_query: Query<Entity, With<BuildValidationText>>,
 ) {
     for entity in query.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
+    }
+    for entity in cell_query.iter() {
+        commands.entity(entity).despawn();
     }
     for entity in validation_query.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
 pub fn update_build_ghost(
     build_state: Res<BuildingState>,
     registry: Res<ModuleRegistry>,
-    mut ghost_query: Query<(&mut Transform, &mut Sprite, &mut Visibility, Option<&mut Handle<Image>>), (With<BuildGhost>, Without<BuildValidationText>)>,
-    mut validation_query: Query<(&mut Transform, &mut Text, &mut Visibility), (With<BuildValidationText>, Without<BuildGhost>)>,
+    mut ghost_query: Query<(&mut Transform, &mut Sprite, &mut Visibility), (With<BuildGhost>, Without<BuildValidationText>, Without<BuildGhostCell>)>,
+    mut cell_query: Query<(&BuildGhostCell, &mut Transform, &mut Sprite, &mut Visibility), (Without<BuildGhost>, Without<BuildValidationText>)>,
+    mut validation_query: Query<(&mut Transform, &mut Text, &mut Visibility), (With<BuildValidationText>, Without<BuildGhost>, Without<BuildGhostCell>)>,
     time: Res<Time>,
     asset_server: Res<AssetServer>,
     mut last_selection: Local<Option<String>>,
 ) {
-    let Ok((mut transform, mut sprite, mut visibility, texture_handle)) = ghost_query.get_single_mut() else {
+    let Ok((mut transform, mut sprite, mut visibility)) = ghost_query.single_mut() else {
         return;
     };
 
@@ -250,6 +270,10 @@ pub fn update_build_ghost(
     let selection = build_state.current_selection();
     let ghost_pos = build_state.ghost_position;
     let rotation = build_state.rotation;
+
+    // Footprint cells beyond the first (index 0, covered by the main ghost sprite
+    // above) — populated only for modules with a non-rectangular footprint override.
+    let mut extra_cells: SmallVec<[IVec2; 4]> = SmallVec::new();
 
     match selection {
         BuildSelection::Hull(_) => {
@@ -261,25 +285,39 @@ pub fn update_build_ghost(
         }
         BuildSelection::Module(mt) => {
             let def = registry.get(mt);
-            let cells = GridOccupancy::cells_for(ghost_pos, def.size, rotation);
-            let (min_x, max_x, min_y, max_y) = cells.iter().fold(
-                (i32::MAX, i32::MIN, i32::MAX, i32::MIN),
-                |(mnx, mxx, mny, mxy), c| {
-                    (mnx.min(c.x), mxx.max(c.x), mny.min(c.y), mxy.max(c.y))
-                },
-            );
-            let center_x = (min_x as f32 + max_x as f32) / 2.0 * 66.0;
-            let center_y = (min_y as f32 + max_y as f32) / 2.0 * 66.0 - 33.0;
-            let sprite_w = 48.0 + (max_x - min_x) as f32 * 66.0;
-            let sprite_h = 48.0 + (max_y - min_y) as f32 * 66.0;
+            let footprint = crate::building::footprints::footprint_override(mt);
+            let cells = GridOccupancy::cells_for(ghost_pos, def.size, rotation, footprint);
 
-            transform.translation.x = center_x;
-            transform.translation.y = center_y;
-            transform.translation.z = 0.3;
-            let visual_angle = rotation.to_radians()
-                + crate::sprite_map::sprite_base_rotation(mt);
-            transform.rotation = Quat::from_rotation_z(visual_angle);
-            sprite.custom_size = Some(Vec2::new(sprite_w, sprite_h));
+            if let Some(_offsets) = footprint {
+                // Non-rectangular: main sprite covers just the first cell,
+                // extra tiles (below) cover the rest — never over-claims a cell.
+                let first = cells.first().copied().unwrap_or(ghost_pos);
+                transform.translation.x = first.x as f32 * 66.0;
+                transform.translation.y = first.y as f32 * 66.0 - 33.0;
+                transform.translation.z = 0.3;
+                transform.rotation = Quat::IDENTITY;
+                sprite.custom_size = Some(Vec2::new(60.0, 60.0));
+                extra_cells = cells.iter().skip(1).copied().collect();
+            } else {
+                let (min_x, max_x, min_y, max_y) = cells.iter().fold(
+                    (i32::MAX, i32::MIN, i32::MAX, i32::MIN),
+                    |(mnx, mxx, mny, mxy), c| {
+                        (mnx.min(c.x), mxx.max(c.x), mny.min(c.y), mxy.max(c.y))
+                    },
+                );
+                let center_x = (min_x as f32 + max_x as f32) / 2.0 * 66.0;
+                let center_y = (min_y as f32 + max_y as f32) / 2.0 * 66.0 - 33.0;
+                let sprite_w = 48.0 + (max_x - min_x) as f32 * 66.0;
+                let sprite_h = 48.0 + (max_y - min_y) as f32 * 66.0;
+
+                transform.translation.x = center_x;
+                transform.translation.y = center_y;
+                transform.translation.z = 0.3;
+                let visual_angle = rotation.to_radians()
+                    + crate::sprite_map::sprite_base_rotation(mt);
+                transform.rotation = Quat::from_rotation_z(visual_angle);
+                sprite.custom_size = Some(Vec2::new(sprite_w, sprite_h));
+            }
         }
     }
 
@@ -287,39 +325,52 @@ pub fn update_build_ghost(
     let selection_key = build_state.selection_name().to_string();
     if *last_selection != Some(selection_key.clone()) {
         *last_selection = Some(selection_key);
-        if let Some(mut handle) = texture_handle {
-            let path = match build_state.current_selection() {
-                BuildSelection::Hull(_) => {
-                    Some(crate::sprite_map::hull_sprite_path(build_state.hull_material))
-                }
-                BuildSelection::Module(mt) => {
-                    crate::sprite_map::module_sprite_path(mt)
-                }
-            };
-            if let Some(p) = path {
-                *handle = asset_server.load(p);
+        let path = match build_state.current_selection() {
+            BuildSelection::Hull(_) => {
+                Some(crate::sprite_map::hull_sprite_path(build_state.hull_material))
             }
+            BuildSelection::Module(mt) => {
+                crate::sprite_map::module_sprite_path(mt)
+            }
+        };
+        if let Some(p) = path {
+            sprite.image = asset_server.load(p);
         }
     }
 
-    // Animated pulse with category-colored tint
-    let pulse = 0.45 + 0.15 * (time.elapsed_seconds() * 4.0).sin();
-    if build_state.is_valid_placement {
+    // Animated pulse with category-colored tint — shared by the main ghost
+    // sprite and any extra footprint tiles so they read as one shape.
+    let pulse = 0.45 + 0.15 * (time.elapsed_secs() * 4.0).sin();
+    let tile_color = if build_state.is_valid_placement {
         let cat_color = category_color(build_state.current_category());
-        sprite.color = Color::rgba(cat_color.r(), cat_color.g(), cat_color.b(), pulse);
+        Color::srgba(cat_color.to_srgba().red, cat_color.to_srgba().green, cat_color.to_srgba().blue, pulse)
     } else {
-        sprite.color = Color::rgba(1.0, 0.0, 0.0, pulse * 0.7);
+        Color::srgba(1.0, 0.0, 0.0, pulse * 0.7)
+    };
+    sprite.color = tile_color;
+
+    // Position/show extra footprint tiles, hide unused slots
+    for (cell_marker, mut c_transform, mut c_sprite, mut c_vis) in cell_query.iter_mut() {
+        if let Some(&cell) = extra_cells.get(cell_marker.0 - 1) {
+            c_transform.translation.x = cell.x as f32 * 66.0;
+            c_transform.translation.y = cell.y as f32 * 66.0 - 33.0;
+            c_transform.translation.z = 0.3;
+            c_sprite.color = tile_color;
+            *c_vis = Visibility::Visible;
+        } else {
+            *c_vis = Visibility::Hidden;
+        }
     }
 
     // Update validation reason text position and content
-    if let Ok((mut v_transform, mut v_text, mut v_vis)) = validation_query.get_single_mut() {
+    if let Ok((mut v_transform, mut v_text, mut v_vis)) = validation_query.single_mut() {
         if let Some(reason) = &build_state.placement_reason {
             v_transform.translation = Vec3::new(
                 transform.translation.x,
                 transform.translation.y - 40.0,
                 0.35,
             );
-            v_text.sections[0].value = reason.clone();
+            v_text.0 = reason.clone();
             *v_vis = Visibility::Visible;
         } else {
             *v_vis = Visibility::Hidden;
@@ -331,19 +382,20 @@ pub fn update_build_ghost(
 // DELETE HIGHLIGHT (world-space sprite in Deleting mode)
 // ============================================================================
 
-pub fn spawn_delete_highlight(mut commands: Commands) {
+pub fn spawn_delete_highlight(
+    mut commands: Commands,
+    ship_query: Query<Entity, With<Ship>>,
+) {
+    let Ok(ship) = ship_query.single() else { return };
+    // Parented to the ship — same fix as spawn_build_ghost.
     commands.spawn((
-        SpriteBundle {
-            sprite: Sprite {
-                color: Color::rgba(1.0, 0.0, 0.0, 0.3),
+        (Sprite {
+                color: Color::srgba(1.0, 0.0, 0.0, 0.3),
                 custom_size: Some(Vec2::new(64.0, 64.0)),
                 ..default()
-            },
-            transform: Transform::from_xyz(0.0, 0.0, 0.3),
-            visibility: Visibility::Hidden,
-            ..default()
-        },
+            }, Transform::from_xyz(0.0, 0.0, 0.3), Visibility::Hidden),
         DeleteHighlight,
+        ChildOf(ship),
     ));
 }
 
@@ -352,7 +404,7 @@ pub fn despawn_delete_highlight(
     query: Query<Entity, With<DeleteHighlight>>,
 ) {
     for entity in query.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
@@ -361,7 +413,7 @@ pub fn update_delete_highlight(
     occupancy: Res<GridOccupancy>,
     mut query: Query<(&mut Transform, &mut Sprite, &mut Visibility), With<DeleteHighlight>>,
 ) {
-    let Ok((mut transform, mut sprite, mut visibility)) = query.get_single_mut() else {
+    let Ok((mut transform, mut sprite, mut visibility)) = query.single_mut() else {
         return;
     };
 
@@ -374,9 +426,9 @@ pub fn update_delete_highlight(
     sprite.custom_size = Some(Vec2::new(64.0, 64.0));
 
     if occupancy.cells.contains_key(&ghost_pos) {
-        sprite.color = Color::rgba(1.0, 0.1, 0.1, 0.5);
+        sprite.color = Color::srgba(1.0, 0.1, 0.1, 0.5);
     } else {
-        sprite.color = Color::rgba(1.0, 0.0, 0.0, 0.15);
+        sprite.color = Color::srgba(1.0, 0.0, 0.0, 0.15);
     }
 }
 
@@ -384,48 +436,55 @@ pub fn update_delete_highlight(
 // GRID LINES OVERLAY
 // ============================================================================
 
-pub fn spawn_build_grid_lines(mut commands: Commands) {
+pub fn spawn_build_grid_lines(
+    mut commands: Commands,
+    ship_query: Query<Entity, With<Ship>>,
+) {
+    let Ok(ship) = ship_query.single() else { return };
+
     let grid_size = 66.0_f32;
     let extent = 10; // 10 cells in each direction
-    let line_color = Color::rgba(0.3, 0.4, 0.5, 0.15);
+    let line_color = Color::srgba(0.3, 0.4, 0.5, 0.15);
+
+    // Parented to the ship — these lines are drawn at ship-LOCAL coordinates
+    // (matching hull/module tiles, which are also ship children), so they
+    // inherit the ship's actual position and rotation instead of sitting
+    // fixed at world origin. Previously world-space-absolute, so the grid
+    // only lined up with the ship when it happened to be sitting exactly at
+    // (0,0) with zero rotation — never true once you've actually flown
+    // anywhere before opening the builder.
 
     // Vertical lines
     for x in -extent..=extent {
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
+            (Sprite {
                     color: line_color,
                     custom_size: Some(Vec2::new(1.0, grid_size * (extent * 2 + 1) as f32)),
                     ..default()
-                },
-                transform: Transform::from_xyz(
+                }, Transform::from_xyz(
                     x as f32 * grid_size - grid_size * 0.5,
                     -33.0,
                     0.05,
-                ),
-                ..default()
-            },
+                )),
             BuildGridLine,
+            ChildOf(ship),
         ));
     }
 
     // Horizontal lines
     for y in -extent..=extent {
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
+            (Sprite {
                     color: line_color,
                     custom_size: Some(Vec2::new(grid_size * (extent * 2 + 1) as f32, 1.0)),
                     ..default()
-                },
-                transform: Transform::from_xyz(
+                }, Transform::from_xyz(
                     0.0,
                     y as f32 * grid_size - 33.0 - grid_size * 0.5,
                     0.05,
-                ),
-                ..default()
-            },
+                )),
             BuildGridLine,
+            ChildOf(ship),
         ));
     }
 }
@@ -435,7 +494,7 @@ pub fn despawn_build_grid_lines(
     query: Query<Entity, With<BuildGridLine>>,
 ) {
     for entity in query.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
@@ -445,10 +504,18 @@ pub fn despawn_build_grid_lines(
 
 pub fn spawn_module_outlines(
     mut commands: Commands,
-    module_query: Query<(&Module, &Transform)>,
+    module_query: Query<(&Module, &Transform, &ChildOf)>,
+    ship_query: Query<Entity, With<Ship>>,
     registry: Res<ModuleRegistry>,
 ) {
-    for (module, module_transform) in module_query.iter() {
+    let Ok(ship) = ship_query.single() else { return };
+
+    for (module, module_transform, parent) in module_query.iter() {
+        // Player's own ship only — Module is shared with AI ships, and this
+        // used to draw an outline for every module in the world regardless
+        // of owner.
+        if parent.parent() != ship { continue; }
+
         let def = registry.get(module.module_type);
         let cat = module.module_type.category();
         let cat_color = module_category_color(cat);
@@ -459,21 +526,22 @@ pub fn spawn_module_outlines(
             def.size.y as f32 * 66.0 + 6.0,
         );
 
+        // Parented to the ship (same fix as spawn_build_grid_lines) — this
+        // copies the module's ship-LOCAL translation but was spawning
+        // world-space-absolute, so it only lined up with its module when
+        // the ship sat at world origin with zero rotation.
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgba(cat_color.r(), cat_color.g(), cat_color.b(), 0.4),
+            (Sprite {
+                    color: Color::srgba(cat_color.to_srgba().red, cat_color.to_srgba().green, cat_color.to_srgba().blue, 0.4),
                     custom_size: Some(outline_size),
                     ..default()
-                },
-                transform: Transform::from_xyz(
+                }, Transform::from_xyz(
                     module_transform.translation.x,
                     module_transform.translation.y,
                     0.15,
-                ),
-                ..default()
-            },
+                )),
             ModuleBuildOutline,
+            ChildOf(ship),
         ));
     }
 }
@@ -483,7 +551,7 @@ pub fn despawn_module_outlines(
     query: Query<Entity, With<ModuleBuildOutline>>,
 ) {
     for entity in query.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
@@ -493,39 +561,41 @@ pub fn despawn_module_outlines(
 
 pub fn spawn_power_indicators(
     mut commands: Commands,
-    module_query: Query<(&Module, &Transform)>,
+    module_query: Query<(&Module, &Transform, &ChildOf)>,
+    ship_query: Query<Entity, With<Ship>>,
     registry: Res<ModuleRegistry>,
 ) {
-    for (module, module_transform) in module_query.iter() {
+    let Ok(ship) = ship_query.single() else { return };
+
+    for (module, module_transform, parent) in module_query.iter() {
+        // Player's own ship only (same reasoning as spawn_module_outlines).
+        if parent.parent() != ship { continue; }
+
         let def = registry.get(module.module_type);
         if def.power_generation <= 0.0 && def.power_consumption <= 0.0 {
             continue;
         }
 
         let (text_str, color) = if def.power_generation > 0.0 {
-            (format!("+{:.0}", def.power_generation), Color::rgb(0.3, 0.9, 0.3))
+            (format!("+{:.0}", def.power_generation), Color::srgb(0.3, 0.9, 0.3))
         } else {
-            (format!("-{:.0}", def.power_consumption), Color::rgb(0.9, 0.3, 0.3))
+            (format!("-{:.0}", def.power_consumption), Color::srgb(0.9, 0.3, 0.3))
         };
 
+        // Parented to the ship (same fix as spawn_module_outlines) —
+        // was world-space-absolute using ship-local translation values.
         commands.spawn((
-            Text2dBundle {
-                text: Text::from_section(
-                    text_str,
-                    TextStyle {
-                        font_size: 14.0,
-                        color,
-                        ..default()
-                    },
-                ).with_alignment(TextAlignment::Center),
-                transform: Transform::from_xyz(
-                    module_transform.translation.x,
-                    module_transform.translation.y + 30.0,
-                    0.5,
-                ),
-                ..default()
-            },
+            Text2d::new(text_str),
+            TextFont { font_size: FontSize::Px(14.0), ..default() },
+            TextColor(color),
+            TextLayout::justify(Justify::Center),
+            Transform::from_xyz(
+                module_transform.translation.x,
+                module_transform.translation.y + 30.0,
+                0.5,
+            ),
             PowerFlowIndicator,
+            ChildOf(ship),
         ));
     }
 }
@@ -535,7 +605,7 @@ pub fn despawn_power_indicators(
     query: Query<Entity, With<PowerFlowIndicator>>,
 ) {
     for entity in query.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
@@ -550,11 +620,11 @@ pub fn update_module_tooltip(
     occupancy: Res<GridOccupancy>,
     module_query: Query<&Module>,
     registry: Res<ModuleRegistry>,
-    mouse: Res<Input<MouseButton>>,
+    mouse: Res<ButtonInput<MouseButton>>,
 ) {
     // Despawn old tooltip
     for entity in existing.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 
     // Don't show tooltip while clicking
@@ -583,22 +653,15 @@ pub fn update_module_tooltip(
             );
 
             commands.spawn((
-                Text2dBundle {
-                    text: Text::from_section(
-                        tooltip_text,
-                        TextStyle {
-                            font_size: 13.0,
-                            color: Color::WHITE,
-                            ..default()
-                        },
-                    ).with_alignment(TextAlignment::Center),
-                    transform: Transform::from_xyz(
-                        ghost_pos.x as f32 * 66.0,
-                        ghost_pos.y as f32 * 66.0 - 33.0 + 45.0,
-                        1.0,
-                    ),
-                    ..default()
-                },
+                Text2d::new(tooltip_text),
+                TextFont { font_size: FontSize::Px(13.0), ..default() },
+                TextColor(Color::WHITE),
+                TextLayout::justify(Justify::Center),
+                Transform::from_xyz(
+                    ghost_pos.x as f32 * 66.0,
+                    ghost_pos.y as f32 * 66.0 - 33.0 + 45.0,
+                    1.0,
+                ),
                 ModuleTooltip,
             ));
         }
@@ -608,16 +671,16 @@ pub fn update_module_tooltip(
 /// Map ModuleCategory to a color for outlines
 fn module_category_color(cat: ModuleCategory) -> Color {
     match cat {
-        ModuleCategory::Power => Color::rgb(0.8, 0.6, 0.1),
-        ModuleCategory::Propulsion => Color::rgb(0.2, 0.5, 0.8),
-        ModuleCategory::LifeSupport => Color::rgb(0.2, 0.7, 0.4),
-        ModuleCategory::Control => Color::rgb(0.6, 0.6, 0.8),
-        ModuleCategory::Weapons => Color::rgb(0.8, 0.2, 0.2),
-        ModuleCategory::Detection => Color::rgb(0.3, 0.7, 0.7),
-        ModuleCategory::Storage => Color::rgb(0.6, 0.5, 0.3),
-        ModuleCategory::Crew => Color::rgb(0.7, 0.5, 0.7),
-        ModuleCategory::Utility => Color::rgb(0.5, 0.6, 0.5),
-        ModuleCategory::Structural => Color::rgb(0.5, 0.5, 0.55),
+        ModuleCategory::Power => Color::srgb(0.8, 0.6, 0.1),
+        ModuleCategory::Propulsion => Color::srgb(0.2, 0.5, 0.8),
+        ModuleCategory::LifeSupport => Color::srgb(0.2, 0.7, 0.4),
+        ModuleCategory::Control => Color::srgb(0.6, 0.6, 0.8),
+        ModuleCategory::Weapons => Color::srgb(0.8, 0.2, 0.2),
+        ModuleCategory::Detection => Color::srgb(0.3, 0.7, 0.7),
+        ModuleCategory::Storage => Color::srgb(0.6, 0.5, 0.3),
+        ModuleCategory::Crew => Color::srgb(0.7, 0.5, 0.7),
+        ModuleCategory::Utility => Color::srgb(0.5, 0.6, 0.5),
+        ModuleCategory::Structural => Color::srgb(0.5, 0.5, 0.55),
     }
 }
 
@@ -628,17 +691,17 @@ fn module_category_color(cat: ModuleCategory) -> Color {
 /// Color for each build category tab
 fn category_color(cat: BuildCategory) -> Color {
     match cat {
-        BuildCategory::Hull => Color::rgb(0.5, 0.5, 0.55),
-        BuildCategory::Power => Color::rgb(0.8, 0.6, 0.1),
-        BuildCategory::Propulsion => Color::rgb(0.2, 0.5, 0.8),
-        BuildCategory::LifeSupport => Color::rgb(0.2, 0.7, 0.4),
-        BuildCategory::Control => Color::rgb(0.6, 0.6, 0.8),
-        BuildCategory::Weapons => Color::rgb(0.8, 0.2, 0.2),
-        BuildCategory::Detection => Color::rgb(0.3, 0.7, 0.7),
-        BuildCategory::Storage => Color::rgb(0.6, 0.5, 0.3),
-        BuildCategory::Crew => Color::rgb(0.7, 0.5, 0.7),
-        BuildCategory::Utility => Color::rgb(0.5, 0.6, 0.5),
-        BuildCategory::Custom => Color::rgb(0.9, 0.6, 0.9),
+        BuildCategory::Hull => Color::srgb(0.5, 0.5, 0.55),
+        BuildCategory::Power => Color::srgb(0.8, 0.6, 0.1),
+        BuildCategory::Propulsion => Color::srgb(0.2, 0.5, 0.8),
+        BuildCategory::LifeSupport => Color::srgb(0.2, 0.7, 0.4),
+        BuildCategory::Control => Color::srgb(0.6, 0.6, 0.8),
+        BuildCategory::Weapons => Color::srgb(0.8, 0.2, 0.2),
+        BuildCategory::Detection => Color::srgb(0.3, 0.7, 0.7),
+        BuildCategory::Storage => Color::srgb(0.6, 0.5, 0.3),
+        BuildCategory::Crew => Color::srgb(0.7, 0.5, 0.7),
+        BuildCategory::Utility => Color::srgb(0.5, 0.6, 0.5),
+        BuildCategory::Custom => Color::srgb(0.9, 0.6, 0.9),
     }
 }
 
@@ -666,113 +729,75 @@ pub fn spawn_build_panel(
     // === ROOT: full-width bottom bar ===
     commands
         .spawn((
-            NodeBundle {
-                style: Style {
+            (Node {
                     position_type: PositionType::Absolute,
                     left: Val::Px(0.0),
                     right: Val::Px(0.0),
                     bottom: Val::Px(0.0),
                     flex_direction: FlexDirection::Column,
                     ..default()
-                },
-                ..default()
-            },
+                }),
             BuildPanelRoot,
         ))
         .with_children(|root| {
             // === TOP ROW: Category tabs ===
-            root.spawn(NodeBundle {
-                style: Style {
+            root.spawn((Node {
                     width: Val::Percent(100.0),
                     height: Val::Px(32.0),
                     flex_direction: FlexDirection::Row,
                     ..default()
-                },
-                background_color: Color::rgba(0.04, 0.05, 0.10, 0.95).into(),
-                ..default()
-            })
+                }, BackgroundColor(Color::srgba(0.04, 0.05, 0.10, 0.95))))
             .with_children(|tabs_row| {
                 // Mode indicator on the left
                 tabs_row.spawn((
-                    TextBundle {
-                        text: Text::from_section(
-                            " PLACING ",
-                            TextStyle {
-                                font_size: 16.0,
-                                color: Color::BLACK,
-                                ..default()
-                            },
-                        ),
-                        style: Style {
+                    Text::new(" PLACING "), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::BLACK), Node {
                             padding: UiRect::new(
                                 Val::Px(8.0), Val::Px(8.0),
                                 Val::Px(6.0), Val::Px(6.0),
                             ),
                             ..default()
-                        },
-                        background_color: Color::GREEN.into(),
-                        ..default()
-                    },
+                        }, BackgroundColor(Color::srgb(0.0, 1.0, 0.0)),
                     BuildModeText,
                 ));
 
                 // Spacer
-                tabs_row.spawn(NodeBundle {
-                    style: Style {
+                tabs_row.spawn((Node {
                         width: Val::Px(8.0),
                         ..default()
-                    },
-                    ..default()
-                });
+                    }));
 
                 // Category tabs
                 for (i, cat) in BuildCategory::ALL.iter().enumerate() {
                     tabs_row.spawn((
-                        NodeBundle {
-                            style: Style {
+                        (Node {
                                 padding: UiRect::new(
                                     Val::Px(10.0), Val::Px(10.0),
                                     Val::Px(6.0), Val::Px(6.0),
                                 ),
                                 margin: UiRect::right(Val::Px(2.0)),
                                 ..default()
-                            },
-                            background_color: Color::rgba(0.08, 0.10, 0.18, 0.85).into(),
-                            ..default()
-                        },
+                            }, BackgroundColor(Color::srgba(0.08, 0.10, 0.18, 0.85))),
                         CategoryTab { index: i },
                         CategoryTabBg,
                         Interaction::default(),
                     ))
                     .with_children(|tab| {
-                        tab.spawn(TextBundle::from_section(
-                            category_short_name(*cat),
-                            TextStyle {
-                                font_size: 13.0,
-                                color: Color::rgb(0.7, 0.7, 0.7),
-                                ..default()
-                            },
-                        ));
+                        tab.spawn((Text::new(category_short_name(*cat)), TextFont { font_size: FontSize::Px(13.0), ..default() }, TextColor(Color::srgb(0.7, 0.7, 0.7))));
                     });
                 }
             });
 
             // === BOTTOM ROW: Items + Info ===
-            root.spawn(NodeBundle {
-                style: Style {
+            root.spawn((Node {
                     width: Val::Percent(100.0),
                     height: Val::Px(90.0),
                     flex_direction: FlexDirection::Row,
                     ..default()
-                },
-                background_color: Color::rgba(0.03, 0.04, 0.09, 0.94).into(),
-                ..default()
-            })
+                }, BackgroundColor(Color::srgba(0.03, 0.04, 0.09, 0.94))))
             .with_children(|content| {
                 // LEFT: Item slots (scrollable row)
                 content.spawn((
-                    NodeBundle {
-                        style: Style {
+                    (Node {
                             width: Val::Percent(60.0),
                             height: Val::Percent(100.0),
                             flex_direction: FlexDirection::Row,
@@ -781,9 +806,7 @@ pub fn spawn_build_panel(
                             column_gap: Val::Px(6.0),
                             overflow: Overflow::clip(),
                             ..default()
-                        },
-                        ..default()
-                    },
+                        }),
                     ItemSlotsContainer,
                 ))
                 .with_children(|items_area| {
@@ -792,105 +815,56 @@ pub fn spawn_build_panel(
                 });
 
                 // Vertical separator
-                content.spawn(NodeBundle {
-                    style: Style {
+                content.spawn((Node {
                         width: Val::Px(1.0),
                         height: Val::Percent(80.0),
                         align_self: AlignSelf::Center,
                         ..default()
-                    },
-                    background_color: Color::rgba(0.20, 0.23, 0.30, 0.4).into(),
-                    ..default()
-                });
+                    }, BackgroundColor(Color::srgba(0.20, 0.23, 0.30, 0.4))));
 
                 // RIGHT: Info panel
-                content.spawn(NodeBundle {
-                    style: Style {
+                content.spawn((Node {
                         width: Val::Percent(40.0),
                         height: Val::Percent(100.0),
                         flex_direction: FlexDirection::Column,
                         padding: UiRect::all(Val::Px(8.0)),
                         row_gap: Val::Px(2.0),
                         ..default()
-                    },
-                    ..default()
-                })
+                    }))
                 .with_children(|info| {
                     // Item name
                     info.spawn((
-                        TextBundle::from_section(
-                            "Outer Hull",
-                            TextStyle {
-                                font_size: 18.0,
-                                color: Color::WHITE,
-                                ..default()
-                            },
-                        ),
+                        (Text::new("Outer Hull"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::WHITE)),
                         BuildItemName,
                     ));
 
                     // Stats
                     info.spawn((
-                        TextBundle::from_section(
-                            "HP: 100 | Size: 1x1",
-                            TextStyle {
-                                font_size: 13.0,
-                                color: Color::rgb(0.6, 0.6, 0.65),
-                                ..default()
-                            },
-                        ),
+                        (Text::new("HP: 100 | Size: 1x1"), TextFont { font_size: FontSize::Px(13.0), ..default() }, TextColor(Color::srgb(0.6, 0.6, 0.65))),
                         BuildStatsText,
                     ));
 
                     // Rotation
                     info.spawn((
-                        TextBundle::from_section(
-                            "R: Rotate | North",
-                            TextStyle {
-                                font_size: 12.0,
-                                color: Color::rgb(0.45, 0.55, 0.65),
-                                ..default()
-                            },
-                        ),
+                        (Text::new("R: Rotate | North"), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(Color::srgb(0.45, 0.55, 0.65))),
                         BuildRotationText,
                     ));
 
                     // Material (hull only)
                     info.spawn((
-                        TextBundle::from_section(
-                            "Material: Steel (200m)",
-                            TextStyle {
-                                font_size: 12.0,
-                                color: Color::rgb(0.5, 0.65, 0.5),
-                                ..default()
-                            },
-                        ),
+                        (Text::new("Material: Steel (200m)"), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(Color::srgb(0.5, 0.65, 0.5))),
                         BuildMaterialText,
                     ));
 
                     // Description
                     info.spawn((
-                        TextBundle::from_section(
-                            "",
-                            TextStyle {
-                                font_size: 11.0,
-                                color: Color::rgb(0.55, 0.55, 0.6),
-                                ..default()
-                            },
-                        ),
+                        (Text::new(""), TextFont { font_size: FontSize::Px(11.0), ..default() }, TextColor(Color::srgb(0.55, 0.55, 0.6))),
                         BuildDescText,
                     ));
 
                     // Power & shielding summary
                     info.spawn((
-                        TextBundle::from_section(
-                            "",
-                            TextStyle {
-                                font_size: 11.0,
-                                color: Color::rgb(0.5, 0.6, 0.7),
-                                ..default()
-                            },
-                        ),
+                        (Text::new(""), TextFont { font_size: FontSize::Px(11.0), ..default() }, TextColor(Color::srgb(0.5, 0.6, 0.7))),
                         BuildSummaryText,
                     ));
                 });
@@ -900,17 +874,17 @@ pub fn spawn_build_panel(
 
 /// Spawns colored item slots for a given category
 fn spawn_item_slots(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     category: &BuildCategory,
     registry: &ModuleRegistry,
 ) {
     match category {
         BuildCategory::Hull => {
             let hull_items = [
-                ("OUT", Color::rgb(0.4, 0.4, 0.5)),   // Outer
-                ("INN", Color::rgb(0.3, 0.3, 0.4)),   // Inner
-                ("VOD", Color::rgb(0.15, 0.15, 0.2)),  // Void
-                ("BLK", Color::rgb(0.5, 0.4, 0.3)),   // Bulkhead
+                ("OUT", Color::srgb(0.4, 0.4, 0.5)),   // Outer
+                ("INN", Color::srgb(0.3, 0.3, 0.4)),   // Inner
+                ("VOD", Color::srgb(0.15, 0.15, 0.2)),  // Void
+                ("BLK", Color::srgb(0.5, 0.4, 0.3)),   // Bulkhead
             ];
             for (i, (label, color)) in hull_items.iter().enumerate() {
                 spawn_single_slot(parent, i, label, *color);
@@ -934,14 +908,13 @@ fn spawn_item_slots(
 }
 
 fn spawn_single_slot(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     index: usize,
     label: &str,
     color: Color,
 ) {
     parent.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 width: Val::Px(58.0),
                 height: Val::Px(58.0),
                 min_width: Val::Px(58.0),
@@ -949,24 +922,13 @@ fn spawn_single_slot(
                 align_items: AlignItems::Center,
                 border: UiRect::all(Val::Px(2.0)),
                 ..default()
-            },
-            background_color: color.into(),
-            border_color: Color::rgba(0.0, 0.0, 0.0, 0.0).into(),
-            ..default()
-        },
+            }, BackgroundColor(color), BorderColor::all(Color::srgba(0.0, 0.0, 0.0, 0.0))),
         ItemSlot { index },
         ItemSlotBg,
         Interaction::default(),
     ))
     .with_children(|slot| {
-        slot.spawn(TextBundle::from_section(
-            label,
-            TextStyle {
-                font_size: 11.0,
-                color: Color::WHITE,
-                ..default()
-            },
-        ));
+        slot.spawn((Text::new(label), TextFont { font_size: FontSize::Px(11.0), ..default() }, TextColor(Color::WHITE)));
     });
 }
 
@@ -975,7 +937,7 @@ pub fn despawn_build_panel(
     query: Query<Entity, With<BuildPanelRoot>>,
 ) {
     for entity in query.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 }
 
@@ -995,7 +957,7 @@ pub fn update_build_panel(
     stats_q: Query<Entity, With<BuildStatsText>>,
     rot_q: Query<Entity, With<BuildRotationText>>,
     mat_q: Query<Entity, With<BuildMaterialText>>,
-    mut text_query: Query<&mut Text>,
+    mut text_query: Query<(&mut Text, &mut TextColor)>,
     // Tab highlighting
     mut tab_query: Query<(&CategoryTab, &mut BackgroundColor, &Children), With<CategoryTabBg>>,
     // Item slot highlighting
@@ -1009,14 +971,14 @@ pub fn update_build_panel(
     let sel_index = build_state.selected_index;
 
     // Mode indicator
-    if let Ok(entity) = mode_q.get_single() {
-        if let Ok(mut text) = text_query.get_mut(entity) {
+    if let Ok(entity) = mode_q.single() {
+        if let Ok((mut text, _)) = text_query.get_mut(entity) {
             let (label, _color) = match current_build_state.get() {
-                BuildState::Placing => (" PLACING ", Color::GREEN),
-                BuildState::Deleting => (" DELETE ", Color::RED),
+                BuildState::Placing => (" PLACING ", Color::srgb(0.0, 1.0, 0.0)),
+                BuildState::Deleting => (" DELETE ", Color::srgb(1.0, 0.0, 0.0)),
                 _ => (" BUILD ", Color::WHITE),
             };
-            text.sections[0].value = label.to_string();
+            text.0 = label.to_string();
         }
     }
 
@@ -1027,16 +989,16 @@ pub fn update_build_panel(
         if is_active {
             *bg = category_color(cat).into();
             // Update child text to white
-            for &child in children.iter() {
-                if let Ok(mut text) = text_query.get_mut(child) {
-                    text.sections[0].style.color = Color::WHITE;
+            for child in children.iter() {
+                if let Ok((_, mut text_color)) = text_query.get_mut(child) {
+                    text_color.0 = Color::WHITE;
                 }
             }
         } else {
-            *bg = Color::rgba(0.08, 0.10, 0.18, 0.85).into();
-            for &child in children.iter() {
-                if let Ok(mut text) = text_query.get_mut(child) {
-                    text.sections[0].style.color = Color::rgb(0.5, 0.5, 0.55);
+            *bg = Color::srgba(0.08, 0.10, 0.18, 0.85).into();
+            for child in children.iter() {
+                if let Ok((_, mut text_color)) = text_query.get_mut(child) {
+                    text_color.0 = Color::srgb(0.5, 0.5, 0.55);
                 }
             }
         }
@@ -1045,10 +1007,10 @@ pub fn update_build_panel(
     // Rebuild item slots if category changed
     if *last_category != Some(cat_index) {
         *last_category = Some(cat_index);
-        if let Ok((container_entity, children)) = container_query.get_single() {
+        if let Ok((container_entity, children)) = container_query.single() {
             // Despawn old slots
-            for &child in children.iter() {
-                commands.entity(child).despawn_recursive();
+            for child in children.iter() {
+                commands.entity(child).despawn();
             }
             // Spawn new slots
             commands.entity(container_entity).with_children(|parent| {
@@ -1062,23 +1024,23 @@ pub fn update_build_panel(
         if slot.index == sel_index {
             *border = Color::WHITE.into();
         } else {
-            *border = Color::rgba(0.0, 0.0, 0.0, 0.0).into();
+            *border = Color::srgba(0.0, 0.0, 0.0, 0.0).into();
         }
     }
 
     // Item name
-    if let Ok(entity) = item_name_q.get_single() {
-        if let Ok(mut text) = text_query.get_mut(entity) {
-            text.sections[0].value = build_state.selection_name().to_string();
+    if let Ok(entity) = item_name_q.single() {
+        if let Ok((mut text, mut text_color)) = text_query.get_mut(entity) {
+            text.0 = build_state.selection_name().to_string();
             // Color the name with the category color
-            text.sections[0].style.color = category_color(category);
+            text_color.0 = category_color(category);
         }
     }
 
     // Stats
-    if let Ok(entity) = stats_q.get_single() {
-        if let Ok(mut text) = text_query.get_mut(entity) {
-            text.sections[0].value = match build_state.current_selection() {
+    if let Ok(entity) = stats_q.single() {
+        if let Ok((mut text, _)) = text_query.get_mut(entity) {
+            text.0 = match build_state.current_selection() {
                 BuildSelection::Hull(_) => {
                     let mat = build_state.hull_material;
                     format!(
@@ -1110,22 +1072,22 @@ pub fn update_build_panel(
     }
 
     // Rotation
-    if let Ok(entity) = rot_q.get_single() {
-        if let Ok(mut text) = text_query.get_mut(entity) {
-            text.sections[0].value = format!("R: Rotate | {:?}", build_state.rotation);
+    if let Ok(entity) = rot_q.single() {
+        if let Ok((mut text, _)) = text_query.get_mut(entity) {
+            text.0 = format!("R: Rotate | {:?}", build_state.rotation);
         }
     }
 
     // Material (hull only)
-    if let Ok(entity) = mat_q.get_single() {
-        if let Ok(mut text) = text_query.get_mut(entity) {
+    if let Ok(entity) = mat_q.single() {
+        if let Ok((mut text, mut text_color)) = text_query.get_mut(entity) {
             if category == BuildCategory::Hull {
                 let mat = build_state.hull_material;
-                text.sections[0].value =
+                text.0 =
                     format!("M: Material | {} (Shield: {:.0})", mat.name(), mat.radiation_shielding());
-                text.sections[0].style.color = Color::rgb(0.5, 0.65, 0.5);
+                text_color.0 = Color::srgb(0.5, 0.65, 0.5);
             } else {
-                text.sections[0].value = String::new();
+                text.0 = String::new();
             }
         }
     }
@@ -1138,15 +1100,15 @@ pub fn update_build_info(
     registry: Res<ModuleRegistry>,
     desc_q: Query<Entity, With<BuildDescText>>,
     summary_q: Query<Entity, With<BuildSummaryText>>,
-    mut text_query: Query<&mut Text>,
+    mut text_query: Query<(&mut Text, &mut TextColor)>,
     module_query: Query<&Module>,
     hull_query: Query<&HullSegment>,
     currency: Res<Currency>,
 ) {
     // Description
-    if let Ok(entity) = desc_q.get_single() {
-        if let Ok(mut text) = text_query.get_mut(entity) {
-            text.sections[0].value = match build_state.current_selection() {
+    if let Ok(entity) = desc_q.single() {
+        if let Ok((mut text, _)) = text_query.get_mut(entity) {
+            text.0 = match build_state.current_selection() {
                 BuildSelection::Hull(layer) => {
                     match layer {
                         HullLayer::Outer => "Primary hull plating. First line of defense against radiation and debris.",
@@ -1163,8 +1125,8 @@ pub fn update_build_info(
     }
 
     // Power & shielding summary
-    if let Ok(entity) = summary_q.get_single() {
-        if let Ok(mut text) = text_query.get_mut(entity) {
+    if let Ok(entity) = summary_q.single() {
+        if let Ok((mut text, mut text_color)) = text_query.get_mut(entity) {
             let mut total_gen = 0.0_f32;
             let mut total_use = 0.0_f32;
             for module in module_query.iter() {
@@ -1183,12 +1145,12 @@ pub fn update_build_info(
             }
 
             let balance = total_gen - total_use;
-            text.sections[0].style.color = if balance >= 0.0 {
-                Color::rgb(0.4, 0.7, 0.5)
+            text_color.0 = if balance >= 0.0 {
+                Color::srgb(0.4, 0.7, 0.5)
             } else {
-                Color::rgb(0.8, 0.4, 0.3)
+                Color::srgb(0.8, 0.4, 0.3)
             };
-            text.sections[0].value = summary;
+            text.0 = summary;
         }
     }
 }
@@ -1221,13 +1183,22 @@ pub fn build_panel_click(
 
 pub fn update_controls_help(
     current_build_state: Res<State<BuildState>>,
+    game_state: Res<State<crate::states::GameState>>,
     mut help_query: Query<&mut Text, With<ControlsHelpText>>,
 ) {
-    let Ok(mut text) = help_query.get_single_mut() else {
+    let Ok(mut text) = help_query.single_mut() else {
         return;
     };
 
-    text.sections[0].value = match current_build_state.get() {
+    // In flight the bar shows flight controls — it used to keep displaying
+    // the docked hints ("Enter: Launch") for the whole run, so nobody could
+    // discover the brake or the shield toggle.
+    if *game_state.get() == crate::states::GameState::Exploring {
+        text.0 = "Mouse: Aim | W/S: Thrust | A/D: Strafe | Shift: Brake | Space/Click: Fire | R: Shield | F: Dock | B: Build".to_string();
+        return;
+    }
+
+    text.0 = match current_build_state.get() {
         BuildState::Inactive => {
             "B: Build Mode | U: Shop | J: Contracts | Enter: Launch | ESC: Pause".to_string()
         }
@@ -1259,7 +1230,7 @@ pub fn spawn_customization_panel(
     // Despawn existing panel if customization is not active
     if !customization_state.active {
         for entity in existing_panel.iter() {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
         return;
     }
@@ -1271,8 +1242,7 @@ pub fn spawn_customization_panel(
 
     // Right-side overlay panel
     let panel_root = commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 position_type: PositionType::Absolute,
                 right: Val::Px(0.0),
                 top: Val::Px(0.0),
@@ -1282,23 +1252,13 @@ pub fn spawn_customization_panel(
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(15.0),
                 ..default()
-            },
-            background_color: Color::rgba(0.1, 0.1, 0.15, 0.95).into(),
-            ..default()
-        },
+            }, BackgroundColor(Color::srgba(0.1, 0.1, 0.15, 0.95))),
         CustomizationPanelRoot,
     )).id();
 
     // Title
     commands.entity(panel_root).with_children(|parent| {
-        parent.spawn(TextBundle::from_section(
-            format!("Customize {}", customization_state.module_type.name()),
-            TextStyle {
-                font_size: 24.0,
-                color: Color::WHITE,
-                ..default()
-            },
-        ));
+        parent.spawn((Text::new(format!("Customize {}", customization_state.module_type.name())), TextFont { font_size: FontSize::Px(24.0), ..default() }, TextColor(Color::WHITE)));
 
         // Sliders based on module category
         spawn_sliders_for_category(parent, &customization_state);
@@ -1307,29 +1267,15 @@ pub fn spawn_customization_panel(
         spawn_stats_preview(parent, &customization_state);
 
         // Controls help
-        parent.spawn(TextBundle::from_section(
-            "Arrow Keys: Adjust | Enter: Apply | ESC: Cancel",
-            TextStyle {
-                font_size: 14.0,
-                color: Color::rgb(0.7, 0.7, 0.7),
-                ..default()
-            },
-        ));
+        parent.spawn((Text::new("Arrow Keys: Adjust | Enter: Apply | ESC: Cancel"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.7, 0.7, 0.7))));
     });
 }
 
 fn spawn_sliders_for_category(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     customization_state: &CustomizationState,
 ) {
-    parent.spawn(TextBundle::from_section(
-        "Properties:",
-        TextStyle {
-            font_size: 18.0,
-            color: Color::rgb(0.9, 0.9, 0.9),
-            ..default()
-        },
-    ));
+    parent.spawn((Text::new("Properties:"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(0.9, 0.9, 0.9))));
 
     match customization_state.module_type.category() {
         ModuleCategory::Weapons => {
@@ -1356,7 +1302,7 @@ fn spawn_sliders_for_category(
 }
 
 fn spawn_slider(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     property_key: &str,
     label: &str,
     min: f32,
@@ -1370,40 +1316,26 @@ fn spawn_slider(
 
     // Slider container
     parent.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(5.0),
                 ..default()
-            },
-            ..default()
-        },
+            }),
     )).with_children(|slider_parent| {
         // Label with value
         slider_parent.spawn((
-            TextBundle::from_section(
-                format!("{}: {:.1}", label, current_value),
-                TextStyle {
-                    font_size: 16.0,
-                    color: Color::rgb(0.8, 0.8, 0.8),
-                    ..default()
-                },
-            ),
+            (Text::new(format!("{}: {:.1}", label, current_value)), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.8, 0.8, 0.8))),
             SliderValueText {
                 property_key: property_key.to_string(),
             },
         ));
 
         // Slider bar background
-        slider_parent.spawn(NodeBundle {
-            style: Style {
+        slider_parent.spawn((Node {
                 width: Val::Px(360.0),
                 height: Val::Px(20.0),
                 ..default()
-            },
-            background_color: Color::rgb(0.2, 0.2, 0.25).into(),
-            ..default()
-        }).with_children(|bar_parent| {
+            }, BackgroundColor(Color::srgb(0.2, 0.2, 0.25)))).with_children(|bar_parent| {
             // Slider fill (represents current value)
             let fill_percent = if max > min {
                 ((current_value - min) / (max - min) * 100.0).clamp(0.0, 100.0)
@@ -1411,15 +1343,11 @@ fn spawn_slider(
                 0.0
             };
             bar_parent.spawn((
-                NodeBundle {
-                    style: Style {
+                (Node {
                         width: Val::Percent(fill_percent),
                         height: Val::Percent(100.0),
                         ..default()
-                    },
-                    background_color: Color::rgb(0.3, 0.6, 0.9).into(),
-                    ..default()
-                },
+                    }, BackgroundColor(Color::srgb(0.3, 0.6, 0.9))),
                 CustomizationSlider {
                     property_key: property_key.to_string(),
                 },
@@ -1429,17 +1357,10 @@ fn spawn_slider(
 }
 
 fn spawn_stats_preview(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     customization_state: &CustomizationState,
 ) {
-    parent.spawn(TextBundle::from_section(
-        "Stats Preview:",
-        TextStyle {
-            font_size: 18.0,
-            color: Color::rgb(0.9, 0.9, 0.9),
-            ..default()
-        },
-    ));
+    parent.spawn((Text::new("Stats Preview:"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(0.9, 0.9, 0.9))));
 
     // Display stats based on module category
     match customization_state.module_type.category() {
@@ -1476,16 +1397,9 @@ fn spawn_stats_preview(
     }
 }
 
-fn spawn_stat_row(parent: &mut ChildBuilder, name: &str, value: f32) {
+fn spawn_stat_row(parent: &mut ChildSpawnerCommands, name: &str, value: f32) {
     parent.spawn((
-        TextBundle::from_section(
-            format!("  {}: {:.1}", name, value),
-            TextStyle {
-                font_size: 14.0,
-                color: Color::rgb(0.7, 0.9, 0.7),
-                ..default()
-            },
-        ),
+        (Text::new(format!("  {}: {:.1}", name, value)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.7, 0.9, 0.7))),
         CustomizationStatDisplay {
             stat_name: name.to_string(),
         },
@@ -1498,10 +1412,10 @@ fn spawn_stat_row(parent: &mut ChildBuilder, name: &str, value: f32) {
 
 /// Handle customization panel input (arrow keys to adjust sliders, Enter to apply, ESC to cancel)
 pub fn handle_customization_input(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut customization_state: ResMut<CustomizationState>,
     build_state: Res<BuildingState>,
-    mut place_events: EventWriter<PlaceModuleRequest>,
+    mut place_events: MessageWriter<PlaceModuleRequest>,
 ) {
     if !customization_state.active {
         return;
@@ -1514,7 +1428,7 @@ pub fn handle_customization_input(
     }
 
     // Enter: Apply customization and place module
-    if keyboard.just_pressed(KeyCode::Return) {
+    if keyboard.just_pressed(KeyCode::Enter) {
         apply_customization(
             &customization_state,
             &build_state,
@@ -1525,10 +1439,10 @@ pub fn handle_customization_input(
     }
 
     // Arrow keys: Adjust property values
-    if keyboard.just_pressed(KeyCode::Left) || keyboard.just_pressed(KeyCode::Down) {
+    if keyboard.just_pressed(KeyCode::ArrowLeft) || keyboard.just_pressed(KeyCode::ArrowDown) {
         adjust_focused_property(&mut customization_state, -0.5);
     }
-    if keyboard.just_pressed(KeyCode::Right) || keyboard.just_pressed(KeyCode::Up) {
+    if keyboard.just_pressed(KeyCode::ArrowRight) || keyboard.just_pressed(KeyCode::ArrowUp) {
         adjust_focused_property(&mut customization_state, 0.5);
     }
 }
@@ -1546,19 +1460,19 @@ fn adjust_focused_property(customization_state: &mut CustomizationState, delta: 
     }
 }
 
-/// Apply customization by creating a PlaceModuleRequest with custom sub-components
+/// Apply customization by creating a PlaceModuleRequest with custom ship-components
 fn apply_customization(
     customization_state: &CustomizationState,
     build_state: &BuildingState,
-    place_events: &mut EventWriter<PlaceModuleRequest>,
+    place_events: &mut MessageWriter<PlaceModuleRequest>,
 ) {
-    // Build sub-components from current property values
+    // Build ship-components from current property values
     let subcomponents = customization_state.build_subcomponents();
 
     // Generate a custom name based on module type and properties
     let custom_name = format!("Custom {}", customization_state.module_type.name());
 
-    place_events.send(PlaceModuleRequest {
+    place_events.write(PlaceModuleRequest {
         module_type: customization_state.module_type,
         grid_position: build_state.ghost_position,
         rotation: build_state.rotation,
@@ -1571,7 +1485,7 @@ fn apply_customization(
 /// Update customization panel UI to reflect current state
 pub fn update_customization_panel(
     customization_state: Res<CustomizationState>,
-    mut slider_query: Query<(&CustomizationSlider, &mut Style)>,
+    mut slider_query: Query<(&CustomizationSlider, &mut Node)>,
     mut value_text_query: Query<(&SliderValueText, &mut Text)>,
     mut stat_query: Query<(&CustomizationStatDisplay, &mut Text), Without<SliderValueText>>,
 ) {
@@ -1597,7 +1511,7 @@ pub fn update_customization_panel(
     for (value_text, mut text) in value_text_query.iter_mut() {
         if let Some(&value) = customization_state.properties.get(&value_text.property_key) {
             let label = get_property_label(&value_text.property_key);
-            text.sections[0].value = format!("{}: {:.1}", label, value);
+            text.0 = format!("{}: {:.1}", label, value);
         }
     }
 
@@ -1643,7 +1557,7 @@ fn update_stat_text(
 ) {
     for (stat_display, mut text) in stat_query.iter_mut() {
         if stat_display.stat_name == stat_name {
-            text.sections[0].value = format!("  {}: {:.1}", stat_name, value);
+            text.0 = format!("  {}: {:.1}", stat_name, value);
         }
     }
 }
@@ -1695,7 +1609,7 @@ pub fn spawn_component_placement_panel(
     // Despawn existing panel if not active
     if !placement_state.active {
         for entity in existing_panel.iter() {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
         return;
     }
@@ -1707,83 +1621,54 @@ pub fn spawn_component_placement_panel(
 
     // Spawn root panel container (darkened backdrop)
     commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
                 position_type: PositionType::Absolute,
                 ..default()
-            },
-            background_color: Color::rgba(0.0, 0.0, 0.0, 0.7).into(),
-            ..default()
-        },
+            }, BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7))),
         ComponentPlacementPanelRoot,
     )).with_children(|parent| {
         // Main panel container with industrial borders
-        parent.spawn(NodeBundle {
-            style: Style {
-                width: Val::Px(804.0),  // +4px for borders
+        parent.spawn((Node {
+                width: Val::Px(804.0),  
                 height: Val::Px(604.0),
                 flex_direction: FlexDirection::Column,
                 border: UiRect::all(Val::Px(2.0)),
                 ..default()
-            },
-            background_color: COLOR_BG_DARK.into(),
-            border_color: COLOR_BORDER_LIGHT.into(),
-            ..default()
-        }).with_children(|border| {
-            border.spawn(NodeBundle {
-                style: Style {
+            }, BackgroundColor(COLOR_BG_DARK), BorderColor::all(COLOR_BORDER_LIGHT))).with_children(|border| {
+            border.spawn((Node {
                     width: Val::Percent(100.0),
                     height: Val::Percent(100.0),
                     flex_direction: FlexDirection::Column,
                     padding: UiRect::all(Val::Px(3.0)),
                     row_gap: Val::Px(2.0),
                     ..default()
-                },
-                background_color: COLOR_BG_PANEL.into(),
-                ..default()
-            }).with_children(|main| {
+                }, BackgroundColor(COLOR_BG_PANEL))).with_children(|main| {
             // Title bar - industrial style with rivets effect
-            main.spawn(NodeBundle {
-                style: Style {
+            main.spawn((Node {
                     width: Val::Percent(100.0),
                     height: Val::Px(44.0),
                     justify_content: JustifyContent::Center,
                     align_items: AlignItems::Center,
                     border: UiRect::all(Val::Px(2.0)),
                     ..default()
-                },
-                background_color: COLOR_TITLE_BAR.into(),
-                border_color: COLOR_BORDER.into(),
-                ..default()
-            }).with_children(|title_bar| {
-                title_bar.spawn(TextBundle::from_section(
-                    format!("[ COMPONENT BUILDER: {} ]", placement_state.module_type.name().to_uppercase()),
-                    TextStyle {
-                        font_size: 20.0,
-                        color: COLOR_TEXT_ACTIVE,
-                        ..default()
-                    },
-                ));
+                }, BackgroundColor(COLOR_TITLE_BAR), BorderColor::all(COLOR_BORDER))).with_children(|title_bar| {
+                title_bar.spawn((Text::new(format!("[ COMPONENT BUILDER: {} ]", placement_state.module_type.name().to_uppercase())), TextFont { font_size: FontSize::Px(20.0), ..default() }, TextColor(COLOR_TEXT_ACTIVE)));
             });
 
             // Content row with gap
-            main.spawn(NodeBundle {
-                style: Style {
+            main.spawn((Node {
                     width: Val::Percent(100.0),
                     flex_grow: 1.0,
                     flex_direction: FlexDirection::Row,
                     column_gap: Val::Px(3.0),
                     ..default()
-                },
-                ..default()
-            }).with_children(|panel| {
+                })).with_children(|panel| {
             // Left side: Component palette with industrial panel
-            panel.spawn(NodeBundle {
-                style: Style {
+            panel.spawn((Node {
                     width: Val::Px(200.0),
                     height: Val::Percent(100.0),
                     flex_direction: FlexDirection::Column,
@@ -1791,31 +1676,16 @@ pub fn spawn_component_placement_panel(
                     row_gap: Val::Px(4.0),
                     border: UiRect::all(Val::Px(2.0)),
                     ..default()
-                },
-                background_color: COLOR_BG_PANEL_LIGHT.into(),
-                border_color: COLOR_BORDER.into(),
-                ..default()
-            }).with_children(|palette| {
+                }, BackgroundColor(COLOR_BG_PANEL_LIGHT), BorderColor::all(COLOR_BORDER))).with_children(|palette| {
                 // Title with industrial brackets
-                palette.spawn(TextBundle::from_section(
-                    "[ COMPONENTS ]",
-                    TextStyle {
-                        font_size: 16.0,
-                        color: COLOR_TEXT_ACTIVE,
-                        ..default()
-                    },
-                ));
+                palette.spawn((Text::new("[ COMPONENTS ]"), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(COLOR_TEXT_ACTIVE)));
 
                 // Separator line
-                palette.spawn(NodeBundle {
-                    style: Style {
+                palette.spawn((Node {
                         width: Val::Percent(100.0),
                         height: Val::Px(2.0),
                         ..default()
-                    },
-                    background_color: COLOR_BORDER.into(),
-                    ..default()
-                });
+                    }, BackgroundColor(COLOR_BORDER)));
 
                 // Get available piece types for this module
                 let piece_types = get_available_pieces(placement_state.module_type.category());
@@ -1826,8 +1696,7 @@ pub fn spawn_component_placement_panel(
                 // Spawn button for each piece type with industrial style
                 for piece_type in piece_types {
                     palette.spawn((
-                        ButtonBundle {
-                            style: Style {
+                        (Node {
                                 width: Val::Percent(100.0),
                                 height: Val::Px(36.0),
                                 justify_content: JustifyContent::FlexStart,
@@ -1835,41 +1704,25 @@ pub fn spawn_component_placement_panel(
                                 padding: UiRect::all(Val::Px(8.0)),
                                 border: UiRect::all(Val::Px(1.0)),
                                 ..default()
-                            },
-                            background_color: COLOR_BUTTON.into(),
-                            border_color: COLOR_BORDER.into(),
-                            ..default()
-                        },
+                            }, BackgroundColor(COLOR_BUTTON), BorderColor::all(COLOR_BORDER)),
                         ComponentPaletteItem { piece_type: piece_type.clone() },
                     )).with_children(|button| {
                         // Color indicator strip
-                        button.spawn(NodeBundle {
-                            style: Style {
+                        button.spawn((Node {
                                 width: Val::Px(3.0),
                                 height: Val::Percent(100.0),
                                 margin: UiRect::right(Val::Px(6.0)),
                                 ..default()
-                            },
-                            background_color: category_color.into(),
-                            ..default()
-                        });
+                            }, BackgroundColor(category_color)));
 
                         // Component name
-                        button.spawn(TextBundle::from_section(
-                            piece_type.name().to_uppercase(),
-                            TextStyle {
-                                font_size: 14.0,
-                                color: COLOR_TEXT_PRIMARY,
-                                ..default()
-                            },
-                        ));
+                        button.spawn((Text::new(piece_type.name().to_uppercase()), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(COLOR_TEXT_PRIMARY)));
                     });
                 }
             });
 
             // Center: Internal grid with industrial panel
-            panel.spawn(NodeBundle {
-                style: Style {
+            panel.spawn((Node {
                     width: Val::Px(400.0),
                     height: Val::Percent(100.0),
                     flex_direction: FlexDirection::Column,
@@ -1878,59 +1731,35 @@ pub fn spawn_component_placement_panel(
                     padding: UiRect::all(Val::Px(8.0)),
                     border: UiRect::all(Val::Px(2.0)),
                     ..default()
-                },
-                background_color: COLOR_BG_DARK.into(),
-                border_color: COLOR_BORDER.into(),
-                ..default()
-            }).with_children(|center| {
+                }, BackgroundColor(COLOR_BG_DARK), BorderColor::all(COLOR_BORDER))).with_children(|center| {
                 // Grid title with industrial brackets
-                center.spawn(TextBundle::from_section(
-                    format!("[ INTERNAL GRID: {} ]", placement_state.module_type.name().to_uppercase()),
-                    TextStyle {
-                        font_size: 16.0,
-                        color: COLOR_TEXT_ACTIVE,
-                        ..default()
-                    },
-                ));
+                center.spawn((Text::new(format!("[ INTERNAL GRID: {} ]", placement_state.module_type.name().to_uppercase())), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(COLOR_TEXT_ACTIVE)));
 
                 // 4x4 grid with industrial borders
-                center.spawn(NodeBundle {
-                    style: Style {
-                        width: Val::Px(328.0),  // 80*4 + 8 for borders
+                center.spawn((Node {
+                        width: Val::Px(328.0),  
                         height: Val::Px(328.0),
                         flex_direction: FlexDirection::Column,
                         border: UiRect::all(Val::Px(2.0)),
                         ..default()
-                    },
-                    background_color: COLOR_BG_PANEL_LIGHT.into(),
-                    border_color: COLOR_BORDER_LIGHT.into(),
-                    ..default()
-                }).with_children(|grid| {
+                    }, BackgroundColor(COLOR_BG_PANEL_LIGHT), BorderColor::all(COLOR_BORDER_LIGHT))).with_children(|grid| {
                     for y in 0..4 {
-                        grid.spawn(NodeBundle {
-                            style: Style {
+                        grid.spawn((Node {
                                 width: Val::Percent(100.0),
                                 height: Val::Percent(25.0),
                                 flex_direction: FlexDirection::Row,
                                 ..default()
-                            },
-                            ..default()
-                        }).with_children(|row| {
+                            })).with_children(|row| {
                             for x in 0..4 {
                                 row.spawn((
-                                    ButtonBundle {
-                                        style: Style {
+                                    (Node {
                                             width: Val::Percent(25.0),
                                             height: Val::Percent(100.0),
                                             border: UiRect::all(Val::Px(1.0)),
                                             justify_content: JustifyContent::Center,
                                             align_items: AlignItems::Center,
                                             ..default()
-                                        },
-                                        background_color: COLOR_GRID_EMPTY.into(),
-                                        border_color: COLOR_BORDER.into(),
-                                        ..default()
-                                    },
+                                        }, BackgroundColor(COLOR_GRID_EMPTY), BorderColor::all(COLOR_BORDER)),
                                     InternalGridCell {
                                         grid_pos: IVec2::new(x, y),
                                     },
@@ -1941,31 +1770,18 @@ pub fn spawn_component_placement_panel(
                 });
 
                 // Controls help with industrial styling
-                center.spawn(NodeBundle {
-                    style: Style {
+                center.spawn((Node {
                         width: Val::Percent(100.0),
                         padding: UiRect::all(Val::Px(8.0)),
                         border: UiRect::all(Val::Px(1.0)),
                         ..default()
-                    },
-                    background_color: COLOR_BG_PANEL.into(),
-                    border_color: COLOR_BORDER.into(),
-                    ..default()
-                }).with_children(|help| {
-                    help.spawn(TextBundle::from_section(
-                        "> Select component from list\n> Click grid to place\n> Right-click for options\n\n[ENTER] Finalize | [ESC] Cancel",
-                        TextStyle {
-                            font_size: 13.0,
-                            color: COLOR_TEXT_SECONDARY,
-                            ..default()
-                        },
-                    ));
+                    }, BackgroundColor(COLOR_BG_PANEL), BorderColor::all(COLOR_BORDER))).with_children(|help| {
+                    help.spawn((Text::new("> Select component from list\n> Click grid to place\n> Right-click for options\n\n[ENTER] Finalize | [ESC] Cancel"), TextFont { font_size: FontSize::Px(13.0), ..default() }, TextColor(COLOR_TEXT_SECONDARY)));
                 });
             });
 
             // Right side: Placed pieces list with industrial panel
-            panel.spawn(NodeBundle {
-                style: Style {
+            panel.spawn((Node {
                     width: Val::Px(180.0),
                     height: Val::Percent(100.0),
                     flex_direction: FlexDirection::Column,
@@ -1973,69 +1789,38 @@ pub fn spawn_component_placement_panel(
                     row_gap: Val::Px(4.0),
                     border: UiRect::all(Val::Px(2.0)),
                     ..default()
-                },
-                background_color: COLOR_BG_PANEL_LIGHT.into(),
-                border_color: COLOR_BORDER.into(),
-                ..default()
-            }).with_children(|list| {
+                }, BackgroundColor(COLOR_BG_PANEL_LIGHT), BorderColor::all(COLOR_BORDER))).with_children(|list| {
                 // Title with bracket style
-                list.spawn(TextBundle::from_section(
-                    format!("[ PLACED: {} ]", placement_state.placed_pieces.len()),
-                    TextStyle {
-                        font_size: 16.0,
-                        color: COLOR_TEXT_ACTIVE,
-                        ..default()
-                    },
-                ));
+                list.spawn((Text::new(format!("[ PLACED: {} ]", placement_state.placed_pieces.len())), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(COLOR_TEXT_ACTIVE)));
 
                 // Separator
-                list.spawn(NodeBundle {
-                    style: Style {
+                list.spawn((Node {
                         width: Val::Percent(100.0),
                         height: Val::Px(2.0),
                         ..default()
-                    },
-                    background_color: COLOR_BORDER.into(),
-                    ..default()
-                });
+                    }, BackgroundColor(COLOR_BORDER)));
 
                 // List placed pieces with category color
                 let category_color = get_category_color(placement_state.module_type.category());
                 for piece in &placement_state.placed_pieces {
-                    list.spawn(NodeBundle {
-                        style: Style {
+                    list.spawn((Node {
                             width: Val::Percent(100.0),
                             flex_direction: FlexDirection::Row,
                             align_items: AlignItems::Center,
                             padding: UiRect::all(Val::Px(4.0)),
                             border: UiRect::all(Val::Px(1.0)),
                             ..default()
-                        },
-                        background_color: COLOR_BG_PANEL.into(),
-                        border_color: COLOR_BORDER.into(),
-                        ..default()
-                    }).with_children(|item| {
+                        }, BackgroundColor(COLOR_BG_PANEL), BorderColor::all(COLOR_BORDER))).with_children(|item| {
                         // Color indicator
-                        item.spawn(NodeBundle {
-                            style: Style {
+                        item.spawn((Node {
                                 width: Val::Px(2.0),
                                 height: Val::Percent(100.0),
                                 margin: UiRect::right(Val::Px(4.0)),
                                 ..default()
-                            },
-                            background_color: category_color.into(),
-                            ..default()
-                        });
+                            }, BackgroundColor(category_color)));
 
                         // Piece info
-                        item.spawn(TextBundle::from_section(
-                            format!("{}\n@({},{})", piece.piece_type.name().to_uppercase(), piece.internal_position.x, piece.internal_position.y),
-                            TextStyle {
-                                font_size: 12.0,
-                                color: COLOR_TEXT_SECONDARY,
-                                ..default()
-                            },
-                        ));
+                        item.spawn((Text::new(format!("{}\n@({},{})", piece.piece_type.name().to_uppercase(), piece.internal_position.x, piece.internal_position.y)), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(COLOR_TEXT_SECONDARY)));
                     });
                 }
             });
@@ -2093,7 +1878,7 @@ pub fn handle_component_placement_input(
     mut placement_state: ResMut<ComponentPlacementState>,
     palette_query: Query<(&ComponentPaletteItem, &Interaction), Changed<Interaction>>,
     grid_query: Query<(&InternalGridCell, &Interaction), Changed<Interaction>>,
-    mouse_button: Res<Input<MouseButton>>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
 ) {
     // Handle palette clicks (select piece type)
     for (item, interaction) in palette_query.iter() {
@@ -2130,7 +1915,7 @@ pub fn update_component_palette_visuals(
 
         *color = match (is_selected, *interaction) {
             (true, Interaction::Hovered) => COLOR_BUTTON_ACTIVE,    // Selected + hover - bright industrial yellow
-            (true, _) => Color::rgb(0.75, 0.65, 0.22).into(),       // Selected - darker yellow
+            (true, _) => Color::srgb(0.75, 0.65, 0.22).into(),       // Selected - darker yellow
             (false, Interaction::Hovered) => COLOR_BUTTON_HOVER,    // Hover only
             (false, Interaction::Pressed) => COLOR_BUTTON_PRESSED,  // Pressed
             (false, _) => COLOR_BUTTON,                             // Normal
@@ -2170,10 +1955,10 @@ pub fn update_component_grid_visuals(
             // Occupied cells show category color (brighter on hover)
             match *interaction {
                 Interaction::Hovered => category_color,
-                _ => Color::rgb(
-                    category_color.r() * 0.7,
-                    category_color.g() * 0.7,
-                    category_color.b() * 0.7,
+                _ => Color::srgb(
+                    category_color.to_srgba().red * 0.7,
+                    category_color.to_srgba().green * 0.7,
+                    category_color.to_srgba().blue * 0.7,
                 ),
             }
         } else {
@@ -2188,11 +1973,11 @@ pub fn update_component_grid_visuals(
 
 /// Handle keyboard input for component placement
 pub fn handle_component_placement_keyboard(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut placement_state: ResMut<ComponentPlacementState>,
     build_state: Res<BuildingState>,
     mut build_state_next: ResMut<NextState<BuildState>>,
-    mut place_events: EventWriter<PlaceModuleRequest>,
+    mut place_events: MessageWriter<PlaceModuleRequest>,
 ) {
     if !placement_state.active {
         return;
@@ -2205,7 +1990,7 @@ pub fn handle_component_placement_keyboard(
     }
 
     // Enter: Finalize and place module
-    if keyboard.just_pressed(KeyCode::Return) {
+    if keyboard.just_pressed(KeyCode::Enter) {
         let pieces = placement_state.finalize();
 
         // Convert pieces to subcomponents
@@ -2270,7 +2055,7 @@ pub fn handle_component_placement_keyboard(
         let custom_name = format!("Custom {}", placement_state.module_type.name());
 
         // Send place request
-        place_events.send(PlaceModuleRequest {
+        place_events.write(PlaceModuleRequest {
             module_type: placement_state.module_type,
             grid_position: IVec2::ZERO, // Will be set by placement system
             rotation: build_state.rotation,
@@ -2292,13 +2077,13 @@ pub fn show_piece_context_menu(
     mut commands: Commands,
     placement_state: Res<ComponentPlacementState>,
     grid_query: Query<(&InternalGridCell, &Interaction), Changed<Interaction>>,
-    mouse_button: Res<Input<MouseButton>>,
+    mouse_button: Res<ButtonInput<MouseButton>>,
     existing_menu: Query<Entity, With<PieceContextMenu>>,
     mut customization_state: ResMut<PieceCustomizationState>,
 ) {
     // Despawn existing menu if any
     for entity in existing_menu.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 
     // Check for right-clicks on grid cells
@@ -2316,27 +2101,21 @@ pub fn show_piece_context_menu(
 
                 // Spawn context menu with industrial styling
                 commands.spawn((
-                    NodeBundle {
-                        style: Style {
+                    (Node {
                             position_type: PositionType::Absolute,
-                            left: Val::Px(400.0), // Center of screen
+                            left: Val::Px(400.0), 
                             top: Val::Px(300.0),
                             flex_direction: FlexDirection::Column,
                             padding: UiRect::all(Val::Px(6.0)),
                             row_gap: Val::Px(3.0),
                             border: UiRect::all(Val::Px(2.0)),
                             ..default()
-                        },
-                        background_color: COLOR_BG_PANEL.into(),
-                        border_color: COLOR_BORDER_LIGHT.into(),
-                        ..default()
-                    },
+                        }, BackgroundColor(COLOR_BG_PANEL), BorderColor::all(COLOR_BORDER_LIGHT)),
                     PieceContextMenu,
                 )).with_children(|menu| {
                     // Option 1: Customize this piece
                     menu.spawn((
-                        ButtonBundle {
-                            style: Style {
+                        (Node {
                                 width: Val::Px(220.0),
                                 height: Val::Px(32.0),
                                 justify_content: JustifyContent::FlexStart,
@@ -2344,30 +2123,18 @@ pub fn show_piece_context_menu(
                                 padding: UiRect::all(Val::Px(8.0)),
                                 border: UiRect::all(Val::Px(1.0)),
                                 ..default()
-                            },
-                            background_color: COLOR_BUTTON.into(),
-                            border_color: COLOR_BORDER.into(),
-                            ..default()
-                        },
+                            }, BackgroundColor(COLOR_BUTTON), BorderColor::all(COLOR_BORDER)),
                         ContextMenuOption {
                             option_type: ContextMenuOptionType::CustomizeOne,
                         },
                     )).with_children(|button| {
-                        button.spawn(TextBundle::from_section(
-                            format!("> CUSTOMIZE {}", piece.piece_type.name().to_uppercase()),
-                            TextStyle {
-                                font_size: 13.0,
-                                color: COLOR_TEXT_PRIMARY,
-                                ..default()
-                            },
-                        ));
+                        button.spawn((Text::new(format!("> CUSTOMIZE {}", piece.piece_type.name().to_uppercase())), TextFont { font_size: FontSize::Px(13.0), ..default() }, TextColor(COLOR_TEXT_PRIMARY)));
                     });
 
                     // Option 2: Customize all connected pieces (if more than one)
                     if connected.len() > 1 {
                         menu.spawn((
-                            ButtonBundle {
-                                style: Style {
+                            (Node {
                                     width: Val::Px(220.0),
                                     height: Val::Px(32.0),
                                     justify_content: JustifyContent::FlexStart,
@@ -2375,30 +2142,18 @@ pub fn show_piece_context_menu(
                                     padding: UiRect::all(Val::Px(8.0)),
                                     border: UiRect::all(Val::Px(1.0)),
                                     ..default()
-                                },
-                                background_color: COLOR_BUTTON.into(),
-                                border_color: COLOR_BORDER.into(),
-                                ..default()
-                            },
+                                }, BackgroundColor(COLOR_BUTTON), BorderColor::all(COLOR_BORDER)),
                             ContextMenuOption {
                                 option_type: ContextMenuOptionType::CustomizeGroup(connected.len()),
                             },
                         )).with_children(|button| {
-                            button.spawn(TextBundle::from_section(
-                                format!("> CUSTOMIZE ALL {} CONNECTED", connected.len()),
-                                TextStyle {
-                                    font_size: 13.0,
-                                    color: COLOR_TEXT_ACTIVE,
-                                    ..default()
-                                },
-                            ));
+                            button.spawn((Text::new(format!("> CUSTOMIZE ALL {} CONNECTED", connected.len())), TextFont { font_size: FontSize::Px(13.0), ..default() }, TextColor(COLOR_TEXT_ACTIVE)));
                         });
                     }
 
                     // Option 3: Remove piece (warning style)
                     menu.spawn((
-                        ButtonBundle {
-                            style: Style {
+                        (Node {
                                 width: Val::Px(220.0),
                                 height: Val::Px(32.0),
                                 justify_content: JustifyContent::FlexStart,
@@ -2406,23 +2161,12 @@ pub fn show_piece_context_menu(
                                 padding: UiRect::all(Val::Px(8.0)),
                                 border: UiRect::all(Val::Px(1.0)),
                                 ..default()
-                            },
-                            background_color: Color::rgb(0.25, 0.15, 0.15).into(),
-                            border_color: COLOR_DANGER.into(),
-                            ..default()
-                        },
+                            }, BackgroundColor(Color::srgb(0.25, 0.15, 0.15)), BorderColor::all(COLOR_DANGER)),
                         ContextMenuOption {
                             option_type: ContextMenuOptionType::Remove,
                         },
                     )).with_children(|button| {
-                        button.spawn(TextBundle::from_section(
-                            "> REMOVE PIECE",
-                            TextStyle {
-                                font_size: 13.0,
-                                color: COLOR_DANGER,
-                                ..default()
-                            },
-                        ));
+                        button.spawn((Text::new("> REMOVE PIECE"), TextFont { font_size: FontSize::Px(13.0), ..default() }, TextColor(COLOR_DANGER)));
                     });
                 });
 
@@ -2474,7 +2218,7 @@ pub fn handle_context_menu_input(
 
             // Despawn the context menu
             for entity in menu_query.iter() {
-                commands.entity(entity).despawn_recursive();
+                commands.entity(entity).despawn();
             }
         }
     }
@@ -2490,7 +2234,7 @@ pub fn spawn_piece_customization_panel(
     // Despawn existing panel if not active
     if !customization_state.active {
         for entity in existing_panel.iter() {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
         return;
     }
@@ -2511,8 +2255,7 @@ pub fn spawn_piece_customization_panel(
 
     // Spawn customization panel
     commands.spawn((
-        NodeBundle {
-            style: Style {
+        (Node {
                 width: Val::Px(400.0),
                 height: Val::Px(500.0),
                 position_type: PositionType::Absolute,
@@ -2522,10 +2265,7 @@ pub fn spawn_piece_customization_panel(
                 padding: UiRect::all(Val::Px(20.0)),
                 row_gap: Val::Px(10.0),
                 ..default()
-            },
-            background_color: Color::rgb(0.15, 0.15, 0.18).into(),
-            ..default()
-        },
+            }, BackgroundColor(Color::srgb(0.15, 0.15, 0.18))),
         PieceCustomizationPanelRoot,
     )).with_children(|panel| {
         // Title
@@ -2535,75 +2275,40 @@ pub fn spawn_piece_customization_panel(
             format!("Customize {}", piece_type.name())
         };
 
-        panel.spawn(TextBundle::from_section(
-            title,
-            TextStyle {
-                font_size: 20.0,
-                color: Color::rgb(0.9, 0.9, 0.9),
-                ..default()
-            },
-        ));
+        panel.spawn((Text::new(title), TextFont { font_size: FontSize::Px(20.0), ..default() }, TextColor(Color::srgb(0.9, 0.9, 0.9))));
 
         // Get properties for this piece type
         let properties = get_piece_properties(piece_type);
 
         // Spawn sliders for each property
         for (key, (_min, _max, default_val)) in properties {
-            panel.spawn(NodeBundle {
-                style: Style {
+            panel.spawn((Node {
                     flex_direction: FlexDirection::Column,
                     row_gap: Val::Px(5.0),
                     ..default()
-                },
-                ..default()
-            }).with_children(|prop_group| {
+                })).with_children(|prop_group| {
                 // Label
-                prop_group.spawn(TextBundle::from_section(
-                    get_property_label(&key),
-                    TextStyle {
-                        font_size: 14.0,
-                        color: Color::rgb(0.8, 0.8, 0.8),
-                        ..default()
-                    },
-                ));
+                prop_group.spawn((Text::new(get_property_label(&key)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.8, 0.8, 0.8))));
 
                 // Slider (placeholder - would need actual slider component)
                 prop_group.spawn((
-                    NodeBundle {
-                        style: Style {
+                    (Node {
                             width: Val::Percent(100.0),
                             height: Val::Px(20.0),
                             ..default()
-                        },
-                        background_color: Color::rgb(0.3, 0.3, 0.35).into(),
-                        ..default()
-                    },
+                        }, BackgroundColor(Color::srgb(0.3, 0.3, 0.35))),
                     PieceCustomizationSlider {
                         property_key: key.clone(),
                     },
                 ));
 
                 // Value display
-                prop_group.spawn(TextBundle::from_section(
-                    format!("{:.1}", default_val),
-                    TextStyle {
-                        font_size: 12.0,
-                        color: Color::rgb(0.7, 0.7, 0.7),
-                        ..default()
-                    },
-                ));
+                prop_group.spawn((Text::new(format!("{:.1}", default_val)), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(Color::srgb(0.7, 0.7, 0.7))));
             });
         }
 
         // Controls help
-        panel.spawn(TextBundle::from_section(
-            "TODO: Use arrow keys to adjust values\n[Enter] Apply to pieces | [Esc] Cancel",
-            TextStyle {
-                font_size: 14.0,
-                color: Color::rgb(0.9, 0.7, 0.5),
-                ..default()
-            },
-        ));
+        panel.spawn((Text::new("TODO: Use arrow keys to adjust values\n[Enter] Apply to pieces | [Esc] Cancel"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.9, 0.7, 0.5))));
     });
 }
 
@@ -2647,7 +2352,7 @@ fn get_piece_properties(piece_type: &ComponentPieceType) -> Vec<(String, (f32, f
 
 /// Handle keyboard input for piece customization
 pub fn handle_piece_customization_keyboard(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut customization_state: ResMut<PieceCustomizationState>,
     mut placement_state: ResMut<ComponentPlacementState>,
 ) {
@@ -2661,7 +2366,7 @@ pub fn handle_piece_customization_keyboard(
     }
 
     // Enter: Apply customization
-    if keyboard.just_pressed(KeyCode::Return) {
+    if keyboard.just_pressed(KeyCode::Enter) {
         let properties = customization_state.apply();
 
         // Apply properties to the target piece(s)

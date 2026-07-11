@@ -1,12 +1,11 @@
 use bevy::prelude::*;
-use bevy::sprite::TextureAtlasSprite;
 use rand::Rng;
-use crate::states::GameState;
+use crate::states::{GameState, SpatialSet};
 use crate::components::*;
 use crate::resources::*;
 use crate::events::*;
 use crate::sprite_map;
-use crate::ai_submarine::components::AiSubmarine;
+use crate::ai_ship::components::AiShip;
 
 mod behaviors;
 pub mod food_chain;
@@ -23,7 +22,8 @@ pub struct CreaturePlugin;
 impl Plugin for CreaturePlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<EcosystemState>()
-            .init_resource::<EcosystemConfig>();
+            .init_resource::<EcosystemConfig>()
+            .init_resource::<noise_trail::NoiseTrailTimer>();
 
         app.add_systems(
             Update,
@@ -40,6 +40,7 @@ impl Plugin for CreaturePlugin {
                 parasite_attach_system,
             )
                 .chain()
+                .after(SpatialSet::Update)
                 .run_if(in_state(GameState::Exploring)),
         )
         .add_systems(
@@ -68,12 +69,12 @@ impl Plugin for CreaturePlugin {
 fn spawn_creatures(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
+    mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
     time: Res<Time>,
     config: Res<GameConfig>,
-    sub_state: Res<DepthState>,
+    ship_state: Res<DepthState>,
     world_state: Res<WorldState>,
-    submarine_query: Query<&Transform, With<Submarine>>,
+    ship_query: Query<&Transform, With<Ship>>,
     creature_query: Query<&Creature>,
     eco_state: Res<EcosystemState>,
     eco_config: Res<EcosystemConfig>,
@@ -83,14 +84,14 @@ fn spawn_creatures(
     // Don't spawn any hostile creatures in the first 30 seconds
     let hostile_warmup = 30.0;
 
-    *spawn_timer += time.delta_seconds();
+    *spawn_timer += time.delta_secs();
 
     let total_creatures: u32 = eco_state.population_counts.values().sum();
     if total_creatures >= eco_config.max_total_creatures {
         return;
     }
 
-    let depth = sub_state.current_depth.abs();
+    let depth = ship_state.current_depth.abs();
     let max_creatures = (8 + (depth / 300.0) as usize).min(eco_config.max_total_creatures as usize);
     if creature_query.iter().count() >= max_creatures {
         return;
@@ -156,24 +157,24 @@ fn spawn_creatures(
             return;
         }
 
-        let sub_pos = submarine_query
-            .get_single()
+        let ship_pos = ship_query
+            .single()
             .map(|t| t.translation.truncate())
             .unwrap_or(Vec2::ZERO);
 
         let mut rng = rand::thread_rng();
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
         let dist = rng.gen_range(600.0..1000.0);
-        let spawn_pos = sub_pos + Vec2::new(angle.cos() * dist, angle.sin() * dist);
+        let spawn_pos = ship_pos + Vec2::new(angle.cos() * dist, angle.sin() * dist);
 
-        spawn_creature(&mut commands, &asset_server, &mut texture_atlases, creature_type, spawn_pos);
+        spawn_creature(&mut commands, &asset_server, &mut texture_atlas_layouts, creature_type, spawn_pos);
 
         // ParasiteSwarm spawns in clusters
         if creature_type == CreatureType::ParasiteSwarm {
             let group_size = rng.gen_range(3..8);
             for _ in 0..group_size {
                 let offset = Vec2::new(rng.gen_range(-40.0..40.0), rng.gen_range(-40.0..40.0));
-                spawn_creature(&mut commands, &asset_server, &mut texture_atlases, CreatureType::ParasiteSwarm, spawn_pos + offset);
+                spawn_creature(&mut commands, &asset_server, &mut texture_atlas_layouts, CreatureType::ParasiteSwarm, spawn_pos + offset);
             }
         }
     }
@@ -183,7 +184,7 @@ fn spawn_creatures(
 fn spawn_creature(
     commands: &mut Commands,
     asset_server: &AssetServer,
-    texture_atlases: &mut Assets<TextureAtlas>,
+    texture_atlas_layouts: &mut Assets<TextureAtlasLayout>,
     creature_type: CreatureType,
     position: Vec2,
 ) {
@@ -234,26 +235,25 @@ fn spawn_creature(
     };
 
     let texture: Handle<Image> = asset_server.load(sprite_map::creature_sprite_path(creature_type));
-    let atlas = TextureAtlas::from_grid(
-        texture,
-        Vec2::new(frame_w as f32, frame_h as f32),
+    let layout = TextureAtlasLayout::from_grid(
+        UVec2::new(frame_w, frame_h),
         total_frames,
         1,
         None,
         None,
     );
+    let layout_handle = texture_atlas_layouts.add(layout);
 
     let mut entity_commands = commands.spawn((
-        SpriteSheetBundle {
-            texture_atlas: texture_atlases.add(atlas),
-            sprite: TextureAtlasSprite {
-                index: 0,
+        (Sprite {
+                image: texture,
                 custom_size: Some(Vec2::new(w, h)),
+                texture_atlas: Some(TextureAtlas {
+                    layout: layout_handle,
+                    index: 0,
+                }),
                 ..default()
-            },
-            transform: Transform::from_xyz(position.x, position.y, 0.0),
-            ..default()
-        },
+            }, Transform::from_xyz(position.x, position.y, 0.0)),
         Creature {
             creature_type,
             health: scaled_health,
@@ -284,9 +284,9 @@ fn spawn_creature(
         Velocity(Vec2::ZERO),
         CreatureAnimation {
             timer: Timer::from_seconds(anim_speed, TimerMode::Repeating),
-            swim_frames,
-            attack_frames,
-            total_frames,
+            swim_frames: swim_frames as usize,
+            attack_frames: attack_frames as usize,
+            total_frames: total_frames as usize,
             current_frame: 0,
         },
         CreatureNeeds {
@@ -330,13 +330,13 @@ fn spawn_creature(
 /// Moves creatures based on AI state
 fn creature_movement(
     time: Res<Time>,
-    submarine_query: Query<&Transform, With<Submarine>>,
-    mut creature_query: Query<(Entity, &mut Transform, &Creature, &CreatureAI, &mut Velocity), Without<Submarine>>,
-    corpse_query: Query<&Transform, (With<Corpse>, Without<Creature>, Without<Submarine>)>,
-    ai_sub_positions: Query<&Transform, (With<AiSubmarine>, Without<Creature>, Without<Submarine>)>,
+    ship_query: Query<&Transform, With<Ship>>,
+    mut creature_query: Query<(Entity, &mut Transform, &Creature, &CreatureAI, &mut Velocity), Without<Ship>>,
+    corpse_query: Query<&Transform, (With<Corpse>, Without<Creature>, Without<Ship>)>,
+    ai_ship_positions: Query<&Transform, (With<AiShip>, Without<Creature>, Without<Ship>)>,
 ) {
-    let sub_pos = submarine_query
-        .get_single()
+    let ship_pos = ship_query
+        .single()
         .map(|t| t.translation.truncate())
         .unwrap_or(Vec2::ZERO);
 
@@ -350,19 +350,19 @@ fn creature_movement(
 
         let target_pos = if let Some(ref eco_target) = ai.target {
             match eco_target {
-                EcoTarget::Submarine(_) => sub_pos,
-                EcoTarget::AiSubmarine(e) => {
-                    ai_sub_positions.get(*e).ok()
+                EcoTarget::Ship(_) => ship_pos,
+                EcoTarget::AiShip(e) => {
+                    ai_ship_positions.get(*e).ok()
                         .map(|t| t.translation.truncate())
-                        .unwrap_or(sub_pos)
+                        .unwrap_or(ship_pos)
                 }
                 EcoTarget::Creature(e) => {
-                    creature_pos_map.get(e).copied().unwrap_or(sub_pos)
+                    creature_pos_map.get(e).copied().unwrap_or(ship_pos)
                 }
                 EcoTarget::Corpse(e) => {
                     corpse_query.get(*e).ok()
                         .map(|t| t.translation.truncate())
-                        .unwrap_or(sub_pos)
+                        .unwrap_or(ship_pos)
                 }
                 EcoTarget::Position(p) => *p,
             }
@@ -385,7 +385,7 @@ fn creature_movement(
                     // Stalker: weaves side to side while approaching
                     CreatureType::Stalker => {
                         let perp = Vec2::new(-direction.y, direction.x);
-                        let weave = (time.elapsed_seconds() * 3.0).sin() * 0.4;
+                        let weave = (time.elapsed_secs() * 3.0).sin() * 0.4;
                         (direction + perp * weave).normalize_or_zero() * creature.speed * rage_mult
                     }
                     // Leviathan: slow sweeping approach, enraged when hurt
@@ -394,7 +394,7 @@ fn creature_movement(
                             direction * creature.speed * 1.8 * rage_mult
                         } else {
                             let perp = Vec2::new(-direction.y, direction.x);
-                            let sweep = (time.elapsed_seconds() * 1.2).sin() * 0.3;
+                            let sweep = (time.elapsed_secs() * 1.2).sin() * 0.3;
                             (direction + perp * sweep).normalize_or_zero() * creature.speed * rage_mult
                         }
                     }
@@ -461,9 +461,9 @@ fn creature_movement(
             _ => 2.0,
         };
 
-        velocity.0 = velocity.0.lerp(target_velocity, lerp_factor * time.delta_seconds());
-        transform.translation.x += velocity.0.x * time.delta_seconds();
-        transform.translation.y += velocity.0.y * time.delta_seconds();
+        velocity.0 = velocity.0.lerp(target_velocity, lerp_factor * time.delta_secs());
+        transform.translation.x += velocity.0.x * time.delta_secs();
+        transform.translation.y += velocity.0.y * time.delta_secs();
 
         if velocity.0.length_squared() > 1.0 {
             let angle = velocity.0.y.atan2(velocity.0.x);
@@ -475,16 +475,16 @@ fn creature_movement(
 /// Creature attack system — damages player ship or AI ships
 fn creature_attack_system(
     time: Res<Time>,
-    sub_query: Query<(Entity, &Transform), With<Submarine>>,
-    mut creature_query: Query<(Entity, &Transform, &Creature, &CreatureAI, &mut AttackCooldown), Without<Submarine>>,
-    ai_sub_query: Query<(Entity, &Transform), (With<AiSubmarine>, Without<Submarine>)>,
-    mut damage_events: EventWriter<SubmarineDamaged>,
-    mut ai_damage_events: EventWriter<AiSubDamaged>,
-    mut attacking_events: EventWriter<CreatureAttacking>,
-    mut notifications: EventWriter<ShowNotification>,
+    ship_query: Query<(Entity, &Transform), With<Ship>>,
+    mut creature_query: Query<(Entity, &Transform, &Creature, &CreatureAI, &mut AttackCooldown), Without<Ship>>,
+    ai_ship_query: Query<(Entity, &Transform), (With<AiShip>, Without<Ship>)>,
+    mut damage_events: MessageWriter<ShipDamaged>,
+    mut ai_damage_events: MessageWriter<AiShipDamaged>,
+    mut attacking_events: MessageWriter<CreatureAttacking>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
-    let Ok((sub_entity, sub_transform)) = sub_query.get_single() else { return };
-    let sub_pos = sub_transform.translation.truncate();
+    let Ok((ship_entity, ship_transform)) = ship_query.single() else { return };
+    let ship_pos = ship_transform.translation.truncate();
 
     for (creature_entity, transform, creature, ai, mut cooldown) in creature_query.iter_mut() {
         if !matches!(ai.state, CreatureAIState::Attacking) {
@@ -492,7 +492,7 @@ fn creature_attack_system(
         }
 
         cooldown.timer.tick(time.delta());
-        if !cooldown.timer.finished() {
+        if !cooldown.timer.is_finished() {
             continue;
         }
 
@@ -501,38 +501,38 @@ fn creature_attack_system(
         let health_pct = if creature.max_health > 0.0 { creature.health / creature.max_health } else { 1.0 };
         let rage_damage = if health_pct < 0.4 { creature.damage * 1.25 } else { creature.damage };
 
-        if matches!(ai.target, Some(EcoTarget::Submarine(_))) {
-            let dist = creature_pos.distance(sub_pos);
+        if matches!(ai.target, Some(EcoTarget::Ship(_))) {
+            let dist = creature_pos.distance(ship_pos);
             if dist > 100.0 { continue; }
 
             cooldown.timer.reset();
 
-            attacking_events.send(CreatureAttacking {
+            attacking_events.write(CreatureAttacking {
                 creature: creature_entity,
-                target: sub_entity,
+                target: ship_entity,
             });
 
-            damage_events.send(SubmarineDamaged {
+            damage_events.write(ShipDamaged {
                 source: DamageSource::Creature(creature_entity),
                 amount: rage_damage,
                 position: Some(creature_pos),
-                direction: Some((creature_pos - sub_pos).normalize_or_zero()),
+                direction: Some((creature_pos - ship_pos).normalize_or_zero()),
             });
 
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("{:?} attacks! ({:.0} damage)", creature.creature_type, rage_damage),
                 notification_type: NotificationType::Danger,
                 duration: 2.0,
             });
-        } else if let Some(EcoTarget::AiSubmarine(ai_sub_entity)) = ai.target {
-            if let Ok((ai_e, ai_transform)) = ai_sub_query.get(ai_sub_entity) {
+        } else if let Some(EcoTarget::AiShip(ai_ship_entity)) = ai.target {
+            if let Ok((ai_e, ai_transform)) = ai_ship_query.get(ai_ship_entity) {
                 let ai_pos = ai_transform.translation.truncate();
                 let dist = creature_pos.distance(ai_pos);
                 if dist > 100.0 { continue; }
 
                 cooldown.timer.reset();
 
-                ai_damage_events.send(AiSubDamaged {
+                ai_damage_events.write(AiShipDamaged {
                     target: ai_e,
                     source: DamageSource::Creature(Entity::PLACEHOLDER),
                     amount: rage_damage,
@@ -547,27 +547,27 @@ fn creature_attack_system(
 /// ParasiteSwarm: attaches to hull and slowly drains systems
 fn parasite_attach_system(
     time: Res<Time>,
-    parasite_query: Query<(&Transform, &Creature, &CreatureAI), Without<Submarine>>,
-    sub_query: Query<&Transform, With<Submarine>>,
-    mut damage_events: EventWriter<SubmarineDamaged>,
-    mut notifications: EventWriter<ShowNotification>,
+    parasite_query: Query<(&Transform, &Creature, &CreatureAI), Without<Ship>>,
+    ship_query: Query<&Transform, With<Ship>>,
+    mut damage_events: MessageWriter<ShipDamaged>,
+    mut notifications: MessageWriter<ShowNotification>,
     mut drain_timer: Local<f32>,
 ) {
-    *drain_timer += time.delta_seconds();
+    *drain_timer += time.delta_secs();
     if *drain_timer < 1.0 {
         return;
     }
 
-    let Ok(sub_transform) = sub_query.get_single() else { return };
-    let sub_pos = sub_transform.translation.truncate();
+    let Ok(ship_transform) = ship_query.single() else { return };
+    let ship_pos = ship_transform.translation.truncate();
 
     let mut attached_count = 0u32;
     for (transform, creature, ai) in parasite_query.iter() {
         if creature.creature_type != CreatureType::ParasiteSwarm { continue; }
         if !matches!(ai.state, CreatureAIState::Attacking) { continue; }
-        if !matches!(ai.target, Some(EcoTarget::Submarine(_))) { continue; }
+        if !matches!(ai.target, Some(EcoTarget::Ship(_))) { continue; }
 
-        let dist = transform.translation.truncate().distance(sub_pos);
+        let dist = transform.translation.truncate().distance(ship_pos);
         if dist < 80.0 {
             attached_count += 1;
         }
@@ -576,7 +576,7 @@ fn parasite_attach_system(
     if attached_count > 0 {
         *drain_timer = 0.0;
         let drain_damage = attached_count as f32 * 0.5;
-        damage_events.send(SubmarineDamaged {
+        damage_events.write(ShipDamaged {
             source: DamageSource::Creature(Entity::PLACEHOLDER),
             amount: drain_damage,
             position: None,
@@ -584,7 +584,7 @@ fn parasite_attach_system(
         });
 
         if attached_count >= 3 {
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: format!("Parasite swarm draining hull! ({} attached)", attached_count),
                 notification_type: NotificationType::Danger,
                 duration: 2.0,
@@ -595,20 +595,20 @@ fn parasite_attach_system(
 
 /// Checks if creatures detect the ship
 fn check_creature_detection(
-    submarine_query: Query<&Transform, With<Submarine>>,
+    ship_query: Query<&Transform, With<Ship>>,
     creature_query: Query<(Entity, &Transform, &Creature, &CreatureAI)>,
-    mut spotted_events: EventWriter<CreatureSpotted>,
+    mut spotted_events: MessageWriter<CreatureSpotted>,
     mut detected: Local<std::collections::HashSet<Entity>>,
 ) {
-    let Ok(sub_transform) = submarine_query.get_single() else { return };
+    let Ok(ship_transform) = ship_query.single() else { return };
 
     for (entity, transform, creature, ai) in creature_query.iter() {
         let distance = transform.translation.truncate()
-            .distance(sub_transform.translation.truncate());
+            .distance(ship_transform.translation.truncate());
 
         if matches!(ai.state, CreatureAIState::Hunting | CreatureAIState::Attacking) && !detected.contains(&entity) {
             detected.insert(entity);
-            spotted_events.send(CreatureSpotted {
+            spotted_events.write(CreatureSpotted {
                 creature: entity,
                 creature_type: creature.creature_type,
                 distance,
@@ -622,21 +622,21 @@ fn check_creature_detection(
 /// Despawn creatures that are very far from the ship
 fn cleanup_distant_creatures(
     mut commands: Commands,
-    sub_query: Query<&Transform, With<Submarine>>,
+    ship_query: Query<&Transform, With<Ship>>,
     creature_query: Query<(Entity, &Transform, &Creature, &CreatureAI)>,
     mut eco_state: ResMut<EcosystemState>,
 ) {
-    let Ok(sub_transform) = sub_query.get_single() else { return };
-    let sub_pos = sub_transform.translation.truncate();
+    let Ok(ship_transform) = ship_query.single() else { return };
+    let ship_pos = ship_transform.translation.truncate();
 
     for (entity, transform, creature, ai) in creature_query.iter() {
-        let dist = transform.translation.truncate().distance(sub_pos);
+        let dist = transform.translation.truncate().distance(ship_pos);
         if dist > 2500.0 {
             if ai.state == CreatureAIState::Migrating { continue; }
             if let Some(count) = eco_state.population_counts.get_mut(&creature.creature_type) {
                 *count = count.saturating_sub(1);
             }
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
 }
@@ -646,7 +646,7 @@ fn animate_creature_sprites(
     time: Res<Time>,
     mut query: Query<(
         &mut CreatureAnimation,
-        &mut TextureAtlasSprite,
+        &mut Sprite,
         Option<&CreatureAI>,
     )>,
 ) {
@@ -670,6 +670,8 @@ fn animate_creature_sprites(
             anim.current_frame = (anim.current_frame + 1) % anim.swim_frames;
         }
 
-        sprite.index = anim.current_frame;
+        if let Some(atlas) = sprite.texture_atlas.as_mut() {
+            atlas.index = anim.current_frame;
+        }
     }
 }
