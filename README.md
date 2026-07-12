@@ -53,13 +53,9 @@ cargo check              # Fast type-check without a full build
 | `Esc` | Pause |
 | `Enter` | Start / launch |
 
-See [depths_below/docs/CONTROLS_GUIDE.md](depths_below/docs/CONTROLS_GUIDE.md) for the full guide.
-
 ## Project Status
 
 The core gameplay loop is fully functional: building, launching, surviving, fighting, salvaging, docking, and discovering logs all work. Missing pieces include progression depth (hull upgrade path, build costs), audio, and some gameplay polish (stealth mechanics, alert ramping, a tutorial).
-
-See [depths_below/GAME_STATE.md](depths_below/GAME_STATE.md) for the full current-state writeup.
 
 ## License
 
