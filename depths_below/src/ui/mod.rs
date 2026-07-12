@@ -24,6 +24,7 @@ impl Plugin for UiPlugin {
             .init_resource::<windows::framework::WindowZCounter>()
             .init_resource::<windows::tooltip::TooltipState>()
             .init_resource::<windows::notification_log::NotificationHistory>()
+            .init_resource::<PendingWarpTarget>()
             .add_systems(Startup, setup_ui)
             .add_systems(
                 Update,
@@ -132,6 +133,15 @@ impl Plugin for UiPlugin {
                     toggle_crew_menu,
                     toggle_map_overlay,
                     crew_menu_assign_input,
+                ).run_if(in_state(GameState::Exploring)),
+            )
+            // Map-click warp destination + G-hold warp dash (while exploring)
+            .add_systems(
+                Update,
+                (
+                    map_click_system,
+                    warp_dash_input,
+                    execute_warp_dash,
                 ).run_if(in_state(GameState::Exploring)),
             )
             // Upgrade shop (at surface base)
@@ -288,6 +298,46 @@ pub struct GravityIndicatorText;
 /// Marker for map/inventory overlay
 #[derive(Component)]
 pub struct MapOverlay;
+
+/// The clickable world-map square within the overlay — tagged so the click
+/// handler can find it and convert cursor position to world coordinates.
+#[derive(Component)]
+struct MapPanel;
+
+/// Gold crosshair marking the currently selected warp destination.
+#[derive(Component)]
+struct PendingWarpMarker;
+
+/// World position the player last clicked on the map — persists across
+/// opening/closing the map (it's a resource, not tied to the overlay's
+/// entities) so the selection sticks until they pick a new one.
+#[derive(Resource, Default)]
+pub struct PendingWarpTarget(pub Option<Vec2>);
+
+/// On the ship while a long-range warp dash is charging. Target position and
+/// fuel cost are locked in at charge-start; hold G to keep charging, release
+/// early to cancel.
+#[derive(Component)]
+pub struct MapWarpCharging {
+    pub charge_timer: Timer,
+    pub target_pos: Vec2,
+    pub fuel_cost: f32,
+}
+
+const WARP_DASH_FUEL_PER_1000: f32 = 1.0;
+const WARP_DASH_BASE_CHARGE: f32 = 2.0;
+const WARP_DASH_DISTANCE_PER_SECOND: f32 = 15_000.0;
+/// Stop this far short of the exact clicked point — avoids ever materializing
+/// inside whatever's sitting there (a station, a boss hull, etc).
+const WARP_DASH_ARRIVAL_BUFFER: f32 = 3000.0;
+
+fn warp_dash_fuel_cost(distance: f32) -> f32 {
+    (distance / 1000.0) * WARP_DASH_FUEL_PER_1000
+}
+
+fn warp_dash_charge_time(distance: f32) -> f32 {
+    WARP_DASH_BASE_CHARGE + distance / WARP_DASH_DISTANCE_PER_SECOND
+}
 
 /// Helper to spawn a HUD bar (background + fill)
 fn spawn_hud_bar(parent: &mut ChildSpawnerCommands, kind: HudBarKind, width: f32, color: Color) {
@@ -1216,6 +1266,345 @@ fn world_to_map_px(world_pos: Vec2, panel_size: f32) -> (f32, f32) {
     (x.clamp(0.0, panel_size), y.clamp(0.0, panel_size))
 }
 
+/// Bundles the map's world-data queries into one SystemParam — Bevy caps how
+/// many parameters a single system function can take (16), and
+/// toggle_map_overlay's own params plus these pushed it past that.
+#[derive(bevy::ecs::system::SystemParam)]
+struct MapWorldData<'w, 's> {
+    ai_ship_query: Query<'w, 's, &'static Transform, With<crate::ai_ship::components::AiShip>>,
+    sim: Res<'w, crate::ai_ship::components::WorldSimulation>,
+    star_query: Query<'w, 's, &'static Transform, With<crate::celestial::components::Star>>,
+    planet_query: Query<'w, 's, &'static Transform, With<crate::celestial::components::Planet>>,
+    bounty_ship_query: Query<'w, 's, (&'static Transform, &'static crate::ai_ship::components::BountyTarget), With<crate::ai_ship::components::AiShip>>,
+    contract_state: Res<'w, crate::contracts::ContractState>,
+}
+
+/// Plain-data snapshot of everything the map needs to render — decoupled
+/// from SystemParams so both toggle_map_overlay (open) and map_click_system
+/// (re-render after picking a destination) can build the exact same UI
+/// without duplicating the layout code.
+struct MapSnapshot {
+    panel_size: f32,
+    player_pos: Vec2,
+    pending_target: Option<Vec2>,
+    current_fuel: f32,
+    stars: Vec<Vec2>,
+    planets: Vec<Vec2>,
+    hostiles: Vec<Vec2>,
+    bounties: Vec<Vec2>,
+    wrecks_found: usize,
+    caves_found: usize,
+    settlements_found: usize,
+    inventory_items: Vec<(String, u32)>,
+    inventory_weight: (f32, f32),
+    logs_found: Vec<String>,
+}
+
+fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
+    let panel_size = snap.panel_size;
+    commands.spawn((
+        (Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                column_gap: Val::Px(20.0),
+                padding: UiRect::all(Val::Px(20.0)),
+                ..default()
+            }, BackgroundColor(Color::srgba(0.0, 0.0, 0.05, 0.97)), ZIndex(50)),
+        MapOverlay,
+    )).with_children(|parent| {
+        // Left column: map panel + legend stacked underneath it.
+        parent.spawn(Node {
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(8.0),
+            flex_shrink: 0.0,
+            ..default()
+        }).with_children(|col| {
+        // Solar system map: fixed world-anchored frame (not recentered on
+        // the player) so position relative to the whole map is legible.
+        // Clickable — click anywhere to set a warp destination (see
+        // map_click_system); Interaction is what makes Bevy track hover/press
+        // state on this node at all.
+        col.spawn((
+            Node {
+                width: Val::Px(panel_size),
+                height: Val::Px(panel_size),
+                position_type: PositionType::Relative,
+                overflow: Overflow::clip(),
+                flex_shrink: 0.0,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.02, 0.03, 0.08, 1.0)),
+            Interaction::None,
+            MapPanel,
+        )).with_children(|map| {
+            // Star(s)
+            for star_pos in &snap.stars {
+                let (x, y) = world_to_map_px(*star_pos, panel_size);
+                map.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(x - 7.0),
+                        top: Val::Px(y - 7.0),
+                        width: Val::Px(14.0),
+                        height: Val::Px(14.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(1.0, 0.9, 0.4)),
+                ));
+            }
+            // Planets
+            for planet_pos in &snap.planets {
+                let (x, y) = world_to_map_px(*planet_pos, panel_size);
+                map.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(x - 3.5),
+                        top: Val::Px(y - 3.5),
+                        width: Val::Px(7.0),
+                        height: Val::Px(7.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.5, 0.6, 0.8)),
+                ));
+            }
+            // Stations: Haven + resupply outposts
+            for station_pos in std::iter::once(crate::world::home_base::STATION_POS)
+                .chain(crate::world::home_base::OUTPOST_POSITIONS.iter().copied())
+            {
+                let (x, y) = world_to_map_px(station_pos, panel_size);
+                map.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(x - 4.0),
+                        top: Val::Px(y - 4.0),
+                        width: Val::Px(8.0),
+                        height: Val::Px(8.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.25, 1.0, 0.35)),
+                ));
+            }
+            // Hostiles: real (in render range) + still-off-screen simulated
+            for hostile_pos in &snap.hostiles {
+                let (x, y) = world_to_map_px(*hostile_pos, panel_size);
+                map.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(x - 2.0),
+                        top: Val::Px(y - 2.0),
+                        width: Val::Px(4.0),
+                        height: Val::Px(4.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(1.0, 0.15, 0.15)),
+                ));
+            }
+            // Active bounty targets, highlighted on top of the generic red
+            // hostile dot at the same spot — this is specifically "your" hunt.
+            for bounty_pos in &snap.bounties {
+                let (x, y) = world_to_map_px(*bounty_pos, panel_size);
+                map.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(x - 4.0),
+                        top: Val::Px(y - 4.0),
+                        width: Val::Px(8.0),
+                        height: Val::Px(8.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(1.0, 0.2, 0.85)),
+                ));
+            }
+
+            // Pending warp destination, if one is selected — gold crosshair
+            if let Some(target) = snap.pending_target {
+                let (x, y) = world_to_map_px(target, panel_size);
+                map.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(x - 6.0),
+                        top: Val::Px(y - 1.0),
+                        width: Val::Px(12.0),
+                        height: Val::Px(2.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(1.0, 0.85, 0.1)),
+                    PendingWarpMarker,
+                ));
+                map.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(x - 1.0),
+                        top: Val::Px(y - 6.0),
+                        width: Val::Px(2.0),
+                        height: Val::Px(12.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(1.0, 0.85, 0.1)),
+                    PendingWarpMarker,
+                ));
+            }
+
+            // Player marker on top, slightly bigger so it's easy to find
+            let (px, py) = world_to_map_px(snap.player_pos, panel_size);
+            map.spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(px - 3.5),
+                    top: Val::Px(py - 3.5),
+                    width: Val::Px(7.0),
+                    height: Val::Px(7.0),
+                    ..default()
+                },
+                BackgroundColor(Color::srgb(0.3, 0.9, 1.0)),
+            ));
+        });
+
+        // Color key legend, directly under the map
+        col.spawn(Node {
+            flex_direction: FlexDirection::Row,
+            flex_wrap: FlexWrap::Wrap,
+            column_gap: Val::Px(14.0),
+            row_gap: Val::Px(4.0),
+            width: Val::Px(panel_size),
+            ..default()
+        }).with_children(|legend| {
+            let entries: &[(Color, &str)] = &[
+                (Color::srgb(0.3, 0.9, 1.0), "You"),
+                (Color::srgb(0.25, 1.0, 0.35), "Station"),
+                (Color::srgb(1.0, 0.15, 0.15), "Hostile"),
+                (Color::srgb(1.0, 0.2, 0.85), "Bounty target"),
+                (Color::srgb(1.0, 0.9, 0.4), "Star"),
+                (Color::srgb(0.5, 0.6, 0.8), "Planet"),
+                (Color::srgb(1.0, 0.85, 0.1), "Warp target"),
+            ];
+            for (color, label) in entries {
+                legend.spawn(Node {
+                    flex_direction: FlexDirection::Row,
+                    align_items: AlignItems::Center,
+                    column_gap: Val::Px(5.0),
+                    ..default()
+                }).with_children(|row| {
+                    row.spawn((
+                        Node { width: Val::Px(9.0), height: Val::Px(9.0), ..default() },
+                        BackgroundColor(*color),
+                    ));
+                    row.spawn((Text::new(*label), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(Color::srgb(0.75, 0.75, 0.8))));
+                });
+            }
+        });
+        });
+
+        // Sidebar: inventory / discovered locations / logs
+        parent.spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                width: Val::Px(300.0),
+                height: Val::Percent(90.0),
+                padding: UiRect::all(Val::Px(10.0)),
+                row_gap: Val::Px(6.0),
+                overflow: Overflow::clip_y(),
+                flex_shrink: 0.0,
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.1, 0.85)),
+        )).with_children(|parent| {
+            parent.spawn((Text::new("MAP & INVENTORY"), TextFont { font_size: FontSize::Px(22.0), ..default() }, TextColor(Color::WHITE)));
+
+            // Warp dash: destination + projected cost
+            parent.spawn((Text::new("--- Warp Dash ---"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(1.0, 0.85, 0.1))));
+            if let Some(target) = snap.pending_target {
+                let dist = snap.player_pos.distance(target);
+                let fuel_cost = warp_dash_fuel_cost((dist - WARP_DASH_ARRIVAL_BUFFER).max(0.0));
+                let charge_time = warp_dash_charge_time((dist - WARP_DASH_ARRIVAL_BUFFER).max(0.0));
+                let can_afford = snap.current_fuel >= fuel_cost;
+                let cost_color = if can_afford { Color::srgb(0.7, 0.9, 1.0) } else { Color::srgb(1.0, 0.4, 0.4) };
+                parent.spawn((Text::new(format!("Target: {:.0} units away", dist)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::WHITE)));
+                parent.spawn((Text::new(format!("Cost: {:.0} fuel ({:.0} available)", fuel_cost, snap.current_fuel)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(cost_color)));
+                parent.spawn((Text::new(format!("Charge time: {:.0}s", charge_time)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.7, 0.9, 1.0))));
+                parent.spawn((Text::new("Close map (M), hold G to charge and jump."), TextFont { font_size: FontSize::Px(13.0), ..default() }, TextColor(Color::srgb(0.6, 0.9, 0.6))));
+            } else {
+                parent.spawn((Text::new("Click the map to set a destination."), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.6, 0.6, 0.6))));
+            }
+
+            // Discovered locations
+            parent.spawn((Text::new("--- Discovered ---"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(0.6, 0.7, 0.9))));
+            parent.spawn((Text::new(format!("Wrecks found: {}", snap.wrecks_found)), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.8, 0.6, 0.4))));
+            parent.spawn((Text::new(format!("Caves found: {}", snap.caves_found)), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.6, 0.6, 0.6))));
+            parent.spawn((Text::new(format!("Settlements: {}", snap.settlements_found)), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.4, 0.8, 0.4))));
+
+            // Inventory
+            parent.spawn((Text::new("--- Inventory ---"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(1.0, 1.0, 0.0))));
+
+            if snap.inventory_items.is_empty() {
+                parent.spawn((Text::new("(empty)"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.5, 0.5, 0.5))));
+            } else {
+                for (name, count) in &snap.inventory_items {
+                    parent.spawn((Text::new(format!("{}: x{}", name, count)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::WHITE)));
+                }
+            }
+
+            parent.spawn((Text::new(format!("Weight: {:.0}/{:.0}", snap.inventory_weight.0, snap.inventory_weight.1)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.5, 0.5, 0.5))));
+
+            // Logs found
+            if !snap.logs_found.is_empty() {
+                parent.spawn((Text::new("--- Logs ---"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(0.0, 1.0, 1.0))));
+                for log in &snap.logs_found {
+                    parent.spawn((Text::new(log.clone()), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.7, 0.7, 0.8))));
+                }
+            }
+
+            parent.spawn((Text::new("Press M to close"), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(Color::srgb(0.25, 0.25, 0.25))));
+        });
+    });
+}
+
+fn build_map_snapshot(
+    windows: &Query<&Window>,
+    player_pos: Vec2,
+    pending_target: Option<Vec2>,
+    fuel_state: &FuelState,
+    discovered: &DiscoveredLocations,
+    inventory: &Inventory,
+    statistics: &Statistics,
+    world_data: &MapWorldData,
+) -> MapSnapshot {
+    let (win_w, win_h) = windows.single().map(|w| (w.width(), w.height())).unwrap_or((1280.0, 800.0));
+    let panel_size = (win_w.min(win_h) * 0.85).max(200.0);
+
+    let mut hostiles: Vec<Vec2> = world_data.ai_ship_query.iter().map(|t| t.translation.truncate()).collect();
+    hostiles.extend(
+        world_data.sim.ships.iter()
+            .filter(|s| !s.spawned && s.behavior != crate::ai_ship::components::SimBehavior::Dead)
+            .map(|s| s.position)
+    );
+
+    let bounties: Vec<Vec2> = crate::contracts::bounty_nav::active_bounty_positions_with_id(
+        &world_data.contract_state, &world_data.sim, &world_data.bounty_ship_query,
+    ).into_iter().map(|(pos, _)| pos).collect();
+
+    MapSnapshot {
+        panel_size,
+        player_pos,
+        pending_target,
+        current_fuel: fuel_state.current_fuel,
+        stars: world_data.star_query.iter().map(|t| t.translation.truncate()).collect(),
+        planets: world_data.planet_query.iter().map(|t| t.translation.truncate()).collect(),
+        hostiles,
+        bounties,
+        wrecks_found: discovered.wrecks.len(),
+        caves_found: discovered.caves.len(),
+        settlements_found: discovered.settlements.len(),
+        inventory_items: inventory.items.iter().map(|(item_type, count)| (item_type.name().to_string(), *count)).collect(),
+        inventory_weight: (inventory.current_weight, inventory.max_capacity),
+        logs_found: statistics.logs_found.clone(),
+    }
+}
+
 fn toggle_map_overlay(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -1224,10 +1613,9 @@ fn toggle_map_overlay(
     inventory: Res<Inventory>,
     statistics: Res<Statistics>,
     player_query: Query<&Transform, With<Ship>>,
-    ai_ship_query: Query<&Transform, With<crate::ai_ship::components::AiShip>>,
-    sim: Res<crate::ai_ship::components::WorldSimulation>,
-    star_query: Query<&Transform, With<crate::celestial::components::Star>>,
-    planet_query: Query<&Transform, With<crate::celestial::components::Planet>>,
+    world_data: MapWorldData,
+    pending: Res<PendingWarpTarget>,
+    fuel_state: Res<FuelState>,
     windows: Query<&Window>,
     mut virtual_time: ResMut<Time<Virtual>>,
 ) {
@@ -1247,156 +1635,183 @@ fn toggle_map_overlay(
     virtual_time.pause();
 
     let player_pos = player_query.single().map(|t| t.translation.truncate()).unwrap_or(Vec2::ZERO);
-    let (win_w, win_h) = windows.single().map(|w| (w.width(), w.height())).unwrap_or((1280.0, 800.0));
-    let panel_size = (win_w.min(win_h) * 0.85).max(200.0);
+    let snapshot = build_map_snapshot(&windows, player_pos, pending.0, &fuel_state, &discovered, &inventory, &statistics, &world_data);
+    spawn_map_overlay(&mut commands, &snapshot);
+}
 
-    commands.spawn((
-        (Node {
-                position_type: PositionType::Absolute,
-                width: Val::Percent(100.0),
-                height: Val::Percent(100.0),
-                flex_direction: FlexDirection::Row,
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                column_gap: Val::Px(20.0),
-                padding: UiRect::all(Val::Px(20.0)),
-                ..default()
-            }, BackgroundColor(Color::srgba(0.0, 0.0, 0.05, 0.97)), ZIndex(50)),
-        MapOverlay,
-    )).with_children(|parent| {
-        // Solar system map: fixed world-anchored frame (not recentered on
-        // the player) so position relative to the whole map is legible.
-        parent.spawn((
-            Node {
-                width: Val::Px(panel_size),
-                height: Val::Px(panel_size),
-                position_type: PositionType::Relative,
-                overflow: Overflow::clip(),
-                flex_shrink: 0.0,
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.02, 0.03, 0.08, 1.0)),
-        )).with_children(|map| {
-            // Star(s)
-            for star_transform in star_query.iter() {
-                let (x, y) = world_to_map_px(star_transform.translation.truncate(), panel_size);
-                map.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(x - 7.0),
-                        top: Val::Px(y - 7.0),
-                        width: Val::Px(14.0),
-                        height: Val::Px(14.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(1.0, 0.9, 0.4)),
-                ));
-            }
-            // Planets
-            for planet_transform in planet_query.iter() {
-                let (x, y) = world_to_map_px(planet_transform.translation.truncate(), panel_size);
-                map.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(x - 3.5),
-                        top: Val::Px(y - 3.5),
-                        width: Val::Px(7.0),
-                        height: Val::Px(7.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.5, 0.6, 0.8)),
-                ));
-            }
-            // Enemies: real (in render range) entities...
-            for ai_transform in ai_ship_query.iter() {
-                let (x, y) = world_to_map_px(ai_transform.translation.truncate(), panel_size);
-                map.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(x - 2.0),
-                        top: Val::Px(y - 2.0),
-                        width: Val::Px(4.0),
-                        height: Val::Px(4.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(1.0, 0.15, 0.15)),
-                ));
-            }
-            // ...and still-off-screen simulated ones (most ships, most of the time)
-            for sim_ship in sim.ships.iter().filter(|s| !s.spawned && s.behavior != crate::ai_ship::components::SimBehavior::Dead) {
-                let (x, y) = world_to_map_px(sim_ship.position, panel_size);
-                map.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(x - 2.0),
-                        top: Val::Px(y - 2.0),
-                        width: Val::Px(4.0),
-                        height: Val::Px(4.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(1.0, 0.15, 0.15)),
-                ));
-            }
+/// Handles clicks on the map panel: converts cursor position to world
+/// coordinates, sets that as the pending warp destination, and rebuilds the
+/// entire overlay so the sidebar's cost/charge-time preview and the
+/// crosshair both update in the same frame — patching just the crosshair
+/// left the sidebar (the main feedback the player actually looks at) frozen
+/// on "click the map to set a destination" forever, which read as "clicking
+/// does nothing."
+fn map_click_system(
+    mut commands: Commands,
+    mouse: Res<ButtonInput<MouseButton>>,
+    map_panel: Query<(&ComputedNode, &GlobalTransform), With<MapPanel>>,
+    existing: Query<Entity, With<MapOverlay>>,
+    windows: Query<&Window>,
+    mut pending: ResMut<PendingWarpTarget>,
+    player_query: Query<&Transform, With<Ship>>,
+    discovered: Res<DiscoveredLocations>,
+    inventory: Res<Inventory>,
+    statistics: Res<Statistics>,
+    world_data: MapWorldData,
+    fuel_state: Res<FuelState>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    if !mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
+    let Ok((node, global_transform)) = map_panel.single() else { return };
+    let Some(cursor_pos) = windows.single().ok().and_then(|w| w.cursor_position()) else { return };
 
-            // Player marker on top, slightly bigger so it's easy to find
-            let (px, py) = world_to_map_px(player_pos, panel_size);
-            map.spawn((
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: Val::Px(px - 3.5),
-                    top: Val::Px(py - 3.5),
-                    width: Val::Px(7.0),
-                    height: Val::Px(7.0),
-                    ..default()
-                },
-                BackgroundColor(Color::WHITE),
-            ));
+    let panel_center = global_transform.translation().truncate();
+    let panel_size = node.size();
+    if panel_size.x <= 0.0 || panel_size.y <= 0.0 {
+        return;
+    }
+
+    let local_x = cursor_pos.x - (panel_center.x - panel_size.x / 2.0);
+    let local_y = cursor_pos.y - (panel_center.y - panel_size.y / 2.0);
+    if local_x < 0.0 || local_y < 0.0 || local_x > panel_size.x || local_y > panel_size.y {
+        return; // click landed outside the map panel (e.g. on the sidebar)
+    }
+
+    // Inverse of world_to_map_px
+    let half = panel_size.x / 2.0;
+    let world_x = (local_x - half) / half * MAP_WORLD_RANGE;
+    let world_y = (half - local_y) / half * MAP_WORLD_RANGE;
+    let target = Vec2::new(world_x, world_y);
+    pending.0 = Some(target);
+
+    let player_pos = player_query.single().map(|t| t.translation.truncate()).unwrap_or(Vec2::ZERO);
+    let dist = player_pos.distance(target);
+    notifications.write(ShowNotification {
+        message: format!("Warp target set — {:.0} units away.", dist),
+        notification_type: NotificationType::Info,
+        duration: 2.5,
+    });
+
+    // Full rebuild so the sidebar preview and crosshair are consistent.
+    if let Ok(entity) = existing.single() {
+        commands.entity(entity).despawn();
+    }
+    let snapshot = build_map_snapshot(&windows, player_pos, pending.0, &fuel_state, &discovered, &inventory, &statistics, &world_data);
+    spawn_map_overlay(&mut commands, &snapshot);
+}
+
+/// G: hold to charge a warp dash toward the pending map destination. Release
+/// early to cancel. No-ops (silently, via the Without<MapWarpCharging> guard)
+/// if nothing's selected — same info notification either way explains why.
+fn warp_dash_input(
+    mut commands: Commands,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    time: Res<Time>,
+    ship_query: Query<(Entity, &Transform), (With<Ship>, Without<MapWarpCharging>)>,
+    mut charging_query: Query<(Entity, &mut MapWarpCharging), With<Ship>>,
+    pending: Res<PendingWarpTarget>,
+    fuel_state: Res<FuelState>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    if keyboard.just_pressed(KeyCode::KeyG) {
+        let Ok((entity, transform)) = ship_query.single() else { return };
+        let ship_pos = transform.translation.truncate();
+
+        let Some(target) = pending.0 else {
+            notifications.write(ShowNotification {
+                message: "No warp destination set — open the map (M) and click one.".into(),
+                notification_type: NotificationType::Warning,
+                duration: 3.0,
+            });
+            return;
+        };
+
+        let dist = ship_pos.distance(target);
+        if dist < WARP_DASH_ARRIVAL_BUFFER {
+            notifications.write(ShowNotification {
+                message: "Already at the warp destination.".into(),
+                notification_type: NotificationType::Info,
+                duration: 2.5,
+            });
+            return;
+        }
+
+        let jump_dist = dist - WARP_DASH_ARRIVAL_BUFFER;
+        let fuel_cost = warp_dash_fuel_cost(jump_dist);
+        if fuel_state.current_fuel < fuel_cost {
+            notifications.write(ShowNotification {
+                message: format!("Not enough fuel for the jump ({:.0} needed, {:.0} available).", fuel_cost, fuel_state.current_fuel),
+                notification_type: NotificationType::Warning,
+                duration: 3.0,
+            });
+            return;
+        }
+
+        let dir = (target - ship_pos).normalize_or_zero();
+        let target_pos = target - dir * WARP_DASH_ARRIVAL_BUFFER;
+        let charge_time = warp_dash_charge_time(jump_dist);
+
+        commands.entity(entity).insert(MapWarpCharging {
+            charge_timer: Timer::from_seconds(charge_time, TimerMode::Once),
+            target_pos,
+            fuel_cost,
         });
 
-        // Sidebar: inventory / discovered locations / logs
-        parent.spawn((
-            Node {
-                flex_direction: FlexDirection::Column,
-                width: Val::Px(300.0),
-                height: Val::Percent(90.0),
-                padding: UiRect::all(Val::Px(10.0)),
-                row_gap: Val::Px(6.0),
-                overflow: Overflow::clip_y(),
-                flex_shrink: 0.0,
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.1, 0.85)),
-        )).with_children(|parent| {
-            parent.spawn((Text::new("MAP & INVENTORY"), TextFont { font_size: FontSize::Px(22.0), ..default() }, TextColor(Color::WHITE)));
-
-            // Discovered locations
-            parent.spawn((Text::new(format!("Wrecks found: {}", discovered.wrecks.len())), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.8, 0.6, 0.4))));
-            parent.spawn((Text::new(format!("Caves found: {}", discovered.caves.len())), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.6, 0.6, 0.6))));
-            parent.spawn((Text::new(format!("Settlements: {}", discovered.settlements.len())), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.4, 0.8, 0.4))));
-
-            // Inventory
-            parent.spawn((Text::new("--- Inventory ---"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(1.0, 1.0, 0.0))));
-
-            if inventory.items.is_empty() {
-                parent.spawn((Text::new("(empty)"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.5, 0.5, 0.5))));
-            } else {
-                for (item_type, count) in &inventory.items {
-                    parent.spawn((Text::new(format!("{}: x{}", item_type.name(), count)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::WHITE)));
-                }
-            }
-
-            parent.spawn((Text::new(format!("Weight: {:.0}/{:.0}", inventory.current_weight, inventory.max_capacity)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.5, 0.5, 0.5))));
-
-            // Logs found
-            if !statistics.logs_found.is_empty() {
-                parent.spawn((Text::new("--- Logs ---"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(0.0, 1.0, 1.0))));
-                for log in &statistics.logs_found {
-                    parent.spawn((Text::new(log), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.7, 0.7, 0.8))));
-                }
-            }
-
-            parent.spawn((Text::new("Press M to close"), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(Color::srgb(0.25, 0.25, 0.25))));
+        notifications.write(ShowNotification {
+            message: format!("Warp dash charging: {:.0} fuel, {:.0}s — hold G!", fuel_cost, charge_time),
+            notification_type: NotificationType::Info,
+            duration: charge_time + 1.0,
         });
+        return;
+    }
+
+    if keyboard.just_released(KeyCode::KeyG) {
+        if let Ok((entity, charging)) = charging_query.single() {
+            if !charging.charge_timer.is_finished() {
+                commands.entity(entity).remove::<MapWarpCharging>();
+                notifications.write(ShowNotification {
+                    message: "Warp dash cancelled.".into(),
+                    notification_type: NotificationType::Info,
+                    duration: 2.0,
+                });
+            }
+        }
+        return;
+    }
+
+    if let Ok((_, mut charging)) = charging_query.single_mut() {
+        charging.charge_timer.tick(time.delta());
+    }
+}
+
+/// Completes the jump once the charge finishes: teleport, kill momentum,
+/// spend the fuel locked in at charge-start, clear the destination.
+fn execute_warp_dash(
+    mut commands: Commands,
+    mut ship_query: Query<(Entity, &mut Transform, &mut Velocity, &MapWarpCharging), With<Ship>>,
+    mut fuel_state: ResMut<FuelState>,
+    mut pending: ResMut<PendingWarpTarget>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    let Ok((entity, mut transform, mut velocity, charging)) = ship_query.single_mut() else { return };
+    if !charging.charge_timer.is_finished() {
+        return;
+    }
+
+    transform.translation.x = charging.target_pos.x;
+    transform.translation.y = charging.target_pos.y;
+    velocity.0 = Vec2::ZERO;
+    fuel_state.current_fuel = (fuel_state.current_fuel - charging.fuel_cost).max(0.0);
+    pending.0 = None;
+
+    commands.entity(entity).remove::<MapWarpCharging>();
+
+    notifications.write(ShowNotification {
+        message: "Warp dash complete.".into(),
+        notification_type: NotificationType::Success,
+        duration: 4.0,
     });
 }
 

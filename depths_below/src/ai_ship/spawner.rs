@@ -24,6 +24,8 @@ fn distance_difficulty(position: Vec2) -> (f32, f32) {
 /// Color tint per AI ship type
 fn ship_tint(ship_type: AiShipType) -> Color {
     match ship_type {
+        AiShipType::VoidTitan => Color::srgb(0.75, 0.6, 0.1),     // molten gold — apex boss
+        AiShipType::Dreadnought => Color::srgb(0.5, 0.08, 0.08),  // deep crimson — mega-battleship
         AiShipType::Leviathan => Color::srgb(0.2, 0.6, 0.5),    // teal - creature riders
         AiShipType::AbyssalCult => Color::srgb(0.4, 0.15, 0.5),  // purple - bio-organic cult
         AiShipType::Drowned => Color::srgb(0.35, 0.4, 0.35),     // ghostly gray-green
@@ -60,6 +62,8 @@ pub fn spawn_ai_ship(
         .collect();
 
     let initial_behavior = match ship_type {
+        AiShipType::VoidTitan => AiShipBehavior::Patrolling,
+        AiShipType::Dreadnought => AiShipBehavior::Patrolling,
         AiShipType::Leviathan => AiShipBehavior::Patrolling,
         AiShipType::AbyssalCult => AiShipBehavior::Patrolling,
         AiShipType::Drowned => AiShipBehavior::Patrolling,
@@ -71,6 +75,8 @@ pub fn spawn_ai_ship(
     };
 
     let fuel = match ship_type {
+        AiShipType::VoidTitan => 3000.0,
+        AiShipType::Dreadnought => 2000.0,
         AiShipType::Leviathan => 400.0,
         AiShipType::AbyssalCult => 600.0,
         AiShipType::Drowned => 200.0,

@@ -1,3 +1,4 @@
+pub mod bounty_nav;
 pub mod generation;
 pub mod tracking;
 pub mod ui;
@@ -260,10 +261,19 @@ impl Plugin for ContractsPlugin {
                 ui::update_mission_board_display,
             ).chain().run_if(in_state(GameState::StationDocked).or_else(in_state(GameState::Exploring))))
             // Contract HUD during exploration
-            .add_systems(OnEnter(GameState::Exploring), ui::spawn_contract_hud)
+            .add_systems(OnEnter(GameState::Exploring), (ui::spawn_contract_hud, bounty_nav::spawn_bounty_arrow))
             .add_systems(OnExit(GameState::Exploring), ui::despawn_contract_hud)
             .add_systems(Update, ui::update_contract_hud
                 .run_if(in_state(GameState::Exploring)))
+            // Bounty navigation: HUD arrow toward the nearest active target,
+            // plus a floating label over the specific tagged ship once it's
+            // close enough to be a real entity. Long-range point-to-point
+            // travel is the M-key map + G-hold warp dash (see ui/mod.rs).
+            .add_systems(Update, (
+                bounty_nav::update_bounty_arrow,
+                bounty_nav::spawn_bounty_markers,
+                bounty_nav::update_bounty_markers,
+            ).run_if(in_state(GameState::Exploring)))
             // Failure on game over
             .add_systems(OnEnter(GameState::GameOver), tracking::handle_contract_failure);
     }

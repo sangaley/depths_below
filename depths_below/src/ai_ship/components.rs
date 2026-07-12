@@ -20,6 +20,10 @@ pub enum AiShipType {
     IronTide,    // Heavy battleships, railguns, tanky boss faction
     Blackwater,  // Elite mercs, tactical flanking, hunt bounties
     RustSwarm,   // Tiny junk ships, spawn in groups, kamikaze
+    // --- True bosses: rare, spawn only at the extreme edge of explored
+    // space, dwarf every other ship in the roster. Jackpot bounty targets.
+    Dreadnought, // Mega-battleship — Iron Tide's design taken to its limit
+    VoidTitan,   // Abyssal-leviathan hybrid — the largest, hardest kill in the game
 }
 
 /// Aggregated state for the AI ship
@@ -230,6 +234,17 @@ impl WorldSimulation {
     pub fn bounty_position(&self, bounty_id: u32) -> Option<Vec2> {
         self.ships.iter().find(|s| s.bounty_id == Some(bounty_id)).map(|s| s.position)
     }
+
+    /// Frees a bounty tag without touching the ship otherwise — called when
+    /// a contract is abandoned or fails. Without this, an abandoned bounty
+    /// would tag its ship forever, which for a single-ship faction (the
+    /// bosses) would permanently lock out ever offering that faction as a
+    /// bounty again.
+    pub fn untag_bounty(&mut self, bounty_id: u32) {
+        if let Some(ship) = self.ships.iter_mut().find(|s| s.bounty_id == Some(bounty_id)) {
+            ship.bounty_id = None;
+        }
+    }
 }
 
 /// Faction territory definition
@@ -305,14 +320,31 @@ pub fn faction_territories() -> Vec<FactionTerritory> {
             radius: 28_000.0,
             ship_count: 2, // rare but powerful
         },
-        // Pressure Kings - deep zone only, farthest out (still a real gap
-        // before the star itself at ~492k, which stays a distant endgame
-        // destination rather than just another territory)
+        // Pressure Kings - deep zone only, farthest out of the "normal"
+        // factions (still a real gap before the star itself at ~492k, which
+        // stays a distant endgame destination rather than just another
+        // territory)
         FactionTerritory {
             faction: AiShipType::PressureKing,
             center: Vec2::new(-140_000.0, -320_000.0),
             radius: 35_000.0,
             ship_count: 3,
+        },
+        // Dreadnought — one lone mega-battleship, patrolling well past the
+        // star system. Finding it at all is most of the challenge.
+        FactionTerritory {
+            faction: AiShipType::Dreadnought,
+            center: Vec2::new(400_000.0, -420_000.0), // ~580k out
+            radius: 60_000.0,
+            ship_count: 1,
+        },
+        // Void Titan — the single hardest kill in the game, sitting beyond
+        // everything else in explored space.
+        FactionTerritory {
+            faction: AiShipType::VoidTitan,
+            center: Vec2::new(-600_000.0, -600_000.0), // ~850k out
+            radius: 80_000.0,
+            ship_count: 1,
         },
     ]
 }
@@ -321,7 +353,9 @@ pub fn faction_territories() -> Vec<FactionTerritory> {
 /// to weight bounty-contract rewards by how dangerous the target is.
 pub fn faction_power(faction: AiShipType) -> f32 {
     match faction {
-        AiShipType::IronTide => 3.0,      // Battleship - strongest
+        AiShipType::VoidTitan => 8.0,      // the hardest kill in the game
+        AiShipType::Dreadnought => 6.0,    // mega-battleship
+        AiShipType::IronTide => 3.0,      // Battleship - strongest "normal" faction
         AiShipType::Blackwater => 2.0,     // Elite mercs
         AiShipType::PressureKing => 2.5,   // Heavy armor + weapons
         AiShipType::AbyssalCult => 1.5,    // Bio-weapons
@@ -337,6 +371,10 @@ pub fn factions_hostile(a: AiShipType, b: AiShipType) -> bool {
     use AiShipType::*;
     if a == b { return false; } // same faction = allies
     match (a, b) {
+        // Bosses are hostile to everything, including each other — rampaging
+        // apex threats, not aligned with any faction's politics.
+        (VoidTitan, _) | (_, VoidTitan) => true,
+        (Dreadnought, _) | (_, Dreadnought) => true,
         // Abyssal Cult attacks Leviathan Riders (they capture creatures)
         (AbyssalCult, Leviathan) | (Leviathan, AbyssalCult) => true,
         // Iron Tide attacks everyone except Blackwater (allied mercs)

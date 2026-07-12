@@ -17,13 +17,15 @@ pub fn ai_brain_system(
         &mut AiShipBehavior,
         &mut AiShipNav,
         &mut AiShipDecisionTimer,
+        &Children,
     )>,
     player_ship: Query<(Entity, &Transform), With<Ship>>,
     creature_query: Query<(Entity, &Transform, &Creature), Without<Ship>>,
     wreck_query: Query<(Entity, &Transform), With<AiShipWreck>>,
+    weapon_query: Query<(&Weapon, &Module, &OwnedByAiShip), Without<Engine>>,
     creature_grid: Res<CreatureGrid>,
 ) {
-    for (_entity, transform, ship_type, mut state, mut behavior, mut nav, mut timer) in ai_ships.iter_mut() {
+    for (_entity, transform, ship_type, mut state, mut behavior, mut nav, mut timer, children) in ai_ships.iter_mut() {
         timer.timer.tick(time.delta());
         if !timer.timer.just_finished() {
             continue;
@@ -41,6 +43,23 @@ pub fn ai_brain_system(
         let hull_pct = state.hull_integrity;
         let fuel_pct = state.fuel / state.max_fuel.max(1.0);
         let depth = (-pos.y / 10.0).max(0.0);
+
+        // Detection/engagement range for the "should I start fighting" checks
+        // below — must stay comfortably above movement.rs's standoff distance
+        // (now also weapon-based, at 0.85x max range) or a long-range-armed
+        // ship would want to hold a standoff its own brain never lets it
+        // reach: ai_brain decides "not in range, don't engage" using a
+        // smaller number than movement.rs's "hold at my weapon's range" once
+        // it IS engaging, so the ship would never start fighting from its
+        // actual weapon range in the first place. 1.05x keeps a safety
+        // margin above the 0.85x standoff so the two systems don't fight
+        // each other into an engage/disengage oscillation.
+        let max_weapon_range = children.iter()
+            .filter_map(|c| weapon_query.get(c).ok())
+            .filter(|(_, module, _)| module.is_active && module.health > 0.0)
+            .map(|(weapon, _, _)| weapon.range)
+            .fold(0.0_f32, f32::max);
+        let engage_range = if max_weapon_range > 0.0 { max_weapon_range * 1.05 } else { 4400.0 };
 
         // Perception
         let player_info = player_ship.iter().next().map(|(e, t)| {
@@ -128,13 +147,15 @@ pub fn ai_brain_system(
             // ----------------------------------------------------------------
             AiShipType::AbyssalCult => {
                 // KAMIKAZE when critically damaged - ram nearest target
-                // Detection range must exceed the 1800 standoff (movement.rs)
-                // or the ship engages, immediately backs off past the
-                // trigger distance, drops out of Engaging, drifts back in,
-                // and repeats — a fast oscillation that looks like glitching.
+                // Detection range must exceed the standoff (movement.rs) or
+                // the ship engages, immediately backs off past the trigger
+                // distance, drops out of Engaging, drifts back in, and
+                // repeats — a fast oscillation that looks like glitching.
+                // engage_range is weapon-based now (1.05x max weapon range)
+                // so this holds regardless of loadout.
                 if hull_pct < 0.20 {
                     if let Some((_, p_pos, dist)) = player_info {
-                        if dist < 4400.0 {
+                        if dist < engage_range {
                             actions.push(ScoredAction {
                                 score: 100.0,
                                 behavior: AiShipBehavior::Engaging,
@@ -148,7 +169,7 @@ pub fn ai_brain_system(
                 if let Some((_, c_dist, _c_pos, _)) = nearest_creature {
                     if let Some((_, p_pos, p_dist)) = player_info {
                         // Player near a creature = threat to sacred life
-                        if p_dist < 4400.0 && c_dist < 400.0 {
+                        if p_dist < engage_range && c_dist < 400.0 {
                             actions.push(ScoredAction {
                                 score: 88.0,
                                 behavior: AiShipBehavior::Engaging,
@@ -196,9 +217,9 @@ pub fn ai_brain_system(
                 // Never flee - already dead, can't die again (narratively)
 
                 // Attack anything nearby - player (detection must exceed the
-                // 1800 standoff distance — see AbyssalCult kamikaze comment)
+                // standoff distance — see AbyssalCult kamikaze comment)
                 if let Some((_, p_pos, dist)) = player_info {
-                    if dist < 4400.0 {
+                    if dist < engage_range {
                         actions.push(ScoredAction {
                             score: 80.0,
                             behavior: AiShipBehavior::Engaging,
@@ -250,9 +271,9 @@ pub fn ai_brain_system(
                     });
                 } else {
                     // RAM player upward - primary behavior (detection must
-                    // exceed the 3000 standoff — see AbyssalCult comment)
+                    // exceed the standoff — see AbyssalCult comment)
                     if let Some((_, p_pos, dist)) = player_info {
-                        if dist < 7000.0 {
+                        if dist < engage_range {
                             // Position above the player to push them up
                             let ram_pos = Vec2::new(p_pos.x, p_pos.y + 150.0);
                             actions.push(ScoredAction {
@@ -373,10 +394,10 @@ pub fn ai_brain_system(
                 }
 
                 // Engage any target in weapon range (long range weapons).
-                // Detection must exceed the 3000 standoff — see AbyssalCult
+                // Detection must exceed the standoff — see AbyssalCult
                 // kamikaze comment for why.
                 if let Some((_, p_pos, dist)) = player_info {
-                    if dist < 7000.0 {
+                    if dist < engage_range {
                         actions.push(ScoredAction {
                             score: 85.0,
                             behavior: AiShipBehavior::Engaging,
@@ -443,10 +464,10 @@ pub fn ai_brain_system(
                 }
 
                 // Engage player at medium range (tactical distance).
-                // Detection must exceed the 2200 standoff — see AbyssalCult
+                // Detection must exceed the standoff — see AbyssalCult
                 // kamikaze comment for why.
                 if let Some((_, p_pos, dist)) = player_info {
-                    if dist < 5200.0 {
+                    if dist < engage_range {
                         let to_target = (p_pos - pos).normalize_or_zero();
                         let flank = Vec2::new(-to_target.y, to_target.x);
                         let offset = if pos.x > p_pos.x { 1.0 } else { -1.0 };
@@ -522,6 +543,65 @@ pub fn ai_brain_system(
                     behavior: AiShipBehavior::Idle,
                     destination: Some(pos + Vec2::new(30.0, -20.0)),
                 });
+            }
+
+            // ----------------------------------------------------------------
+            // DREADNOUGHT: Mega-battleship. Never retreats — no flee action
+            // at all. Engages anything in an enormous detection range and
+            // grinds it down with sheer weapon coverage.
+            // ----------------------------------------------------------------
+            AiShipType::Dreadnought => {
+                if under_fire {
+                    if let Some((_, p_pos, _)) = player_info {
+                        actions.push(ScoredAction {
+                            score: 95.0,
+                            behavior: AiShipBehavior::Engaging,
+                            destination: Some(p_pos),
+                        });
+                    }
+                }
+
+                if let Some((_, p_pos, dist)) = player_info {
+                    if dist < 9000.0 {
+                        actions.push(ScoredAction {
+                            score: 90.0,
+                            behavior: AiShipBehavior::Engaging,
+                            destination: Some(p_pos),
+                        });
+                    }
+                }
+
+                if !nav.waypoints.is_empty() {
+                    actions.push(ScoredAction {
+                        score: 40.0,
+                        behavior: AiShipBehavior::Patrolling,
+                        destination: nav.waypoints.get(nav.current_waypoint).copied(),
+                    });
+                }
+            }
+
+            // ----------------------------------------------------------------
+            // VOID TITAN: The apex threat. Never flees, never hesitates — if
+            // you're in range, it's already coming for you.
+            // ----------------------------------------------------------------
+            AiShipType::VoidTitan => {
+                if let Some((_, p_pos, dist)) = player_info {
+                    if dist < 12000.0 {
+                        actions.push(ScoredAction {
+                            score: 100.0,
+                            behavior: AiShipBehavior::Engaging,
+                            destination: Some(p_pos),
+                        });
+                    }
+                }
+
+                if !nav.waypoints.is_empty() {
+                    actions.push(ScoredAction {
+                        score: 40.0,
+                        behavior: AiShipBehavior::Patrolling,
+                        destination: nav.waypoints.get(nav.current_waypoint).copied(),
+                    });
+                }
             }
         }
 

@@ -144,6 +144,8 @@ pub fn attach_ai_shields(
         // carving up the hull block by block.
         let max = if no_shield_hp { 0.0 } else {
             match ship_type {
+                AiShipType::VoidTitan => 140.0,    // the hardest kill in the game
+                AiShipType::Dreadnought => 100.0,  // mega-battleship
                 AiShipType::IronTide => 40.0,      // tanky battleship
                 AiShipType::PressureKing => 30.0,
                 AiShipType::Blackwater => 24.0,

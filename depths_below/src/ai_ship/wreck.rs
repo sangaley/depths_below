@@ -26,6 +26,8 @@ pub fn ai_ship_death_system(
 ) {
     for event in destroyed_events.read() {
         let loot = match event.ship_type {
+            AiShipType::VoidTitan => 30,    // legendary hoard
+            AiShipType::Dreadnought => 20,  // colossal wreck
             AiShipType::Leviathan => 6,
             AiShipType::AbyssalCult => 4,
             AiShipType::Drowned => 8,     // rare old loot
@@ -75,6 +77,8 @@ pub fn ai_ship_death_system(
         }
 
         let type_name = match event.ship_type {
+            AiShipType::VoidTitan => "Void Titan",
+            AiShipType::Dreadnought => "Dreadnought",
             AiShipType::Leviathan => "Leviathan Rider",
             AiShipType::AbyssalCult => "Abyssal Cult",
             AiShipType::Drowned => "Drowned",

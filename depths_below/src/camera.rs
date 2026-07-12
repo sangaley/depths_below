@@ -25,7 +25,13 @@ impl Default for CameraState {
         Self {
             zoom: 1.8,
             min_zoom: 0.5,
-            max_zoom: 8.0,
+            // Was 8.0 — at scale 8 on a 1280x720 window the visible area is
+            // only ~10,240x5,760 world units, so an enemy holding an
+            // 8,000-9,600 unit standoff (now that shots can actually reach
+            // that far, see combat::PROJECTILE_SPEED) sat right at the
+            // screen edge even fully zoomed out. 20.0 gives ~25,600x14,400
+            // visible, comfortably framing a long-range fight.
+            max_zoom: 20.0,
             shake_intensity: 0.0,
             shake_decay: 5.0,
             shake_offset: Vec2::ZERO,
@@ -235,10 +241,21 @@ fn update_depth_vignette(
     // depth 1000 and CULLED everything beyond 3x that — stars, stations,
     // and enemy ships all vanished a screen-width out.) The starfield is
     // excluded from this system entirely — the sky is not a world object.
-    let light_range = 2500.0;
+    //
+    // Was 2500 — weapon ranges now reach up to 9,600 (see
+    // combat::PROJECTILE_SPEED) and AI ships hold standoff distances up to
+    // 8,000-9,600 of their own, so a target at typical long-range engagement
+    // distance was already faded to the 15% floor before a shot even landed.
+    // 6000 keeps a target bright/near-bright through most real engagement
+    // ranges instead of undermining the range fix with "can hit it, can't
+    // see it."
+    let light_range = 6000.0;
 
-    // Cull distance — entities beyond this are hidden purely for performance
-    let cull_range = light_range * 4.0;
+    // Cull distance — entities beyond this are hidden purely for performance.
+    // Was light_range * 4 (10,000 total) — now sized explicitly so it clears
+    // the longest weapon range (9,600) with real margin for ships
+    // patrolling/closing in before they're actually in range.
+    let cull_range = 16_000.0;
 
     for (mut sprite, global_transform, mut visibility, parent) in sprite_query.iter_mut() {
         // Never cull ship's own children (hull, modules, crew)

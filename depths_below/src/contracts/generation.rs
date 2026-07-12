@@ -144,22 +144,28 @@ fn ship_factions_for_star(star: u8) -> &'static [AiShipType] {
         2 => &[AiShipType::RustSwarm, AiShipType::Leviathan, AiShipType::Drowned],
         3 => &[AiShipType::AbyssalCult, AiShipType::GlassEye, AiShipType::Blackwater],
         4 => &[AiShipType::Blackwater, AiShipType::IronTide],
-        _ => &[AiShipType::IronTide, AiShipType::PressureKing],
+        // Bosses only show up at the top star tier (max faction rep) — rare,
+        // legendary jackpot bounties, not a routine offering.
+        _ => &[AiShipType::IronTide, AiShipType::PressureKing, AiShipType::Dreadnought, AiShipType::VoidTitan],
     }
 }
 
 /// Reward for a ship bounty: base star reward, scaled up by how far the
 /// *actual tagged ship* currently is from spawn and by its faction's combat
 /// power rating — the two factors the player asked for ("farther and more
-/// difficult").
+/// difficult"). The distance multiplier is uncapped enough that the bosses
+/// (580k-850k out, versus ~350k for the farthest normal faction) land in a
+/// different bracket entirely rather than just tying the luckiest normal
+/// bounty.
 fn destroy_ship_reward(star: u8, ship_type: AiShipType, distance: f32, rng: &mut impl Rng) -> u32 {
     let (lo, hi) = base_reward_range(star);
     let base = rng.gen_range(lo..=hi) as f32;
 
-    // 1x near spawn, up to 3x at ~350,000 units out (roughly the farthest territory).
-    let distance_mult = 1.0 + (distance / 175_000.0).min(2.0);
+    // 1x near spawn, up to 3x at ~350,000 out (farthest normal faction),
+    // up to 5x at ~800,000+ out (boss territory).
+    let distance_mult = 1.0 + (distance / 175_000.0).min(4.0);
 
-    // 0.6x for the weakest faction (GlassEye) up to 1.8x for the strongest (IronTide).
+    // 0.6x for the weakest faction (GlassEye) up to 3.8x for Void Titan.
     let power_mult = 0.6 + faction_power(ship_type) * 0.4;
 
     (base * distance_mult * power_mult).round() as u32
@@ -181,6 +187,8 @@ fn tag_destroy_ship_target(star: u8, sim: &mut WorldSimulation, rng: &mut impl R
 
 fn ship_display_name(ship_type: AiShipType) -> &'static str {
     match ship_type {
+        AiShipType::VoidTitan => "Void Titan",
+        AiShipType::Dreadnought => "Dreadnought",
         AiShipType::Leviathan => "Leviathan Rider",
         AiShipType::AbyssalCult => "Abyssal Cult",
         AiShipType::Drowned => "Drowned",
@@ -272,11 +280,19 @@ fn generate_single_contract(
             };
             reward = destroy_ship_reward(star, ship_type, distance, rng);
             let name = ship_display_name(ship_type);
-            (
-                format!("Bounty: {} vessel", name),
-                format!("A {} vessel has been marked on your map — hunt it down and destroy it. Higher-value bounty for a distant, dangerous target.", name),
-                ContractObjective::DestroyShip { ship_type, target_id, destroyed: false },
-            )
+            let is_boss = matches!(ship_type, AiShipType::Dreadnought | AiShipType::VoidTitan);
+            let (title, desc) = if is_boss {
+                (
+                    format!("JACKPOT BOUNTY: {}", name),
+                    format!("A {} has been marked on your map, far past the edge of charted space. This is the single biggest bounty available — and the single hardest kill.", name),
+                )
+            } else {
+                (
+                    format!("Bounty: {} vessel", name),
+                    format!("A {} vessel has been marked on your map — hunt it down and destroy it. Higher-value bounty for a distant, dangerous target.", name),
+                )
+            };
+            (title, desc, ContractObjective::DestroyShip { ship_type, target_id, destroyed: false })
         }
     };
 

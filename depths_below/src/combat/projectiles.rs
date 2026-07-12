@@ -4,7 +4,18 @@ use super::*;
 use crate::ai_ship::components::AiShip;
 use crate::events::AiShipDamaged;
 
-/// Spawn a projectile entity, differentiated by ammo type
+/// Spawn a projectile entity, differentiated by ammo type.
+///
+/// `range` sets how far the shot can actually travel before it expires —
+/// this used to be a fixed per-ammo-type timer (1.5-4s) completely
+/// disconnected from the weapon's stated range, so a "6000-range" weapon's
+/// bullets (600u/s * 1.5 speed_mult = 900u/s, 1.5s lifetime) physically
+/// expired after ~1350 units. Every ship "in range" per that stat was
+/// wasting ammo shooting at something its own shots could never reach,
+/// which meant nothing could ever actually fight at the ranges the AI
+/// standoff distances and weapon stats implied. Lifetime is now derived
+/// from range so a shot fired at max range takes exactly as long to arrive
+/// as the geometry implies.
 pub(crate) fn spawn_projectile(
     commands: &mut Commands,
     asset_server: &AssetServer,
@@ -12,6 +23,7 @@ pub(crate) fn spawn_projectile(
     target: Vec2,
     damage: f32,
     speed: f32,
+    range: f32,
     from_player: bool,
     ammo_type: AmmoType,
 ) {
@@ -27,6 +39,9 @@ pub(crate) fn spawn_projectile(
     // Enemy projectiles keep red tint regardless of ammo type
     let final_color = if from_player { ammo_type.projectile_color() } else { Color::srgb(1.0, 0.2, 0.2) };
 
+    let final_speed = speed * ammo_type.speed_mult();
+    let lifetime_secs = (range / final_speed.max(1.0)).max(0.1);
+
     commands.spawn((
         (Sprite {
                 image: asset_server.load(texture_path),
@@ -40,9 +55,9 @@ pub(crate) fn spawn_projectile(
             }),
         Projectile {
             damage,
-            speed: speed * ammo_type.speed_mult(),
+            speed: final_speed,
             direction,
-            lifetime: Timer::from_seconds(ammo_type.lifetime_secs(), TimerMode::Once),
+            lifetime: Timer::from_seconds(lifetime_secs, TimerMode::Once),
             from_player,
             ammo_type,
         },

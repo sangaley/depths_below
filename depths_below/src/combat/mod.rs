@@ -57,8 +57,11 @@ pub(crate) fn get_weapon_fire_rate(calculated: Option<&CalculatedStats>, weapon:
         .unwrap_or(weapon.fire_rate)
 }
 
-/// Projectile speed base
-pub(crate) const PROJECTILE_SPEED: f32 = 600.0;
+/// Projectile speed base. Was 600 — at the weapon ranges now reachable
+/// (lifetime derives from range instead of a fixed timer, see
+/// projectiles::spawn_projectile), that meant a max-range shot (9600) took
+/// 16+ seconds to arrive. 1800 gets a max-range bullet there in ~3.5s.
+pub(crate) const PROJECTILE_SPEED: f32 = 1800.0;
 /// Projectile collision radius
 pub(crate) const PROJECTILE_RADIUS: f32 = 12.0;
 /// Creature collision radius

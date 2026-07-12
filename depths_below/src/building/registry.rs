@@ -471,7 +471,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::Gatling, ModuleDef {
         name: "Gatling",
-        description: "Rotary autocannon. Fills space with lead. Inaccurate but terrifying against swarms.",
+        description: "Rotary autocannon. Fills space with lead up close. Inaccurate but terrifying against swarms.",
         category: ModuleCategory::Weapons,
         size: IVec2::new(1, 1),
         health: 60.0,
@@ -479,7 +479,11 @@ pub fn build_registry() -> ModuleRegistry {
         power_consumption: 15.0,
         color: Color::srgb(0.6, 0.3, 0.3),
         companion: CompanionData::Weapon {
-            damage: 6.5, range: 3900.0, fire_rate: 6.0, ammo: 300,
+            // Short-range brawler archetype: close the distance, get the
+            // fire-rate reward. Range down from 3900 (was blurring into
+            // mid-range territory); damage up from 6.5 to help offset the
+            // exposure of actually being that close.
+            damage: 8.0, range: 2200.0, fire_rate: 6.0, ammo: 300,
             mount_type: MountType::Turret, ammo_type: AmmoType::Bullet,
         },
         customizable: true,
@@ -529,7 +533,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::IonDisruptor, ModuleDef {
         name: "Ion Disruptor",
-        description: "Disrupts electrical systems. Low damage, high disable chance. Makes targets helpless.",
+        description: "Disrupts electrical systems up close. Low damage, high disable chance. Makes targets helpless.",
         category: ModuleCategory::Weapons,
         size: IVec2::new(1, 1),
         health: 60.0,
@@ -537,7 +541,10 @@ pub fn build_registry() -> ModuleRegistry {
         power_consumption: 25.0,
         color: Color::srgb(0.5, 0.2, 0.6),
         companion: CompanionData::Weapon {
-            damage: 12.5, range: 4200.0, fire_rate: 0.5, ammo: 999,
+            // Short-range brawler: a disable effect is a close-quarters tool
+            // by nature. Range down from 4200 to sit clearly below the
+            // mid-range tier (Cannon/Coilgun/Laser/PlasmaCaster at 4200-6000).
+            damage: 12.5, range: 1800.0, fire_rate: 0.5, ammo: 999,
             mount_type: MountType::Turret, ammo_type: AmmoType::Charge,
         },
         customizable: true,

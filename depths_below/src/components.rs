@@ -1148,15 +1148,6 @@ impl AmmoType {
         }
     }
 
-    pub fn lifetime_secs(&self) -> f32 {
-        match self {
-            AmmoType::Missile => 4.0,
-            AmmoType::Bullet  => 1.5,
-            AmmoType::Charge  => 2.0,
-            AmmoType::Mine    => 0.0,
-        }
-    }
-
     pub fn hit_radius_mult(&self) -> f32 {
         match self {
             AmmoType::Missile => 1.5,

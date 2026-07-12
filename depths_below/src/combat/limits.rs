@@ -10,8 +10,12 @@ use super::new_projectiles::MissileProjectile;
 /// Max projectiles alive at once (kinetic + missiles combined)
 pub const MAX_PROJECTILES: usize = 1000;
 
-/// Max blocks on the player ship
-pub const MAX_SHIP_BLOCKS: usize = 250;
+/// Max blocks on the player ship. Was 250 — a real ship had already grown to
+/// 305 (evidently from before this cap was enforced everywhere), so the
+/// player was permanently locked out of building with no way back under the
+/// limit short of deleting ~55+ blocks. Raised to give real headroom above
+/// what's already been built, while still bounding entity count.
+pub const MAX_SHIP_BLOCKS: usize = 500;
 
 /// System: despawn oldest projectiles if over the limit
 pub fn enforce_projectile_limit(

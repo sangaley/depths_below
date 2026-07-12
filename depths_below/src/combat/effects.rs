@@ -50,6 +50,7 @@ pub(super) fn creature_ranged_attack(
             ship_pos,
             shoot_damage,
             PROJECTILE_SPEED * 0.6,
+            shoot_range,
             false,
             AmmoType::Charge,
         );

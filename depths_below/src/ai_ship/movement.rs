@@ -17,6 +17,7 @@ pub fn ai_ship_movement_system(
         &Children,
     ), With<AiShip>>,
     engine_query: Query<(&Engine, &Module, &OwnedByAiShip)>,
+    weapon_query: Query<(&Weapon, &Module, &OwnedByAiShip), Without<Engine>>,
 ) {
     let dt = time.delta_secs();
 
@@ -57,6 +58,8 @@ pub fn ai_ship_movement_system(
             AiShipType::Drowned => 0.7,        // sluggish, damaged engines
             AiShipType::PressureKing => 0.8,   // heavy but powerful engines
             AiShipType::IronTide => 0.6,       // slow battleship
+            AiShipType::Dreadnought => 0.4,    // colossal, lumbering
+            AiShipType::VoidTitan => 0.35,     // barely moves, but it doesn't need to
         };
 
         // Global AI pace.
@@ -81,12 +84,26 @@ pub fn ai_ship_movement_system(
             // Combat standoff: while engaging, hold a firing distance from the
             // target instead of flying into (and through) it. Below the band:
             // back off. Inside the band: orbit sideways. Beyond it: approach.
-            // RustSwarm keeps its point-blank ramming — that IS their faction.
-            // Scaled up to match weapon ranges (tripled elsewhere) — ships now
-            // fight at proper long range instead of hugging each other.
+            // RustSwarm keeps its point-blank ramming — that IS their faction,
+            // regardless of what it's carrying. Everyone else holds at their
+            // own longest-range active weapon (85% of its range, so they
+            // fight solidly inside their own reach instead of right at the
+            // ragged edge) — a ship stripped down to short-range guns closes
+            // in, one carrying a sniper weapon hangs back, instead of every
+            // ship in a faction using the same fixed distance regardless of
+            // loadout. Falls back to the old faction defaults only if a ship
+            // somehow has no active weapons (e.g. mid-repair).
+            let max_weapon_range = children.iter()
+                .filter_map(|c| weapon_query.get(c).ok())
+                .filter(|(_, module, _)| module.is_active && module.health > 0.0)
+                .map(|(weapon, _, _)| weapon.range)
+                .fold(0.0_f32, f32::max);
+
             let standoff = if *behavior == AiShipBehavior::Engaging {
                 match ship_type {
                     AiShipType::RustSwarm => 0.0,
+                    _ if max_weapon_range > 0.0 => max_weapon_range * 0.85,
+                    AiShipType::VoidTitan | AiShipType::Dreadnought => 8000.0,
                     AiShipType::IronTide | AiShipType::PressureKing => 6000.0,
                     AiShipType::Blackwater => 4400.0,
                     _ => 3600.0,

@@ -370,6 +370,8 @@ pub fn update_radar(
             let radar_y = radar_half - (offset.y / radar_range) * radar_half;
 
             let blip_color = match ai_ship_type {
+                AiShipType::VoidTitan => Color::srgb(1.0, 0.85, 0.1),   // gold — unmistakable
+                AiShipType::Dreadnought => Color::srgb(0.8, 0.05, 0.05), // deep crimson
                 AiShipType::Leviathan => Color::srgb(0.2, 0.7, 0.6),
                 AiShipType::AbyssalCult => Color::srgb(0.6, 0.2, 0.8),
                 AiShipType::Drowned => Color::srgb(0.4, 0.5, 0.4),
@@ -379,14 +381,18 @@ pub fn update_radar(
                 AiShipType::Blackwater => Color::srgb(0.3, 0.3, 0.4),
                 AiShipType::RustSwarm => Color::srgb(0.9, 0.5, 0.2),
             };
+            let blip_size = match ai_ship_type {
+                AiShipType::VoidTitan | AiShipType::Dreadnought => 13.0, // bosses stand out
+                _ => 8.0,
+            };
 
             commands.spawn((
                 (Node {
                         position_type: PositionType::Absolute,
-                        left: Val::Px(radar_x - 4.0),
-                        top: Val::Px(radar_y - 4.0),
-                        width: Val::Px(8.0),
-                        height: Val::Px(8.0),
+                        left: Val::Px(radar_x - blip_size / 2.0),
+                        top: Val::Px(radar_y - blip_size / 2.0),
+                        width: Val::Px(blip_size),
+                        height: Val::Px(blip_size),
                         ..default()
                     }, BackgroundColor(blip_color), ZIndex(51)),
                 RadarBlip {

@@ -5,10 +5,21 @@ use crate::building::ModuleRegistry;
 use super::components::*;
 use super::spawner;
 
-/// Render distance - ships within this range get spawned as real entities
-const RENDER_DISTANCE: f32 = 1800.0;
-/// Distance at which spawned entities get converted back to simulation
-const DESPAWN_DISTANCE: f32 = 3500.0;
+/// Render distance - ships within this range get spawned as real entities.
+/// Was 1800 — weapon ranges now reach up to 9,600 (see
+/// combat::PROJECTILE_SPEED / spawn_projectile) and AI ships hold standoff
+/// distances up to ~8,160 (85% of their longest weapon's range, see
+/// ai_ship::movement). 10,000 means a ship materializes as a real entity
+/// before the player is even in its weapon range, instead of after.
+const RENDER_DISTANCE: f32 = 10_000.0;
+/// Distance at which spawned entities get converted back to simulation. Was
+/// 3500 — well inside the new ~8,160 max standoff distance, so a ship
+/// holding a long-range fight would get yanked back to an abstract
+/// simulated point (functionally "despawn") the moment it backed off to
+/// actually use its weapon's range. 14,000 clears the max standoff with
+/// real margin and stays under camera::cull_range (16,000) so a ship
+/// doesn't visually vanish before it's converted back to simulation either.
+const DESPAWN_DISTANCE: f32 = 14_000.0;
 
 /// Initialize the world simulation with all factions in their territories
 pub fn init_world_simulation(
@@ -256,6 +267,12 @@ pub fn tick_world_simulation(
                 ship.fuel = 1.0;
                 ship.behavior = SimBehavior::Patrolling;
                 ship.spawned = false;
+                // This is a fresh respawn, not the same hull a completed
+                // bounty was hunting — clear the old tag so the faction's
+                // ship pool is eligible for new bounties again. Without
+                // this, a single-ship faction (the bosses) could only ever
+                // be offered as a bounty once, permanently.
+                ship.bounty_id = None;
             }
         }
     }

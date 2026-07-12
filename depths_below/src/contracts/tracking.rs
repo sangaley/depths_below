@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::ai_ship::components::WorldSimulation;
 use crate::components::{CargoHold, Module, ModuleType, Ship, ZoneType};
 use crate::events::*;
 use crate::resources::{Currency, DepthState, Inventory};
@@ -263,6 +264,7 @@ pub fn turn_in_at_station_proximity(
 pub fn handle_contract_failure(
     mut state: ResMut<ContractState>,
     mut currency: ResMut<Currency>,
+    mut sim: ResMut<WorldSimulation>,
     mut failed_events: MessageWriter<ContractFailed>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
@@ -270,6 +272,10 @@ pub fn handle_contract_failure(
 
     for contract in state.active_contracts.iter_mut() {
         if contract.status == ContractStatus::TurnedIn { continue; }
+
+        if let ContractObjective::DestroyShip { target_id, .. } = &contract.objective {
+            sim.untag_bounty(*target_id);
+        }
 
         contract.status = ContractStatus::Failed;
         failed_count += 1;

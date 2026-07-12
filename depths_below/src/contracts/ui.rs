@@ -8,7 +8,8 @@ use crate::states::GameState;
 use crate::world::home_base;
 use super::generation;
 use super::{
-    ContractState, ContractStatus, Faction, FactionReputation, MissionBoardOpen, ViewingStation,
+    ContractObjective, ContractState, ContractStatus, Faction, FactionReputation, MissionBoardOpen,
+    ViewingStation,
 };
 
 /// Display name for a station index (0 = Haven, 1..=N = outposts).
@@ -136,6 +137,7 @@ pub fn mission_board_input(
     mut state: ResMut<ContractState>,
     mut selection: ResMut<MissionBoardSelection>,
     currency: Res<Currency>,
+    mut sim: ResMut<WorldSimulation>,
     mut accepted_events: MessageWriter<ContractAccepted>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
@@ -199,6 +201,9 @@ pub fn mission_board_input(
         if let Some(idx) = active_idx {
             if idx < state.active_contracts.len() {
                 let contract = state.active_contracts.remove(idx);
+                if let ContractObjective::DestroyShip { target_id, .. } = &contract.objective {
+                    sim.untag_bounty(*target_id);
+                }
                 notifications.write(ShowNotification {
                     message: format!("Abandoned: {}", contract.title),
                     notification_type: NotificationType::Warning,

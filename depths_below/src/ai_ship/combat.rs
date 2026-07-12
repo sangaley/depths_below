@@ -75,7 +75,8 @@ pub fn ai_weapon_fire_system(
                 ai_pos,
                 player_pos,
                 weapon.damage,
-                600.0,
+                crate::combat::PROJECTILE_SPEED,
+                weapon.range,
                 false, // not from player
                 ammo_storage.ammo_type,
             );

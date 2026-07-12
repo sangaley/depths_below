@@ -99,6 +99,7 @@ pub(super) fn crew_weapon_system(
                     adjusted_target,
                     damage,
                     PROJECTILE_SPEED,
+                    range,
                     true,
                     ammo_storage.ammo_type,
                 );
@@ -204,6 +205,7 @@ pub(super) fn manual_weapon_system(
                 adjusted_target,
                 damage,
                 PROJECTILE_SPEED * 1.2,
+                range,
                 true,
                 ammo_storage.ammo_type,
             );
@@ -223,6 +225,7 @@ pub(super) fn manual_weapon_system(
                 forward,
                 damage,
                 PROJECTILE_SPEED,
+                range,
                 true,
                 ammo_storage.ammo_type,
             );
