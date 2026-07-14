@@ -92,7 +92,6 @@ fn load_audio(mut commands: Commands, assets: Res<AssetServer>) {
             "audio/weapons/laser_5.mp3",
         ]),
         heavy_cannons: load_all(&[
-            "audio/weapons/heavy_cannon_1.mp3",
             "audio/weapons/heavy_cannon_2.mp3",
         ]),
         shots: load_all(&[

@@ -12,7 +12,6 @@ Files: weapons/shoot_1-2, rocket_1, impacts/explosion_1-2, ambient/interior_hum,
 machine_loop_1-3, ui/terminal_1-3, beep_1-2
 
 ## Freesound.org — all CC0, no attribution needed
-- weapons/heavy_cannon_1: "Laser Cannon 03" by klangfabrik (freesound.org/s/232936)
 - weapons/heavy_cannon_2: "Sci fi cannon shot" by doudar41 (freesound.org/s/728519)
 - impacts/explosion_deep: "Deep Boom" by Za-Games (freesound.org/s/539968)
 - impacts/explosion_large: "Aftermath" by BaDoink (freesound.org/s/560750)
