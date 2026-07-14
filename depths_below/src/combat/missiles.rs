@@ -60,13 +60,16 @@ pub fn fire_missiles_system(
 
         if !module.is_active { continue; }
 
+        // Tick before the thermal gate — see fire_weapons_system: gating
+        // first freezes the timer, which generate_heat reads as "recently
+        // fired", locking the launcher hot forever.
+        cooldown.timer.tick(time.delta());
+        if !cooldown.timer.is_finished() { continue; }
+
         // Thermal throttle — same gate the laser/kinetics use.
         if let Some(temp) = temp {
             if temp.current >= temp.max_temp * 0.95 { continue; }
         }
-
-        cooldown.timer.tick(time.delta());
-        if !cooldown.timer.is_finished() { continue; }
 
         let group_firing = fire_state.firing[fire_group.group as usize % 4];
         if !group_firing { continue; }

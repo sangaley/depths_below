@@ -150,15 +150,18 @@ pub fn fire_weapons_system(
         }
         if !module.is_active { continue; }
 
+        // Tick cooldown BEFORE the thermal gate. Gating first froze the
+        // timer while hot — and generate_heat treats a running cooldown as
+        // "recently fired", so a hot gun kept generating heat forever and
+        // never came back (one burst → permanently stuck red).
+        cooldown.timer.tick(time.delta());
+        if !cooldown.timer.is_finished() { continue; }
+
         // Thermal throttle — same gate the laser uses. Overtuned guns heat
         // past this under sustained fire and stutter until they cool.
         if let Some(temp) = temp {
             if temp.current >= temp.max_temp * 0.95 { continue; }
         }
-
-        // Tick cooldown
-        cooldown.timer.tick(time.delta());
-        if !cooldown.timer.is_finished() { continue; }
 
         // Check if this weapon's fire group is active
         let group_firing = fire_state.firing[fire_group.group as usize % 4];

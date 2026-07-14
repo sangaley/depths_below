@@ -390,13 +390,15 @@ pub fn fire_ion_system(
         if parent.parent() != player_ship { continue; }
         if module.module_type != ModuleType::IonDisruptor { continue; }
         if !module.is_active { continue; }
+        // Tick before the thermal gate — a frozen cooldown reads as
+        // "recently fired" in generate_heat and locks the gun hot forever.
+        cooldown.timer.tick(time.delta());
+        if !cooldown.timer.is_finished() { continue; }
+
         // Thermal throttle — same gate the laser/kinetics use.
         if let Some(temp) = temp {
             if temp.current >= temp.max_temp * 0.95 { continue; }
         }
-
-        cooldown.timer.tick(time.delta());
-        if !cooldown.timer.is_finished() { continue; }
 
         let group_firing = fire_state.firing[fire_group.group as usize % 4];
         if !group_firing { continue; }
@@ -634,13 +636,15 @@ pub fn fire_plasma_system(
         if parent.parent() != player_ship { continue; }
         if module.module_type != ModuleType::PlasmaCaster { continue; }
         if !module.is_active { continue; }
+        // Tick before the thermal gate — a frozen cooldown reads as
+        // "recently fired" in generate_heat and locks the gun hot forever.
+        cooldown.timer.tick(time.delta());
+        if !cooldown.timer.is_finished() { continue; }
+
         // Thermal throttle — same gate the laser/kinetics use.
         if let Some(temp) = temp {
             if temp.current >= temp.max_temp * 0.95 { continue; }
         }
-
-        cooldown.timer.tick(time.delta());
-        if !cooldown.timer.is_finished() { continue; }
 
         let group_firing = fire_state.firing[fire_group.group as usize % 4];
         if !group_firing { continue; }
