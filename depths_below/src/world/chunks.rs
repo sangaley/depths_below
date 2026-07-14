@@ -6,27 +6,27 @@ use super::generation::generate_chunk;
 
 const CHUNK_SIZE: f32 = 512.0;
 
-/// Updates loaded chunks based on submarine position
+/// Updates loaded chunks based on ship position
 pub fn update_chunks(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    submarine_query: Query<&Transform, With<Submarine>>,
+    ship_query: Query<&Transform, With<Ship>>,
     world_state: Res<WorldState>,
     mut chunk_manager: ResMut<ChunkManager>,
-    mut chunk_events: EventWriter<ChunkEntered>,
+    mut chunk_events: MessageWriter<ChunkEntered>,
     mut prev_chunk: Local<Option<IVec2>>,
 ) {
-    let Ok(sub_transform) = submarine_query.get_single() else {
+    let Ok(ship_transform) = ship_query.single() else {
         return;
     };
 
-    let sub_pos = sub_transform.translation.truncate();
-    let current_chunk = world_to_chunk(sub_pos);
+    let ship_pos = ship_transform.translation.truncate();
+    let current_chunk = world_to_chunk(ship_pos);
 
     // Send ChunkEntered event when chunk changes
     if *prev_chunk != Some(current_chunk) {
         *prev_chunk = Some(current_chunk);
-        chunk_events.send(ChunkEntered {
+        chunk_events.write(ChunkEntered {
             chunk_pos: current_chunk,
         });
     }
@@ -66,7 +66,7 @@ pub fn update_chunks(
 
     for chunk_pos in chunks_to_unload {
         if let Some(entity) = chunk_manager.loaded_chunks.remove(&chunk_pos) {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
 }

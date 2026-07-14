@@ -1,18 +1,18 @@
 use crate::components::*;
 
 /// Stat calculator for custom modules
-/// Implements formulas that calculate final stats from sub-components
+/// Implements formulas that calculate final stats from ship-components
 pub struct StatCalculator;
 
 impl StatCalculator {
-    /// Calculate weapon stats from base stats and sub-components
+    /// Calculate weapon stats from base stats and ship-components
     pub fn calculate_weapon_stats(
         base: &WeaponStats,
         subcomponents: &[SubComponentType],
     ) -> WeaponStats {
         let mut stats = base.clone();
 
-        // Apply modifiers from each sub-component
+        // Apply modifiers from each ship-component
         for subcomp in subcomponents {
             match subcomp {
                 SubComponentType::BarrelComponent { length, caliber, thickness } => {
@@ -62,7 +62,7 @@ impl StatCalculator {
         stats
     }
 
-    /// Calculate engine stats from base stats and sub-components
+    /// Calculate engine stats from base stats and ship-components
     pub fn calculate_engine_stats(
         base: &EngineStats,
         subcomponents: &[SubComponentType],
@@ -97,7 +97,7 @@ impl StatCalculator {
         stats
     }
 
-    /// Calculate reactor stats from base stats and sub-components
+    /// Calculate reactor stats from base stats and ship-components
     pub fn calculate_reactor_stats(
         base: &ReactorStats,
         subcomponents: &[SubComponentType],
@@ -137,7 +137,7 @@ impl StatCalculator {
         stats
     }
 
-    /// Calculate life support stats from base stats and sub-components
+    /// Calculate life support stats from base stats and ship-components
     pub fn calculate_life_support_stats(
         base: &LifeSupportStats,
         subcomponents: &[SubComponentType],
@@ -167,7 +167,7 @@ impl StatCalculator {
         stats
     }
 
-    /// Calculate all stats for a custom module based on its type and sub-components
+    /// Calculate all stats for a custom module based on its type and ship-components
     pub fn calculate_stats(
         module_type: ModuleType,
         subcomponents: &[SubComponentType],

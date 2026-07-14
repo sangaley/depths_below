@@ -82,8 +82,7 @@ pub struct OxygenState {
 #[derive(Resource, Default)]
 pub struct HullState {
     pub hull_integrity: f32,
-    pub max_depth_rating: f32,
-    pub total_weight: f32,
+    pub max_radiation_shielding: f32,
 }
 
 #[derive(Resource, Default)]
@@ -102,16 +101,16 @@ pub struct FuelState {
 impl Default for FuelState {
     fn default() -> Self {
         Self {
-            current_fuel: 500.0,
-            max_fuel: 500.0,
-            fuel_consumption_rate: 1.0,
+            current_fuel: 1500.0,    // Enough for a real expedition; outposts resupply
+            max_fuel: 1500.0,
+            fuel_consumption_rate: 0.8,
         }
     }
 }
 
-/// Submarine blueprint for saving/loading
+/// Ship blueprint for saving/loading
 #[derive(Resource, Serialize, Deserialize, Clone)]
-pub struct SubmarineBlueprint {
+pub struct ShipBlueprint {
     pub hull_segments: Vec<HullSegmentData>,
     pub modules: Vec<ModuleData>,
 }
@@ -120,7 +119,7 @@ pub struct SubmarineBlueprint {
 pub struct HullSegmentData {
     pub grid_position: IVec2,
     pub health: f32,
-    pub depth_rating: f32,
+    pub radiation_shielding: f32,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -133,6 +132,15 @@ pub struct ModuleData {
     #[serde(default = "default_true")]
     pub is_active: bool,
     pub custom_data: Option<CustomModuleData>,
+    /// Multi-block customization parameter values (Tier 3 slider data)
+    #[serde(default)]
+    pub customization_params: Option<std::collections::HashMap<String, f32>>,
+    /// Stat tuning multipliers (velocity, fire_rate, damage)
+    #[serde(default)]
+    pub tuning: Option<crate::building::customization::tuning::WeaponTuning>,
+    /// Loaded kinetic ammo type
+    #[serde(default)]
+    pub selected_ammo: Option<crate::combat::ammo_types::KineticAmmoType>,
 }
 
 fn default_rotation() -> Rotation { Rotation::North }
@@ -145,7 +153,7 @@ pub struct CustomModuleData {
     pub subcomponents: Vec<SubComponentType>,
 }
 
-impl Default for SubmarineBlueprint {
+impl Default for ShipBlueprint {
     fn default() -> Self {
         Self {
             hull_segments: Vec::new(),
@@ -170,21 +178,21 @@ impl Default for WorldState {
         Self {
             seed: 0,
             time_of_day: 0.0,
-            current_biome: BiomeType::OpenOcean,
+            current_biome: BiomeType::OpenVoid,
         }
     }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BiomeType {
-    OpenOcean,
-    KelpForest,
-    CoralReef,
-    DeepTrench,
+    OpenVoid,
+    AsteroidField,
+    CrystalFormation,
+    VoidRift,
     ThermalVents,
-    IceCaverns,
-    AbyssalPlain,
-    SunkenCity,
+    IceShells,
+    DeadZone,
+    AncientRuins,
 }
 
 /// Tracks which chunks are loaded
@@ -234,7 +242,6 @@ pub struct EcoKillRecord {
 pub struct EcosystemState {
     pub population_counts: HashMap<CreatureType, u32>,
     pub recent_kills: Vec<EcoKillRecord>,
-    pub ambient_population: HashMap<crate::components::AmbientKind, u32>,
     pub total_elapsed: f32,
 }
 
@@ -261,16 +268,10 @@ pub struct EcosystemConfig {
 impl Default for EcosystemConfig {
     fn default() -> Self {
         let mut per_type_caps = HashMap::new();
-        per_type_caps.insert(CreatureType::Leviathan, 1);
+        per_type_caps.insert(CreatureType::VoidDrifter, 12);
         per_type_caps.insert(CreatureType::Stalker, 4);
-        per_type_caps.insert(CreatureType::BlindHunter, 3);
-        per_type_caps.insert(CreatureType::Ambusher, 3);
-        per_type_caps.insert(CreatureType::ElectricEel, 3);
-        per_type_caps.insert(CreatureType::LureFish, 3);
-        per_type_caps.insert(CreatureType::SwarmQueen, 2);
-        per_type_caps.insert(CreatureType::Scavenger, 5);
-        per_type_caps.insert(CreatureType::Parasite, 8);
-        per_type_caps.insert(CreatureType::Watcher, 2);
+        per_type_caps.insert(CreatureType::Leviathan, 1);
+        per_type_caps.insert(CreatureType::ParasiteSwarm, 15);
 
         Self {
             max_total_creatures: 30,
@@ -401,7 +402,7 @@ pub struct Currency {
 
 impl Default for Currency {
     fn default() -> Self {
-        Self { credits: 500 }
+        Self { credits: 750 } // Enough for a solid starter build with one weapon system
     }
 }
 
@@ -422,7 +423,7 @@ impl Default for Unlocks {
         Self {
             modules: vec![
                 "reactor".into(), "engine".into(), "quarters".into(),
-                "oxygen".into(), "ballast".into(), "light".into(),
+                "oxygen".into(), "thruster".into(), "light".into(),
             ],
             hull_types: vec!["standard".into()],
             upgrades: Vec::new(),
@@ -438,7 +439,7 @@ pub struct Statistics {
     pub creatures_killed: u32,
     pub wrecks_salvaged: u32,
     pub crew_lost: u32,
-    pub submarines_lost: u32,
+    pub ships_lost: u32,
     pub play_time_seconds: f32,
     pub logs_found: Vec<String>,
 }
@@ -452,22 +453,33 @@ pub struct VictoryState {
     pub achieved: bool,
 }
 
+/// Why the last run ended — shown on the death screen so players learn what
+/// actually killed them instead of guessing.
+#[derive(Resource, Default)]
+pub struct DeathCause {
+    /// Final verdict, composed by check_game_over when the run ends.
+    pub cause: Option<String>,
+    /// Most recent damage taken: (description, elapsed seconds when it hit).
+    /// Used to attribute hull/crew deaths to their actual source.
+    pub last_damage: Option<(String, f64)>,
+}
+
 // ============================================================================
 // GAME CONFIG
 // ============================================================================
 
 #[derive(Resource)]
 pub struct GameConfig {
-    // Pressure
-    pub pressure_damage_multiplier: f32,
-    pub pressure_per_meter: f32,
+    // Radiation
+    pub radiation_damage_multiplier: f32,
+    pub radiation_per_unit: f32,
 
     // Oxygen
     pub base_oxygen_consumption_per_crew: f32,
     pub suffocation_damage_rate: f32,
 
     // Movement
-    pub base_submarine_speed: f32,
+    pub base_ship_speed: f32,
     pub depth_change_speed: f32,
 
     // Creatures
@@ -479,15 +491,22 @@ pub struct GameConfig {
 impl Default for GameConfig {
     fn default() -> Self {
         Self {
-            pressure_damage_multiplier: 1.0,
-            pressure_per_meter: 0.1,
-            base_oxygen_consumption_per_crew: 5.0,
-            suffocation_damage_rate: 5.0,
-            base_submarine_speed: 100.0,
-            depth_change_speed: 20.0,
-            creature_spawn_rate: 0.1,
-            creature_detection_noise_threshold: 50.0,
-            creature_detection_light_threshold: 30.0,
+            // Radiation — brutal near stars without shielding. Player MUST build for it.
+            radiation_damage_multiplier: 1.5,    // Higher than original — punishment for no shielding
+            radiation_per_unit: 0.12,            // Slightly higher base — void isn't safe either
+            // Oxygen — you NEED scrubbers. No scrubbers = crew dies fast.
+            // 3.0/crew: 8 starter crew = 24/s vs two UNSTAFFED scrubbers at 30/s
+            // (staffing halves output) — the old 6.0 made suffocation a
+            // guaranteed slow death ~100s after every launch.
+            base_oxygen_consumption_per_crew: 3.0,
+            suffocation_damage_rate: 8.0,           // Fast death without air — motivates building life support
+            // Movement — should feel weighty in space
+            base_ship_speed: 120.0,          // Slightly faster — space is big
+            depth_change_speed: 25.0,
+            // Creatures — steady trickle, not overwhelming
+            creature_spawn_rate: 0.08,            // Slightly slower spawning
+            creature_detection_noise_threshold: 40.0, // Easier to detect creatures
+            creature_detection_light_threshold: 25.0,
         }
     }
 }
@@ -502,7 +521,8 @@ pub struct InputState {
     pub depth_input: f32,       // -1 rise, +1 sink
     pub mouse_world_pos: Vec2,
     pub mouse_grid_pos: IVec2,
-    pub ballast_input: f32,     // Q/E for ballast control
+    pub thruster_input: f32,    // Q/E for vertical thruster control
+    pub brake: bool,            // Shift — retro-thrust against current velocity
 }
 
 // ============================================================================
@@ -640,9 +660,9 @@ impl BuildingState {
                 BuildSelection::Hull(HULL_LAYERS[idx])
             }
             BuildCategory::Custom => {
-                // For now, return first customizable module (TorpedoTube)
+                // For now, return first customizable module (Torpedo)
                 // Later this will be saved custom blueprints
-                BuildSelection::Module(ModuleType::TorpedoTube)
+                BuildSelection::Module(ModuleType::HeavyMissile)
             }
             _ => {
                 if let Some(module_cat) = cat.to_module_category() {
@@ -700,7 +720,7 @@ impl BuildingState {
 // CUSTOMIZATION MODE
 // ============================================================================
 
-/// State for customizing modules with sliders and sub-component placement
+/// State for customizing modules with sliders and ship-component placement
 #[derive(Resource)]
 pub struct CustomizationState {
     pub active: bool,
@@ -713,7 +733,7 @@ impl Default for CustomizationState {
     fn default() -> Self {
         Self {
             active: false,
-            module_type: ModuleType::TorpedoTube,
+            module_type: ModuleType::HeavyMissile,
             properties: HashMap::new(),
             preview_stats: CalculatedStats::default(),
         }
@@ -764,7 +784,7 @@ impl CustomizationState {
     pub fn recalculate_preview(&mut self) {
         use crate::building::StatCalculator;
 
-        // Build sub-components from properties
+        // Build ship-components from properties
         let subcomponents = self.build_subcomponents();
 
         // Get base stats (would need registry, but for now use defaults)
@@ -813,7 +833,7 @@ impl CustomizationState {
         );
     }
 
-    /// Build sub-components from current property values
+    /// Build ship-components from current property values
     pub fn build_subcomponents(&self) -> Vec<SubComponentType> {
         use crate::components::*;
 
@@ -914,7 +934,7 @@ impl Default for ComponentPlacementState {
     fn default() -> Self {
         Self {
             active: false,
-            module_type: ModuleType::TorpedoTube,
+            module_type: ModuleType::HeavyMissile,
             selected_piece_type: None,
             placed_pieces: Vec::new(),
             ghost_position: None,
@@ -1178,7 +1198,7 @@ pub struct HullSaveData {
     pub grid_position: IVec2,
     pub health: f32,
     pub max_health: f32,
-    pub depth_rating: f32,
+    pub radiation_shielding: f32,
     pub material: HullMaterial,
     pub hull_layer: HullLayer,
 }
@@ -1197,7 +1217,7 @@ pub struct SaveSlotInfo {
 pub struct SaveData {
     pub version: u32,
     pub slot_info: SaveSlotInfo,
-    pub submarine: SubmarineBlueprint,
+    pub ship: ShipBlueprint,
     pub hull_segments: Vec<HullSaveData>,
     pub crew: Vec<CrewSaveData>,
     pub inventory: Inventory,
@@ -1209,6 +1229,12 @@ pub struct SaveData {
     pub current_depth: f32,
     pub world_seed: u64,
     pub was_exploring: bool,
+    /// Current star system ID (for celestial state)
+    #[serde(default)]
+    pub current_system_id: u32,
+    /// Galaxy seed for reproducible system generation
+    #[serde(default)]
+    pub galaxy_seed: u64,
 }
 
 impl Default for SaveData {
@@ -1222,7 +1248,7 @@ impl Default for SaveData {
                 play_time: 0.0,
                 hull_integrity: 1.0,
             },
-            submarine: SubmarineBlueprint::default(),
+            ship: ShipBlueprint::default(),
             hull_segments: Vec::new(),
             crew: Vec::new(),
             inventory: Inventory::default(),
@@ -1234,6 +1260,8 @@ impl Default for SaveData {
             current_depth: 0.0,
             world_seed: 0,
             was_exploring: false,
+            current_system_id: 0,
+            galaxy_seed: 0,
         }
     }
 }
@@ -1276,11 +1304,11 @@ mod tests {
     #[test]
     fn game_config_defaults() {
         let config = GameConfig::default();
-        assert!(config.pressure_damage_multiplier > 0.0);
-        assert!(config.pressure_per_meter > 0.0);
+        assert!(config.radiation_damage_multiplier > 0.0);
+        assert!(config.radiation_per_unit > 0.0);
         assert!(config.base_oxygen_consumption_per_crew > 0.0);
         assert!(config.suffocation_damage_rate > 0.0);
-        assert!(config.base_submarine_speed > 0.0);
+        assert!(config.base_ship_speed > 0.0);
     }
 
     #[test]

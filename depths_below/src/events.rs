@@ -3,16 +3,16 @@
 
 use bevy::prelude::*;
 use crate::components::{ModuleType, Rotation, HullLayer, HullMaterial, SubComponentType, ExplosiveType};
-use crate::ai_submarine::components::AiSubType;
+use crate::ai_ship::components::AiShipType;
 use crate::resources::ItemType;
 
 // ============================================================================
 // SUBMARINE EVENTS
 // ============================================================================
 
-/// Fired when submarine takes damage
-#[derive(Event)]
-pub struct SubmarineDamaged {
+/// Fired when ship takes damage
+#[derive(Message)]
+pub struct ShipDamaged {
     pub source: DamageSource,
     pub amount: f32,
     pub position: Option<Vec2>,
@@ -21,56 +21,66 @@ pub struct SubmarineDamaged {
 
 #[derive(Clone, Debug)]
 pub enum DamageSource {
-    Pressure,
+    Radiation,
     Creature(Entity),
     Collision,
     Explosion,
     Fire,
 }
 
+/// Fired whenever a weapon actually discharges (player or AI) — audio/vfx hook.
+/// Continuous weapons (laser) write this every frame they're beaming; the
+/// audio system rate-limits per weapon type.
+#[derive(Message)]
+pub struct WeaponFired {
+    pub weapon_type: ModuleType,
+    pub position: Vec2,
+    pub from_player: bool,
+}
+
 /// Fired when a hull segment is breached
-#[derive(Event)]
+#[derive(Message)]
 pub struct HullBreached {
     pub segment: Entity,
     pub severity: f32,  // 0.0 to 1.0
 }
 
 /// Fired when a module is damaged
-#[derive(Event)]
+#[derive(Message)]
 pub struct ModuleDamaged {
     pub module: Entity,
     pub amount: f32,
 }
 
 /// Fired when a module is destroyed
-#[derive(Event)]
+#[derive(Message)]
 pub struct ModuleDestroyed {
     pub module: Entity,
 }
 
-/// Fired when a room floods
-#[derive(Event)]
-pub struct RoomFlooded {
+/// Fired when a room depressurizes (air escaping through hull breach)
+#[derive(Message)]
+pub struct RoomDepressurized {
     pub room_id: usize,
     pub severity: f32,
 }
 
 /// Fired when power state changes significantly
-#[derive(Event)]
+#[derive(Message)]
 pub struct PowerStateChanged {
     pub new_balance: f32,
     pub is_critical: bool,
 }
 
 /// Fired when oxygen state changes significantly
-#[derive(Event)]
+#[derive(Message)]
 pub struct OxygenStateChanged {
     pub new_level: f32,
     pub is_critical: bool,
 }
 
 /// Fired when depth changes zones
-#[derive(Event)]
+#[derive(Message)]
 pub struct DepthZoneChanged {
     pub new_depth: f32,
     pub new_zone: crate::components::ZoneType,
@@ -81,7 +91,7 @@ pub struct DepthZoneChanged {
 // ============================================================================
 
 /// Request to place a module (uses ModuleType enum instead of String)
-#[derive(Event)]
+#[derive(Message)]
 pub struct PlaceModuleRequest {
     pub module_type: ModuleType,
     pub grid_position: IVec2,
@@ -93,7 +103,7 @@ pub struct PlaceModuleRequest {
 }
 
 /// Request to place a hull segment
-#[derive(Event)]
+#[derive(Message)]
 pub struct PlaceHullRequest {
     pub layer: HullLayer,
     pub material: HullMaterial,
@@ -103,7 +113,7 @@ pub struct PlaceHullRequest {
 }
 
 /// Module was successfully placed
-#[derive(Event)]
+#[derive(Message)]
 pub struct ModulePlaced {
     pub module: Entity,
     pub module_type: ModuleType,
@@ -111,13 +121,13 @@ pub struct ModulePlaced {
 }
 
 /// Request to remove a module
-#[derive(Event)]
+#[derive(Message)]
 pub struct RemoveModuleRequest {
     pub module: Entity,
 }
 
 /// Module was removed
-#[derive(Event)]
+#[derive(Message)]
 pub struct ModuleRemoved {
     pub module_type: ModuleType,
     pub grid_position: IVec2,
@@ -128,7 +138,7 @@ pub struct ModuleRemoved {
 // ============================================================================
 
 /// Crew member took damage
-#[derive(Event)]
+#[derive(Message)]
 pub struct CrewDamaged {
     pub crew: Entity,
     pub amount: f32,
@@ -138,14 +148,14 @@ pub struct CrewDamaged {
 #[derive(Clone, Debug)]
 pub enum CrewDamageSource {
     Suffocation,
-    Flooding,
+    Decompression,
     Fire,
     Creature,
     Explosion,
 }
 
 /// Crew member died
-#[derive(Event)]
+#[derive(Message)]
 pub struct CrewDied {
     pub crew: Entity,
     pub name: String,
@@ -153,7 +163,7 @@ pub struct CrewDied {
 }
 
 /// Staffing priority changed on a module
-#[derive(Event)]
+#[derive(Message)]
 pub struct StaffingPriorityChanged {
     pub module: Entity,
     pub new_priority: u8,
@@ -163,8 +173,8 @@ pub struct StaffingPriorityChanged {
 // CREATURE EVENTS
 // ============================================================================
 
-/// Creature spotted the submarine
-#[derive(Event)]
+/// Creature spotted the ship
+#[derive(Message)]
 pub struct CreatureSpotted {
     pub creature: Entity,
     pub creature_type: crate::components::CreatureType,
@@ -172,14 +182,14 @@ pub struct CreatureSpotted {
 }
 
 /// Creature is attacking
-#[derive(Event)]
+#[derive(Message)]
 pub struct CreatureAttacking {
     pub creature: Entity,
     pub target: Entity,
 }
 
 /// Creature was killed
-#[derive(Event)]
+#[derive(Message)]
 pub struct CreatureKilled {
     pub creature: Entity,
     pub creature_type: crate::components::CreatureType,
@@ -191,7 +201,7 @@ pub struct CreatureKilled {
 // ============================================================================
 
 /// A creature ate another creature
-#[derive(Event)]
+#[derive(Message)]
 pub struct CreatureAteCreature {
     pub predator: Entity,
     pub predator_type: crate::components::CreatureType,
@@ -200,7 +210,7 @@ pub struct CreatureAteCreature {
 }
 
 /// A creature ate from a corpse
-#[derive(Event)]
+#[derive(Message)]
 pub struct CreatureAteCorpse {
     pub creature: Entity,
     pub creature_type: crate::components::CreatureType,
@@ -217,7 +227,7 @@ pub enum CascadeType {
 }
 
 /// Large-scale ecosystem event triggered by player actions
-#[derive(Event)]
+#[derive(Message)]
 pub struct EcosystemCascade {
     pub cascade_type: CascadeType,
     pub position: Vec2,
@@ -228,26 +238,26 @@ pub struct EcosystemCascade {
 // ============================================================================
 
 /// Entered a new chunk
-#[derive(Event)]
+#[derive(Message)]
 pub struct ChunkEntered {
     pub chunk_pos: IVec2,
 }
 
 /// Discovered a point of interest
-#[derive(Event)]
+#[derive(Message)]
 pub struct PoiDiscovered {
     pub poi_type: crate::components::PoiType,
     pub position: Vec2,
 }
 
 /// Started docking with something
-#[derive(Event)]
+#[derive(Message)]
 pub struct DockingStarted {
     pub target: Entity,
 }
 
 /// Finished docking
-#[derive(Event)]
+#[derive(Message)]
 pub struct DockingCompleted {
     pub target: Entity,
 }
@@ -257,7 +267,7 @@ pub struct DockingCompleted {
 // ============================================================================
 
 /// Notification to display
-#[derive(Event)]
+#[derive(Message)]
 pub struct ShowNotification {
     pub message: String,
     pub notification_type: NotificationType,
@@ -273,7 +283,7 @@ pub enum NotificationType {
 }
 
 /// Request to open a menu
-#[derive(Event)]
+#[derive(Message)]
 pub struct OpenMenu {
     pub menu_type: MenuType,
 }
@@ -289,7 +299,7 @@ pub enum MenuType {
 }
 
 /// Request to close current menu
-#[derive(Event)]
+#[derive(Message)]
 pub struct CloseMenu;
 
 // ============================================================================
@@ -297,7 +307,7 @@ pub struct CloseMenu;
 // ============================================================================
 
 /// Fired when an explosive module detonates (after PendingDetonation timer)
-#[derive(Event)]
+#[derive(Message)]
 pub struct ModuleExploded {
     pub grid_position: IVec2,
     pub blast_damage: f32,
@@ -305,7 +315,7 @@ pub struct ModuleExploded {
 }
 
 /// Fired to ignite a module
-#[derive(Event)]
+#[derive(Message)]
 pub struct FireStarted {
     pub module: Entity,
     pub grid_position: IVec2,
@@ -313,7 +323,7 @@ pub struct FireStarted {
 }
 
 /// Fired when a fire goes out
-#[derive(Event)]
+#[derive(Message)]
 pub struct FireExtinguished {
     pub module: Entity,
     pub cause: FireExtinguishCause,
@@ -321,13 +331,13 @@ pub struct FireExtinguished {
 
 #[derive(Clone, Copy, Debug)]
 pub enum FireExtinguishCause {
-    Flooding,
+    Decompression,
     BurnedOut,
     CrewSuppressed,
 }
 
 /// Fired when a hull segment reaches 0 HP
-#[derive(Event)]
+#[derive(Message)]
 pub struct HullSegmentDestroyed {
     pub segment: Entity,
     pub grid_position: IVec2,
@@ -338,14 +348,14 @@ pub struct HullSegmentDestroyed {
 // ============================================================================
 
 /// Request to seal/unseal a bulkhead door
-#[derive(Event)]
+#[derive(Message)]
 pub struct ToggleBulkhead {
     pub segment: Entity,
     pub seal: bool,
 }
 
 /// Fired when a crew member is dispatched to handle an emergency
-#[derive(Event)]
+#[derive(Message)]
 pub struct CrewDispatched {
     pub crew: Entity,
     pub room_id: usize,
@@ -354,7 +364,7 @@ pub struct CrewDispatched {
 
 #[derive(Clone, Copy, Debug)]
 pub enum DispatchReason {
-    Flooding,
+    Decompression,
     Fire,
 }
 
@@ -362,9 +372,9 @@ pub enum DispatchReason {
 // AI SUBMARINE EVENTS
 // ============================================================================
 
-/// Fired when an AI submarine takes damage
-#[derive(Event)]
-pub struct AiSubDamaged {
+/// Fired when an AI ship takes damage
+#[derive(Message)]
+pub struct AiShipDamaged {
     pub target: Entity,
     pub source: DamageSource,
     pub amount: f32,
@@ -372,12 +382,16 @@ pub struct AiSubDamaged {
     pub direction: Option<Vec2>,
 }
 
-/// Fired when an AI submarine is destroyed
-#[derive(Event)]
-pub struct AiSubDestroyed {
+/// Fired when an AI ship is destroyed
+#[derive(Message)]
+pub struct AiShipDestroyed {
     pub entity: Entity,
-    pub sub_type: AiSubType,
+    pub ship_type: AiShipType,
     pub position: Vec2,
+    /// Set if this ship was a tagged bounty target (see ai_ship::components::BountyTarget)
+    /// — lets contract tracking complete the specific bounty instead of any
+    /// ship of the same faction.
+    pub bounty_id: Option<u32>,
 }
 
 // ============================================================================
@@ -385,25 +399,25 @@ pub struct AiSubDestroyed {
 // ============================================================================
 
 /// A contract was accepted from the mission board
-#[derive(Event)]
+#[derive(Message)]
 pub struct ContractAccepted {
     pub contract_id: u32,
 }
 
 /// A contract objective was completed (during exploration)
-#[derive(Event)]
+#[derive(Message)]
 pub struct ContractCompleted {
     pub contract_id: u32,
 }
 
 /// A contract was failed (e.g. game over with deposit)
-#[derive(Event)]
+#[derive(Message)]
 pub struct ContractFailed {
     pub contract_id: u32,
 }
 
 /// A completed contract was turned in at surface for rewards
-#[derive(Event)]
+#[derive(Message)]
 pub struct ContractTurnedIn {
     pub contract_id: u32,
     pub reward: u32,
@@ -414,23 +428,23 @@ pub struct ContractTurnedIn {
 // SAVE/LOAD EVENTS
 // ============================================================================
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct SaveGameRequest {
     pub slot: u32,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct LoadGameRequest {
     pub slot: u32,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct GameSaved {
     pub slot: u32,
     pub success: bool,
 }
 
-#[derive(Event)]
+#[derive(Message)]
 pub struct GameLoaded {
     pub slot: u32,
     pub success: bool,
@@ -445,62 +459,63 @@ pub struct EventsPlugin;
 impl Plugin for EventsPlugin {
     fn build(&self, app: &mut App) {
         app
-            // Submarine events
-            .add_event::<SubmarineDamaged>()
-            .add_event::<HullBreached>()
-            .add_event::<ModuleDamaged>()
-            .add_event::<ModuleDestroyed>()
-            .add_event::<RoomFlooded>()
-            .add_event::<PowerStateChanged>()
-            .add_event::<OxygenStateChanged>()
-            .add_event::<DepthZoneChanged>()
+            // Ship events
+            .add_message::<ShipDamaged>()
+            .add_message::<WeaponFired>()
+            .add_message::<HullBreached>()
+            .add_message::<ModuleDamaged>()
+            .add_message::<ModuleDestroyed>()
+            .add_message::<RoomDepressurized>()
+            .add_message::<PowerStateChanged>()
+            .add_message::<OxygenStateChanged>()
+            .add_message::<DepthZoneChanged>()
             // Building events
-            .add_event::<PlaceModuleRequest>()
-            .add_event::<PlaceHullRequest>()
-            .add_event::<ModulePlaced>()
-            .add_event::<RemoveModuleRequest>()
-            .add_event::<ModuleRemoved>()
+            .add_message::<PlaceModuleRequest>()
+            .add_message::<PlaceHullRequest>()
+            .add_message::<ModulePlaced>()
+            .add_message::<RemoveModuleRequest>()
+            .add_message::<ModuleRemoved>()
             // Crew events
-            .add_event::<CrewDamaged>()
-            .add_event::<CrewDied>()
-            .add_event::<StaffingPriorityChanged>()
+            .add_message::<CrewDamaged>()
+            .add_message::<CrewDied>()
+            .add_message::<StaffingPriorityChanged>()
             // Creature events
-            .add_event::<CreatureSpotted>()
-            .add_event::<CreatureAttacking>()
-            .add_event::<CreatureKilled>()
+            .add_message::<CreatureSpotted>()
+            .add_message::<CreatureAttacking>()
+            .add_message::<CreatureKilled>()
             // Ecosystem events
-            .add_event::<CreatureAteCreature>()
-            .add_event::<CreatureAteCorpse>()
-            .add_event::<EcosystemCascade>()
+            .add_message::<CreatureAteCreature>()
+            .add_message::<CreatureAteCorpse>()
+            .add_message::<EcosystemCascade>()
             // World events
-            .add_event::<ChunkEntered>()
-            .add_event::<PoiDiscovered>()
-            .add_event::<DockingStarted>()
-            .add_event::<DockingCompleted>()
+            .add_message::<ChunkEntered>()
+            .add_message::<PoiDiscovered>()
+            .add_message::<DockingStarted>()
+            .add_message::<DockingCompleted>()
             // UI events
-            .add_event::<ShowNotification>()
-            .add_event::<OpenMenu>()
-            .add_event::<CloseMenu>()
+            .add_message::<ShowNotification>()
+            .add_message::<OpenMenu>()
+            .add_message::<CloseMenu>()
             // Chain reaction / fire / cascade events
-            .add_event::<ModuleExploded>()
-            .add_event::<FireStarted>()
-            .add_event::<FireExtinguished>()
-            .add_event::<HullSegmentDestroyed>()
+            .add_message::<ModuleExploded>()
+            .add_message::<FireStarted>()
+            .add_message::<FireExtinguished>()
+            .add_message::<HullSegmentDestroyed>()
             // Crisis management events
-            .add_event::<ToggleBulkhead>()
-            .add_event::<CrewDispatched>()
-            // AI submarine events
-            .add_event::<AiSubDamaged>()
-            .add_event::<AiSubDestroyed>()
+            .add_message::<ToggleBulkhead>()
+            .add_message::<CrewDispatched>()
+            // AI ship events
+            .add_message::<AiShipDamaged>()
+            .add_message::<AiShipDestroyed>()
             // Contract events
-            .add_event::<ContractAccepted>()
-            .add_event::<ContractCompleted>()
-            .add_event::<ContractFailed>()
-            .add_event::<ContractTurnedIn>()
+            .add_message::<ContractAccepted>()
+            .add_message::<ContractCompleted>()
+            .add_message::<ContractFailed>()
+            .add_message::<ContractTurnedIn>()
             // Save/load events
-            .add_event::<SaveGameRequest>()
-            .add_event::<LoadGameRequest>()
-            .add_event::<GameSaved>()
-            .add_event::<GameLoaded>();
+            .add_message::<SaveGameRequest>()
+            .add_message::<LoadGameRequest>()
+            .add_message::<GameSaved>()
+            .add_message::<GameLoaded>();
     }
 }

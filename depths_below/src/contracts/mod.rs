@@ -1,3 +1,4 @@
+pub mod bounty_nav;
 pub mod generation;
 pub mod tracking;
 pub mod ui;
@@ -5,6 +6,7 @@ pub mod ui;
 use bevy::prelude::*;
 use serde::{Serialize, Deserialize};
 
+use crate::ai_ship::components::AiShipType;
 use crate::components::{CreatureType, PoiType, ZoneType};
 use crate::resources::ItemType;
 use crate::states::GameState;
@@ -42,6 +44,7 @@ pub enum ContractType {
     RetrieveSalvage,
     CaptureLive,
     SurveyZone,
+    DestroyShip,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -52,6 +55,12 @@ pub enum ContractObjective {
     RetrieveSalvage { item_type: ItemType, target_count: u32, current_count: u32 },
     CaptureLive { creature_type: CreatureType, captured: bool },
     SurveyZone { zone: ZoneType, required_seconds: f32, elapsed_seconds: f32 },
+    /// Bounty on one specific tagged hostile ship (see
+    /// ai_ship::components::BountyTarget) — reward scales with how far that
+    /// ship actually is from Haven Station and how tough its faction is
+    /// (see contracts::generation::destroy_ship_reward). `target_id` matches
+    /// AiShipDestroyed::bounty_id when that exact ship dies.
+    DestroyShip { ship_type: AiShipType, target_id: u32, destroyed: bool },
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Debug)]
@@ -100,6 +109,9 @@ impl Contract {
             ContractObjective::SurveyZone { elapsed_seconds, required_seconds, .. } => {
                 format!("{:.0}/{:.0}s", elapsed_seconds, required_seconds)
             }
+            ContractObjective::DestroyShip { destroyed, .. } => {
+                if *destroyed { "Done".into() } else { "Hunting".into() }
+            }
         }
     }
 
@@ -112,6 +124,7 @@ impl Contract {
             ContractObjective::RetrieveSalvage { current_count, target_count, .. } => current_count >= target_count,
             ContractObjective::CaptureLive { captured, .. } => *captured,
             ContractObjective::SurveyZone { elapsed_seconds, required_seconds, .. } => elapsed_seconds >= required_seconds,
+            ContractObjective::DestroyShip { destroyed, .. } => *destroyed,
         }
     }
 
@@ -125,9 +138,18 @@ impl Contract {
 // RESOURCES
 // ============================================================================
 
+/// Number of contract boards: Haven Station (index 0) plus one per resupply
+/// outpost, in world::home_base::OUTPOST_POSITIONS order.
+pub const STATION_COUNT: usize = 1 + crate::world::home_base::OUTPOST_POSITIONS.len();
+
 #[derive(Resource, Serialize, Deserialize, Clone, Default)]
 pub struct ContractState {
-    pub available_contracts: Vec<Contract>,
+    /// One board per station (see STATION_COUNT) — each station offers its
+    /// own bounties, generated lazily the first time its board is opened.
+    pub available_by_station: Vec<Vec<Contract>>,
+    /// Accepted contracts, shared across every station — there's no cap on
+    /// how many can be active at once, and a completed one can be turned in
+    /// at any station, not just the one that offered it.
     pub active_contracts: Vec<Contract>,
     pub next_id: u32,
     pub contracts_completed_total: u32,
@@ -135,8 +157,19 @@ pub struct ContractState {
 }
 
 impl ContractState {
-    pub const MAX_ACTIVE: usize = 3;
+    /// Board for a given station index, generating an empty slot on first
+    /// access so indexing never panics even before any board has been rolled.
+    pub fn board_mut(&mut self, station: usize) -> &mut Vec<Contract> {
+        if self.available_by_station.len() < STATION_COUNT {
+            self.available_by_station.resize(STATION_COUNT, Vec::new());
+        }
+        &mut self.available_by_station[station]
+    }
 }
+
+/// Which station's board is currently open in the mission board UI.
+#[derive(Resource, Default)]
+pub struct ViewingStation(pub usize);
 
 #[derive(Resource, Serialize, Deserialize, Clone)]
 pub struct FactionReputation {
@@ -204,13 +237,11 @@ impl Plugin for ContractsPlugin {
             .init_resource::<ContractState>()
             .init_resource::<FactionReputation>()
             .init_resource::<MissionBoardOpen>()
+            .init_resource::<ViewingStation>()
             .init_resource::<ui::MissionBoardSelection>()
-            // Generate board + turn in completed contracts on surface
-            .add_systems(OnEnter(GameState::SurfaceBase), (
-                generation::generate_initial_board,
-                tracking::turn_in_contracts,
-            ).chain())
-            // Tracking during exploration
+            // Turn in completed contracts on docking at Haven
+            .add_systems(OnEnter(GameState::StationDocked), tracking::turn_in_contracts)
+            // Tracking + claim-anywhere during exploration
             .add_systems(Update, (
                 tracking::track_kill_contracts,
                 tracking::track_poi_contracts,
@@ -218,19 +249,31 @@ impl Plugin for ContractsPlugin {
                 tracking::track_salvage_contracts,
                 tracking::track_survey_contracts,
                 tracking::track_capture_contracts,
+                tracking::track_destroy_ship_contracts,
                 tracking::check_contract_completion,
+                tracking::turn_in_at_station_proximity,
             ).chain().run_if(in_state(GameState::Exploring)))
-            // Mission board UI at surface
+            // Mission board UI — usable docked at Haven or just flying near
+            // any station (Haven or an outpost), each with its own board
             .add_systems(Update, (
                 ui::toggle_mission_board,
                 ui::mission_board_input,
                 ui::update_mission_board_display,
-            ).chain().run_if(in_state(GameState::SurfaceBase)))
+            ).chain().run_if(in_state(GameState::StationDocked).or_else(in_state(GameState::Exploring))))
             // Contract HUD during exploration
-            .add_systems(OnEnter(GameState::Exploring), ui::spawn_contract_hud)
+            .add_systems(OnEnter(GameState::Exploring), (ui::spawn_contract_hud, bounty_nav::spawn_bounty_arrow))
             .add_systems(OnExit(GameState::Exploring), ui::despawn_contract_hud)
             .add_systems(Update, ui::update_contract_hud
                 .run_if(in_state(GameState::Exploring)))
+            // Bounty navigation: HUD arrow toward the nearest active target,
+            // plus a floating label over the specific tagged ship once it's
+            // close enough to be a real entity. Long-range point-to-point
+            // travel is the M-key map + G-hold warp dash (see ui/mod.rs).
+            .add_systems(Update, (
+                bounty_nav::update_bounty_arrow,
+                bounty_nav::spawn_bounty_markers,
+                bounty_nav::update_bounty_markers,
+            ).run_if(in_state(GameState::Exploring)))
             // Failure on game over
             .add_systems(OnEnter(GameState::GameOver), tracking::handle_contract_failure);
     }

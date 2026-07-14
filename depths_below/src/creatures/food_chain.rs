@@ -1,5 +1,5 @@
 use crate::components::{
-    AmbientKind, CreatureType, FoodChainRole, FoodChainTier,
+    CreatureType, FoodChainRole, FoodChainTier,
 };
 
 /// Per-type ecosystem stats for spawning components
@@ -7,8 +7,8 @@ pub struct EcoStats {
     pub hunger_rate: f32,
     pub energy_drain_rate: f32,
     pub food_value: f32,
-    pub territory_radius: f32,
     pub is_territorial: bool,
+    pub territory_radius: f32,
     pub territory_aggression: f32,
     pub can_reproduce: bool,
     pub gestation_duration: f32,
@@ -16,271 +16,95 @@ pub struct EcoStats {
     pub satiation_threshold: f32,
 }
 
-/// Returns the food chain role definition for a given creature type
-pub fn food_chain_role(ct: CreatureType) -> FoodChainRole {
-    match ct {
+/// Returns the food chain role for a creature type
+pub fn food_chain_role(creature_type: CreatureType) -> FoodChainRole {
+    match creature_type {
         CreatureType::Leviathan => FoodChainRole {
             tier: FoodChainTier::Apex,
             prey_types: vec![
                 CreatureType::Stalker,
-                CreatureType::BlindHunter,
-                CreatureType::Ambusher,
-                CreatureType::ElectricEel,
-                CreatureType::LureFish,
-                CreatureType::Scavenger,
+                CreatureType::VoidDrifter,
             ],
-            prey_ambient: vec![AmbientKind::GiantSquid, AmbientKind::Whale],
             threat_types: vec![],
-            eats_corpses: false,
-            attacks_submarine: true,
+            attacks_ship: true,
         },
         CreatureType::Stalker => FoodChainRole {
             tier: FoodChainTier::Predator,
             prey_types: vec![
-                CreatureType::ElectricEel,
-                CreatureType::LureFish,
-                CreatureType::Scavenger,
-            ],
-            prey_ambient: vec![
-                AmbientKind::SmallFish,
-                AmbientKind::SchoolFish,
-                AmbientKind::DeepFish,
+                CreatureType::VoidDrifter,
+                CreatureType::ParasiteSwarm,
             ],
             threat_types: vec![CreatureType::Leviathan],
-            eats_corpses: false,
-            attacks_submarine: true,
+            attacks_ship: true,
         },
-        CreatureType::BlindHunter => FoodChainRole {
-            tier: FoodChainTier::Predator,
-            prey_types: vec![
-                CreatureType::ElectricEel,
-                CreatureType::LureFish,
-                CreatureType::Scavenger,
-            ],
-            prey_ambient: vec![AmbientKind::SmallFish, AmbientKind::DeepFish],
-            threat_types: vec![CreatureType::Leviathan],
-            eats_corpses: false,
-            attacks_submarine: true,
-        },
-        CreatureType::Ambusher => FoodChainRole {
-            tier: FoodChainTier::Predator,
-            prey_types: vec![
-                CreatureType::ElectricEel,
-                CreatureType::LureFish,
-                CreatureType::Scavenger,
-            ],
-            prey_ambient: vec![
-                AmbientKind::SmallFish,
-                AmbientKind::SchoolFish,
-            ],
-            threat_types: vec![CreatureType::Leviathan],
-            eats_corpses: false,
-            attacks_submarine: true,
-        },
-        CreatureType::ElectricEel => FoodChainRole {
-            tier: FoodChainTier::MesoPredator,
-            prey_types: vec![],
-            prey_ambient: vec![
-                AmbientKind::SmallFish,
-                AmbientKind::SchoolFish,
-                AmbientKind::Jellyfish,
-            ],
-            threat_types: vec![
-                CreatureType::Leviathan,
-                CreatureType::Stalker,
-                CreatureType::BlindHunter,
-                CreatureType::Ambusher,
-            ],
-            eats_corpses: false,
-            attacks_submarine: true,
-        },
-        CreatureType::LureFish => FoodChainRole {
-            tier: FoodChainTier::MesoPredator,
-            prey_types: vec![],
-            prey_ambient: vec![
-                AmbientKind::SmallFish,
-                AmbientKind::Jellyfish,
-                AmbientKind::DeepFish,
-            ],
-            threat_types: vec![
-                CreatureType::Leviathan,
-                CreatureType::Stalker,
-                CreatureType::BlindHunter,
-                CreatureType::Ambusher,
-            ],
-            eats_corpses: false,
-            attacks_submarine: true,
-        },
-        CreatureType::Scavenger => FoodChainRole {
+        CreatureType::ParasiteSwarm => FoodChainRole {
             tier: FoodChainTier::Scavenger,
             prey_types: vec![],
-            prey_ambient: vec![AmbientKind::SmallFish],
-            threat_types: vec![
-                CreatureType::Leviathan,
-                CreatureType::Stalker,
-                CreatureType::BlindHunter,
-                CreatureType::Ambusher,
-            ],
-            eats_corpses: true,
-            attacks_submarine: true,
+            threat_types: vec![CreatureType::Stalker, CreatureType::Leviathan],
+            attacks_ship: true,
         },
-        CreatureType::SwarmQueen => FoodChainRole {
-            tier: FoodChainTier::Hive,
-            prey_types: vec![],
-            prey_ambient: vec![
-                AmbientKind::SmallFish,
-                AmbientKind::SchoolFish,
-                AmbientKind::Jellyfish,
-            ],
-            threat_types: vec![CreatureType::Leviathan],
-            eats_corpses: false,
-            attacks_submarine: true,
-        },
-        CreatureType::Parasite => FoodChainRole {
+        CreatureType::VoidDrifter => FoodChainRole {
             tier: FoodChainTier::Prey,
             prey_types: vec![],
-            prey_ambient: vec![],
             threat_types: vec![
                 CreatureType::Stalker,
-                CreatureType::BlindHunter,
-                CreatureType::Ambusher,
+                CreatureType::Leviathan,
             ],
-            eats_corpses: true,
-            attacks_submarine: true,
-        },
-        CreatureType::Watcher => FoodChainRole {
-            tier: FoodChainTier::Observer,
-            prey_types: vec![],
-            prey_ambient: vec![],
-            threat_types: vec![CreatureType::Leviathan],
-            eats_corpses: false,
-            attacks_submarine: false,
+            attacks_ship: false,
         },
     }
 }
 
-/// Returns ecosystem stats for a creature type
-pub fn creature_ecosystem_stats(ct: CreatureType) -> EcoStats {
-    match ct {
-        CreatureType::Leviathan => EcoStats {
-            hunger_rate: 0.3,
-            energy_drain_rate: 0.1,
-            food_value: 100.0,
-            territory_radius: 500.0,
-            is_territorial: true,
-            territory_aggression: 0.9,
-            can_reproduce: false,
-            gestation_duration: 0.0,
-            offspring_count: 0,
-            satiation_threshold: 20.0,
+/// Returns ecosystem stats for spawning creature components
+pub fn creature_ecosystem_stats(creature_type: CreatureType) -> EcoStats {
+    match creature_type {
+        CreatureType::VoidDrifter => EcoStats {
+            hunger_rate: 0.2,            // Low metabolism — passive
+            energy_drain_rate: 0.05,
+            food_value: 6.0,
+            is_territorial: false,
+            territory_radius: 0.0,
+            territory_aggression: 0.0,
+            can_reproduce: true,
+            gestation_duration: 50.0,    // Slow reproduction
+            offspring_count: 2,
+            satiation_threshold: 50.0,
         },
         CreatureType::Stalker => EcoStats {
-            hunger_rate: 0.8,
-            energy_drain_rate: 0.3,
-            food_value: 40.0,
-            territory_radius: 350.0,
+            hunger_rate: 0.5,            // Gets hungry, hunts when needed
+            energy_drain_rate: 0.2,
+            food_value: 25.0,
             is_territorial: true,
-            territory_aggression: 0.6,
-            can_reproduce: true,
-            gestation_duration: 90.0,
-            offspring_count: 1,
-            satiation_threshold: 20.0,
-        },
-        CreatureType::BlindHunter => EcoStats {
-            hunger_rate: 1.0,
-            energy_drain_rate: 0.4,
-            food_value: 35.0,
-            territory_radius: 300.0,
-            is_territorial: true,
+            territory_radius: 500.0,     // Larger territory
             territory_aggression: 0.7,
             can_reproduce: true,
-            gestation_duration: 80.0,
+            gestation_duration: 120.0,   // Slow — keeps population manageable
             offspring_count: 1,
-            satiation_threshold: 20.0,
+            satiation_threshold: 65.0,
         },
-        CreatureType::Ambusher => EcoStats {
-            hunger_rate: 0.5,
-            energy_drain_rate: 0.2,
-            food_value: 45.0,
-            territory_radius: 250.0,
+        CreatureType::Leviathan => EcoStats {
+            hunger_rate: 0.15,           // Barely needs to eat — apex predator
+            energy_drain_rate: 0.05,
+            food_value: 150.0,
             is_territorial: true,
-            territory_aggression: 0.8,
-            can_reproduce: true,
-            gestation_duration: 100.0,
-            offspring_count: 1,
-            satiation_threshold: 20.0,
+            territory_radius: 1200.0,    // Massive territory
+            territory_aggression: 1.0,
+            can_reproduce: false,        // One per system
+            gestation_duration: 0.0,
+            offspring_count: 0,
+            satiation_threshold: 0.0,
         },
-        CreatureType::ElectricEel => EcoStats {
-            hunger_rate: 0.7,
-            energy_drain_rate: 0.5,
-            food_value: 25.0,
-            territory_radius: 200.0,
-            is_territorial: false,
-            territory_aggression: 0.3,
-            can_reproduce: true,
-            gestation_duration: 70.0,
-            offspring_count: 2,
-            satiation_threshold: 20.0,
-        },
-        CreatureType::LureFish => EcoStats {
-            hunger_rate: 0.6,
-            energy_drain_rate: 0.2,
-            food_value: 20.0,
-            territory_radius: 150.0,
-            is_territorial: false,
-            territory_aggression: 0.2,
-            can_reproduce: true,
-            gestation_duration: 60.0,
-            offspring_count: 2,
-            satiation_threshold: 20.0,
-        },
-        CreatureType::Scavenger => EcoStats {
-            hunger_rate: 1.2,
+        CreatureType::ParasiteSwarm => EcoStats {
+            hunger_rate: 1.0,            // Always hungry — drives them to attach
             energy_drain_rate: 0.3,
-            food_value: 15.0,
-            territory_radius: 0.0,
+            food_value: 2.0,
             is_territorial: false,
-            territory_aggression: 0.1,
+            territory_radius: 0.0,
+            territory_aggression: 0.0,
             can_reproduce: true,
-            gestation_duration: 50.0,
-            offspring_count: 2,
-            satiation_threshold: 20.0,
-        },
-        CreatureType::SwarmQueen => EcoStats {
-            hunger_rate: 0.4,
-            energy_drain_rate: 0.2,
-            food_value: 50.0,
-            territory_radius: 300.0,
-            is_territorial: true,
-            territory_aggression: 0.5,
-            can_reproduce: false, // uses swarm spawning instead
-            gestation_duration: 0.0,
-            offspring_count: 0,
-            satiation_threshold: 20.0,
-        },
-        CreatureType::Parasite => EcoStats {
-            hunger_rate: 2.0,
-            energy_drain_rate: 0.5,
-            food_value: 5.0,
-            territory_radius: 0.0,
-            is_territorial: false,
-            territory_aggression: 0.0,
-            can_reproduce: false,
-            gestation_duration: 0.0,
-            offspring_count: 0,
-            satiation_threshold: 20.0,
-        },
-        CreatureType::Watcher => EcoStats {
-            hunger_rate: 0.0,
-            energy_drain_rate: 0.1,
-            food_value: 10.0,
-            territory_radius: 400.0,
-            is_territorial: true,
-            territory_aggression: 0.0,
-            can_reproduce: false,
-            gestation_duration: 0.0,
-            offspring_count: 0,
-            satiation_threshold: 20.0,
+            gestation_duration: 30.0,    // Fast reproduction — swarm behavior
+            offspring_count: 4,
+            satiation_threshold: 30.0,
         },
     }
 }

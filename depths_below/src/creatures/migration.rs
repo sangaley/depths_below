@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::components::{
-    AmbientCreature, Creature, CreatureAI, CreatureAIState, CreatureNeeds, FoodChainRole,
+    Creature, CreatureAI, CreatureAIState, CreatureNeeds, FoodChainRole,
     HungerDuration, MigrationPath, Territory,
 };
 
@@ -19,10 +19,9 @@ pub fn check_migration(
         Option<&mut HungerDuration>,
         Option<&MigrationPath>,
     )>,
-    ambient_query: Query<&Transform, With<AmbientCreature>>,
     other_creatures: Query<(Entity, &Transform, &Creature), Without<MigrationPath>>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
 
     for (entity, transform, creature, needs, role, hunger_dur, existing_path) in creatures.iter_mut()
     {
@@ -43,14 +42,7 @@ pub fn check_migration(
                     let detection_range = creature.detection_range * 2.0;
                     let mut local_prey = 0u32;
 
-                    // Count ambient prey in range
-                    for amb_transform in ambient_query.iter() {
-                        if pos.distance(amb_transform.translation.truncate()) < detection_range {
-                            local_prey += 1;
-                        }
-                    }
-
-                    // Count creature prey in range
+                    // Count prey in range
                     for (_e, other_transform, other_creature) in other_creatures.iter() {
                         if pos.distance(other_transform.translation.truncate()) < detection_range
                             && role.prey_types.contains(&other_creature.creature_type)

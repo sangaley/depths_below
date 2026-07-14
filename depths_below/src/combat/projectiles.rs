@@ -1,10 +1,21 @@
 use bevy::prelude::*;
 
 use super::*;
-use crate::ai_submarine::components::AiSubmarine;
-use crate::events::AiSubDamaged;
+use crate::ai_ship::components::AiShip;
+use crate::events::AiShipDamaged;
 
-/// Spawn a projectile entity, differentiated by ammo type
+/// Spawn a projectile entity, differentiated by ammo type.
+///
+/// `range` sets how far the shot can actually travel before it expires —
+/// this used to be a fixed per-ammo-type timer (1.5-4s) completely
+/// disconnected from the weapon's stated range, so a "6000-range" weapon's
+/// bullets (600u/s * 1.5 speed_mult = 900u/s, 1.5s lifetime) physically
+/// expired after ~1350 units. Every ship "in range" per that stat was
+/// wasting ammo shooting at something its own shots could never reach,
+/// which meant nothing could ever actually fight at the ranges the AI
+/// standoff distances and weapon stats implied. Lifetime is now derived
+/// from range so a shot fired at max range takes exactly as long to arrive
+/// as the geometry implies.
 pub(crate) fn spawn_projectile(
     commands: &mut Commands,
     asset_server: &AssetServer,
@@ -12,6 +23,7 @@ pub(crate) fn spawn_projectile(
     target: Vec2,
     damage: f32,
     speed: f32,
+    range: f32,
     from_player: bool,
     ammo_type: AmmoType,
 ) {
@@ -25,28 +37,27 @@ pub(crate) fn spawn_projectile(
     };
 
     // Enemy projectiles keep red tint regardless of ammo type
-    let final_color = if from_player { ammo_type.projectile_color() } else { Color::rgb(1.0, 0.2, 0.2) };
+    let final_color = if from_player { ammo_type.projectile_color() } else { Color::srgb(1.0, 0.2, 0.2) };
+
+    let final_speed = speed * ammo_type.speed_mult();
+    let lifetime_secs = (range / final_speed.max(1.0)).max(0.1);
 
     commands.spawn((
-        SpriteBundle {
-            texture: asset_server.load(texture_path),
-            sprite: Sprite {
+        (Sprite {
+                image: asset_server.load(texture_path),
                 color: final_color,
                 custom_size: Some(ammo_type.projectile_size()),
                 ..default()
-            },
-            transform: Transform {
+            }, Transform {
                 translation: Vec3::new(origin.x, origin.y, 0.5),
                 rotation: Quat::from_rotation_z(angle),
                 ..default()
-            },
-            ..default()
-        },
+            }),
         Projectile {
             damage,
-            speed: speed * ammo_type.speed_mult(),
+            speed: final_speed,
             direction,
-            lifetime: Timer::from_seconds(ammo_type.lifetime_secs(), TimerMode::Once),
+            lifetime: Timer::from_seconds(lifetime_secs, TimerMode::Once),
             from_player,
             ammo_type,
         },
@@ -61,14 +72,14 @@ pub(super) fn projectile_movement(
 ) {
     for (entity, mut projectile, mut transform) in projectile_query.iter_mut() {
         // Move
-        let delta = projectile.direction * projectile.speed * time.delta_seconds();
+        let delta = projectile.direction * projectile.speed * time.delta_secs();
         transform.translation.x += delta.x;
         transform.translation.y += delta.y;
 
         // Tick lifetime
         projectile.lifetime.tick(time.delta());
-        if projectile.lifetime.finished() {
-            commands.entity(entity).despawn_recursive();
+        if projectile.lifetime.is_finished() {
+            commands.entity(entity).despawn();
         }
     }
 }
@@ -78,12 +89,12 @@ pub(super) fn projectile_movement(
 pub(super) fn projectile_collision(
     mut commands: Commands,
     projectile_query: Query<(Entity, &Projectile, &Transform)>,
-    mut creature_query: Query<(Entity, &Transform, &mut Creature), Without<Submarine>>,
-    sub_query: Query<&Transform, With<Submarine>>,
-    ai_sub_query: Query<(Entity, &Transform), With<AiSubmarine>>,
-    mut damage_events: EventWriter<SubmarineDamaged>,
-    mut ai_damage_events: EventWriter<AiSubDamaged>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut creature_query: Query<(Entity, &Transform, &mut Creature), Without<Ship>>,
+    mut ship_query: Query<(&Transform, Option<&mut crate::combat::shields::ShipShield>), With<Ship>>,
+    ai_ship_query: Query<(Entity, &Transform), With<AiShip>>,
+    mut damage_events: MessageWriter<ShipDamaged>,
+    mut ai_damage_events: MessageWriter<AiShipDamaged>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     for (proj_entity, projectile, proj_transform) in projectile_query.iter() {
         let proj_pos = proj_transform.translation.truncate();
@@ -93,7 +104,7 @@ pub(super) fn projectile_collision(
             let is_aoe = projectile.ammo_type.is_aoe();
             let mut hit_any = false;
 
-            let hit_color = if is_aoe { Color::rgb(0.5, 0.7, 1.0) } else { Color::rgb(1.0, 1.0, 0.5) };
+            let hit_color = if is_aoe { Color::srgb(0.5, 0.7, 1.0) } else { Color::srgb(1.0, 1.0, 0.5) };
             let hit_size = if is_aoe { 28.0 } else { 16.0 };
 
             for (_c_entity, c_transform, mut creature) in creature_query.iter_mut() {
@@ -105,7 +116,7 @@ pub(super) fn projectile_collision(
                     hit_any = true;
 
                     spawn_hit_effect(&mut commands, c_pos, hit_color, hit_size);
-                    spawn_floating_damage(&mut commands, c_pos, projectile.damage, Color::rgb(1.0, 1.0, 0.3));
+                    spawn_floating_damage(&mut commands, c_pos, projectile.damage, Color::srgb(1.0, 1.0, 0.3));
 
                     if !is_aoe {
                         break;
@@ -113,14 +124,14 @@ pub(super) fn projectile_collision(
                 }
             }
 
-            // Check AI submarines if no creature was hit (single-target) or always for AoE
+            // Check AI ships if no creature was hit (single-target) or always for AoE
             if !hit_any || is_aoe {
-                for (ai_entity, ai_transform) in ai_sub_query.iter() {
+                for (ai_entity, ai_transform) in ai_ship_query.iter() {
                     let ai_pos = ai_transform.translation.truncate();
                     let dist = proj_pos.distance(ai_pos);
 
                     if dist < PROJECTILE_RADIUS + SUBMARINE_RADIUS {
-                        ai_damage_events.send(AiSubDamaged {
+                        ai_damage_events.write(AiShipDamaged {
                             target: ai_entity,
                             source: DamageSource::Explosion,
                             amount: projectile.damage,
@@ -129,8 +140,8 @@ pub(super) fn projectile_collision(
                         });
                         hit_any = true;
 
-                        spawn_hit_effect(&mut commands, ai_pos, Color::rgb(1.0, 0.5, 0.2), hit_size);
-                        spawn_floating_damage(&mut commands, ai_pos, projectile.damage, Color::rgb(1.0, 0.8, 0.3));
+                        spawn_hit_effect(&mut commands, ai_pos, Color::srgb(1.0, 0.5, 0.2), hit_size);
+                        spawn_floating_damage(&mut commands, ai_pos, projectile.damage, Color::srgb(1.0, 0.8, 0.3));
 
                         if !is_aoe {
                             break;
@@ -140,29 +151,56 @@ pub(super) fn projectile_collision(
             }
 
             if hit_any {
-                commands.entity(proj_entity).despawn_recursive();
+                commands.entity(proj_entity).despawn();
             }
         } else {
-            // Enemy projectile -> check against submarine
-            if let Ok(sub_transform) = sub_query.get_single() {
-                let sub_pos = sub_transform.translation.truncate();
-                let dist = proj_pos.distance(sub_pos);
+            // Enemy projectile -> player shield first, then the hull
+            if let Ok((ship_transform, shield)) = ship_query.single_mut() {
+                let ship_pos = ship_transform.translation.truncate();
+                let mut dist = proj_pos.distance(ship_pos);
 
-                if dist < PROJECTILE_RADIUS + SUBMARINE_RADIUS {
-                    damage_events.send(SubmarineDamaged {
+                // Hull hit bound follows the ship's real extent (the shield
+                // radius is computed from it) — the old fixed radius let most
+                // shots sail through the outer hull blocks.
+                let mut hull_hit_radius = PROJECTILE_RADIUS + SUBMARINE_RADIUS;
+
+                if let Some(mut shield) = shield {
+                    // Bubble is centered on the blocks' centroid, not the root
+                    dist = proj_pos.distance(shield.world_center(ship_transform));
+                    if shield.is_up() && dist < shield.radius {
+                        shield.absorb(projectile.damage);
+                        spawn_hit_effect(&mut commands, proj_pos, Color::srgb(0.5, 0.8, 1.0), 16.0);
+                        commands.entity(proj_entity).despawn();
+                        continue;
+                    }
+                    hull_hit_radius = hull_hit_radius.max(shield.radius);
+                }
+
+                if dist < hull_hit_radius {
+                    damage_events.write(ShipDamaged {
                         source: DamageSource::Creature(Entity::PLACEHOLDER),
                         amount: projectile.damage,
                         position: Some(proj_pos),
-                        direction: Some(projectile.direction),
+                        // process_ship_damage's outermost-first penetration
+                        // sort assumes `direction` points from the ship
+                        // TOWARD the attacker (every other ShipDamaged
+                        // writer uses (attacker_pos - ship_pos)). This
+                        // passed the projectile's own direction of travel —
+                        // attacker THROUGH the ship, the opposite sign — so
+                        // damage was applied outermost-first along the
+                        // wrong axis: a shot into the bow could destroy
+                        // blocks at the stern first instead of the bow
+                        // blocks it actually hit.
+                        direction: Some(-projectile.direction),
                     });
 
-                    notifications.send(ShowNotification {
+                    notifications.write(ShowNotification {
                         message: format!("Hull hit! -{:.0} damage", projectile.damage),
                         notification_type: NotificationType::Danger,
                         duration: 2.0,
                     });
 
-                    commands.entity(proj_entity).despawn_recursive();
+                    commands.entity(proj_entity).despawn();
                 }
             }
         }

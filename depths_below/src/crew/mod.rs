@@ -14,7 +14,7 @@ impl Plugin for CrewPlugin {
             .init_resource::<CrewRoster>()
             .init_resource::<StaffingState>()
             .init_resource::<AutoAssignTimer>()
-            // Staffing / efficiency systems run at both SurfaceBase and Exploring
+            // Staffing / efficiency systems run at both StationDocked and Exploring
             // so the HUD shows correct crew/station counts at the surface.
             .add_systems(
                 Update,
@@ -25,7 +25,7 @@ impl Plugin for CrewPlugin {
                     reconcile_hired_crew,
                 )
                     .run_if(in_state(GameState::Exploring)
-                        .or_else(in_state(GameState::SurfaceBase))
+                        .or_else(in_state(GameState::StationDocked))
                         .or_else(in_state(GameState::Docked))),
             )
             // Gameplay crew systems only run while Exploring
@@ -68,7 +68,7 @@ impl Default for AutoAssignTimer {
 /// Spawns the initial crew (8 crew, no skills)
 pub fn spawn_starter_crew(
     mut commands: Commands,
-    submarine_query: Query<Entity, With<Submarine>>,
+    ship_query: Query<Entity, With<Ship>>,
     existing_crew: Query<Entity, With<CrewMember>>,
     mut roster: ResMut<CrewRoster>,
 ) {
@@ -76,7 +76,7 @@ pub fn spawn_starter_crew(
     if !existing_crew.is_empty() {
         return;
     }
-    let Ok(submarine) = submarine_query.get_single() else {
+    let Ok(ship) = ship_query.single() else {
         return;
     };
 
@@ -84,19 +84,15 @@ pub fn spawn_starter_crew(
 
     for (i, name) in crew_names.iter().enumerate() {
         let crew = commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(0.8, 0.6, 0.5),
+            (Sprite {
+                    color: Color::srgb(0.8, 0.6, 0.5),
                     custom_size: Some(Vec2::new(16.0, 16.0)),
                     ..default()
-                },
-                transform: Transform::from_xyz(
+                }, Transform::from_xyz(
                     (i as f32 - 3.5) * 20.0,
                     0.0,
                     0.5,
-                ),
-                ..default()
-            },
+                )),
             CrewMember {
                 name: name.to_string(),
                 health: 100.0,
@@ -105,7 +101,7 @@ pub fn spawn_starter_crew(
                 morale: 100.0,
                 state: CrewState::Idle,
             },
-        )).set_parent(submarine).id();
+        )).insert(ChildOf(ship)).id();
 
         roster.members.push(crew);
     }
@@ -279,15 +275,15 @@ fn update_crew_needs(
         }
 
         if !oxygen_available {
-            crew.oxygen = (crew.oxygen - 10.0 * time.delta_seconds()).max(0.0);
+            crew.oxygen = (crew.oxygen - 10.0 * time.delta_secs()).max(0.0);
         } else {
-            crew.oxygen = (crew.oxygen + 20.0 * time.delta_seconds()).min(100.0);
+            crew.oxygen = (crew.oxygen + 20.0 * time.delta_secs()).min(100.0);
         }
 
         if crew.oxygen < 50.0 || depth_state.current_depth > 500.0 {
-            crew.morale = (crew.morale - 5.0 * time.delta_seconds()).max(0.0);
+            crew.morale = (crew.morale - 5.0 * time.delta_secs()).max(0.0);
         } else {
-            crew.morale = (crew.morale + 1.0 * time.delta_seconds()).min(100.0);
+            crew.morale = (crew.morale + 1.0 * time.delta_secs()).min(100.0);
         }
     }
 }
@@ -318,21 +314,21 @@ fn update_crew_room_location(
     }
 }
 
-/// Scans for rooms with flooding or fire and dispatches idle crew to handle emergencies.
+/// Scans for rooms with decompression or fire and dispatches idle crew to handle emergencies.
 /// Temporarily clears non-manual CrewStation assignments for dispatched crew.
 fn crew_emergency_dispatch(
     mut crew_query: Query<(Entity, &mut CrewMember)>,
     fire_query: Query<&Module, With<OnFire>>,
     room_map: Res<RoomMap>,
     mut station_query: Query<(Entity, &mut CrewStation)>,
-    mut dispatch_events: EventWriter<CrewDispatched>,
+    mut dispatch_events: MessageWriter<CrewDispatched>,
 ) {
-    // Build priority list of emergency rooms: flooding first, then fire
+    // Build priority list of emergency rooms: decompression first, then fire
     let mut emergency_rooms: Vec<(usize, DispatchReason)> = Vec::new();
 
     for room in room_map.rooms.iter() {
-        if room.is_breached && room.water_level > 0.0 {
-            emergency_rooms.push((room.id, DispatchReason::Flooding));
+        if room.is_breached && room.air_level < 1.0 {
+            emergency_rooms.push((room.id, DispatchReason::Decompression));
         }
     }
 
@@ -374,7 +370,7 @@ fn crew_emergency_dispatch(
                 }
             }
 
-            dispatch_events.send(CrewDispatched {
+            dispatch_events.write(CrewDispatched {
                 crew: entity,
                 room_id,
                 reason,
@@ -383,15 +379,15 @@ fn crew_emergency_dispatch(
     }
 }
 
-/// Updates crew AI behavior — now aware of both floods and fires.
+/// Updates crew AI behavior — now aware of both decompression and fires.
 fn update_crew_ai(
     hull_query: Query<(Entity, &HullSegment, &Transform)>,
     fire_query: Query<Entity, With<OnFire>>,
     mut crew_query: Query<&mut CrewMember>,
 ) {
-    let has_flooded = hull_query.iter().any(|(_, hull, _)| hull.is_flooded);
+    let has_depressurized = hull_query.iter().any(|(_, hull, _)| hull.is_depressurized);
     let has_fires = !fire_query.is_empty();
-    let has_danger = has_flooded || has_fires;
+    let has_danger = has_depressurized || has_fires;
 
     for mut crew in crew_query.iter_mut() {
         if crew.health <= 0.0 {
@@ -427,9 +423,9 @@ fn crew_fire_suppression(
     crew_query: Query<(&CrewMember, &CrewRoomLocation)>,
     mut fire_query: Query<(Entity, &mut OnFire, &Module, &mut Sprite), Without<DestroyedModule>>,
     room_map: Res<RoomMap>,
-    mut extinguish_events: EventWriter<FireExtinguished>,
+    mut extinguish_events: MessageWriter<FireExtinguished>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
 
     // Build per-room suppression power from repairing crew (flat 1.0 per crew)
     let mut room_suppression: std::collections::HashMap<usize, f32> = std::collections::HashMap::new();
@@ -460,8 +456,8 @@ fn crew_fire_suppression(
 
         if fire.intensity < 0.05 {
             commands.entity(entity).remove::<OnFire>();
-            sprite.color = Color::rgb(0.2, 0.2, 0.2);
-            extinguish_events.send(FireExtinguished {
+            sprite.color = Color::srgb(0.2, 0.2, 0.2);
+            extinguish_events.write(FireExtinguished {
                 module: entity,
                 cause: FireExtinguishCause::CrewSuppressed,
             });
@@ -474,8 +470,8 @@ fn check_crew_suffocation(
     time: Res<Time>,
     config: Res<GameConfig>,
     mut crew_query: Query<(Entity, &mut CrewMember)>,
-    mut damage_events: EventWriter<CrewDamaged>,
-    mut death_events: EventWriter<CrewDied>,
+    mut damage_events: MessageWriter<CrewDamaged>,
+    mut death_events: MessageWriter<CrewDied>,
 ) {
     for (entity, mut crew) in crew_query.iter_mut() {
         if crew.health <= 0.0 {
@@ -483,17 +479,17 @@ fn check_crew_suffocation(
         }
 
         if crew.oxygen <= 0.0 {
-            let damage = config.suffocation_damage_rate * time.delta_seconds();
+            let damage = config.suffocation_damage_rate * time.delta_secs();
             crew.health -= damage;
 
-            damage_events.send(CrewDamaged {
+            damage_events.write(CrewDamaged {
                 crew: entity,
                 amount: damage,
                 source: CrewDamageSource::Suffocation,
             });
 
             if crew.health <= 0.0 {
-                death_events.send(CrewDied {
+                death_events.write(CrewDied {
                     crew: entity,
                     name: crew.name.clone(),
                     cause: CrewDamageSource::Suffocation,
@@ -513,10 +509,10 @@ fn crew_repair_system(
     mut module_query: Query<&mut Module, (Without<DestroyedModule>, Without<RepairSystem>)>,
     room_map: Res<RoomMap>,
     occupancy: Res<GridOccupancy>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
     mut repaired_notified: Local<bool>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
 
     // Build per-room repair power from repairing crew (flat 1.0 per crew)
     let mut room_repair_power: std::collections::HashMap<usize, f32> = std::collections::HashMap::new();
@@ -550,16 +546,16 @@ fn crew_repair_system(
                 // Find hull segments at this tile via occupancy
                 if let Some(&entity) = occupancy.cells.get(&tile) {
                     if let Ok(mut hull) = hull_query.get_mut(entity) {
-                        if hull.is_flooded && hull.flood_level > 0.0 {
+                        if hull.is_depressurized && hull.depressurization_level > 0.0 {
                             let repair_rate = total_power * 0.05 * dt;
-                            hull.flood_level = (hull.flood_level - repair_rate).max(0.0);
-                            if hull.flood_level <= 0.0 {
-                                hull.is_flooded = false;
+                            hull.depressurization_level = (hull.depressurization_level - repair_rate).max(0.0);
+                            if hull.depressurization_level <= 0.0 {
+                                hull.is_depressurized = false;
                                 any_repaired = true;
                             }
                         }
-                        // Repair hull health if damaged and not flooded
-                        if hull.health < hull.max_health && !hull.is_flooded {
+                        // Repair hull health if damaged and not depressurized
+                        if hull.health < hull.max_health && !hull.is_depressurized {
                             let heal_rate = total_power * 2.0 * dt;
                             hull.health = (hull.health + heal_rate).min(hull.max_health);
                         }
@@ -588,7 +584,7 @@ fn crew_repair_system(
 
     if any_repaired && !*repaired_notified {
         *repaired_notified = true;
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: "Crew repaired a hull breach!".into(),
             notification_type: NotificationType::Success,
             duration: 3.0,
@@ -603,13 +599,13 @@ fn crew_repair_system(
 /// Also clears any CrewStation assignments for the dead crew.
 fn handle_crew_death(
     mut commands: Commands,
-    mut death_events: EventReader<CrewDied>,
+    mut death_events: MessageReader<CrewDied>,
     mut roster: ResMut<CrewRoster>,
     mut statistics: ResMut<Statistics>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
     mut station_query: Query<&mut CrewStation>,
 ) {
-    for event in death_events.iter() {
+    for event in death_events.read() {
         roster.members.retain(|&e| e != event.crew);
         statistics.crew_lost += 1;
 
@@ -620,13 +616,13 @@ fn handle_crew_death(
             }
         }
 
-        notifications.send(ShowNotification {
+        notifications.write(ShowNotification {
             message: format!("{} has died! Cause: {:?}", event.name, event.cause),
             notification_type: NotificationType::Danger,
             duration: 4.0,
         });
 
-        commands.entity(event.crew).despawn_recursive();
+        commands.entity(event.crew).despawn();
     }
 }
 
@@ -641,7 +637,7 @@ fn medbay_healing(
     room_map: Res<RoomMap>,
     mut crew_query: Query<(&mut CrewMember, &CrewRoomLocation)>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
 
     for (facility, module, eff) in facility_query.iter() {
         if facility.facility_type != FacilityType::MedBay || !module.is_active {
@@ -674,7 +670,7 @@ fn messhall_morale(
     facility_query: Query<(&CrewFacility, &Module)>,
     mut crew_query: Query<&mut CrewMember>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
 
     let has_active_messhall = facility_query.iter().any(|(f, m)| {
         f.facility_type == FacilityType::MessHall && m.is_active && m.health > 0.0
@@ -718,7 +714,7 @@ fn training_room_boost(
     facility_query: Query<(&CrewFacility, &Module)>,
     mut crew_query: Query<&mut CrewMember>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
 
     let has_active_training = facility_query.iter().any(|(f, m)| {
         f.facility_type == FacilityType::TrainingRoom && m.is_active && m.health > 0.0
@@ -747,7 +743,7 @@ fn engineering_station_boost(
     facility_query: Query<(&CrewFacility, &Module, Option<&ModuleEfficiency>), Without<RepairSystem>>,
     mut repair_query: Query<(&mut Module, &RepairSystem), Without<DestroyedModule>>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
 
     // Collect active engineering station positions with their efficiency
     let stations: Vec<(IVec2, f32)> = facility_query.iter()
@@ -782,15 +778,15 @@ fn engineering_station_boost(
     }
 }
 
-/// Finds crew members that aren't in the roster or parented to the submarine
+/// Finds crew members that aren't in the roster or parented to the ship
 /// and fixes them. This handles crew hired at docking stations.
 fn reconcile_hired_crew(
     mut commands: Commands,
-    crew_query: Query<(Entity, Option<&Parent>), With<CrewMember>>,
-    submarine_query: Query<Entity, With<Submarine>>,
+    crew_query: Query<(Entity, Option<&ChildOf>), With<CrewMember>>,
+    ship_query: Query<Entity, With<Ship>>,
     mut roster: ResMut<CrewRoster>,
 ) {
-    let Ok(submarine) = submarine_query.get_single() else { return };
+    let Ok(ship) = ship_query.single() else { return };
 
     for (crew_entity, parent) in crew_query.iter() {
         // Add to roster if missing
@@ -798,9 +794,9 @@ fn reconcile_hired_crew(
             roster.members.push(crew_entity);
         }
 
-        // Parent to submarine if orphaned
+        // Parent to ship if orphaned
         if parent.is_none() {
-            commands.entity(crew_entity).set_parent(submarine);
+            commands.entity(crew_entity).insert(ChildOf(ship));
         }
     }
 }

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::components::{NoiseTrailPoint, Submarine};
+use crate::components::{NoiseTrailPoint, Ship};
 use crate::resources::{EcosystemConfig, NoiseState};
 
 /// Timer for noise trail emission
@@ -17,12 +17,12 @@ impl Default for NoiseTrailTimer {
     }
 }
 
-/// Every 0.5s, if submarine noise > 10, spawn invisible NoiseTrailPoint at sub position
+/// Every 0.5s, if ship noise > 10, spawn invisible NoiseTrailPoint at ship position
 pub fn emit_noise_trail(
     time: Res<Time>,
     mut trail_timer: ResMut<NoiseTrailTimer>,
     noise_state: Option<Res<NoiseState>>,
-    sub_query: Query<&Transform, With<Submarine>>,
+    ship_query: Query<&Transform, With<Ship>>,
     existing_trails: Query<Entity, With<NoiseTrailPoint>>,
     eco_config: Res<EcosystemConfig>,
     mut commands: Commands,
@@ -38,7 +38,7 @@ pub fn emit_noise_trail(
         return;
     }
 
-    let sub_transform = match sub_query.iter().next() {
+    let ship_transform = match ship_query.iter().next() {
         Some(t) => t,
         None => return,
     };
@@ -49,19 +49,15 @@ pub fn emit_noise_trail(
         return;
     }
 
-    let pos = sub_transform.translation;
+    let pos = ship_transform.translation;
     let intensity = noise_level * 0.5;
 
     commands.spawn((
-        SpriteBundle {
-            sprite: Sprite {
-                color: Color::rgba(0.0, 0.0, 0.0, 0.0), // invisible
+        (Sprite {
+                color: Color::srgba(0.0, 0.0, 0.0, 0.0), 
                 custom_size: Some(Vec2::new(1.0, 1.0)),
                 ..default()
-            },
-            transform: Transform::from_translation(pos),
-            ..default()
-        },
+            }, Transform::from_translation(pos)),
         NoiseTrailPoint {
             intensity,
             decay_rate: eco_config.noise_decay_rate,
@@ -75,11 +71,11 @@ pub fn decay_noise_trails(
     mut commands: Commands,
     mut trails: Query<(Entity, &mut NoiseTrailPoint)>,
 ) {
-    let dt = time.delta_seconds();
+    let dt = time.delta_secs();
     for (entity, mut trail) in trails.iter_mut() {
         trail.intensity -= trail.decay_rate * dt;
         if trail.intensity < 1.0 {
-            commands.entity(entity).despawn_recursive();
+            commands.entity(entity).despawn();
         }
     }
 }

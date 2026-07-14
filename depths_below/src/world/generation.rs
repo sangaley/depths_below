@@ -4,86 +4,86 @@ use rand::prelude::*;
 use crate::components::*;
 use crate::sprite_map;
 
-/// Dark & mysterious narrative log entries placed at POIs throughout the world.
+/// Dark & mysterious narrative log entries placed at POIs throughout the void.
 /// Each entry: (title, text, minimum_depth_level)
 const LOG_ENTRIES: &[(&str, &str, i32)] = &[
-    // --- SHALLOW ZONE (depth 0-3) ---
+    // --- NEAR ORBIT (depth 0-3) ---
     ("Expedition Log #1",
-     "Day 3: We've descended past the kelp forests. Sonar shows massive structures below. Not natural formations.",
+     "Day 3: We've pushed past the asteroid fields. Radar shows massive structures ahead. Not natural formations.",
      1),
     ("Recovered Note",
-     "To whoever finds this: the company lied about what's down here. Turn back. The surface world has forgotten this place for good reason.",
+     "To whoever finds this: the company lied about what's out here. Turn back. The station has forgotten this sector for good reason.",
      2),
     ("Ship's Log: CSS Meridian",
-     "Engine failure at 180m. Hull compromised. Three crew missing since last night. Nobody heard them leave.",
+     "Engine failure at sector 180. Hull compromised. Three crew missing since last night. Nobody heard them leave.",
      2),
 
-    // --- TWILIGHT ZONE (depth 3-6) ---
+    // --- ASTEROID BELT (depth 3-6) ---
     ("Expedition Log #2",
      "Day 7: Found wreckage of a previous expedition. Their hull was breached from the INSIDE. What could do that?",
      3),
     ("Research Note: Acoustics",
-     "We've been recording infrasound from below. When played back at normal speed, it sounds like breathing.",
+     "We've been recording infrasound from deeper in the void. When played back at normal speed, it sounds like breathing.",
      4),
     ("Distress Signal (Decoded)",
      "MAYDAY MAYDAY. Something is following us. It matches our speed exactly. It's been three days. It never gets closer, never falls behind.",
      5),
-    ("Research Note: Bioluminescence",
+    ("Research Note: Luminescence",
      "The creatures here don't just glow - they communicate with light. Patterns too complex to be random. Are they... words?",
      5),
 
-    // --- DARK ZONE (depth 6-10) ---
+    // --- DEEP SPACE (depth 6-10) ---
     ("Expedition Log #3",
-     "Day 12: The ruins are older than anything on the surface. Carved stone at 800m depth. Impossible geology. The carvings depict... us. Submarines. How?",
+     "Day 12: The ruins are older than anything at the station. Carved metal at sector 800. Impossible engineering. The carvings depict... us. Ships. How?",
      6),
     ("Personal Journal: Dr. Vasquez",
      "The symbols match nothing in any database. But I dream about them now. In the dreams, I can read them perfectly. I just can't remember what they say when I wake.",
      7),
     ("Engineering Report",
-     "Hull sensors report external contact - something is running along the hull. Like fingers. There's nothing on sonar.",
+     "Hull sensors report external contact - something is running along the hull. Like fingers. There's nothing on radar.",
      8),
     ("Audio Transcript #47",
-     "RESEARCHER: The stone tablet we recovered - it's warm to the touch. CAPTAIN: That's impossible at this temp. RESEARCHER: I know. And it's getting warmer.",
+     "RESEARCHER: The artifact we recovered - it's warm to the touch. CAPTAIN: That's impossible in the void. RESEARCHER: I know. And it's getting warmer.",
      9),
     ("Warning Beacon",
-     "AUTOMATED MESSAGE: Do not proceed past 1000m. Repeat: DO NOT proceed. The watchers are not what they seem.",
+     "AUTOMATED MESSAGE: Do not proceed past sector 1000. Repeat: DO NOT proceed. The watchers are not what they seem.",
      9),
 
-    // --- ABYSS ZONE (depth 10-16) ---
+    // --- NEBULA (depth 10-16) ---
     ("Expedition Log #4",
-     "Day 18: We can hear it now. A low hum from below. The instruments say nothing is there, but we can all hear it. Chen says it's trying to communicate.",
+     "Day 18: We can hear it now. A low hum from deeper in. The instruments say nothing is there, but we can all hear it. Chen says it's trying to communicate.",
      10),
     ("Recovered Black Box",
-     "Last words of the crew of the DSV Orpheus: 'It opened its eyes. Oh god, the whole seafloor opened its eyes.'",
+     "Last words of the crew of the DSV Orpheus: 'It opened its eyes. Oh god, the whole void opened its eyes.'",
      11),
     ("Research Note: Evolution",
      "These creatures didn't evolve to live here. They evolved somewhere else and were... placed here. Like prisoners. Or guards.",
      12),
     ("Fragment: Ancient Text",
-     "Translation (partial): '...and in the deep places we built our prisons, for what slumbers must never dream of the surface world...'",
+     "Translation (partial): '...and in the deep void we built our prisons, for what slumbers must never dream of the worlds above...'",
      13),
     ("Personal Log: Unknown Author",
      "Day ??? The compass doesn't work anymore. Neither does time. My watch says it's been 3 hours. My body says weeks. I can feel the hum in my teeth.",
      14),
     ("Radio Intercept",
-     "Surface control, this is Deep Station Seven. We are NOT alone down here. I don't mean the creatures. Something is watching through them. Request immediate extraction.",
+     "Station control, this is Deep Outpost Seven. We are NOT alone out here. I don't mean the creatures. Something is watching through them. Request immediate extraction.",
      15),
 
-    // --- TRENCH ZONE (depth 16+) ---
+    // --- BLACK HOLE PROXIMITY (depth 16+) ---
     ("Final Transmission",
      "They built this place to contain something. The ruins aren't ruins - they're a cage. And it's waking up.",
      16),
-    ("Carved Stone (Translated)",
-     "WE WHO GUARD THE DEEP PLACES WARN YOU: WHAT SLEEPS BELOW DREAMS OF YOUR WORLD. DO NOT WAKE IT. DO NOT LISTEN TO ITS SONGS.",
+    ("Carved Metal (Translated)",
+     "WE WHO GUARD THE DEEP VOID WARN YOU: WHAT SLEEPS BEYOND DREAMS OF YOUR WORLDS. DO NOT WAKE IT. DO NOT LISTEN TO ITS SONGS.",
      17),
     ("???",
      "The hum has stopped. That's worse. That's so much worse.",
      18),
     ("Final Entry",
-     "We were wrong about everything. The ocean isn't hostile. It's terrified. The water itself is trying to keep us away from what lies beneath.",
+     "We were wrong about everything. The void isn't hostile. It's terrified. Space itself is trying to keep us away from what lies beyond.",
      19),
     ("[UNTITLED]",
-     "You found it. The deepest point. The silence is absolute. The water itself seems alive. You understand now - you were always meant to come here. It was always going to be you.",
+     "You found it. The deepest point. The silence is absolute. The void itself seems alive. You understand now - you were always meant to come here. It was always going to be you.",
      20),
 ];
 
@@ -101,10 +101,7 @@ pub fn generate_chunk(
     let chunk_world_y = chunk_pos.y as f32 * 512.0;
 
     let chunk = commands.spawn((
-        SpatialBundle {
-            transform: Transform::from_xyz(chunk_world_x, chunk_world_y, 0.0),
-            ..default()
-        },
+        Transform::from_xyz(chunk_world_x, chunk_world_y, 0.0),
         Chunk {
             position: chunk_pos,
             is_explored: false,
@@ -118,18 +115,18 @@ pub fn generate_chunk(
         return chunk;
     }
 
-    // The seabed is at depth_level 9-10 (roughly 450-500m)
-    // Only those chunks get terrain. Everything above is open water.
-    let seabed_level = 9;
-    let is_seabed_chunk = depth_level >= seabed_level;
+    // The asteroid field floor is at depth_level 9-10 (roughly 450-500 units)
+    // Only those chunks get terrain. Everything above is open void.
+    let terrain_level = 9;
+    let is_terrain_chunk = depth_level >= terrain_level;
 
     // --- Settlements at fixed depth intervals ---
     if depth_level > 0 && depth_level % 4 == 0 && (chunk_pos.x.abs() % 3 == 0) {
         spawn_poi(commands, asset_server, chunk, PoiType::Settlement, depth_level, &mut rng);
     }
 
-    // --- POIs scattered in open water ---
-    if depth_level > 0 && depth_level < seabed_level {
+    // --- POIs scattered in open void ---
+    if depth_level > 0 && depth_level < terrain_level {
         let poi_chance = 0.20 + (depth_level as f32 * 0.02).min(0.2);
         if rng.gen::<f32>() < poi_chance {
             let poi_type = match depth_level {
@@ -152,27 +149,27 @@ pub fn generate_chunk(
         }
     }
 
-    // --- POIs on the seabed ---
-    if is_seabed_chunk {
+    // --- POIs on the terrain ---
+    if is_terrain_chunk {
         if rng.gen::<f32>() < 0.4 {
             let poi_type = if rng.gen::<f32>() < 0.5 { PoiType::Ruins } else { PoiType::ThermalVent };
             spawn_poi(commands, asset_server, chunk, poi_type, depth_level, &mut rng);
         }
     }
 
-    // Only generate terrain on seabed chunks
-    if is_seabed_chunk {
+    // Only generate terrain on deep chunks
+    if is_terrain_chunk {
         spawn_decorations(commands, asset_server, chunk, depth_level, chunk_pos, seed, &mut rng);
     } else if depth_level > 0 {
-        // Open water chunks get floating particles for visual reference
-        spawn_water_particles(commands, chunk, depth_level, &mut rng);
+        // Open void chunks get floating particles for visual reference
+        spawn_void_particles(commands, chunk, depth_level, &mut rng);
     }
 
     chunk
 }
 
-/// Spawns floating particles/debris in open water chunks for visual reference when moving
-fn spawn_water_particles(
+/// Spawns floating particles/debris in open void chunks for visual reference when moving
+fn spawn_void_particles(
     commands: &mut Commands,
     parent: Entity,
     depth_level: i32,
@@ -189,17 +186,13 @@ fn spawn_water_particles(
         let alpha = rng.gen_range(0.15..0.4_f32);
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgba(brightness, brightness + 0.05, brightness + 0.1, alpha),
+            (Sprite {
+                    color: Color::srgba(brightness, brightness + 0.05, brightness + 0.1, alpha),
                     custom_size: Some(Vec2::new(size, size)),
                     ..default()
-                },
-                transform: Transform::from_xyz(x, y, -0.1),
-                ..default()
-            },
-            WorldDecoration { decoration_type: DecorationType::BioluminescentSpot },
-        )).set_parent(parent);
+                }, Transform::from_xyz(x, y, -0.1)),
+            WorldDecoration { decoration_type: DecorationType::EnergySpot },
+        )).insert(ChildOf(parent));
     }
 
     // Occasional larger debris/silt clouds
@@ -211,21 +204,17 @@ fn spawn_water_particles(
         let brightness = (0.25 - depth_level as f32 * 0.02).max(0.05);
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgba(brightness, brightness, brightness + 0.03, 0.15),
+            (Sprite {
+                    color: Color::srgba(brightness, brightness, brightness + 0.03, 0.15),
                     custom_size: Some(Vec2::new(w, h)),
                     ..default()
-                },
-                transform: Transform {
+                }, Transform {
                     translation: Vec3::new(x, y, -0.1),
                     rotation: Quat::from_rotation_z(rng.gen_range(0.0..std::f32::consts::TAU)),
                     ..default()
-                },
-                ..default()
-            },
-            WorldDecoration { decoration_type: DecorationType::SandMound },
-        )).set_parent(parent);
+                }),
+            WorldDecoration { decoration_type: DecorationType::RockDebris },
+        )).insert(ChildOf(parent));
     }
 }
 
@@ -243,26 +232,22 @@ fn spawn_poi(
     );
 
     let (color, size) = match poi_type {
-        PoiType::Wreck => (Color::rgb(0.5, 0.4, 0.3), Vec2::new(400.0, 180.0)),
-        PoiType::Cave => (Color::rgb(0.15, 0.15, 0.18), Vec2::new(350.0, 280.0)),
-        PoiType::Ruins => (Color::rgb(0.35, 0.35, 0.45), Vec2::new(450.0, 300.0)),
-        PoiType::ThermalVent => (Color::rgb(0.8, 0.3, 0.1), Vec2::new(200.0, 320.0)),
-        PoiType::Settlement => (Color::rgb(0.3, 0.7, 0.4), Vec2::new(500.0, 350.0)),
+        PoiType::Wreck => (Color::srgb(0.5, 0.4, 0.3), Vec2::new(400.0, 180.0)),
+        PoiType::Cave => (Color::srgb(0.15, 0.15, 0.18), Vec2::new(350.0, 280.0)),
+        PoiType::Ruins => (Color::srgb(0.35, 0.35, 0.45), Vec2::new(450.0, 300.0)),
+        PoiType::ThermalVent => (Color::srgb(0.8, 0.3, 0.1), Vec2::new(200.0, 320.0)),
+        PoiType::Settlement => (Color::srgb(0.3, 0.7, 0.4), Vec2::new(500.0, 350.0)),
     };
 
     let texture = asset_server.load(sprite_map::poi_sprite_path(poi_type));
 
     let mut entity_commands = commands.spawn((
-        SpriteBundle {
-            texture,
-            sprite: Sprite {
+        (Sprite {
+                image: texture,
                 color,
                 custom_size: Some(size),
                 ..default()
-            },
-            transform: Transform::from_xyz(offset.x, offset.y, -0.1),
-            ..default()
-        },
+            }, Transform::from_xyz(offset.x, offset.y, -0.1)),
         PointOfInterest {
             poi_type,
             discovered: false,
@@ -303,7 +288,7 @@ fn spawn_poi(
         }
     }
 
-    entity_commands.set_parent(parent);
+    entity_commands.insert(ChildOf(parent));
 }
 
 struct DecorationConfig {
@@ -325,7 +310,7 @@ const DECORATION_CONFIGS: &[DecorationConfig] = &[
     DecorationConfig {
         decoration_type: DecorationType::Rock,
         base_count: 4, depth_multiplier: 0.5, min_depth: 0, max_depth: 0,
-        color: Color::rgb(0.38, 0.36, 0.32),
+        color: Color::srgb(0.38, 0.36, 0.32),
         width_min: 50.0, width_max: 120.0, height_min: 40.0, height_max: 90.0,
         can_rotate: true,
     },
@@ -333,47 +318,47 @@ const DECORATION_CONFIGS: &[DecorationConfig] = &[
     DecorationConfig {
         decoration_type: DecorationType::Rock,
         base_count: 1, depth_multiplier: 0.3, min_depth: 1, max_depth: 0,
-        color: Color::rgb(0.30, 0.28, 0.25),
+        color: Color::srgb(0.30, 0.28, 0.25),
         width_min: 120.0, width_max: 250.0, height_min: 100.0, height_max: 200.0,
         can_rotate: false,
     },
-    // --- KELP FOREST (tall, swaying seaweed) ---
+    // --- SPORE GROWTH (tall, swaying growths) ---
     DecorationConfig {
-        decoration_type: DecorationType::Algae,
+        decoration_type: DecorationType::SporeGrowth,
         base_count: 6, depth_multiplier: 0.2, min_depth: 0, max_depth: 4,
-        color: Color::rgb(0.15, 0.40, 0.12),
+        color: Color::srgb(0.15, 0.40, 0.12),
         width_min: 12.0, width_max: 25.0, height_min: 80.0, height_max: 180.0,
         can_rotate: false,
     },
-    // --- GIANT KELP (very tall, rare) ---
+    // --- GIANT SPORE STALK (very tall, rare) ---
     DecorationConfig {
-        decoration_type: DecorationType::Algae,
+        decoration_type: DecorationType::SporeGrowth,
         base_count: 2, depth_multiplier: 0.1, min_depth: 0, max_depth: 3,
-        color: Color::rgb(0.10, 0.35, 0.08),
+        color: Color::srgb(0.10, 0.35, 0.08),
         width_min: 20.0, width_max: 40.0, height_min: 200.0, height_max: 350.0,
         can_rotate: false,
     },
-    // --- CORAL CLUSTERS (colorful, on terrain) ---
+    // --- CRYSTAL CLUSTERS (colorful, on terrain) ---
     DecorationConfig {
-        decoration_type: DecorationType::Coral,
+        decoration_type: DecorationType::Crystal,
         base_count: 4, depth_multiplier: 0.2, min_depth: 0, max_depth: 6,
-        color: Color::rgb(0.75, 0.35, 0.45),
+        color: Color::srgb(0.75, 0.35, 0.45),
         width_min: 40.0, width_max: 100.0, height_min: 30.0, height_max: 80.0,
         can_rotate: false,
     },
-    // --- LARGE CORAL REEF (massive, rare) ---
+    // --- LARGE CRYSTAL FORMATION (massive, rare) ---
     DecorationConfig {
-        decoration_type: DecorationType::Coral,
+        decoration_type: DecorationType::Crystal,
         base_count: 1, depth_multiplier: 0.15, min_depth: 1, max_depth: 5,
-        color: Color::rgb(0.8, 0.5, 0.3),
+        color: Color::srgb(0.8, 0.5, 0.3),
         width_min: 130.0, width_max: 220.0, height_min: 80.0, height_max: 150.0,
         can_rotate: false,
     },
     // --- BIOLUMINESCENT SPOTS (deep zone glow) ---
     DecorationConfig {
-        decoration_type: DecorationType::BioluminescentSpot,
+        decoration_type: DecorationType::EnergySpot,
         base_count: 0, depth_multiplier: 2.0, min_depth: 5, max_depth: 0,
-        color: Color::rgb(0.1, 0.8, 0.9),
+        color: Color::srgb(0.1, 0.8, 0.9),
         width_min: 20.0, width_max: 60.0, height_min: 20.0, height_max: 60.0,
         can_rotate: false,
     },
@@ -381,7 +366,7 @@ const DECORATION_CONFIGS: &[DecorationConfig] = &[
     DecorationConfig {
         decoration_type: DecorationType::ThermalVentSmoke,
         base_count: 0, depth_multiplier: 0.4, min_depth: 8, max_depth: 0,
-        color: Color::rgb(0.55, 0.3, 0.1),
+        color: Color::srgb(0.55, 0.3, 0.1),
         width_min: 40.0, width_max: 100.0, height_min: 200.0, height_max: 400.0,
         can_rotate: false,
     },
@@ -447,37 +432,27 @@ fn spawn_decorations(
         // Does NOT extend below the chunk - prevents stacking
         let col_h = height + 4.0; // slight extra to fill gaps at bottom
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(r, g, b),
+            (Sprite {
+                    color: Color::srgb(r, g, b),
                     custom_size: Some(Vec2::new(col_width + overlap, col_h)),
-                    anchor: Anchor::TopCenter,
                     ..default()
-                },
-                transform: Transform::from_xyz(local_x, -256.0 + height, -0.45),
-                ..default()
-            },
-            WorldDecoration { decoration_type: DecorationType::SandMound },
-        )).set_parent(parent);
+                }, Anchor::TOP_CENTER, Transform::from_xyz(local_x, -256.0 + height, -0.45)),
+            WorldDecoration { decoration_type: DecorationType::RockDebris },
+        )).insert(ChildOf(parent));
 
         // Surface highlight - thin lighter strip at the terrain top
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(
+            (Sprite {
+                    color: Color::srgb(
                         (r + 0.10).min(0.5),
                         (g + 0.08).min(0.4),
                         (b + 0.05).min(0.3),
                     ),
                     custom_size: Some(Vec2::new(col_width + overlap, 4.0)),
-                    anchor: Anchor::TopCenter,
                     ..default()
-                },
-                transform: Transform::from_xyz(local_x, -256.0 + height, -0.44),
-                ..default()
-            },
-            WorldDecoration { decoration_type: DecorationType::SandMound },
-        )).set_parent(parent);
+                }, Anchor::TOP_CENTER, Transform::from_xyz(local_x, -256.0 + height, -0.44)),
+            WorldDecoration { decoration_type: DecorationType::RockDebris },
+        )).insert(ChildOf(parent));
     }
 
     // --- Step 3: Rock formations sitting on terrain surface ---
@@ -495,22 +470,17 @@ fn spawn_decorations(
         let b = 0.26 + rng.gen_range(-0.05..0.05_f32) - depth_darken;
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(r.max(0.05), g.max(0.05), b.max(0.05)),
+            (Sprite {
+                    color: Color::srgb(r.max(0.05), g.max(0.05), b.max(0.05)),
                     custom_size: Some(Vec2::new(w, h)),
-                    anchor: Anchor::BottomCenter,
                     ..default()
-                },
-                transform: Transform {
+                }, Anchor::BOTTOM_CENTER, Transform {
                     translation: Vec3::new(x, ground_y, -0.3),
                     rotation: Quat::from_rotation_z(rng.gen_range(-0.1..0.1)),
                     ..default()
-                },
-                ..default()
-            },
+                }),
             WorldDecoration { decoration_type: DecorationType::Rock },
-        )).set_parent(parent);
+        )).insert(ChildOf(parent));
     }
 
     // --- Step 4: Large cliff/boulder features (rare, impressive) ---
@@ -525,26 +495,21 @@ fn spawn_decorations(
 
         // Dark rock cliff
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(
+            (Sprite {
+                    color: Color::srgb(
                         (0.20 - depth_darken).max(0.04),
                         (0.18 - depth_darken).max(0.03),
                         (0.16 - depth_darken).max(0.03),
                     ),
                     custom_size: Some(Vec2::new(w, h)),
-                    anchor: Anchor::BottomCenter,
                     ..default()
-                },
-                transform: Transform {
+                }, Anchor::BOTTOM_CENTER, Transform {
                     translation: Vec3::new(x, ground_y, -0.32),
                     rotation: Quat::from_rotation_z(rng.gen_range(-0.08..0.08)),
                     ..default()
-                },
-                ..default()
-            },
+                }),
             WorldDecoration { decoration_type: DecorationType::Rock },
-        )).set_parent(parent);
+        )).insert(ChildOf(parent));
     }
 
     // --- Step 5: Cave openings (dark holes in the terrain) ---
@@ -559,45 +524,35 @@ fn spawn_decorations(
 
         // Dark cave interior
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(0.02, 0.015, 0.025),
+            (Sprite {
+                    color: Color::srgb(0.02, 0.015, 0.025),
                     custom_size: Some(Vec2::new(w, h)),
-                    anchor: Anchor::BottomCenter,
                     ..default()
-                },
-                transform: Transform::from_xyz(x, ground_y - h * 0.3, -0.28),
-                ..default()
-            },
+                }, Anchor::BOTTOM_CENTER, Transform::from_xyz(x, ground_y - h * 0.3, -0.28)),
             WorldDecoration { decoration_type: DecorationType::Rock },
-        )).set_parent(parent);
+        )).insert(ChildOf(parent));
 
         // Cave arch - rock rim above the opening
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgb(
+            (Sprite {
+                    color: Color::srgb(
                         (0.25 - depth_darken).max(0.05),
                         (0.22 - depth_darken).max(0.04),
                         (0.18 - depth_darken).max(0.03),
                     ),
                     custom_size: Some(Vec2::new(w + 40.0, 20.0)),
-                    anchor: Anchor::BottomCenter,
                     ..default()
-                },
-                transform: Transform::from_xyz(x, ground_y + 5.0, -0.27),
-                ..default()
-            },
+                }, Anchor::BOTTOM_CENTER, Transform::from_xyz(x, ground_y + 5.0, -0.27)),
             WorldDecoration { decoration_type: DecorationType::Rock },
-        )).set_parent(parent);
+        )).insert(ChildOf(parent));
     }
 
     // --- Step 6: Vegetation anchored to terrain surface ---
 
-    // Kelp/seaweed (shallow to mid depth)
+    // Spore growths (near orbit to mid distance)
     if depth_level <= 5 {
-        let kelp_count = rng.gen_range(3..8).min(8 - depth_level).max(0);
-        for _ in 0..kelp_count {
+        let spore_count = rng.gen_range(3..8).min(8 - depth_level).max(0);
+        for _ in 0..spore_count {
             let local_x = rng.gen_range(-240.0..240.0_f32);
             let world_x = chunk_world_x + local_x + 256.0;
             let ground_y = -256.0 + terrain_height_at(world_x);
@@ -609,29 +564,24 @@ fn spawn_decorations(
 
             let green = 0.30 + rng.gen_range(-0.1..0.1_f32);
             commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
-                        color: Color::rgba(0.10, green, 0.08, 0.8),
+                (Sprite {
+                        color: Color::srgba(0.10, green, 0.08, 0.8),
                         custom_size: Some(Vec2::new(w, h)),
-                        anchor: Anchor::BottomCenter,
                         ..default()
-                    },
-                    transform: Transform {
+                    }, Anchor::BOTTOM_CENTER, Transform {
                         translation: Vec3::new(x, ground_y, -0.2),
                         rotation: Quat::from_rotation_z(sway),
                         ..default()
-                    },
-                    ..default()
-                },
-                WorldDecoration { decoration_type: DecorationType::Algae },
-            )).set_parent(parent);
+                    }),
+                WorldDecoration { decoration_type: DecorationType::SporeGrowth },
+            )).insert(ChildOf(parent));
         }
     }
 
-    // Coral clusters (shallow to mid depth)
+    // Crystal clusters (near orbit to mid distance)
     if depth_level >= 1 && depth_level <= 6 {
-        let coral_count = rng.gen_range(1..4);
-        for _ in 0..coral_count {
+        let crystal_count = rng.gen_range(1..4);
+        for _ in 0..crystal_count {
             let local_x = rng.gen_range(-230.0..230.0_f32);
             let world_x = chunk_world_x + local_x + 256.0;
             let ground_y = -256.0 + terrain_height_at(world_x);
@@ -640,27 +590,22 @@ fn spawn_decorations(
             let w = rng.gen_range(30.0..90.0_f32);
             let h = rng.gen_range(20.0..60.0_f32);
 
-            // Coral colors: pinks, oranges, purples
+            // Crystal colors: pinks, oranges, purples
             let hue = rng.gen_range(0..3);
             let color = match hue {
-                0 => Color::rgb(0.75 + rng.gen_range(-0.1..0.1), 0.30, 0.40),
-                1 => Color::rgb(0.80, 0.50 + rng.gen_range(-0.1..0.1), 0.25),
-                _ => Color::rgb(0.55, 0.30, 0.65 + rng.gen_range(-0.1..0.1)),
+                0 => Color::srgb(0.75 + rng.gen_range(-0.1..0.1), 0.30, 0.40),
+                1 => Color::srgb(0.80, 0.50 + rng.gen_range(-0.1..0.1), 0.25),
+                _ => Color::srgb(0.55, 0.30, 0.65 + rng.gen_range(-0.1..0.1)),
             };
 
             commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
+                (Sprite {
                         color,
                         custom_size: Some(Vec2::new(w, h)),
-                        anchor: Anchor::BottomCenter,
                         ..default()
-                    },
-                    transform: Transform::from_xyz(x, ground_y, -0.22),
-                    ..default()
-                },
-                WorldDecoration { decoration_type: DecorationType::Coral },
-            )).set_parent(parent);
+                    }, Anchor::BOTTOM_CENTER, Transform::from_xyz(x, ground_y, -0.22)),
+                WorldDecoration { decoration_type: DecorationType::Crystal },
+            )).insert(ChildOf(parent));
         }
     }
 
@@ -673,23 +618,19 @@ fn spawn_decorations(
             let size = rng.gen_range(15.0..50.0_f32);
 
             let color = if rng.gen::<f32>() < 0.5 {
-                Color::rgba(0.1, 0.7, 0.9, 0.5)  // cyan glow
+                Color::srgba(0.1, 0.7, 0.9, 0.5)  // cyan glow
             } else {
-                Color::rgba(0.2, 0.9, 0.4, 0.4)  // green glow
+                Color::srgba(0.2, 0.9, 0.4, 0.4)  // green glow
             };
 
             commands.spawn((
-                SpriteBundle {
-                    sprite: Sprite {
+                (Sprite {
                         color,
                         custom_size: Some(Vec2::new(size, size)),
                         ..default()
-                    },
-                    transform: Transform::from_xyz(x, y, -0.15),
-                    ..default()
-                },
-                WorldDecoration { decoration_type: DecorationType::BioluminescentSpot },
-            )).set_parent(parent);
+                    }, Transform::from_xyz(x, y, -0.15)),
+                WorldDecoration { decoration_type: DecorationType::EnergySpot },
+            )).insert(ChildOf(parent));
         }
     }
 
@@ -704,17 +645,12 @@ fn spawn_decorations(
         let h = rng.gen_range(150.0..350.0_f32);
 
         commands.spawn((
-            SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgba(0.5, 0.25, 0.1, 0.4),
+            (Sprite {
+                    color: Color::srgba(0.5, 0.25, 0.1, 0.4),
                     custom_size: Some(Vec2::new(w, h)),
-                    anchor: Anchor::BottomCenter,
                     ..default()
-                },
-                transform: Transform::from_xyz(x, ground_y, -0.18),
-                ..default()
-            },
+                }, Anchor::BOTTOM_CENTER, Transform::from_xyz(x, ground_y, -0.18)),
             WorldDecoration { decoration_type: DecorationType::ThermalVentSmoke },
-        )).set_parent(parent);
+        )).insert(ChildOf(parent));
     }
 }

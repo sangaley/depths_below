@@ -15,7 +15,7 @@ pub fn creature_vs_creature_combat(
         &CreatureAI,
         &mut AttackCooldown,
     )>,
-    mut ate_events: EventWriter<CreatureAteCreature>,
+    mut ate_events: MessageWriter<CreatureAteCreature>,
 ) {
     // Phase 1: Collect attack intents (immutable borrow)
     let intents: Vec<(Entity, Entity, Vec2, f32, CreatureType)> = creatures
@@ -25,7 +25,7 @@ pub fn creature_vs_creature_combat(
                 return None;
             }
             if let Some(EcoTarget::Creature(target_entity)) = ai.target {
-                if cooldown.timer.finished() {
+                if cooldown.timer.is_finished() {
                     return Some((
                         entity,
                         target_entity,
@@ -71,7 +71,7 @@ pub fn creature_vs_creature_combat(
             target_creature.health -= damage;
 
             if target_creature.health <= 0.0 {
-                ate_events.send(CreatureAteCreature {
+                ate_events.write(CreatureAteCreature {
                     predator: attacker_entity,
                     predator_type: attacker_type,
                     prey_type: target_type,

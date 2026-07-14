@@ -13,22 +13,22 @@ pub(super) fn crew_weapon_system(
         Option<&CalculatedStats>, &WeaponMount, &AmmoStorage,
         Option<&CrewStation>,
     )>,
-    creature_query: Query<(Entity, &Transform), (With<Creature>, Without<Submarine>)>,
+    creature_query: Query<(Entity, &Transform), (With<Creature>, Without<Ship>)>,
     crew_query: Query<&CrewMember>,
-    sub_query: Query<(&Transform, &SubmarinePhysics), With<Submarine>>,
+    ship_query: Query<(&Transform, &ShipPhysics), With<Ship>>,
     power_graph: Res<PowerGraph>,
     targeting_bonus: Res<TargetingBonus>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
-    let Ok((sub_transform, sub_physics)) = sub_query.get_single() else { return };
-    let sub_pos = sub_transform.translation.truncate();
+    let Ok((ship_transform, ship_physics)) = ship_query.single() else { return };
+    let ship_pos = ship_transform.translation.truncate();
 
     // Pre-compute closest creature
     let mut closest_creature: Option<(Entity, f32, Vec2)> = None;
     for (_c_entity, c_transform) in creature_query.iter() {
         let c_pos = c_transform.translation.truncate();
-        let dist = c_pos.distance(sub_pos);
+        let dist = c_pos.distance(ship_pos);
         if closest_creature.map_or(true, |(_, d, _)| dist < d) {
             closest_creature = Some((_c_entity, dist, c_pos));
         }
@@ -59,7 +59,7 @@ pub(super) fn crew_weapon_system(
 
         // Tick cooldown
         cooldown.timer.tick(time.delta());
-        if !cooldown.timer.finished() {
+        if !cooldown.timer.is_finished() {
             continue;
         }
 
@@ -79,10 +79,10 @@ pub(super) fn crew_weapon_system(
         // Check if closest creature is in range
         if let Some((_target_entity, dist, target_pos)) = closest_creature {
             if dist <= range {
-                let dir_to_target = target_pos - sub_pos;
+                let dir_to_target = target_pos - ship_pos;
 
                 // Firing arc check
-                if !is_in_firing_arc(sub_physics.rotation, &module.rotation, weapon_mount, dir_to_target) {
+                if !is_in_firing_arc(ship_physics.rotation, &module.rotation, weapon_mount, dir_to_target) {
                     continue;
                 }
 
@@ -90,15 +90,16 @@ pub(super) fn crew_weapon_system(
 
                 let accuracy = efficiency;
                 let effective_spread = 30.0 * (1.0 - targeting_bonus.accuracy_bonus);
-                let adjusted_target = apply_accuracy_spread(sub_pos, target_pos, accuracy, effective_spread);
+                let adjusted_target = apply_accuracy_spread(ship_pos, target_pos, accuracy, effective_spread);
 
                 projectiles::spawn_projectile(
                     &mut commands,
                     &asset_server,
-                    sub_pos,
+                    ship_pos,
                     adjusted_target,
                     damage,
                     PROJECTILE_SPEED,
+                    range,
                     true,
                     ammo_storage.ammo_type,
                 );
@@ -109,16 +110,16 @@ pub(super) fn crew_weapon_system(
 
 /// Player manual weapon fire (Space key) — power gated, arc-checked, supports mines.
 pub(super) fn manual_weapon_system(
-    keyboard: Res<Input<KeyCode>>,
+    keyboard: Res<ButtonInput<KeyCode>>,
     mut weapon_query: Query<(
         &mut Weapon, &mut WeaponCooldown, &Module,
         Option<&CalculatedStats>, &WeaponMount, &AmmoStorage,
     )>,
-    sub_query: Query<(&Transform, &SubmarinePhysics), With<Submarine>>,
-    creature_query: Query<(&Transform, Entity), (With<Creature>, Without<Submarine>)>,
+    ship_query: Query<(&Transform, &ShipPhysics), With<Ship>>,
+    creature_query: Query<(&Transform, Entity), (With<Creature>, Without<Ship>)>,
     power_graph: Res<PowerGraph>,
     targeting_bonus: Res<TargetingBonus>,
-    mut notifications: EventWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
     asset_server: Res<AssetServer>,
     mut commands: Commands,
 ) {
@@ -126,8 +127,8 @@ pub(super) fn manual_weapon_system(
         return;
     }
 
-    let Ok((sub_transform, sub_physics)) = sub_query.get_single() else { return };
-    let sub_pos = sub_transform.translation.truncate();
+    let Ok((ship_transform, ship_physics)) = ship_query.single() else { return };
+    let ship_pos = ship_transform.translation.truncate();
 
     // Fire the first available weapon
     for (mut weapon, mut cooldown, module, calculated_stats, weapon_mount, ammo_storage) in weapon_query.iter_mut() {
@@ -136,7 +137,7 @@ pub(super) fn manual_weapon_system(
         }
 
         // Cooldown check — skip weapons still reloading
-        if !cooldown.timer.finished() {
+        if !cooldown.timer.is_finished() {
             continue;
         }
 
@@ -154,19 +155,19 @@ pub(super) fn manual_weapon_system(
         let efficiency = ModuleDamageState::from_health_ratio(health_ratio).efficiency();
         if efficiency <= 0.0 { continue; }
 
-        // Mine deployment — drop behind submarine
+        // Mine deployment — drop behind ship
         if ammo_storage.ammo_type == AmmoType::Mine {
             weapon.ammo -= 1;
             let modified_rate = fire_rate * efficiency;
             cooldown.timer = Timer::from_seconds(0.5 / modified_rate.max(0.01), TimerMode::Once);
 
             let backward = Vec2::new(
-                (sub_physics.rotation + PI).cos(),
-                (sub_physics.rotation + PI).sin(),
+                (ship_physics.rotation + PI).cos(),
+                (ship_physics.rotation + PI).sin(),
             );
-            let mine_pos = sub_pos + backward * 80.0;
+            let mine_pos = ship_pos + backward * 80.0;
             mines::spawn_mine(&mut commands, &asset_server, mine_pos, damage);
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: "Mine deployed!".into(),
                 notification_type: NotificationType::Info,
                 duration: 1.0,
@@ -182,10 +183,10 @@ pub(super) fn manual_weapon_system(
         let mut closest: Option<(Vec2, f32)> = None;
         for (c_transform, _) in creature_query.iter() {
             let c_pos = c_transform.translation.truncate();
-            let dist = c_pos.distance(sub_pos);
+            let dist = c_pos.distance(ship_pos);
             if dist <= range {
-                let dir_to = c_pos - sub_pos;
-                if is_in_firing_arc(sub_physics.rotation, &module.rotation, weapon_mount, dir_to) {
+                let dir_to = c_pos - ship_pos;
+                if is_in_firing_arc(ship_physics.rotation, &module.rotation, weapon_mount, dir_to) {
                     if dist < closest.map_or(f32::INFINITY, |(_, d)| d) {
                         closest = Some((c_pos, dist));
                     }
@@ -195,38 +196,40 @@ pub(super) fn manual_weapon_system(
 
         if let Some((target_pos, _)) = closest {
             let effective_spread = 15.0 * (1.0 - targeting_bonus.accuracy_bonus);
-            let adjusted_target = apply_accuracy_spread(sub_pos, target_pos, efficiency, effective_spread);
+            let adjusted_target = apply_accuracy_spread(ship_pos, target_pos, efficiency, effective_spread);
 
             projectiles::spawn_projectile(
                 &mut commands,
                 &asset_server,
-                sub_pos,
+                ship_pos,
                 adjusted_target,
                 damage,
                 PROJECTILE_SPEED * 1.2,
+                range,
                 true,
                 ammo_storage.ammo_type,
             );
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: ammo_storage.ammo_type.display_name().into(),
                 notification_type: NotificationType::Info,
                 duration: 1.0,
             });
         } else {
-            // Fire in the submarine's facing direction
-            let forward_dir = Vec2::new(sub_physics.rotation.cos(), sub_physics.rotation.sin());
-            let forward = sub_pos + forward_dir * range;
+            // Fire in the ship's facing direction
+            let forward_dir = Vec2::new(ship_physics.rotation.cos(), ship_physics.rotation.sin());
+            let forward = ship_pos + forward_dir * range;
             projectiles::spawn_projectile(
                 &mut commands,
                 &asset_server,
-                sub_pos,
+                ship_pos,
                 forward,
                 damage,
                 PROJECTILE_SPEED,
+                range,
                 true,
                 ammo_storage.ammo_type,
             );
-            notifications.send(ShowNotification {
+            notifications.write(ShowNotification {
                 message: "Fired! No targets in range".into(),
                 notification_type: NotificationType::Info,
                 duration: 1.5,
