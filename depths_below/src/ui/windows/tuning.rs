@@ -423,7 +423,10 @@ fn spawn_slider_row(
 pub fn tuning_slider_drag(
     mouse: Res<ButtonInput<MouseButton>>,
     mut drag: ResMut<ActiveSliderDrag>,
-    tracks: Query<(&TuningSliderTrack, &Interaction, &ComputedNode, &GlobalTransform)>,
+    // UiGlobalTransform, NOT GlobalTransform: Bevy 0.19 no longer keeps the
+    // classic GlobalTransform in sync for UI nodes, so reading it gives a
+    // stale/identity value — same bug as map_click_system (see ui/mod.rs).
+    tracks: Query<(&TuningSliderTrack, &Interaction, &ComputedNode, &bevy::ui::UiGlobalTransform)>,
     windows: Query<&Window>,
     tuning_windows: Query<&TuningWindow>,
     mut tuning_query: Query<&mut WeaponTuning>,
@@ -432,7 +435,10 @@ pub fn tuning_slider_drag(
         drag.0 = None;
     }
 
-    let Some(cursor) = windows.single().ok().and_then(|w| w.cursor_position()) else { return };
+    let Ok(window) = windows.single() else { return };
+    // cursor_position() is logical pixels; ComputedNode/UiGlobalTransform are
+    // physical — without the scale factor every hit lands wrong on Retina.
+    let Some(cursor) = window.cursor_position().map(|p| p * window.scale_factor()) else { return };
 
     // Start a drag
     if drag.0.is_none() && mouse.just_pressed(MouseButton::Left) {
@@ -450,13 +456,14 @@ pub fn tuning_slider_drag(
         return;
     }
 
-    // Value from cursor position over the active track
+    // Value from cursor position over the active track. normalize_point maps
+    // into the node's local space (−0.5..0.5 inside), and keeps extrapolating
+    // beyond that when the cursor slides off the track mid-drag — the clamp
+    // pins it to the ends.
     for (track, _, node, transform) in tracks.iter() {
         if track.field != active_field { continue; }
-        let size = node.size();
-        if size.x <= 0.0 { continue; }
-        let left_edge = transform.translation().x - size.x / 2.0;
-        let normalized = ((cursor.x - left_edge) / size.x).clamp(0.0, 1.0);
+        let Some(norm) = node.normalize_point(*transform, cursor) else { continue };
+        let normalized = (norm.x + 0.5).clamp(0.0, 1.0);
         let value = TUNING_MIN + normalized * (TUNING_MAX - TUNING_MIN);
 
         let Ok(tw) = tuning_windows.single() else { return };

@@ -19,6 +19,9 @@ use crate::celestial::events::WarpJumpStarted;
 
 // Per-bus volume scalars. Sounds multiply their own base volume by one of these.
 const SFX_VOL: f32 = 0.8;
+/// Weapon fire sounds muted at user request (2026-07-14) — the current
+/// samples don't fit. Explosions/impacts still play. Flip to re-enable.
+const WEAPON_FIRE_SOUNDS: bool = false;
 const AMBIENT_VOL: f32 = 0.30;
 const UI_VOL: f32 = 0.45;
 const ALARM_VOL: f32 = 0.40;
@@ -184,6 +187,10 @@ fn weapon_fired_audio(
     mut last_played: Local<HashMap<ModuleType, f64>>,
     mut commands: Commands,
 ) {
+    if !WEAPON_FIRE_SOUNDS {
+        events.clear();
+        return;
+    }
     let Some(audio) = audio else { return };
     let mut rng = rand::thread_rng();
     let now = time.elapsed_secs_f64();
