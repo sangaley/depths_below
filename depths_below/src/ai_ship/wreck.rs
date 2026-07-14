@@ -85,7 +85,7 @@ pub fn ai_ship_death_system(
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     for event in destroyed_events.read() {
-        let loot = match event.ship_type {
+        let base_loot = match event.ship_type {
             AiShipType::VoidTitan => 30,    // legendary hoard
             AiShipType::Dreadnought => 20,  // colossal wreck
             AiShipType::Leviathan => 6,
@@ -96,6 +96,53 @@ pub fn ai_ship_death_system(
             AiShipType::IronTide => 10,    // massive wreck
             AiShipType::Blackwater => 6,
             AiShipType::RustSwarm => 2,    // junk
+        };
+
+        // Power off and darken every block — dead reactor, no power,
+        // nothing left running. Blocks that survived the fight (not
+        // individually destroyed) pay out half their build cost in
+        // credits — salvage value for the parts that are still intact.
+        const WRECK_TINT: Color = Color::srgb(0.18, 0.18, 0.2);
+        let mut salvage_value = 0.0_f32;
+        let mut block_count = 0u32;
+        let mut intact_count = 0u32;
+        if let Ok(children) = children_query.get(event.entity) {
+            for child in children.iter() {
+                if let Ok((mut module, mut sprite, is_destroyed)) = module_query.get_mut(child) {
+                    block_count += 1;
+                    if !is_destroyed {
+                        intact_count += 1;
+                        salvage_value += registry.get(module.module_type).cost as f32 * 0.5;
+                    }
+                    module.is_active = false;
+                    sprite.color = WRECK_TINT;
+                } else if let Ok((mut sprite, hull, is_destroyed)) = hull_query.get_mut(child) {
+                    block_count += 1;
+                    if !is_destroyed {
+                        intact_count += 1;
+                        salvage_value += hull.material.cost() as f32 * 0.5;
+                    }
+                    sprite.color = WRECK_TINT;
+                }
+            }
+        }
+
+        // FORENSIC WRECKS — the kill method shapes the loot. A surgical kill
+        // (EMP-disable, snipe the reactor, hull mostly whole) leaves a
+        // pristine wreck worth extra; grinding the ship to dust leaves
+        // scraps. intact fraction is the honest measure of "how gently
+        // did you kill this".
+        let intact_frac = if block_count > 0 {
+            intact_count as f32 / block_count as f32
+        } else {
+            0.0
+        };
+        let (loot, condition) = if intact_frac >= 0.7 {
+            (((base_loot as f32) * 1.5).ceil() as u32, "Pristine wreck — bonus salvage!")
+        } else if intact_frac < 0.3 {
+            (((base_loot as f32) * 0.5).ceil() as u32, "Shattered hulk — little left to take.")
+        } else {
+            (base_loot, "Wreck can be salvaged.")
         };
 
         commands.entity(event.entity).try_insert((
@@ -113,35 +160,12 @@ pub fn ai_ship_death_system(
             },
         ));
 
-        // Power off and darken every block — dead reactor, no power,
-        // nothing left running. Blocks that survived the fight (not
-        // individually destroyed) pay out half their build cost in
-        // credits — salvage value for the parts that are still intact.
-        const WRECK_TINT: Color = Color::srgb(0.18, 0.18, 0.2);
-        let mut salvage_value = 0.0_f32;
-        let mut block_count = 0u32;
-        if let Ok(children) = children_query.get(event.entity) {
-            block_count = children.iter().count() as u32;
-            for child in children.iter() {
-                if let Ok((mut module, mut sprite, is_destroyed)) = module_query.get_mut(child) {
-                    if !is_destroyed {
-                        salvage_value += registry.get(module.module_type).cost as f32 * 0.5;
-                    }
-                    module.is_active = false;
-                    sprite.color = WRECK_TINT;
-                } else if let Ok((mut sprite, hull, is_destroyed)) = hull_query.get_mut(child) {
-                    if !is_destroyed {
-                        salvage_value += hull.material.cost() as f32 * 0.5;
-                    }
-                    sprite.color = WRECK_TINT;
-                }
-            }
-        }
-
-        // Bigger ships rattle longer before the final boom.
+        // Bigger ships rattle longer before the final boom; shattered kills
+        // rattle extra hard — there's more unstable wreckage going up.
+        let extra_pops = if intact_frac < 0.3 { 3 } else { 0 };
         commands.entity(event.entity).try_insert(DeathRattle {
             timer: Timer::from_seconds(0.2, TimerMode::Once),
-            remaining: (block_count / 5).clamp(3, 10),
+            remaining: (block_count / 5).clamp(3, 10) + extra_pops,
         });
 
         let type_name = match event.ship_type {
@@ -157,11 +181,11 @@ pub fn ai_ship_death_system(
             AiShipType::RustSwarm => "Rust Swarm",
         };
 
-        let mut message = format!("{} vessel destroyed! Wreck can be salvaged (F).", type_name);
+        let mut message = format!("{} vessel destroyed! {} (F to loot)", type_name, condition);
         if salvage_value > 0.0 {
             let payout = salvage_value.round() as u32;
             currency.credits += payout;
-            message = format!("{} destroyed! +{}c for intact salvage. Wreck can be looted (F).", type_name, payout);
+            message = format!("{} destroyed! +{}c intact salvage. {} (F to loot)", type_name, payout, condition);
         }
 
         notifications.write(ShowNotification {
@@ -169,5 +193,48 @@ pub fn ai_ship_death_system(
             notification_type: NotificationType::Success,
             duration: 4.0,
         });
+    }
+}
+
+/// HOT WRECKS — fires on a fresh wreck keep eating it. While any block on a
+/// wreck is still burning, its remaining loot ticks away (one unit every few
+/// seconds). Looting immediately means working next to live fires and
+/// cook-offs (burning explosive blocks still detonate); waiting for the
+/// burn-out is safe but costs cargo. Fires are finite (BlockBurning has a
+/// duration), so a wreck never burns to literally nothing unless it was
+/// already ablaze everywhere.
+pub fn wreck_fire_consumes_loot(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut wreck_query: Query<(Entity, &mut Wreck, &mut AiShipWreck, &Children)>,
+    burning_query: Query<(), With<crate::combat::new_projectiles::BlockBurning>>,
+    block_pos_query: Query<&GlobalTransform, Or<(With<Module>, With<HullSegment>)>>,
+    mut tick: Local<f32>,
+) {
+    *tick += time.delta_secs();
+    if *tick < 4.0 { return; }
+    *tick = 0.0;
+
+    let mut rng = rand::thread_rng();
+    for (_entity, mut wreck, mut ai_wreck, children) in wreck_query.iter_mut() {
+        if wreck.loot_remaining == 0 { continue; }
+        let burning_blocks: Vec<Entity> = children.iter()
+            .filter(|c| burning_query.get(*c).is_ok())
+            .collect();
+        if burning_blocks.is_empty() { continue; }
+
+        wreck.loot_remaining = wreck.loot_remaining.saturating_sub(1);
+        ai_wreck.loot_remaining = ai_wreck.loot_remaining.saturating_sub(1);
+
+        // Smoke puff over a random burning block so the loss reads visually
+        let smoke_at = burning_blocks[rng.gen_range(0..burning_blocks.len())];
+        if let Ok(gt) = block_pos_query.get(smoke_at) {
+            crate::combat::spawn_hit_effect(
+                &mut commands,
+                gt.translation().truncate(),
+                Color::srgba(0.4, 0.38, 0.35, 0.6),
+                40.0,
+            );
+        }
     }
 }

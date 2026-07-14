@@ -43,6 +43,7 @@ impl Plugin for AiShipPlugin {
                     noise::ai_ship_radar_contact_decay,
                     wreck::ai_ship_death_system,
                     wreck::update_death_rattle,
+                    wreck::wreck_fire_consumes_loot,
                 )
                     .after(SpatialSet::Update)
                     .run_if(in_state(GameState::Exploring)),
