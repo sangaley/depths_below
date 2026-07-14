@@ -12,12 +12,22 @@ use super::components::*;
 // ============================================================================
 
 /// Applies all adjacency-based enhancer effects for weapons, hull, and structural modules.
-/// Resets every weapon to its BaseWeaponStats snapshot and every block's
-/// CascadeRisk to its default first, then applies this frame's adjacency
-/// bonuses on top — previously each `*=`/`+=` below applied directly to the
-/// live component with nothing ever resetting it, so a weapon or block
-/// sitting next to an enhancer compounded that bonus every single frame
-/// (e.g. range *= 1.40 forever) instead of applying it once.
+/// Resets every weapon to its emergent MachineStats (block layout + Tier 2/3
+/// customization, see multiblock::stats::calculate_machine_stats) and every
+/// block's CascadeRisk to its default first, then applies this frame's
+/// adjacency bonuses on top — previously each `*=`/`+=` below applied
+/// directly to the live component with nothing ever resetting it, so a
+/// weapon or block sitting next to an enhancer compounded that bonus every
+/// single frame (e.g. range *= 1.40 forever) instead of applying it once.
+///
+/// Was resetting straight to the raw BaseWeaponStats snapshot instead of
+/// MachineStats — since this system and calculate_machine_stats/
+/// apply_machine_stats_to_weapons had no defined order, whichever ran last
+/// in a given frame won outright, silently discarding the other's
+/// contribution (block counts and Tier 2/3 customization would work for one
+/// frame then vanish). Resetting to MachineStats.effective_* plus an
+/// explicit `.after()` (see building/mod.rs registration) makes this the
+/// final compose-on-top step instead of a competing overwrite.
 ///
 /// Also scoped per-ship (via each entry's owning ship, from ChildOf): grid
 /// positions are ship-local and small in range, so they collide constantly
@@ -26,15 +36,33 @@ use super::components::*;
 /// cross-ship contamination pattern fixed everywhere else this session.
 pub fn apply_weapon_enhancers(
     module_query: Query<(&Module, &ChildOf), Without<DestroyedModule>>,
-    mut weapon_query: Query<(&Module, &mut Weapon, Option<&BaseWeaponStats>, &ChildOf), Without<DestroyedModule>>,
+    mut weapon_query: Query<(
+        &Module, &mut Weapon, Option<&BaseWeaponStats>, Option<&MachineStats>, &ChildOf,
+        Option<&crate::building::customization::tuning::WeaponTuning>,
+        Option<&crate::building::customization::tuning::SelectedAmmo>,
+    ), Without<DestroyedModule>>,
     mut cascade_query: Query<(&Module, &mut CascadeRisk, &ChildOf)>,
 ) {
-    for (_, mut weapon, base, _) in weapon_query.iter_mut() {
-        if let Some(base) = base {
+    for (_, mut weapon, base, machine, _, tuning, ammo) in weapon_query.iter_mut() {
+        if let Some(machine) = machine {
+            weapon.damage = machine.effective_damage;
+            weapon.range = machine.effective_range;
+            weapon.fire_rate = machine.effective_fire_rate;
+        } else if let Some(base) = base {
             weapon.damage = base.damage;
             weapon.range = base.range;
             weapon.fire_rate = base.fire_rate;
+        }
+        if let Some(base) = base {
             weapon.max_ammo = base.max_ammo;
+        }
+        // Stat tuning (dock-side sliders) composes into the same reset —
+        // applying it anywhere else gets overwritten by this reset next
+        // frame. Heavier loaded ammo cycles slower.
+        if let Some(tuning) = tuning {
+            weapon.damage *= tuning.damage;
+            let weight = ammo.map(|a| a.0.weight_mult()).unwrap_or(1.0);
+            weapon.fire_rate = (weapon.fire_rate * tuning.fire_rate / weight).max(0.05);
         }
     }
     for (_, mut cascade, _) in cascade_query.iter_mut() {
@@ -50,7 +78,7 @@ pub fn apply_weapon_enhancers(
     for (ship, pos, module_type) in &enhancers {
         match module_type {
             ModuleType::MuzzleBrake => {
-                for (wm, mut weapon, _, wp) in weapon_query.iter_mut() {
+                for (wm, mut weapon, _, _, wp, _, _) in weapon_query.iter_mut() {
                     if wp.parent() == *ship && is_adjacent(pos, &wm.grid_position) {
                         weapon.damage *= 1.05;
                     }
@@ -69,7 +97,7 @@ pub fn apply_weapon_enhancers(
                 }
             }
             ModuleType::BoreEvacuator => {
-                for (wm, mut weapon, _, wp) in weapon_query.iter_mut() {
+                for (wm, mut weapon, _, _, wp, _, _) in weapon_query.iter_mut() {
                     if wp.parent() == *ship && is_adjacent(pos, &wm.grid_position)
                         && matches!(wm.module_type, ModuleType::Cannon | ModuleType::Railgun | ModuleType::Coilgun | ModuleType::Gatling)
                     {
@@ -78,7 +106,7 @@ pub fn apply_weapon_enhancers(
                 }
             }
             ModuleType::MagneticAccelerator => {
-                for (wm, mut weapon, _, wp) in weapon_query.iter_mut() {
+                for (wm, mut weapon, _, _, wp, _, _) in weapon_query.iter_mut() {
                     if wp.parent() == *ship && is_adjacent(pos, &wm.grid_position)
                         && matches!(wm.module_type, ModuleType::Railgun | ModuleType::Coilgun)
                     {
@@ -87,7 +115,7 @@ pub fn apply_weapon_enhancers(
                 }
             }
             ModuleType::FocusingArray => {
-                for (wm, mut weapon, _, wp) in weapon_query.iter_mut() {
+                for (wm, mut weapon, _, _, wp, _, _) in weapon_query.iter_mut() {
                     if wp.parent() == *ship && is_adjacent(pos, &wm.grid_position)
                         && matches!(wm.module_type, ModuleType::Laser | ModuleType::PlasmaCaster | ModuleType::IonDisruptor)
                     {
@@ -96,7 +124,7 @@ pub fn apply_weapon_enhancers(
                 }
             }
             ModuleType::WarheadBay => {
-                for (wm, mut weapon, _, wp) in weapon_query.iter_mut() {
+                for (wm, mut weapon, _, _, wp, _, _) in weapon_query.iter_mut() {
                     if wp.parent() == *ship && is_adjacent(pos, &wm.grid_position)
                         && matches!(wm.module_type, ModuleType::HeavyMissile | ModuleType::GuidedMissile | ModuleType::ClusterRocket)
                     {
@@ -105,7 +133,7 @@ pub fn apply_weapon_enhancers(
                 }
             }
             ModuleType::VibrationDamper => {
-                for (wm, mut weapon, _, wp) in weapon_query.iter_mut() {
+                for (wm, mut weapon, _, _, wp, _, _) in weapon_query.iter_mut() {
                     if wp.parent() == *ship && is_adjacent(pos, &wm.grid_position) {
                         weapon.damage *= 1.10;
                     }

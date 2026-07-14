@@ -69,6 +69,8 @@ pub fn fire_weapons_system(
         Entity, &Module, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
         Option<&crate::building::customization::parameters::ModuleCustomization>,
+        Option<&crate::building::customization::tuning::WeaponTuning>,
+        Option<&crate::building::customization::tuning::SelectedAmmo>,
     ), Without<DestroyedModule>>,
     target_transform_query: Query<&Transform, Without<Ship>>,
     target_velocity_query: Query<&Velocity, Without<Ship>>,
@@ -100,7 +102,7 @@ pub fn fire_weapons_system(
         .map(|m| (m.grid_position, m.module_type, m.is_active))
         .collect();
 
-    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, customization) in weapon_query.iter_mut() {
+    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, customization, tuning, selected_ammo) in weapon_query.iter_mut() {
         // Player ship only: this query has no ownership filter on its own, and
         // AI ships carry the exact same Weapon/FireGroup/WeaponMount
         // components (shared spawn_module path). Unscoped, holding Space
@@ -179,20 +181,14 @@ pub fn fire_weapons_system(
         );
         let tier = get_weapon_prediction_tier(module, customization, has_adjacent_tc);
 
-        // Calculate projectile speed based on weapon type (x10 total from
-        // the original values — kinetic rounds used to crawl, especially
-        // Gatling, and fell far short of their own range before ever
-        // reaching it, even after the first round of increases).
-        let proj_speed = match module.module_type {
-            // Railgun eased off 12000 — at that speed + its 0.25 fire_rate
-            // (one shot every 4s) the bolt crossed the screen in a couple
-            // frames, so it read as "never fires" even when it was working.
-            ModuleType::Railgun => 9000.0,    // Very fast
-            ModuleType::Coilgun => 8000.0,    // Fast
-            ModuleType::Cannon => 6000.0,     // Medium
-            ModuleType::Gatling => 5000.0,    // Medium-slow
-            _ => 6000.0,
-        };
+        // Muzzle speed: per-type base (see tuning.rs — shared with the tuning
+        // window's live readout) scaled by the velocity slider and the loaded
+        // ammo's own velocity profile (APFSDS darts fly, HEAT crawls).
+        let tuning_vel = tuning.map(|t| t.velocity).unwrap_or(1.0);
+        let ammo_vel = selected_ammo.map(|a| a.0.velocity_mult()).unwrap_or(1.0);
+        let proj_speed =
+            crate::building::customization::tuning::base_projectile_speed(module.module_type)
+            * tuning_vel * ammo_vel;
 
         // Get shooter velocity for relative prediction
         let shooter_vel = ship_velocity.0;
@@ -229,13 +225,33 @@ pub fn fire_weapons_system(
             from_player: true,
         });
 
-        // Determine damage type based on module type
-        let damage_type = match module.module_type {
-            ModuleType::Railgun => ProjectileDamageType::Kinetic,
-            ModuleType::Cannon => ProjectileDamageType::Kinetic,
-            ModuleType::Coilgun => ProjectileDamageType::Kinetic,
-            ModuleType::Gatling => ProjectileDamageType::Kinetic,
-            _ => ProjectileDamageType::Kinetic,
+        // Loaded ammo drives damage type, per-round damage, and penetration.
+        // Without a SelectedAmmo (AI ships, pre-tuning saves) everything
+        // falls back to the old per-weapon-type behavior.
+        use crate::combat::ammo_types::KineticAmmoType;
+        let (damage_type, ammo_damage_mult, penetration) = match selected_ammo.map(|a| a.0) {
+            Some(ammo) => (
+                match ammo {
+                    KineticAmmoType::Incendiary => ProjectileDamageType::Incendiary,
+                    KineticAmmoType::EMPShell => ProjectileDamageType::EmpRound,
+                    KineticAmmoType::APHE | KineticAmmoType::HEFrag | KineticAmmoType::Flak =>
+                        ProjectileDamageType::Explosive,
+                    _ => ProjectileDamageType::Kinetic,
+                },
+                ammo.damage_mult(),
+                ammo.penetration(),
+            ),
+            None => (
+                ProjectileDamageType::Kinetic,
+                1.0,
+                match module.module_type {
+                    ModuleType::Railgun => 80.0,   // Goes through almost anything
+                    ModuleType::Cannon => 40.0,    // Decent penetration
+                    ModuleType::Coilgun => 25.0,   // Light penetration
+                    ModuleType::Gatling => 10.0,   // Barely penetrates
+                    _ => 20.0,
+                },
+            ),
         };
 
         // Spawn projectile(s)
@@ -268,13 +284,16 @@ pub fn fire_weapons_system(
             // Visual size/color based on weapon — sized and colored to read
             // clearly at gameplay zoom instead of every shot looking like
             // the same small yellow sliver.
-            let (size, color) = match module.module_type {
+            let (size, base_color) = match module.module_type {
                 ModuleType::Railgun => (Vec2::new(50.0, 4.0), Color::srgb(0.2, 0.5, 1.0)),   // long blue streak
                 ModuleType::Cannon => (Vec2::new(20.0, 12.0), Color::srgb(1.0, 0.45, 0.05)), // big orange shell
                 ModuleType::Coilgun => (Vec2::new(12.0, 5.0), Color::srgb(0.6, 0.8, 1.0)),
                 ModuleType::Gatling => (Vec2::new(8.0, 3.0), Color::srgb(1.0, 0.85, 0.2)),
                 _ => (Vec2::new(8.0, 3.0), Color::srgb(0.8, 0.8, 0.4)),
             };
+            // Loaded ammo recolors the round (AP brass, EMP blue, ...) so a
+            // mixed loadout reads at a glance; size stays per-weapon.
+            let color = selected_ammo.map(|a| a.0.color()).unwrap_or(base_color);
 
             let angle = vel.y.atan2(vel.x);
 
@@ -289,19 +308,13 @@ pub fn fire_weapons_system(
                         ..default()
                     }),
                 Projectile {
-                    damage: weapon.damage,
+                    damage: weapon.damage * ammo_damage_mult,
                     speed: proj_speed,
                     lifetime: 4.0,
                     max_lifetime: 4.0,
                     owner: entity,
                     damage_type,
-                    penetration: match module.module_type {
-                        ModuleType::Railgun => 80.0,   // Goes through almost anything
-                        ModuleType::Cannon => 40.0,    // Decent penetration
-                        ModuleType::Coilgun => 25.0,   // Light penetration
-                        ModuleType::Gatling => 10.0,   // Barely penetrates
-                        _ => 20.0,
-                    },
+                    penetration,
                     has_penetrated: false,
                 },
                 Velocity(vel),

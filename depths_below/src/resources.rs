@@ -135,6 +135,12 @@ pub struct ModuleData {
     /// Multi-block customization parameter values (Tier 3 slider data)
     #[serde(default)]
     pub customization_params: Option<std::collections::HashMap<String, f32>>,
+    /// Stat tuning multipliers (velocity, fire_rate, damage)
+    #[serde(default)]
+    pub tuning: Option<crate::building::customization::tuning::WeaponTuning>,
+    /// Loaded kinetic ammo type
+    #[serde(default)]
+    pub selected_ammo: Option<crate::combat::ammo_types::KineticAmmoType>,
 }
 
 fn default_rotation() -> Rotation { Rotation::North }

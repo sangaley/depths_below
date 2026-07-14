@@ -103,7 +103,12 @@ fn collect_save_data(
     discovered_locations: &DiscoveredLocations,
     world_state: &WorldState,
     ship_query: &Query<&Transform, With<Ship>>,
-    module_query: &Query<(&Module, Option<&CustomModule>)>,
+    module_query: &Query<(
+        &Module,
+        Option<&CustomModule>,
+        Option<&crate::building::customization::tuning::WeaponTuning>,
+        Option<&crate::building::customization::tuning::SelectedAmmo>,
+    )>,
     hull_query: &Query<(&HullSegment, &Transform)>,
     crew_query: &Query<(Entity, &CrewMember)>,
     current_state: &State<GameState>,
@@ -116,7 +121,7 @@ fn collect_save_data(
     // Collect modules
     let modules: Vec<ModuleData> = module_query
         .iter()
-        .map(|(module, custom)| {
+        .map(|(module, custom, tuning, selected_ammo)| {
             let custom_data = custom.map(|c| CustomModuleData {
                 custom_name: c.custom_name.clone(),
                 subcomponents: Vec::new(),
@@ -129,6 +134,8 @@ fn collect_save_data(
                 is_active: module.is_active,
                 custom_data,
                 customization_params: None, // Tier 3 params saved in future version
+                tuning: tuning.copied(),
+                selected_ammo: selected_ammo.map(|s| s.0),
             }
         })
         .collect();
@@ -236,7 +243,12 @@ fn handle_save_request(
     world_state: Res<WorldState>,
     current_state: Res<State<GameState>>,
     ship_query: Query<&Transform, With<Ship>>,
-    module_query: Query<(&Module, Option<&CustomModule>)>,
+    module_query: Query<(
+        &Module,
+        Option<&CustomModule>,
+        Option<&crate::building::customization::tuning::WeaponTuning>,
+        Option<&crate::building::customization::tuning::SelectedAmmo>,
+    )>,
     hull_query: Query<(&HullSegment, &Transform)>,
     crew_query: Query<(Entity, &CrewMember)>,
 ) {
@@ -470,6 +482,16 @@ fn rebuild_entities_from_save(
             health: module_data.health,
             is_active: module_data.is_active,
         });
+        // Restore stat tuning + loaded ammo — inserting counts as Changed, so
+        // apply_weapon_tuning recomputes the live stats on the next frame.
+        if let Some(tuning) = module_data.tuning {
+            commands.entity(entity).insert(tuning);
+        }
+        if let Some(ammo) = module_data.selected_ammo {
+            commands.entity(entity).insert(
+                crate::building::customization::tuning::SelectedAmmo(ammo)
+            );
+        }
     }
 
     // ---- Respawn crew ----

@@ -20,6 +20,7 @@ pub fn fire_missiles_system(
     mut weapon_query: Query<(
         Entity, &Module, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
+        Option<&crate::building::customization::tuning::WeaponTuning>,
     ), Without<DestroyedModule>>,
     target_query: Query<&Transform, Without<Ship>>,
     machine_stats: Query<&crate::building::multiblock::components::MachineStats>,
@@ -45,7 +46,7 @@ pub fn fire_missiles_system(
                 .and_then(|(cam, gt)| cam.viewport_to_world_2d(gt, c).ok())
         });
 
-    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent) in weapon_query.iter_mut() {
+    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning) in weapon_query.iter_mut() {
         // Player ship only — see fire_weapons_system for why this matters:
         // AI ships carry identical missile-bay components and would
         // otherwise launch whenever the player fires, homing on the
@@ -90,9 +91,11 @@ pub fn fire_missiles_system(
 
         let size_mult = bay_count as f32;
 
-        // Base missile stats scaled by bay count
+        // Base missile stats scaled by bay count. The tuning velocity slider
+        // is "thrust" for missiles — hotter engines, faster closing speed.
         let missile_damage = weapon.damage * size_mult;
-        let missile_thrust = 400.0 / size_mult.sqrt(); // Bigger = slower acceleration
+        let thrust_mult = tuning.map(|t| t.velocity).unwrap_or(1.0);
+        let missile_thrust = 400.0 * thrust_mult / size_mult.sqrt(); // Bigger = slower acceleration
         let tracking = match module.module_type {
             ModuleType::GuidedMissile => 2.0,     // Good tracking
             ModuleType::HeavyMissile => 1.2,      // Sluggish tracking

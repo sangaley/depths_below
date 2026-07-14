@@ -51,6 +51,10 @@ impl Plugin for BuildingPlugin {
             })
             .init_resource::<customization::custom_presets::CustomPresetLibrary>()
             .add_systems(Startup, customization::custom_presets::load_custom_presets)
+            // Weapon tuning → live stats. Runs in every state (Changed-filtered,
+            // so it's a no-op unless a slider moved or a save just loaded) —
+            // tuned stats must persist into flight, only EDITING is dock-gated.
+            .add_systems(Update, customization::tuning::apply_weapon_tuning)
             .add_systems(
                 Update,
                 (
@@ -65,8 +69,10 @@ impl Plugin for BuildingPlugin {
                     blueprint::save_blueprint_system,
                     blueprint::load_blueprint_system,
                     blueprint::delete_blueprint_system,
-                    inspection::right_click_inspect,
-                    inspection::handle_customize_click,
+                    // Weapon customization (right-click inspect/Tier2/Tier3)
+                    // shelved for now — revisit once most stations/bases are
+                    // done. inspection::right_click_inspect and
+                    // handle_customize_click still exist, just not wired in.
                 )
                     .chain()
                     .run_if(in_state(GameState::StationDocked)),
@@ -96,6 +102,17 @@ impl Plugin for BuildingPlugin {
                         .after(multiblock::connections::rebuild_machine_connections),
                     multiblock::stats::apply_machine_stats_to_weapons
                         .after(multiblock::stats::calculate_machine_stats),
+                    // Must run after apply_machine_stats_to_weapons or the two
+                    // systems race to write Weapon.damage/range/fire_rate with
+                    // no defined order — see apply_weapon_enhancers' doc comment.
+                    // Runs while DOCKED too (not just Exploring) so the tuning
+                    // window's live stat readout reflects the composed result,
+                    // and folds WeaponTuning in during its per-frame reset.
+                    multiblock::enhancers::apply_weapon_enhancers
+                        .after(multiblock::stats::apply_machine_stats_to_weapons),
+                    // Cooldown duration follows the final composed fire_rate.
+                    customization::tuning::sync_weapon_cooldowns
+                        .after(multiblock::enhancers::apply_weapon_enhancers),
                     multiblock::damage::process_block_destruction,
                 ).run_if(in_state(GameState::StationDocked)
                     .or_else(in_state(GameState::Exploring))),
@@ -104,7 +121,6 @@ impl Plugin for BuildingPlugin {
             .add_systems(
                 Update,
                 (
-                    multiblock::enhancers::apply_weapon_enhancers,
                     multiblock::enhancers::apply_hull_enhancers,
                     // Must run after update_ship_state recomputes noise_level
                     // from scratch each frame, or the SignalJammer reduction

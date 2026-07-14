@@ -6,3 +6,4 @@ pub mod inspection;
 pub mod customization;
 pub mod radial_menu;
 
+pub mod tuning;

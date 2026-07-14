@@ -8,7 +8,7 @@ use bevy::prelude::*;
 // ============================================================================
 
 /// The 9 kinetic ammo types
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, serde::Serialize, serde::Deserialize)]
 pub enum KineticAmmoType {
     /// Solid penetrator — goes through hull, hits modules behind
     AP,

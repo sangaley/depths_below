@@ -112,6 +112,19 @@ impl Plugin for UiPlugin {
                     in_state(GameState::Exploring).or_else(in_state(GameState::StationDocked))
                 ),
             )
+            // Weapon tuning — dock-side workshop only. Windows close on undock.
+            .init_resource::<windows::tuning::ActiveSliderDrag>()
+            .add_systems(
+                Update,
+                (
+                    windows::tuning::right_click_open_tuning,
+                    windows::tuning::tuning_slider_drag,
+                    windows::tuning::ammo_button_click,
+                    windows::tuning::reset_tuning_click,
+                    windows::tuning::tuning_window_refresh,
+                ).run_if(in_state(GameState::StationDocked)),
+            )
+            .add_systems(OnExit(GameState::StationDocked), windows::tuning::despawn_tuning_windows)
             // Damage overlay (while exploring) — chained for correct ordering
             .add_systems(
                 Update,

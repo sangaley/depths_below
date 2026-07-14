@@ -376,6 +376,7 @@ pub fn fire_ion_system(
     mut weapon_query: Query<(
         &Module, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
+        Option<&crate::building::customization::tuning::WeaponTuning>,
     ), Without<DestroyedModule>>,
     target_query: Query<&Transform, Without<Ship>>,
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
@@ -383,7 +384,7 @@ pub fn fire_ion_system(
 ) {
     let Ok((player_ship, ship_physics)) = ship_query.single() else { return };
 
-    for (module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent) in weapon_query.iter_mut() {
+    for (module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning) in weapon_query.iter_mut() {
         // Player ship only — see fire_weapons_system for why this matters.
         if parent.parent() != player_ship { continue; }
         if module.module_type != ModuleType::IonDisruptor { continue; }
@@ -417,7 +418,7 @@ pub fn fire_ion_system(
             from_player: true,
         });
 
-        let speed = 2500.0; // x10 total from original — was crawling relative to its own range
+        let speed = 2500.0 * tuning.map(|t| t.velocity).unwrap_or(1.0); // x10 total from original — was crawling relative to its own range
         let angle = direction.y.atan2(direction.x);
 
         commands.spawn((
@@ -614,6 +615,7 @@ pub fn fire_plasma_system(
     mut weapon_query: Query<(
         Entity, &Module, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
+        Option<&crate::building::customization::tuning::WeaponTuning>,
     ), Without<DestroyedModule>>,
     target_query: Query<&Transform, Without<Ship>>,
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
@@ -621,7 +623,7 @@ pub fn fire_plasma_system(
 ) {
     let Ok((player_ship, ship_physics)) = ship_query.single() else { return };
 
-    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent) in weapon_query.iter_mut() {
+    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning) in weapon_query.iter_mut() {
         // Player ship only — see fire_weapons_system for why this matters.
         if parent.parent() != player_ship { continue; }
         if module.module_type != ModuleType::PlasmaCaster { continue; }
@@ -655,7 +657,7 @@ pub fn fire_plasma_system(
             from_player: true,
         });
 
-        let speed = 2200.0; // heavy superheated bolt, slower than kinetic rounds
+        let speed = 2200.0 * tuning.map(|t| t.velocity).unwrap_or(1.0); // heavy superheated bolt, slower than kinetic rounds
         let angle = direction.y.atan2(direction.x);
 
         commands.spawn((

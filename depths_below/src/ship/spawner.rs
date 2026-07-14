@@ -372,6 +372,18 @@ pub fn spawn_module(
         );
     }
 
+    // Stat tuning (power-budget sliders) — defaults are identity multipliers,
+    // so AI ships spawning through this same path are unaffected.
+    {
+        use crate::building::customization::tuning;
+        if tuning::is_tunable_weapon(module_type) {
+            commands.entity(module_entity).insert(tuning::WeaponTuning::default());
+        }
+        if tuning::is_kinetic_weapon(module_type) {
+            commands.entity(module_entity).insert(tuning::SelectedAmmo::default());
+        }
+    }
+
     // Add MachineBlock component for multi-block machines
     {
         use crate::building::multiblock::components::*;
