@@ -21,6 +21,7 @@ pub fn fire_missiles_system(
         Entity, &Module, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
         Option<&crate::building::customization::tuning::WeaponTuning>,
+        Option<&ModuleTemperature>,
     ), Without<DestroyedModule>>,
     target_query: Query<&Transform, Without<Ship>>,
     machine_stats: Query<&crate::building::multiblock::components::MachineStats>,
@@ -46,7 +47,7 @@ pub fn fire_missiles_system(
                 .and_then(|(cam, gt)| cam.viewport_to_world_2d(gt, c).ok())
         });
 
-    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning) in weapon_query.iter_mut() {
+    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning, temp) in weapon_query.iter_mut() {
         // Player ship only — see fire_weapons_system for why this matters:
         // AI ships carry identical missile-bay components and would
         // otherwise launch whenever the player fires, homing on the
@@ -58,6 +59,12 @@ pub fn fire_missiles_system(
         ) { continue; }
 
         if !module.is_active { continue; }
+
+        // Thermal throttle — same gate the laser/kinetics use.
+        if let Some(temp) = temp {
+            if temp.current >= temp.max_temp * 0.95 { continue; }
+        }
+
         cooldown.timer.tick(time.delta());
         if !cooldown.timer.is_finished() { continue; }
 

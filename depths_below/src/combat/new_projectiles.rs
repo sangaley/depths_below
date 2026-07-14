@@ -93,6 +93,7 @@ pub fn fire_weapons_system(
         Option<&crate::building::customization::parameters::ModuleCustomization>,
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&crate::building::customization::tuning::SelectedAmmo>,
+        Option<&ModuleTemperature>,
     ), Without<DestroyedModule>>,
     target_transform_query: Query<&Transform, Without<Ship>>,
     target_velocity_query: Query<&Velocity, Without<Ship>>,
@@ -124,7 +125,7 @@ pub fn fire_weapons_system(
         .map(|m| (m.grid_position, m.module_type, m.is_active))
         .collect();
 
-    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, customization, tuning, selected_ammo) in weapon_query.iter_mut() {
+    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, customization, tuning, selected_ammo, temp) in weapon_query.iter_mut() {
         // Player ship only: this query has no ownership filter on its own, and
         // AI ships carry the exact same Weapon/FireGroup/WeaponMount
         // components (shared spawn_module path). Unscoped, holding Space
@@ -148,6 +149,12 @@ pub fn fire_weapons_system(
             continue;
         }
         if !module.is_active { continue; }
+
+        // Thermal throttle — same gate the laser uses. Overtuned guns heat
+        // past this under sustained fire and stutter until they cool.
+        if let Some(temp) = temp {
+            if temp.current >= temp.max_temp * 0.95 { continue; }
+        }
 
         // Tick cooldown
         cooldown.timer.tick(time.delta());

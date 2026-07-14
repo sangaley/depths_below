@@ -377,6 +377,7 @@ pub fn fire_ion_system(
         &Module, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
         Option<&crate::building::customization::tuning::WeaponTuning>,
+        Option<&ModuleTemperature>,
     ), Without<DestroyedModule>>,
     target_query: Query<&Transform, Without<Ship>>,
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
@@ -384,11 +385,15 @@ pub fn fire_ion_system(
 ) {
     let Ok((player_ship, ship_physics)) = ship_query.single() else { return };
 
-    for (module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning) in weapon_query.iter_mut() {
+    for (module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning, temp) in weapon_query.iter_mut() {
         // Player ship only — see fire_weapons_system for why this matters.
         if parent.parent() != player_ship { continue; }
         if module.module_type != ModuleType::IonDisruptor { continue; }
         if !module.is_active { continue; }
+        // Thermal throttle — same gate the laser/kinetics use.
+        if let Some(temp) = temp {
+            if temp.current >= temp.max_temp * 0.95 { continue; }
+        }
 
         cooldown.timer.tick(time.delta());
         if !cooldown.timer.is_finished() { continue; }
@@ -616,6 +621,7 @@ pub fn fire_plasma_system(
         Entity, &Module, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
         Option<&crate::building::customization::tuning::WeaponTuning>,
+        Option<&ModuleTemperature>,
     ), Without<DestroyedModule>>,
     target_query: Query<&Transform, Without<Ship>>,
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
@@ -623,11 +629,15 @@ pub fn fire_plasma_system(
 ) {
     let Ok((player_ship, ship_physics)) = ship_query.single() else { return };
 
-    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning) in weapon_query.iter_mut() {
+    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning, temp) in weapon_query.iter_mut() {
         // Player ship only — see fire_weapons_system for why this matters.
         if parent.parent() != player_ship { continue; }
         if module.module_type != ModuleType::PlasmaCaster { continue; }
         if !module.is_active { continue; }
+        // Thermal throttle — same gate the laser/kinetics use.
+        if let Some(temp) = temp {
+            if temp.current >= temp.max_temp * 0.95 { continue; }
+        }
 
         cooldown.timer.tick(time.delta());
         if !cooldown.timer.is_finished() { continue; }

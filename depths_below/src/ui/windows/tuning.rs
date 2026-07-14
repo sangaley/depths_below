@@ -587,6 +587,14 @@ pub fn tuning_window_refresh(
             let vel = base_projectile_speed(tw.module_type) * tuning.velocity * ammo_vel;
             line.push_str(&format!("   VEL {:.0}", vel));
         }
+        // Heat: the real cost of hot tuning. Above ambient cooling the gun
+        // can't sustain fire — it will thermally throttle mid-fight.
+        let heat = weapon_heat_per_second(tuning.power_factor());
+        if heat > AMBIENT_COOLING_RATE {
+            line.push_str(&format!("\nHEAT {:.1}/s — OVERHEATS UNDER SUSTAINED FIRE", heat));
+        } else {
+            line.push_str(&format!("\nHEAT {:.1}/s (sustainable)", heat));
+        }
         text.0 = line;
     }
 }
