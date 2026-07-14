@@ -55,9 +55,11 @@ pub fn fire_laser_system(
     mut ai_module_query: Query<(&mut Module, &GlobalTransform), (Without<DestroyedModule>, With<crate::ai_ship::components::OwnedByAiShip>)>,
     mut ai_hull_query: Query<(&mut HullSegment, &GlobalTransform), (Without<crate::components::HullDestroyed>, With<crate::ai_ship::components::OwnedByAiShip>)>,
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
+    // Replaced an unused ShowNotification writer — Bevy caps systems at 16
+    // params and this function is at the limit.
+    mut fired_events: MessageWriter<crate::events::WeaponFired>,
     mut commands: Commands,
     existing_beams: Query<Entity, With<LaserBeamVisual>>,
-    _notifications: MessageWriter<ShowNotification>,
     // Per-weapon "which block am I currently cutting into" — without this,
     // the beam picked the nearest block to its aim point fresh every frame,
     // so the smallest aim drift (or the target ship just moving) scattered
@@ -118,6 +120,14 @@ pub fn fire_laser_system(
         if !is_in_firing_arc(ship_physics.rotation, &module.rotation, mount, beam_dir) {
             continue;
         }
+
+        // Beam is live this frame — written every frame while firing; the
+        // audio system rate-limits continuous weapons per type.
+        fired_events.write(crate::events::WeaponFired {
+            weapon_type: module.module_type,
+            position: weapon_pos,
+            from_player: true,
+        });
 
         // Trace beam — check all creatures along the line
         let beam_end = weapon_pos + beam_dir * beam_range;
@@ -368,6 +378,7 @@ pub fn fire_ion_system(
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
     ), Without<DestroyedModule>>,
     target_query: Query<&Transform, Without<Ship>>,
+    mut fired_events: MessageWriter<crate::events::WeaponFired>,
     mut commands: Commands,
 ) {
     let Ok((player_ship, ship_physics)) = ship_query.single() else { return };
@@ -400,6 +411,11 @@ pub fn fire_ion_system(
 
         cooldown.timer.reset();
         weapon.ammo = weapon.ammo.saturating_sub(1);
+        fired_events.write(crate::events::WeaponFired {
+            weapon_type: module.module_type,
+            position: weapon_pos,
+            from_player: true,
+        });
 
         let speed = 2500.0; // x10 total from original — was crawling relative to its own range
         let angle = direction.y.atan2(direction.x);
@@ -600,6 +616,7 @@ pub fn fire_plasma_system(
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
     ), Without<DestroyedModule>>,
     target_query: Query<&Transform, Without<Ship>>,
+    mut fired_events: MessageWriter<crate::events::WeaponFired>,
     mut commands: Commands,
 ) {
     let Ok((player_ship, ship_physics)) = ship_query.single() else { return };
@@ -632,6 +649,11 @@ pub fn fire_plasma_system(
 
         cooldown.timer.reset();
         weapon.ammo = weapon.ammo.saturating_sub(1);
+        fired_events.write(crate::events::WeaponFired {
+            weapon_type: module.module_type,
+            position: weapon_pos,
+            from_player: true,
+        });
 
         let speed = 2200.0; // heavy superheated bolt, slower than kinetic rounds
         let angle = direction.y.atan2(direction.x);

@@ -28,6 +28,16 @@ pub enum DamageSource {
     Fire,
 }
 
+/// Fired whenever a weapon actually discharges (player or AI) — audio/vfx hook.
+/// Continuous weapons (laser) write this every frame they're beaming; the
+/// audio system rate-limits per weapon type.
+#[derive(Message)]
+pub struct WeaponFired {
+    pub weapon_type: ModuleType,
+    pub position: Vec2,
+    pub from_player: bool,
+}
+
 /// Fired when a hull segment is breached
 #[derive(Message)]
 pub struct HullBreached {
@@ -451,6 +461,7 @@ impl Plugin for EventsPlugin {
         app
             // Ship events
             .add_message::<ShipDamaged>()
+            .add_message::<WeaponFired>()
             .add_message::<HullBreached>()
             .add_message::<ModuleDamaged>()
             .add_message::<ModuleDestroyed>()

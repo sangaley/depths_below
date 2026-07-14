@@ -28,6 +28,7 @@ pub fn fire_missiles_system(
     camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::MainCamera>>,
     mut commands: Commands,
     mut notifications: MessageWriter<ShowNotification>,
+    mut fired_events: MessageWriter<crate::events::WeaponFired>,
 ) {
     let Ok((player_ship, ship_physics)) = ship_query.single() else { return };
 
@@ -122,6 +123,11 @@ pub fn fire_missiles_system(
         if !crate::combat::INFINITE_AMMO {
             weapon.ammo = weapon.ammo.saturating_sub(1);
         }
+        fired_events.write(crate::events::WeaponFired {
+            weapon_type: module.module_type,
+            position: weapon_pos,
+            from_player: true,
+        });
 
         let direction = (target_pos - weapon_pos).normalize_or_zero();
         let initial_vel = direction * 100.0; // Slow launch

@@ -19,6 +19,7 @@ pub fn ai_weapon_fire_system(
         &OwnedByAiShip,
     )>,
     player_query: Query<&Transform, With<Ship>>,
+    mut fired_events: MessageWriter<WeaponFired>,
 ) {
     // DEPTHS_MOVETEST_ENEMY spawns a target dummy that's shot-free by
     // default (for testing movement/damage-model in isolation). Set
@@ -67,6 +68,11 @@ pub fn ai_weapon_fire_system(
             if !crate::combat::INFINITE_AMMO {
                 weapon.ammo = weapon.ammo.saturating_sub(1);
             }
+            fired_events.write(WeaponFired {
+                weapon_type: module.module_type,
+                position: ai_pos,
+                from_player: false,
+            });
 
             // Spawn projectile toward player
             crate::combat::projectiles::spawn_projectile(

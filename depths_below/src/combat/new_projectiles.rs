@@ -75,6 +75,7 @@ pub fn fire_weapons_system(
     targeting_computer_query: Query<&Module, Without<DestroyedModule>>,
     windows_query: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::MainCamera>>,
+    mut fired_events: MessageWriter<crate::events::WeaponFired>,
     mut commands: Commands,
 ) {
     let Ok((player_ship, _ship_transform, ship_physics, ship_velocity)) = ship_query.single() else { return };
@@ -222,6 +223,11 @@ pub fn fire_weapons_system(
         if !crate::combat::INFINITE_AMMO {
             weapon.ammo = weapon.ammo.saturating_sub(1);
         }
+        fired_events.write(crate::events::WeaponFired {
+            weapon_type: module.module_type,
+            position: weapon_pos,
+            from_player: true,
+        });
 
         // Determine damage type based on module type
         let damage_type = match module.module_type {

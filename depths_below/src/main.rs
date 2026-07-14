@@ -22,6 +22,7 @@ mod celestial;
 mod vfx;
 mod spatial;
 mod demo;
+mod audio;
 
 use states::GameState;
 use events::EventsPlugin;
@@ -43,6 +44,7 @@ use celestial::CelestialPlugin;
 use vfx::VfxPlugin;
 use spatial::SpatialPlugin;
 use demo::DemoPlugin;
+use audio::GameAudioPlugin;
 
 fn main() {
     App::new()
@@ -86,6 +88,7 @@ fn main() {
         ))
         .add_plugins(SpatialPlugin)
         .add_plugins(DemoPlugin)
+        .add_plugins(GameAudioPlugin)
 
         .run();
 }
