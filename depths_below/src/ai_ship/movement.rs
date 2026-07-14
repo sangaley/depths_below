@@ -27,16 +27,37 @@ pub fn ai_ship_movement_system(
             continue;
         }
 
-        // Sum thrust from child engines
+        // Sum thrust from child engines — tracking the undamaged total too,
+        // so we know how crippled the drive section is.
         let mut total_thrust = 0.0_f32;
+        let mut max_possible_thrust = 0.0_f32;
         for child in children.iter() {
             if let Ok((engine, module, _owned)) = engine_query.get(child) {
+                max_possible_thrust += engine.thrust;
                 if module.is_active && module.health > 0.0 {
                     let efficiency = module.health / module.max_health;
                     total_thrust += engine.thrust * efficiency;
                 }
             }
         }
+
+        // DEATH SPIRALS — a ship with mangled engines can't hold a heading.
+        // Thrust asymmetry shows up as a slow sinusoidal weave injected into
+        // its steering; the worse the drive damage, the wider and drunker
+        // the wander. Phase from the entity index so a damaged squadron
+        // doesn't wobble in lockstep.
+        let engine_integrity = if max_possible_thrust > 0.0 {
+            (total_thrust / max_possible_thrust).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        let wobble_angle = if engine_integrity < 0.85 {
+            let hurt = 1.0 - engine_integrity;
+            let phase = (_entity.to_bits() % 97) as f32;
+            (time.elapsed_secs() * 2.3 + phase).sin() * hurt * hurt * 1.1
+        } else {
+            0.0
+        };
 
         // Speed multiplier per behavior
         let behavior_mult = match behavior {
@@ -78,7 +99,9 @@ pub fn ai_ship_movement_system(
 
         if let Some(destination) = nav.destination {
             let pos = transform.translation.truncate();
-            let to_dest = destination - pos;
+            // Drive damage skews the perceived heading — the ship weaves
+            // toward where its broken engines are dragging it.
+            let to_dest = Vec2::from_angle(wobble_angle).rotate(destination - pos);
             let dist = to_dest.length();
 
             // Combat standoff: while engaging, hold a firing distance from the
