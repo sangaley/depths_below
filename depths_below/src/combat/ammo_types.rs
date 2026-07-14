@@ -204,7 +204,10 @@ pub enum AmmoHitBehavior {
 }
 
 impl KineticAmmoType {
-    /// Get the hit behavior for this ammo type, scaled by weapon damage
+    /// Get the hit behavior for this ammo type, scaled by weapon damage.
+    /// Radii are in world units, sized against the 66-unit block grid —
+    /// the original values predated the grid and couldn't even reach an
+    /// adjacent block (e.g. blast_radius 40 vs 66 between block centers).
     pub fn hit_behavior(&self, base_damage: f32) -> AmmoHitBehavior {
         match self {
             Self::AP => AmmoHitBehavior::Penetrate {
@@ -214,12 +217,12 @@ impl KineticAmmoType {
             Self::APHE => AmmoHitBehavior::PenetrateExplode {
                 penetration: self.penetration(),
                 blast_damage: base_damage * 0.8,
-                blast_radius: 40.0,
+                blast_radius: 75.0,  // hit block + its direct neighbors
                 min_armor_to_arm: 15.0, // Thin targets = fuse doesn't arm
             },
             Self::HEFrag => AmmoHitBehavior::SurfaceExplode {
                 blast_damage: base_damage * 0.5,
-                blast_radius: 60.0,
+                blast_radius: 110.0, // one full ring of blocks
                 fragment_count: 8,
                 fragment_damage: base_damage * 0.15,
             },
@@ -228,14 +231,14 @@ impl KineticAmmoType {
                 fire_duration: 8.0,
             },
             Self::EMPShell => AmmoHitBehavior::EMPDisable {
-                disable_radius: 50.0,
+                disable_radius: 120.0, // reaches modules behind armor
                 disable_duration: 6.0,
             },
             Self::Flak => AmmoHitBehavior::ProximityBurst {
                 trigger_distance: 30.0,
                 fragment_count: 12,
                 fragment_damage: base_damage * 0.1,
-                fragment_radius: 80.0,
+                fragment_radius: 130.0, // wide, weak — saturation weapon
             },
             Self::HEAT => AmmoHitBehavior::ShapedCharge {
                 jet_penetration: self.penetration(),

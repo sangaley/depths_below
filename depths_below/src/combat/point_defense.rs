@@ -129,6 +129,8 @@ pub fn intercept_missiles(
                 damage_type: super::new_projectiles::ProjectileDamageType::Kinetic,
                 penetration: 5.0,
                 has_penetrated: false,
+                ammo: None, // PD rounds have no special on-hit behavior
+                last_hit: None,
             },
             Velocity(direction * proj_speed),
         ));

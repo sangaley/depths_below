@@ -20,6 +20,23 @@ pub struct Projectile {
     pub damage_type: ProjectileDamageType,
     pub penetration: f32,     // How much armor it can go through
     pub has_penetrated: bool, // Already went through one layer
+    /// Loaded round type — drives on-hit behavior (blast, EMP, burn, ...).
+    /// None for AI shots and legacy paths → plain single-block damage.
+    pub ammo: Option<crate::combat::ammo_types::KineticAmmoType>,
+    /// Block already damaged by this round — a penetrator passing through a
+    /// block is still inside its hit radius next frame; without this it
+    /// would hit the same block twice instead of the one behind it.
+    pub last_hit: Option<Entity>,
+}
+
+/// A block set on fire by incendiary rounds — ticks damage until it burns out.
+#[derive(Component)]
+pub struct BlockBurning {
+    pub dps: f32,
+    pub remaining: f32,
+    /// Owning AI ship — burn ticks report here so aggregate hull integrity
+    /// (process_ai_ship_damage_system) stays in sync.
+    pub ship: Entity,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -316,6 +333,8 @@ pub fn fire_weapons_system(
                     damage_type,
                     penetration,
                     has_penetrated: false,
+                    ammo: selected_ammo.map(|a| a.0),
+                    last_hit: None,
                 },
                 Velocity(vel),
                 GravityAffected { mass: 0.5 }, // Projectiles affected by gravity (slightly)
@@ -381,7 +400,7 @@ const MAX_CREATURE_HIT_RADIUS: f32 = 90.0;
 /// projectile instead of every creature in the world.
 pub fn check_projectile_hits(
     mut commands: Commands,
-    proj_query: Query<(Entity, &Projectile, &Transform, &Velocity)>,
+    mut proj_query: Query<(Entity, &mut Projectile, &Transform, &Velocity)>,
     mut creature_query: Query<(&Transform, &mut Creature), Without<Ship>>,
     creature_grid: Res<crate::spatial::CreatureGrid>,
     mut ai_ship_query: Query<
@@ -394,7 +413,7 @@ pub fn check_projectile_hits(
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
     _notifications: MessageWriter<ShowNotification>,
 ) {
-    'projectiles: for (proj_entity, proj, proj_transform, _proj_vel) in proj_query.iter() {
+    'projectiles: for (proj_entity, mut proj, proj_transform, proj_vel) in proj_query.iter_mut() {
         let proj_pos = proj_transform.translation.truncate();
         // A weapon's own ship is never a valid target for its own shot,
         // regardless of aim — belt-and-suspenders on top of firing-arc and
@@ -428,8 +447,11 @@ pub fn check_projectile_hits(
             // Scan bound follows the ship's real extent (shield radius is
             // computed from it) — a fixed bound left long hulls unhittable.
             if dist_to_ship < shield.radius + 60.0 {
+                // Skip proj.last_hit: a penetrator that just went through a
+                // block is still inside its 45-unit radius next frame.
                 let mut best_module: Option<(Entity, f32)> = None;
                 for child in children.iter() {
+                    if Some(child) == proj.last_hit { continue; }
                     if let Ok((_, gt)) = ai_module_query.get(child) {
                         let d = proj_pos.distance(gt.translation().truncate());
                         if d < 45.0 && best_module.map(|(_, bd)| d < bd).unwrap_or(true) {
@@ -439,6 +461,7 @@ pub fn check_projectile_hits(
                 }
                 let mut best_hull: Option<(Entity, f32)> = None;
                 for child in children.iter() {
+                    if Some(child) == proj.last_hit { continue; }
                     if let Ok((_, gt)) = ai_hull_query.get(child) {
                         let d = proj_pos.distance(gt.translation().truncate());
                         if d < 45.0 && best_hull.map(|(_, bd)| d < bd).unwrap_or(true) {
@@ -450,41 +473,145 @@ pub fn check_projectile_hits(
                 let hit_module = matches!((best_module, best_hull), (Some((_, md)), Some((_, hd))) if md <= hd)
                     || (best_module.is_some() && best_hull.is_none());
 
-                if hit_module {
-                    if let Ok((mut module, gt)) = ai_module_query.get_mut(best_module.unwrap().0) {
+                // Primary hit: damage the struck block, remember where.
+                let primary: Option<(Entity, Vec2)> = if hit_module {
+                    let target = best_module.unwrap().0;
+                    ai_module_query.get_mut(target).ok().map(|(mut module, gt)| {
                         module.health = (module.health - proj.damage).max(0.0);
                         let hit_pos = gt.translation().truncate();
                         spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.6, 0.2), 12.0);
                         spawn_floating_damage(&mut commands, hit_pos, proj.damage, Color::srgb(1.0, 0.8, 0.3));
-                        ai_damage_events.write(crate::events::AiShipDamaged {
-                            target: ai_entity,
-                            source: crate::events::DamageSource::Explosion,
-                            amount: 0.0, // damage already applied directly above — this is bookkeeping only
-                            position: Some(hit_pos),
-                            direction: None,
-                        });
-                        commands.entity(proj_entity).despawn();
-                        continue 'projectiles;
-                    }
+                        (target, hit_pos)
+                    })
                 } else if let Some((hull_entity, _)) = best_hull {
-                    if let Ok((mut hull, gt)) = ai_hull_query.get_mut(hull_entity) {
+                    ai_hull_query.get_mut(hull_entity).ok().map(|(mut hull, gt)| {
                         hull.health = (hull.health - proj.damage).max(0.0);
                         let hit_pos = gt.translation().truncate();
                         spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.5, 0.2), 16.0);
                         spawn_floating_damage(&mut commands, hit_pos, proj.damage, Color::srgb(1.0, 0.3, 0.3));
-                        ai_damage_events.write(crate::events::AiShipDamaged {
-                            target: ai_entity,
-                            source: crate::events::DamageSource::Explosion,
-                            amount: 0.0,
-                            position: Some(hit_pos),
-                            direction: None,
-                        });
-                        commands.entity(proj_entity).despawn();
-                        continue 'projectiles;
+                        (hull_entity, hit_pos)
+                    })
+                } else {
+                    None
+                };
+
+                let Some((hit_entity, hit_pos)) = primary else { continue };
+
+                // === AMMO ON-HIT BEHAVIOR — finally consumes the
+                // AmmoHitBehavior table that ammo_types.rs has defined all
+                // along. `penetrates` decides whether the round survives
+                // this hit and flies on into the block behind.
+                let mut penetrates = false;
+                if let Some(ammo) = proj.ammo {
+                    use crate::combat::ammo_types::AmmoHitBehavior::*;
+                    match ammo.hit_behavior(proj.damage) {
+                        Penetrate { damage_falloff, .. } => {
+                            // AP/APFSDS: continue into the next block with
+                            // reduced energy (one extra layer for now).
+                            if !proj.has_penetrated {
+                                penetrates = true;
+                                proj.has_penetrated = true;
+                                proj.last_hit = Some(hit_entity);
+                                proj.damage *= 1.0 - damage_falloff;
+                            }
+                        }
+                        PenetrateExplode { blast_damage, blast_radius, .. }
+                        | SurfaceExplode { blast_damage, blast_radius, .. } => {
+                            splash_blocks(
+                                &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
+                                hit_entity, hit_pos, blast_radius, blast_damage,
+                            );
+                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.5, 0.1), blast_radius);
+                        }
+                        ProximityBurst { fragment_damage, fragment_radius, .. } => {
+                            splash_blocks(
+                                &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
+                                hit_entity, hit_pos, fragment_radius, fragment_damage,
+                            );
+                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.9, 0.4), fragment_radius);
+                        }
+                        EMPDisable { disable_radius, disable_duration } => {
+                            for child in children.iter() {
+                                if let Ok((module, gt)) = ai_module_query.get(child) {
+                                    if !module.is_active { continue; }
+                                    if hit_pos.distance(gt.translation().truncate()) < disable_radius {
+                                        commands.entity(child).try_insert(
+                                            crate::combat::energy_weapons::IonDisabled { timer: disable_duration }
+                                        );
+                                    }
+                                }
+                            }
+                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(0.4, 0.5, 0.95), disable_radius);
+                        }
+                        Ignite { fire_duration, fire_intensity } => {
+                            commands.entity(hit_entity).try_insert(BlockBurning {
+                                // proj.damage already carries the incendiary's
+                                // low direct-damage multiplier; the burn is
+                                // where the real damage lives.
+                                dps: proj.damage * fire_intensity,
+                                remaining: fire_duration,
+                                ship: ai_entity,
+                            });
+                        }
+                        Shockwave { shockwave_damage, shockwave_radius, .. } => {
+                            // HESH: the block BEHIND the armor takes the spall,
+                            // straight along the round's flight direction.
+                            let dir = proj_vel.0.normalize_or_zero();
+                            let behind = hit_pos + dir * 66.0 * shockwave_radius * 0.75;
+                            let mut best: Option<(Entity, f32)> = None;
+                            for child in children.iter() {
+                                if child == hit_entity { continue; }
+                                let block_pos = ai_module_query.get(child).map(|(_, gt)| gt.translation().truncate())
+                                    .or_else(|_| ai_hull_query.get(child).map(|(_, gt)| gt.translation().truncate()));
+                                if let Ok(block_pos) = block_pos {
+                                    let d = behind.distance(block_pos);
+                                    if d < 50.0 && best.map(|(_, bd)| d < bd).unwrap_or(true) {
+                                        best = Some((child, d));
+                                    }
+                                }
+                            }
+                            if let Some((spall_entity, _)) = best {
+                                if let Ok((mut module, gt)) = ai_module_query.get_mut(spall_entity) {
+                                    module.health = (module.health - shockwave_damage).max(0.0);
+                                    spawn_floating_damage(&mut commands, gt.translation().truncate(), shockwave_damage, Color::srgb(0.9, 0.9, 0.5));
+                                } else if let Ok((mut hull, gt)) = ai_hull_query.get_mut(spall_entity) {
+                                    hull.health = (hull.health - shockwave_damage).max(0.0);
+                                    spawn_floating_damage(&mut commands, gt.translation().truncate(), shockwave_damage, Color::srgb(0.9, 0.9, 0.5));
+                                }
+                            }
+                        }
+                        // HEAT: its 1.8× damage + 70 pen already rode in on
+                        // proj.damage at spawn; the angle-sensitivity part of
+                        // the shaped-charge fantasy needs hit normals the
+                        // grid doesn't give us yet.
+                        ShapedCharge { .. } => {}
                     }
                 }
+
+                ai_damage_events.write(crate::events::AiShipDamaged {
+                    target: ai_entity,
+                    source: crate::events::DamageSource::Explosion,
+                    amount: 0.0, // damage already applied directly above — this is bookkeeping only
+                    position: Some(hit_pos),
+                    direction: None,
+                });
+                if !penetrates {
+                    commands.entity(proj_entity).despawn();
+                }
+                continue 'projectiles;
             }
         }
+
+        // Fragmenting rounds splash other creatures around the impact —
+        // HE-Frag/Flak's whole identity ("great vs swarms") vs single-target AP.
+        let creature_splash: Option<(f32, f32)> = proj.ammo.and_then(|ammo| {
+            use crate::combat::ammo_types::AmmoHitBehavior::*;
+            match ammo.hit_behavior(proj.damage) {
+                SurfaceExplode { blast_radius, fragment_damage, .. } => Some((blast_radius, fragment_damage)),
+                ProximityBurst { fragment_radius, fragment_damage, .. } => Some((fragment_radius, fragment_damage)),
+                _ => None,
+            }
+        });
 
         for (creature_entity, _) in creature_grid.0.nearby(proj_pos, MAX_CREATURE_HIT_RADIUS) {
             let Ok((creature_transform, mut creature)) = creature_query.get_mut(creature_entity) else { continue };
@@ -503,10 +630,26 @@ pub fn check_projectile_hits(
 
             // HIT!
             creature.health -= proj.damage;
+            drop(creature);
 
             // Impact spark
             spawn_hit_effect(&mut commands, proj_pos, Color::srgb(1.0, 0.8, 0.3), 8.0);
             spawn_floating_damage(&mut commands, proj_pos, proj.damage, Color::srgb(1.0, 0.4, 0.2));
+
+            // Fragment splash to everything else in the burst radius
+            if let Some((radius, frag_damage)) = creature_splash {
+                for (other_entity, _) in creature_grid.0.nearby(proj_pos, radius) {
+                    if other_entity == creature_entity { continue; }
+                    let Ok((other_transform, mut other)) = creature_query.get_mut(other_entity) else { continue };
+                    if other.health <= 0.0 { continue; }
+                    let other_pos = other_transform.translation.truncate();
+                    if proj_pos.distance(other_pos) < radius {
+                        other.health -= frag_damage;
+                        spawn_floating_damage(&mut commands, other_pos, frag_damage, Color::srgb(1.0, 0.7, 0.3));
+                    }
+                }
+                spawn_hit_effect(&mut commands, proj_pos, Color::srgb(1.0, 0.6, 0.15), radius);
+            }
 
             // Despawn projectile (unless it penetrates)
             if proj.penetration < 30.0 || proj.has_penetrated {
@@ -515,6 +658,67 @@ pub fn check_projectile_hits(
             // High penetration projectiles continue through
 
             break; // One hit per frame per projectile
+        }
+    }
+}
+
+/// Blast damage to every block within `radius` of the impact, except the
+/// primary block (it already took the direct hit).
+fn splash_blocks(
+    commands: &mut Commands,
+    children: &Children,
+    module_query: &mut Query<(&mut Module, &GlobalTransform), Without<DestroyedModule>>,
+    hull_query: &mut Query<(&mut HullSegment, &GlobalTransform), Without<crate::components::HullDestroyed>>,
+    exclude: Entity,
+    center: Vec2,
+    radius: f32,
+    damage: f32,
+) {
+    for child in children.iter() {
+        if child == exclude { continue; }
+        if let Ok((mut module, gt)) = module_query.get_mut(child) {
+            let pos = gt.translation().truncate();
+            if center.distance(pos) < radius {
+                module.health = (module.health - damage).max(0.0);
+                spawn_floating_damage(commands, pos, damage, Color::srgb(1.0, 0.55, 0.2));
+            }
+        } else if let Ok((mut hull, gt)) = hull_query.get_mut(child) {
+            let pos = gt.translation().truncate();
+            if center.distance(pos) < radius {
+                hull.health = (hull.health - damage).max(0.0);
+                spawn_floating_damage(commands, pos, damage, Color::srgb(1.0, 0.45, 0.25));
+            }
+        }
+    }
+}
+
+/// Ticks incendiary burn on blocks: damage over time until the fire burns
+/// out. Reports zero-amount AiShipDamaged so aggregate hull integrity
+/// (process_ai_ship_damage_system) recalculates from the burned health.
+pub fn tick_burning_blocks(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut burning_query: Query<(Entity, &mut BlockBurning, Option<&mut Module>, Option<&mut HullSegment>)>,
+    mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
+) {
+    let dt = time.delta_secs();
+    for (entity, mut burning, module, hull) in burning_query.iter_mut() {
+        burning.remaining -= dt;
+        let tick_damage = burning.dps * dt;
+        if let Some(mut module) = module {
+            module.health = (module.health - tick_damage).max(0.0);
+        } else if let Some(mut hull) = hull {
+            hull.health = (hull.health - tick_damage).max(0.0);
+        }
+        ai_damage_events.write(crate::events::AiShipDamaged {
+            target: burning.ship,
+            source: crate::events::DamageSource::Fire,
+            amount: 0.0,
+            position: None,
+            direction: None,
+        });
+        if burning.remaining <= 0.0 {
+            commands.entity(entity).remove::<BlockBurning>();
         }
     }
 }

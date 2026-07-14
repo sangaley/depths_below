@@ -184,6 +184,7 @@ impl Plugin for CombatPlugin {
                 effects::animate_floating_damage,
                 crate::ship::damage::cleanup_hit_effects,
                 limits::enforce_projectile_limit,
+                new_projectiles::tick_burning_blocks,
             ).in_set(CombatSet::Cleanup))
             // Fire group assignment (build mode)
             // Severance + chain reactions
