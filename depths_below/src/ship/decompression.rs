@@ -88,15 +88,19 @@ pub fn update_decompression(
     for (hull, _t, parent) in hull_query.iter() {
         if parent.parent() != player_ship { continue; }
         if !hull.is_depressurized { continue; }
-        // Which room is this hole venting? Check the 4 neighbors — hull
-        // tiles are walls, room tiles are the interior beside them.
-        let draining = [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y].iter().any(|off| {
+        // Air still escaping from this hole? Either an adjacent detected
+        // room is actively draining, or the segment's own direct
+        // depressurization is still in progress (ships without enclosed
+        // rooms never populate tile_to_room, which made venting silently
+        // impossible on open layouts).
+        let room_draining = [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y].iter().any(|off| {
             room_map.tile_to_room.get(&(hull.grid_position + *off))
                 .and_then(|id| room_map.rooms.get(*id))
                 .map(|room| room.is_breached && room.air_level > 0.0)
                 .unwrap_or(false)
         });
-        if !draining { continue; }
+        let segment_draining = hull.depressurization_level < 1.0;
+        if !room_draining && !segment_draining { continue; }
         vent_tiles += 1;
 
         // Ship-local tile offset from the ship origin (grid_y*66-33 layout)
@@ -115,10 +119,16 @@ pub fn update_decompression(
         if let Ok((gt, mut velocity, mut physics)) = player_body.single_mut() {
             // Per-tile force flattens out past a few holes — a colander
             // doesn't vent harder than a puncture, it just empties faster.
-            let strength = 22.0 * (vent_tiles as f32).sqrt() / vent_tiles as f32;
+            let strength = 45.0 * (vent_tiles as f32).sqrt() / vent_tiles as f32;
             let world_accel = gt.rotation() * (vent_accel_local * strength).extend(0.0);
             velocity.0 += world_accel.truncate() * dt;
-            physics.angular_velocity += (vent_torque * 0.00004).clamp(-0.15, 0.15) * dt;
+            physics.angular_velocity += (vent_torque * 0.00008).clamp(-0.25, 0.25) * dt;
+
+            // Throttled trace so playtests can confirm venting actually
+            // fires (it silently never triggered on room-less layouts).
+            if (time.elapsed_secs() % 1.0) < dt {
+                info!("[VENT] {} hole(s) venting, accel {:.1} u/s²", vent_tiles, (vent_accel_local * strength).length());
+            }
         }
     }
 }
