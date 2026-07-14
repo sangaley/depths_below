@@ -382,6 +382,14 @@ pub struct AiShipDamaged {
     pub direction: Option<Vec2>,
 }
 
+/// Fired when a module on an AI ship cooks off (ammo/fuel/reactor blast) —
+/// world position so audio/vfx can attenuate by distance to the player.
+#[derive(Message)]
+pub struct AiModuleExploded {
+    pub position: Vec2,
+    pub blast_damage: f32,
+}
+
 /// Fired when an AI ship is destroyed
 #[derive(Message)]
 pub struct AiShipDestroyed {
@@ -506,6 +514,7 @@ impl Plugin for EventsPlugin {
             .add_message::<CrewDispatched>()
             // AI ship events
             .add_message::<AiShipDamaged>()
+            .add_message::<AiModuleExploded>()
             .add_message::<AiShipDestroyed>()
             // Contract events
             .add_message::<ContractAccepted>()

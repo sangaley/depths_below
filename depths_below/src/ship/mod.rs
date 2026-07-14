@@ -106,6 +106,10 @@ impl Plugin for ShipPlugin {
                     damage::process_module_destruction.after(damage::tint_damaged_modules),
                     damage::queue_detonation.after(damage::process_module_destruction),
                     damage::process_detonations.after(damage::queue_detonation),
+                    // AI-ship blasts resolve in world space against the ship's
+                    // own blocks (GridOccupancy only knows the player's grid)
+                    damage::queue_ai_detonation.after(damage::process_module_destruction),
+                    damage::process_ai_detonations.after(damage::queue_ai_detonation),
                     fire::apply_fire_ignition.after(damage::process_detonations),
                     fire::update_fire.after(fire::apply_fire_ignition),
                     hull::process_hull_cascade.after(damage::process_detonations),

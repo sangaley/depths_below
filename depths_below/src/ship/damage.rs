@@ -492,7 +492,7 @@ pub fn process_detonations(
         }
 
         // Fuel/Battery explosions start fires on 4-adjacent non-destroyed modules
-        if matches!(det.explosive_type, ExplosiveType::Fuel | ExplosiveType::Battery) {
+        if matches!(det.explosive_type, ExplosiveType::Fuel | ExplosiveType::Battery | ExplosiveType::Ammo) {
             for offset in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
                 let adj_pos = det.grid_position + offset;
                 if let Some(&adj_entity) = occupancy.cells.get(&adj_pos) {
@@ -535,6 +535,144 @@ pub fn process_detonations(
             message: format!("EXPLOSION at ({}, {})!", det.grid_position.x, det.grid_position.y),
             notification_type: NotificationType::Danger,
             duration: 3.0,
+        });
+    }
+}
+
+// ============================================================================
+// AI SHIP DETONATIONS
+// The player-ship path above resolves blasts through GridOccupancy, which
+// only knows the PLAYER's grid — that's why queue_detonation skips AI ships.
+// This pair resolves against the AI ship's own child blocks in world space
+// instead, so shooting out an enemy's cannon cooks off ITS ammo and chains
+// into ITS neighbors.
+// ============================================================================
+
+/// A queued explosion on an AI ship's module (world-space resolution).
+#[derive(Component)]
+pub struct AiPendingDetonation {
+    pub timer: Timer,
+    pub blast_radius_world: f32,
+    pub blast_damage: f32,
+    pub explosive_type: ExplosiveType,
+    pub position: Vec2,
+    pub ship: Entity,
+}
+
+/// Freshly destroyed explosive module on an AI ship → short fuse.
+pub fn queue_ai_detonation(
+    mut commands: Commands,
+    query: Query<(Entity, &Explosive, &GlobalTransform, &ChildOf), Added<DestroyedModule>>,
+    ai_ships: Query<(), With<crate::ai_ship::components::AiShip>>,
+) {
+    for (entity, explosive, gt, parent) in query.iter() {
+        if ai_ships.get(parent.parent()).is_err() {
+            continue; // player ship handled by queue_detonation above
+        }
+        let fuse_secs = match explosive.explosive_type {
+            ExplosiveType::Reactor => 0.15,
+            ExplosiveType::Ammo => 0.05,
+            ExplosiveType::Fuel => 0.2,
+            ExplosiveType::Battery => 0.1,
+        };
+        commands.entity(entity).try_insert(AiPendingDetonation {
+            timer: Timer::from_seconds(fuse_secs, TimerMode::Once),
+            blast_radius_world: explosive.blast_radius * 66.0,
+            blast_damage: explosive.blast_damage,
+            explosive_type: explosive.explosive_type,
+            position: gt.translation().truncate(),
+            ship: parent.parent(),
+        });
+    }
+}
+
+/// Ticks AI detonation fuses; on boom, damages every block of that ship in
+/// radius (with falloff) and sets survivors near the center burning.
+pub fn process_ai_detonations(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut det_query: Query<(Entity, &mut AiPendingDetonation)>,
+    children_query: Query<&Children>,
+    mut module_query: Query<
+        (&mut Module, &GlobalTransform),
+        (Without<DestroyedModule>, With<crate::ai_ship::components::OwnedByAiShip>),
+    >,
+    mut hull_query: Query<
+        (&mut HullSegment, &GlobalTransform),
+        (Without<HullDestroyed>, With<crate::ai_ship::components::OwnedByAiShip>),
+    >,
+    mut ai_damage_events: MessageWriter<AiShipDamaged>,
+    mut boom_events: MessageWriter<crate::events::AiModuleExploded>,
+) {
+    for (det_entity, mut det) in det_query.iter_mut() {
+        det.timer.tick(time.delta());
+        if !det.timer.is_finished() { continue; }
+        commands.entity(det_entity).remove::<AiPendingDetonation>();
+
+        let Ok(children) = children_query.get(det.ship) else { continue };
+        // Fires start on surviving blocks close to the blast center.
+        let fire_radius = det.blast_radius_world * 0.6;
+        let starts_fires = matches!(det.explosive_type,
+            ExplosiveType::Ammo | ExplosiveType::Fuel | ExplosiveType::Battery);
+
+        for child in children.iter() {
+            if child == det_entity { continue; }
+            let (block_pos, dealt) = if let Ok((mut module, gt)) = module_query.get_mut(child) {
+                let pos = gt.translation().truncate();
+                let dist = det.position.distance(pos);
+                if dist > det.blast_radius_world { continue; }
+                let falloff = 1.0 - (dist / det.blast_radius_world) * 0.7;
+                let damage = det.blast_damage * falloff;
+                module.health = (module.health - damage).max(0.0);
+                (pos, damage)
+            } else if let Ok((mut hull, gt)) = hull_query.get_mut(child) {
+                let pos = gt.translation().truncate();
+                let dist = det.position.distance(pos);
+                if dist > det.blast_radius_world { continue; }
+                let falloff = 1.0 - (dist / det.blast_radius_world) * 0.7;
+                let damage = det.blast_damage * falloff;
+                hull.health = (hull.health - damage).max(0.0);
+                (pos, damage)
+            } else {
+                continue;
+            };
+
+            crate::combat::spawn_floating_damage(
+                &mut commands, block_pos, dealt, Color::srgb(1.0, 0.5, 0.15),
+            );
+            if starts_fires && det.position.distance(block_pos) < fire_radius {
+                commands.entity(child).try_insert(
+                    crate::combat::new_projectiles::BlockBurning {
+                        dps: det.blast_damage * 0.1,
+                        remaining: 6.0,
+                        ship: det.ship,
+                    },
+                );
+            }
+        }
+
+        // Explosion visual — reuses HitEffect like the player-side blast
+        commands.spawn((
+            (Sprite {
+                    color: Color::srgba(1.0, 0.55, 0.1, 0.95),
+                    custom_size: Some(Vec2::splat(det.blast_radius_world * 2.0)),
+                    ..default()
+                }, Transform::from_translation(det.position.extend(0.8))),
+            HitEffect {
+                timer: Timer::from_seconds(0.5, TimerMode::Once),
+            },
+        ));
+
+        ai_damage_events.write(AiShipDamaged {
+            target: det.ship,
+            source: DamageSource::Explosion,
+            amount: 0.0, // damage already applied block-by-block above
+            position: Some(det.position),
+            direction: None,
+        });
+        boom_events.write(crate::events::AiModuleExploded {
+            position: det.position,
+            blast_damage: det.blast_damage,
         });
     }
 }
