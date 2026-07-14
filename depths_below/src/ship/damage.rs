@@ -686,19 +686,30 @@ pub fn process_ai_detonations(
 // ============================================================================
 
 const SHOCKWAVE_SCALE: f32 = 1.0;
-/// Max velocity kick (world units/s) any single blast can impart.
-const SHOCKWAVE_MAX_KICK: f32 = 110.0;
+/// Impulse per point of blast damage (world-units/s of Δv per unit mass).
+/// A 60-damage ammo cook-off vs the 1200-mass starter ship ≈ 40 u/s bump.
+const IMPULSE_PER_DAMAGE: f32 = 800.0;
+/// Δv cap per single blast — chains still stack past this, one blast can't
+/// punt a fighter at projectile speeds on its own.
+const SHOCKWAVE_MAX_KICK: f32 = 300.0;
+/// AI ships have no ShipPhysics — derive mass from block count at the same
+/// ratio as the starter ship (mass 1200 / ~35 blocks).
+const AI_MASS_PER_BLOCK: f32 = 34.0;
 
-/// Applies radial impulse from AI-ship detonations (and the player's own
-/// module cook-offs) to every ship in range, falling off linearly.
+/// Impulse ÷ mass shockwaves: every real detonation imparts momentum, so a
+/// 100-block freighter shrugs off a corner cook-off while a 25-block raider
+/// with a chain of HE going off gets properly yeeted. Off-center blasts also
+/// torque the PLAYER ship (AI steering owns its own rotation and would just
+/// fight it) — the lurch reads as "hit where it hurts".
 pub fn explosion_shockwaves(
     mut ai_booms: MessageReader<crate::events::AiModuleExploded>,
     mut player_booms: MessageReader<ModuleExploded>,
-    mut ship_query: Query<
-        (&GlobalTransform, &mut Velocity),
-        Or<(With<Ship>, With<crate::ai_ship::components::AiShip>)>,
+    mut player_query: Query<(&GlobalTransform, &mut Velocity, &mut ShipPhysics), With<Ship>>,
+    mut ai_query: Query<
+        (Entity, &GlobalTransform, &mut Velocity),
+        (With<crate::ai_ship::components::AiShip>, Without<Ship>),
     >,
-    player_gt_query: Query<&GlobalTransform, With<Ship>>,
+    children_query: Query<&Children>,
 ) {
     if SHOCKWAVE_SCALE <= 0.0 {
         ai_booms.clear();
@@ -706,38 +717,62 @@ pub fn explosion_shockwaves(
         return;
     }
 
+    let mut rng = rand::thread_rng();
     let mut blasts: Vec<(Vec2, f32)> = Vec::new();
     for ev in ai_booms.read() {
         blasts.push((ev.position, ev.blast_damage));
     }
     // Player-side ModuleExploded only carries a ship-local grid position —
     // rotate it into world space through the ship's transform.
-    if let Ok(player_gt) = player_gt_query.single() {
+    if let Ok((player_gt, _, _)) = player_query.single() {
+        let player_gt = *player_gt;
         for ev in player_booms.read() {
             let local = Vec3::new(
                 ev.grid_position.x as f32 * 66.0,
                 ev.grid_position.y as f32 * 66.0 - 33.0,
                 0.0,
             );
-            let world = player_gt.transform_point(local).truncate();
-            blasts.push((world, ev.blast_damage));
+            blasts.push((player_gt.transform_point(local).truncate(), ev.blast_damage));
         }
     }
     if blasts.is_empty() { return; }
 
     for (blast_pos, blast_damage) in blasts {
         let shock_radius = 250.0 + blast_damage * 2.0;
-        let center_kick = (blast_damage * 1.2 * SHOCKWAVE_SCALE).min(SHOCKWAVE_MAX_KICK);
+        let impulse = blast_damage * IMPULSE_PER_DAMAGE * SHOCKWAVE_SCALE;
 
-        for (gt, mut velocity) in ship_query.iter_mut() {
+        // Player: real mass + torque lurch
+        if let Ok((gt, mut velocity, mut physics)) = player_query.single_mut() {
+            let ship_pos = gt.translation().truncate();
+            let offset = ship_pos - blast_pos;
+            let dist = offset.length();
+            if dist <= shock_radius {
+                if let Some(dir) = offset.try_normalize() {
+                    let falloff = 1.0 - dist / shock_radius;
+                    let dv = (impulse / physics.mass.max(1.0) * falloff).min(SHOCKWAVE_MAX_KICK);
+                    velocity.0 += dir * dv;
+                    // Off-center lurch — small, random-signed, damped out by
+                    // the steering blend within a second.
+                    physics.angular_velocity += rng.gen_range(-1.0..1.0) * (dv / 100.0) * 0.35;
+                }
+            }
+        }
+
+        // AI ships: mass from block count, linear impulse only
+        for (entity, gt, mut velocity) in ai_query.iter_mut() {
             let ship_pos = gt.translation().truncate();
             let offset = ship_pos - blast_pos;
             let dist = offset.length();
             if dist > shock_radius { continue; }
-            let dir = offset.normalize_or_zero();
-            if dir == Vec2::ZERO { continue; }
+            let Some(dir) = offset.try_normalize() else { continue };
+            let block_count = children_query.get(entity)
+                .map(|c| c.iter().count())
+                .unwrap_or(20)
+                .max(1);
+            let mass = block_count as f32 * AI_MASS_PER_BLOCK;
             let falloff = 1.0 - dist / shock_radius;
-            velocity.0 += dir * center_kick * falloff;
+            let dv = (impulse / mass * falloff).min(SHOCKWAVE_MAX_KICK);
+            velocity.0 += dir * dv;
         }
     }
 }
