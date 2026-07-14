@@ -21,6 +21,7 @@ machine_loop_1-3, ui/terminal_1-3, beep_1-2
 - ambient/hull_creak_2: "Metal Creak 4" by ingudios (freesound.org/s/119468)
 - ambient/hull_groan_long_1: "Creaking Metal - Slow" by EagleStealthTeam (freesound.org/s/172411)
 - ambient/hull_groan_long_2: "Creaking Metal" by Soapuel (freesound.org/s/489442)
+- engines/engine_rumble_loop: "thrusters_loop" by DJT4NN3R (freesound.org/s/347576)
 
 Note: Freesound files are the 128kbps HQ previews. If a sound becomes prominent
 in-game, download the original WAV from the linked page (requires free account).

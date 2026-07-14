@@ -95,6 +95,7 @@ fn mult_to_fraction(mult: f32) -> f32 {
 
 pub fn right_click_open_tuning(
     mouse: Res<ButtonInput<MouseButton>>,
+    build_state: Res<State<crate::states::BuildState>>,
     occupancy: Res<GridOccupancy>,
     module_query: Query<(Entity, &Module), With<WeaponTuning>>,
     existing: Query<(Entity, &TuningWindow)>,
@@ -106,6 +107,14 @@ pub fn right_click_open_tuning(
     mut commands: Commands,
 ) {
     if !mouse.just_pressed(MouseButton::Right) {
+        return;
+    }
+
+    // Right-click is overloaded in build mode: while Placing it DELETES the
+    // block under the cursor (see handle_module_removal). Only open the
+    // tuning window when no build tool is active, otherwise right-clicking a
+    // weapon removed it and opened tuning for a block that no longer existed.
+    if *build_state.get() != crate::states::BuildState::Inactive {
         return;
     }
 

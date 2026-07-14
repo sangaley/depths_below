@@ -19,9 +19,8 @@ use crate::celestial::events::WarpJumpStarted;
 
 // Per-bus volume scalars. Sounds multiply their own base volume by one of these.
 const SFX_VOL: f32 = 0.8;
-/// Weapon fire sounds muted at user request (2026-07-14) — the current
-/// samples don't fit. Explosions/impacts still play. Flip to re-enable.
-const WEAPON_FIRE_SOUNDS: bool = false;
+/// Kill switch for weapon fire sounds only (explosions/impacts unaffected).
+const WEAPON_FIRE_SOUNDS: bool = true;
 const AMBIENT_VOL: f32 = 0.30;
 const UI_VOL: f32 = 0.45;
 const ALARM_VOL: f32 = 0.40;
@@ -107,7 +106,10 @@ fn load_audio(mut commands: Commands, assets: Res<AssetServer>) {
         ]),
         explosion_deep: assets.load("audio/impacts/explosion_deep.mp3"),
         explosion_large: assets.load("audio/impacts/explosion_large.mp3"),
-        engine_loop: assets.load("audio/engines/engine_medium_loop.mp3"),
+        // engine_rumble_loop: low interior thruster rumble ("thrusters_loop"
+        // by DJT4NN3R, freesound.org/s/347576, CC0) — the Little Robot
+        // engine_*_loop files sounded synthy rather than like an engine.
+        engine_loop: assets.load("audio/engines/engine_rumble_loop.mp3"),
         warps: load_all(&[
             "audio/engines/warp_1.mp3",
             "audio/engines/warp_2.mp3",
