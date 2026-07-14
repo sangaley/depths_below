@@ -676,3 +676,68 @@ pub fn process_ai_detonations(
         });
     }
 }
+
+// ============================================================================
+// EXPLOSION SHOCKWAVES
+// Real detonations (cook-offs, death-rattle pops, final booms) give nearby
+// ships a soft radial shove. Deliberately subtle — it should read as feel,
+// never wrestle aim away from the player. Set SHOCKWAVE_SCALE to 0.0 to
+// disable outright.
+// ============================================================================
+
+const SHOCKWAVE_SCALE: f32 = 1.0;
+/// Max velocity kick (world units/s) any single blast can impart.
+const SHOCKWAVE_MAX_KICK: f32 = 110.0;
+
+/// Applies radial impulse from AI-ship detonations (and the player's own
+/// module cook-offs) to every ship in range, falling off linearly.
+pub fn explosion_shockwaves(
+    mut ai_booms: MessageReader<crate::events::AiModuleExploded>,
+    mut player_booms: MessageReader<ModuleExploded>,
+    mut ship_query: Query<
+        (&GlobalTransform, &mut Velocity),
+        Or<(With<Ship>, With<crate::ai_ship::components::AiShip>)>,
+    >,
+    player_gt_query: Query<&GlobalTransform, With<Ship>>,
+) {
+    if SHOCKWAVE_SCALE <= 0.0 {
+        ai_booms.clear();
+        player_booms.clear();
+        return;
+    }
+
+    let mut blasts: Vec<(Vec2, f32)> = Vec::new();
+    for ev in ai_booms.read() {
+        blasts.push((ev.position, ev.blast_damage));
+    }
+    // Player-side ModuleExploded only carries a ship-local grid position —
+    // rotate it into world space through the ship's transform.
+    if let Ok(player_gt) = player_gt_query.single() {
+        for ev in player_booms.read() {
+            let local = Vec3::new(
+                ev.grid_position.x as f32 * 66.0,
+                ev.grid_position.y as f32 * 66.0 - 33.0,
+                0.0,
+            );
+            let world = player_gt.transform_point(local).truncate();
+            blasts.push((world, ev.blast_damage));
+        }
+    }
+    if blasts.is_empty() { return; }
+
+    for (blast_pos, blast_damage) in blasts {
+        let shock_radius = 250.0 + blast_damage * 2.0;
+        let center_kick = (blast_damage * 1.2 * SHOCKWAVE_SCALE).min(SHOCKWAVE_MAX_KICK);
+
+        for (gt, mut velocity) in ship_query.iter_mut() {
+            let ship_pos = gt.translation().truncate();
+            let offset = ship_pos - blast_pos;
+            let dist = offset.length();
+            if dist > shock_radius { continue; }
+            let dir = offset.normalize_or_zero();
+            if dir == Vec2::ZERO { continue; }
+            let falloff = 1.0 - dist / shock_radius;
+            velocity.0 += dir * center_kick * falloff;
+        }
+    }
+}
