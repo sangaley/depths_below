@@ -1,0 +1,23 @@
+# Rust
+/target
+**/target
+Cargo.lock
+
+# OS
+.DS_Store
+.DS_Store?
+Thumbs.db
+
+# Editors
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Python (sprite generation scripts)
+__pycache__/
+*.pyc
+
+# Local env
+.env
