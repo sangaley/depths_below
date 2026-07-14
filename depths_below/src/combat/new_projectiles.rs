@@ -23,6 +23,11 @@ pub struct Projectile {
     /// Loaded round type — drives on-hit behavior (blast, EMP, burn, ...).
     /// None for AI shots and legacy paths → plain single-block damage.
     pub ammo: Option<crate::combat::ammo_types::KineticAmmoType>,
+    /// Caliber scale of the firing weapon — shrinks/grows the ammo's on-hit
+    /// EFFECTS (blast radius, EMP duration, burn time). Damage numbers
+    /// already scale through proj.damage; without this a gatling EMP round
+    /// disabled as wide and as long as a cannon's, at 10x the fire rate.
+    pub caliber: f32,
     /// Block already damaged by this round — a penetrator passing through a
     /// block is still inside its hit radius next frame; without this it
     /// would hit the same block twice instead of the one behind it.
@@ -334,6 +339,7 @@ pub fn fire_weapons_system(
                     penetration,
                     has_penetrated: false,
                     ammo: selected_ammo.map(|a| a.0),
+                    caliber: caliber_scale(module.module_type),
                     last_hit: None,
                 },
                 Velocity(vel),
@@ -517,31 +523,35 @@ pub fn check_projectile_hits(
                         }
                         PenetrateExplode { blast_damage, blast_radius, .. }
                         | SurfaceExplode { blast_damage, blast_radius, .. } => {
+                            let radius = blast_radius * proj.caliber;
                             splash_blocks(
                                 &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
-                                hit_entity, hit_pos, blast_radius, blast_damage,
+                                hit_entity, hit_pos, radius, blast_damage,
                             );
-                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.5, 0.1), blast_radius);
+                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.5, 0.1), radius);
                         }
                         ProximityBurst { fragment_damage, fragment_radius, .. } => {
+                            let radius = fragment_radius * proj.caliber;
                             splash_blocks(
                                 &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
-                                hit_entity, hit_pos, fragment_radius, fragment_damage,
+                                hit_entity, hit_pos, radius, fragment_damage,
                             );
-                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.9, 0.4), fragment_radius);
+                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.9, 0.4), radius);
                         }
                         EMPDisable { disable_radius, disable_duration } => {
+                            let radius = disable_radius * proj.caliber;
+                            let duration = disable_duration * proj.caliber;
                             for child in children.iter() {
                                 if let Ok((module, gt)) = ai_module_query.get(child) {
                                     if !module.is_active { continue; }
-                                    if hit_pos.distance(gt.translation().truncate()) < disable_radius {
+                                    if hit_pos.distance(gt.translation().truncate()) < radius {
                                         commands.entity(child).try_insert(
-                                            crate::combat::energy_weapons::IonDisabled { timer: disable_duration }
+                                            crate::combat::energy_weapons::IonDisabled { timer: duration }
                                         );
                                     }
                                 }
                             }
-                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(0.4, 0.5, 0.95), disable_radius);
+                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(0.4, 0.5, 0.95), radius);
                         }
                         Ignite { fire_duration, fire_intensity } => {
                             commands.entity(hit_entity).try_insert(BlockBurning {
@@ -549,7 +559,7 @@ pub fn check_projectile_hits(
                                 // low direct-damage multiplier; the burn is
                                 // where the real damage lives.
                                 dps: proj.damage * fire_intensity,
-                                remaining: fire_duration,
+                                remaining: fire_duration * proj.caliber,
                                 ship: ai_entity,
                             });
                         }
@@ -607,8 +617,8 @@ pub fn check_projectile_hits(
         let creature_splash: Option<(f32, f32)> = proj.ammo.and_then(|ammo| {
             use crate::combat::ammo_types::AmmoHitBehavior::*;
             match ammo.hit_behavior(proj.damage) {
-                SurfaceExplode { blast_radius, fragment_damage, .. } => Some((blast_radius, fragment_damage)),
-                ProximityBurst { fragment_radius, fragment_damage, .. } => Some((fragment_radius, fragment_damage)),
+                SurfaceExplode { blast_radius, fragment_damage, .. } => Some((blast_radius * proj.caliber, fragment_damage)),
+                ProximityBurst { fragment_radius, fragment_damage, .. } => Some((fragment_radius * proj.caliber, fragment_damage)),
                 _ => None,
             }
         });
@@ -659,6 +669,19 @@ pub fn check_projectile_hits(
 
             break; // One hit per frame per projectile
         }
+    }
+}
+
+/// How big a round each kinetic weapon actually throws — scales the ammo's
+/// on-hit effects. A gatling firing APHE is a hail of small grenades; a
+/// cannon firing it is a shell.
+pub fn caliber_scale(module_type: ModuleType) -> f32 {
+    match module_type {
+        ModuleType::Gatling => 0.45,
+        ModuleType::Coilgun => 0.75,
+        ModuleType::Cannon => 1.0,
+        ModuleType::Railgun => 1.25,
+        _ => 1.0,
     }
 }
 

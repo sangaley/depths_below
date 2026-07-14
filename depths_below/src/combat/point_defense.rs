@@ -130,6 +130,7 @@ pub fn intercept_missiles(
                 penetration: 5.0,
                 has_penetrated: false,
                 ammo: None, // PD rounds have no special on-hit behavior
+                caliber: 0.3,
                 last_hit: None,
             },
             Velocity(direction * proj_speed),
