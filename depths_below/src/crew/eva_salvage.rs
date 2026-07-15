@@ -89,7 +89,7 @@ pub fn order_salvage_detail(
     >,
     mut station_query: Query<(Entity, &mut CrewStation)>,
     station_info: Query<(&Module, Has<KeepManned>), With<CrewStation>>,
-    weapon_marker: Query<(), With<Weapon>>,
+    reactor_marker: Query<(), With<Reactor>>,
     children_query: Query<&Children>,
     block_query: BlockQuery,
     mut notifications: MessageWriter<ShowNotification>,
@@ -138,10 +138,11 @@ pub fn order_salvage_detail(
 
     // Which posts keep their operator? Player-pinned stations
     // (right-click a crew station to toggle), or the default skeleton
-    // crew when nothing is pinned: helm + one gun.
+    // crew when nothing is pinned: helm + one reactor — a gunner is no
+    // use if the unmanned reactor can't power the gun.
     let mut pinned_posts: Vec<Entity> = Vec::new();
     let mut default_helm: Option<Entity> = None;
-    let mut default_gun: Option<Entity> = None;
+    let mut default_reactor: Option<Entity> = None;
     if let Ok(children) = children_query.get(ship_entity) {
         for child in children.iter() {
             if let Ok((module, is_pinned)) = station_info.get(child) {
@@ -151,14 +152,14 @@ pub fn order_salvage_detail(
                 if default_helm.is_none() && module.module_type == ModuleType::HelmStation {
                     default_helm = Some(child);
                 }
-                if default_gun.is_none() && weapon_marker.get(child).is_ok() {
-                    default_gun = Some(child);
+                if default_reactor.is_none() && reactor_marker.get(child).is_ok() {
+                    default_reactor = Some(child);
                 }
             }
         }
     }
     if pinned_posts.is_empty() {
-        pinned_posts.extend(default_helm.into_iter().chain(default_gun));
+        pinned_posts.extend(default_helm.into_iter().chain(default_reactor));
     }
 
     // Manually-assigned crew hold their posts. Auto-assigned crew are fair
