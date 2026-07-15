@@ -79,6 +79,7 @@ pub fn ship_movement(
     time: Res<Time>,
     input_state: Res<InputState>,
     _config: Res<GameConfig>,
+    camera_state: Res<crate::camera::CameraState>,
     engine_query: Query<(&Engine, &Module, Option<&CalculatedStats>, Option<&ModuleEfficiency>)>,
     thruster_query: Query<(&mut Thruster, &Module)>,
     mut ship_query: Query<(&mut Transform, &mut Velocity, &mut ShipPhysics, &mut ThrusterState), With<Ship>>,
@@ -106,6 +107,10 @@ pub fn ship_movement(
     // nose is, capped at MAX_TURN_RATE, so the ship settles on the cursor
     // smoothly instead of oscillating past it.
     physics.rudder = input_state.movement.x;
+    // While free-looking (holding T), the cursor is being used to pan the
+    // camera, not aim — freezing the turn here stops the ship spinning to
+    // face wherever the player happens to be looking.
+    if !camera_state.free_look_active {
     if let (Ok(window), Ok((camera, cam_gt))) = (windows_query.single(), camera_query.single()) {
         if let Some(cursor) = window.cursor_position() {
             if let Ok(cursor_world) = camera.viewport_to_world_2d(cam_gt, cursor) {
@@ -122,6 +127,13 @@ pub fn ship_movement(
                 }
             }
         }
+    }
+    } else {
+        // Decay any leftover turn rate instead of leaving it frozen —
+        // otherwise the ship keeps coasting on whatever angular velocity
+        // it had the instant free-look was pressed.
+        let blend = (TURN_RESPONSE * dt).min(1.0);
+        physics.angular_velocity -= physics.angular_velocity * blend;
     }
     physics.rotation += physics.angular_velocity * dt;
 

@@ -2,6 +2,7 @@ pub mod build_ui;
 pub mod damage_overlay;
 pub mod windows;
 pub mod theme;
+pub mod cursor;
 
 use std::collections::HashMap;
 
@@ -25,10 +26,11 @@ impl Plugin for UiPlugin {
             .init_resource::<windows::tooltip::TooltipState>()
             .init_resource::<windows::notification_log::NotificationHistory>()
             .init_resource::<PendingWarpTarget>()
-            .add_systems(Startup, setup_ui)
+            .add_systems(Startup, (setup_ui, cursor::setup_custom_cursor))
             .add_systems(
                 Update,
                 (
+                    cursor::update_custom_cursor,
                     update_hud,
                     update_hud_secondary,
                     update_celestial_hud,
@@ -1662,7 +1664,7 @@ fn toggle_map_overlay(
 fn map_click_system(
     mut commands: Commands,
     mouse: Res<ButtonInput<MouseButton>>,
-    map_panel: Query<(&ComputedNode, &GlobalTransform), With<MapPanel>>,
+    map_panel: Query<(&ComputedNode, &bevy::ui::UiGlobalTransform), With<MapPanel>>,
     existing: Query<Entity, With<MapOverlay>>,
     windows: Query<&Window>,
     mut pending: ResMut<PendingWarpTarget>,
@@ -1677,25 +1679,26 @@ fn map_click_system(
     if !mouse.just_pressed(MouseButton::Left) {
         return;
     }
-    let Ok((node, global_transform)) = map_panel.single() else { return };
-    let Some(cursor_pos) = windows.single().ok().and_then(|w| w.cursor_position()) else { return };
+    let Ok((node, transform)) = map_panel.single() else { return };
+    let Ok(window) = windows.single() else { return };
+    // window.cursor_position() is logical pixels; ComputedNode/UiGlobalTransform
+    // are physical — on a Retina Mac (2x) that alone silently broke every
+    // click. Also: this was querying the classic 2D/3D `GlobalTransform`,
+    // which Bevy 0.19 no longer keeps in sync for UI nodes at all (UI now
+    // uses its own dedicated `UiGlobalTransform` — see picking_backend.rs)
+    // — so panel_center was reading a stale/default value regardless of the
+    // pixel-scale bug. Both are fixed by using UiGlobalTransform plus Bevy's
+    // own `ComputedNode::normalize_point` hit-test helper instead of manual
+    // rectangle math.
+    let Some(cursor_pos) = window.cursor_position().map(|p| p * window.scale_factor()) else { return };
 
-    let panel_center = global_transform.translation().truncate();
-    let panel_size = node.size();
-    if panel_size.x <= 0.0 || panel_size.y <= 0.0 {
-        return;
-    }
-
-    let local_x = cursor_pos.x - (panel_center.x - panel_size.x / 2.0);
-    let local_y = cursor_pos.y - (panel_center.y - panel_size.y / 2.0);
-    if local_x < 0.0 || local_y < 0.0 || local_x > panel_size.x || local_y > panel_size.y {
+    let Some(norm) = node.normalize_point(*transform, cursor_pos) else { return };
+    if norm.x.abs() > 0.5 || norm.y.abs() > 0.5 {
         return; // click landed outside the map panel (e.g. on the sidebar)
     }
 
-    // Inverse of world_to_map_px
-    let half = panel_size.x / 2.0;
-    let world_x = (local_x - half) / half * MAP_WORLD_RANGE;
-    let world_y = (half - local_y) / half * MAP_WORLD_RANGE;
+    let world_x = norm.x * 2.0 * MAP_WORLD_RANGE;
+    let world_y = -norm.y * 2.0 * MAP_WORLD_RANGE;
     let target = Vec2::new(world_x, world_y);
     pending.0 = Some(target);
 
@@ -2367,9 +2370,13 @@ fn get_docking_services(
     crew_count: usize,
     total_berths: u32,
     inventory: &Inventory,
+    station_idx: usize,
 ) -> Vec<DockingService> {
     let hull_damage = 1.0 - hull_state.hull_integrity;
-    let hull_repair_cost = (hull_damage * 500.0) as u32;
+    let hull_repair_full_cost = (hull_damage * 500.0) as u32;
+    let scrap_have = inventory.items.get(&ItemType::ScrapMetal).copied().unwrap_or(0);
+    let scrap_usable = (hull_repair_full_cost / 50).min(scrap_have);
+    let hull_repair_cost = hull_repair_full_cost.saturating_sub(scrap_usable * 50);
 
     let o2_missing = oxygen_state.max_oxygen - oxygen_state.current_oxygen;
     let o2_cost = (o2_missing * 2.0) as u32;
@@ -2383,21 +2390,15 @@ fn get_docking_services(
     }
     let ammo_cost = ammo_needed * 5;
 
-    let hire_cost = 200 + (crew_count as u32) * 50;
+    let hire_full_cost = 200 + (crew_count as u32) * 50;
+    let bio_have = inventory.items.get(&ItemType::BioSample).copied().unwrap_or(0);
+    let bio_usable = (hire_full_cost / 60).min(bio_have);
+    let hire_cost = hire_full_cost.saturating_sub(bio_usable * 60);
 
-    // Sell value: count total sellable items
+    // Sell value: count total sellable items at this station's prices
     let mut sell_value = 0u32;
     for (item_type, count) in &inventory.items {
-        let price = match item_type {
-            ItemType::ScrapMetal => 10,
-            ItemType::Crystal => 25,
-            ItemType::BioSample => 15,
-            ItemType::FuelCell => 20,
-            ItemType::RareAlloy => 50,
-            ItemType::AncientArtifact => 100,
-            ItemType::AmmoCrate => 30,
-        };
-        sell_value += price * count;
+        sell_value += crate::resources::station_item_price(station_idx, *item_type) * count;
     }
 
     let fuel_missing = fuel_state.max_fuel - fuel_state.current_fuel;
@@ -2406,7 +2407,7 @@ fn get_docking_services(
     vec![
         DockingService {
             name: "Repair Hull",
-            description: format!("Restore hull to 100% (Damage: {:.0}%)", hull_damage * 100.0),
+            description: format!("Restore hull to 100% (Damage: {:.0}%) - ScrapMetal used first", hull_damage * 100.0),
             cost: hull_repair_cost,
             available: hull_damage > 0.01,
         },
@@ -2430,7 +2431,7 @@ fn get_docking_services(
         },
         DockingService {
             name: "Hire Crew",
-            description: format!("Recruit crew ({}/{} berths)", crew_count, total_berths),
+            description: format!("Recruit crew ({}/{} berths) - BioSample used first", crew_count, total_berths),
             cost: hire_cost,
             available: (crew_count as u32) < total_berths,
         },
@@ -2465,9 +2466,13 @@ fn spawn_docking_menu(
     inventory: Res<Inventory>,
     currency: Res<Currency>,
     staffing_state: Res<StaffingState>,
+    ship_query: Query<&Transform, With<Ship>>,
 ) {
     let crew_count = crew_query.iter().count();
-    let services = get_docking_services(&hull_state, &oxygen_state, &fuel_state, &weapon_query, crew_count, staffing_state.total_berths, &inventory);
+    let station_idx = ship_query.single().ok()
+        .and_then(|t| crate::world::home_base::nearest_station_index(t.translation.truncate()))
+        .unwrap_or(0);
+    let services = get_docking_services(&hull_state, &oxygen_state, &fuel_state, &weapon_query, crew_count, staffing_state.total_berths, &inventory, station_idx);
 
     commands.spawn((
         (Node {
@@ -2482,7 +2487,7 @@ fn spawn_docking_menu(
         DockingOverlay,
         DockingMenuSelection(0),
     )).with_children(|parent| {
-        parent.spawn((Text::new("OUTPOST"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H1), ..default() }, TextColor(theme::ThemeColors::ACCENT_CYAN)));
+        parent.spawn((Text::new("HAVEN STATION — SHIPYARD"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H1), ..default() }, TextColor(theme::ThemeColors::ACCENT_CYAN)));
 
         parent.spawn((Text::new(format!("Credits: {}", currency.credits)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() }, TextColor(theme::ThemeColors::ACCENT_YELLOW)));
 
@@ -2547,9 +2552,14 @@ fn docking_menu_input(
     mut hull_query: Query<&mut HullSegment>,
     staffing_state: Res<StaffingState>,
     mut module_query: Query<&mut Module>,
+    ship_query: Query<&Transform, With<Ship>>,
 ) {
     let (mut hull_state, mut oxygen_state, mut fuel_state, mut currency, mut inventory) = econ_state;
     let Ok(mut selection) = menu_query.single_mut() else { return };
+
+    let station_idx = ship_query.single().ok()
+        .and_then(|t| crate::world::home_base::nearest_station_index(t.translation.truncate()))
+        .unwrap_or(0);
 
     let service_count = 8usize;
     let old_idx = selection.0;
@@ -2570,36 +2580,56 @@ fn docking_menu_input(
 
         match selection.0 {
             0 => {
-                // Repair Hull
+                // Repair Hull — ScrapMetal offsets cost (50c value each)
+                // before credits, same pattern as Refuel/Rearm's FuelCell/
+                // AmmoCrate offset. Checked atomically (compute scrap+credit
+                // split, verify affordable, THEN consume both) rather than
+                // spending scrap first — repair is all-or-nothing, unlike
+                // fuel/ammo's partial fill, so a failed attempt must not
+                // waste resources the player can't get back.
                 let hull_damage = 1.0 - hull_state.hull_integrity;
-                let cost = (hull_damage * 500.0) as u32;
+                let full_cost = (hull_damage * 500.0) as u32;
                 if hull_damage < 0.01 {
                     notifications.write(ShowNotification {
                         message: "Hull already at full integrity".into(),
                         notification_type: NotificationType::Info,
                         duration: 2.0,
                     });
-                } else if currency.credits >= cost {
-                    currency.credits -= cost;
-                    hull_state.hull_integrity = 1.0;
-                    // Also repair all hull segments
-                    for mut segment in hull_query.iter_mut() {
-                        segment.health = segment.max_health;
-                        segment.is_depressurized = false;
-                        segment.depressurization_level = 0.0;
-                    }
-                    notifications.write(ShowNotification {
-                        message: format!("Hull repaired! (-{}c)", cost),
-                        notification_type: NotificationType::Success,
-                        duration: 3.0,
-                    });
-                    changed = true;
                 } else {
-                    notifications.write(ShowNotification {
-                        message: format!("Not enough credits (need {}c, have {}c)", cost, currency.credits),
-                        notification_type: NotificationType::Warning,
-                        duration: 2.0,
-                    });
+                    const SCRAP_VALUE: u32 = 50;
+                    let scrap_have = inventory.items.get(&ItemType::ScrapMetal).copied().unwrap_or(0);
+                    let scrap_used = (full_cost / SCRAP_VALUE).min(scrap_have);
+                    let cost = full_cost.saturating_sub(scrap_used * SCRAP_VALUE);
+                    if currency.credits >= cost {
+                        if scrap_used > 0 {
+                            inventory.remove_item(ItemType::ScrapMetal, scrap_used);
+                        }
+                        currency.credits -= cost;
+                        hull_state.hull_integrity = 1.0;
+                        // Also repair all hull segments
+                        for mut segment in hull_query.iter_mut() {
+                            segment.health = segment.max_health;
+                            segment.is_depressurized = false;
+                            segment.depressurization_level = 0.0;
+                        }
+                        let message = if scrap_used > 0 {
+                            format!("Hull repaired! Used {} ScrapMetal (-{}c)", scrap_used, cost)
+                        } else {
+                            format!("Hull repaired! (-{}c)", cost)
+                        };
+                        notifications.write(ShowNotification {
+                            message,
+                            notification_type: NotificationType::Success,
+                            duration: 3.0,
+                        });
+                        changed = true;
+                    } else {
+                        notifications.write(ShowNotification {
+                            message: format!("Not enough credits (need {}c, have {}c)", cost, currency.credits),
+                            notification_type: NotificationType::Warning,
+                            duration: 2.0,
+                        });
+                    }
                 }
             }
             1 => {
@@ -2748,8 +2778,19 @@ fn docking_menu_input(
                         duration: 2.0,
                     });
                 } else {
-                    let cost = 200 + (crew_count as u32) * 50;
+                    // BioSample offsets hiring cost first (60c value each —
+                    // medical/ration supplies for the new hire) — same
+                    // atomic check-then-spend pattern as Repair Hull's
+                    // ScrapMetal offset, since hiring is all-or-nothing too.
+                    let full_cost = 200 + (crew_count as u32) * 50;
+                    const BIOSAMPLE_VALUE: u32 = 60;
+                    let bio_have = inventory.items.get(&ItemType::BioSample).copied().unwrap_or(0);
+                    let bio_used = (full_cost / BIOSAMPLE_VALUE).min(bio_have);
+                    let cost = full_cost.saturating_sub(bio_used * BIOSAMPLE_VALUE);
                     if currency.credits >= cost {
+                        if bio_used > 0 {
+                            inventory.remove_item(ItemType::BioSample, bio_used);
+                        }
                         currency.credits -= cost;
                         let crew_names = ["Morgan", "Rivera", "Chen", "Volkov", "Okafor", "Tanaka", "Andersen", "Reyes",
                                           "Park", "Santos", "Becker", "Ito", "Larsen", "Novak", "Gupta", "Patel"];
@@ -2777,9 +2818,15 @@ fn docking_menu_input(
                             },
                         ));
 
+                        let message = if bio_used > 0 {
+                            format!("{} joined the crew! Used {} BioSample (-{}c) ({}/{} berths)",
+                                name, bio_used, cost, crew_count + 1, total_berths)
+                        } else {
+                            format!("{} joined the crew! (-{}c) ({}/{} berths)",
+                                name, cost, crew_count + 1, total_berths)
+                        };
                         notifications.write(ShowNotification {
-                            message: format!("{} joined the crew! (-{}c) ({}/{} berths)",
-                                name, cost, crew_count + 1, total_berths),
+                            message,
                             notification_type: NotificationType::Success,
                             duration: 3.0,
                         });
@@ -2798,15 +2845,7 @@ fn docking_menu_input(
                 let mut total_value = 0u32;
                 let mut items_sold = Vec::new();
                 for (item_type, count) in &inventory.items {
-                    let price = match item_type {
-                        ItemType::ScrapMetal => 10,
-                        ItemType::Crystal => 25,
-                        ItemType::BioSample => 15,
-                        ItemType::FuelCell => 20,
-                        ItemType::RareAlloy => 50,
-                        ItemType::AncientArtifact => 100,
-                        ItemType::AmmoCrate => 30,
-                    };
+                    let price = crate::resources::station_item_price(station_idx, *item_type);
                     let value = price * count;
                     total_value += value;
                     items_sold.push((*item_type, *count));
@@ -2888,7 +2927,10 @@ fn docking_menu_input(
     let weapon_data: Vec<_> = weapon_query.iter().map(|w| (w.ammo, w.max_ammo)).collect();
 
     let hull_damage = 1.0 - hull_state.hull_integrity;
-    let hull_repair_cost = (hull_damage * 500.0) as u32;
+    let hull_repair_full_cost = (hull_damage * 500.0) as u32;
+    let scrap_have = inventory.items.get(&ItemType::ScrapMetal).copied().unwrap_or(0);
+    let scrap_usable = (hull_repair_full_cost / 50).min(scrap_have);
+    let hull_repair_cost = hull_repair_full_cost.saturating_sub(scrap_usable * 50);
     let o2_missing = oxygen_state.max_oxygen - oxygen_state.current_oxygen;
     let o2_cost = (o2_missing * 2.0) as u32;
     let mut ammo_needed = 0u32;
@@ -2898,19 +2940,13 @@ fn docking_menu_input(
         }
     }
     let ammo_cost = ammo_needed * 5;
-    let hire_cost = 200 + (crew_count as u32) * 50;
+    let hire_full_cost = 200 + (crew_count as u32) * 50;
+    let bio_have = inventory.items.get(&ItemType::BioSample).copied().unwrap_or(0);
+    let bio_usable = (hire_full_cost / 60).min(bio_have);
+    let hire_cost = hire_full_cost.saturating_sub(bio_usable * 60);
     let mut sell_value = 0u32;
     for (item_type, count) in &inventory.items {
-        let price = match item_type {
-            ItemType::ScrapMetal => 10,
-            ItemType::Crystal => 25,
-            ItemType::BioSample => 15,
-            ItemType::FuelCell => 20,
-            ItemType::RareAlloy => 50,
-            ItemType::AncientArtifact => 100,
-            ItemType::AmmoCrate => 30,
-        };
-        sell_value += price * count;
+        sell_value += crate::resources::station_item_price(station_idx, *item_type) * count;
     }
 
     let fuel_missing = fuel_state.max_fuel - fuel_state.current_fuel;
@@ -2918,11 +2954,11 @@ fn docking_menu_input(
 
     let new_idx = selection.0;
     let service_info: Vec<(&str, String, u32, bool)> = vec![
-        ("Repair Hull", format!("Restore hull to 100% (Damage: {:.0}%)", hull_damage * 100.0), hull_repair_cost, hull_damage > 0.01),
+        ("Repair Hull", format!("Restore hull to 100% (Damage: {:.0}%) - ScrapMetal used first", hull_damage * 100.0), hull_repair_cost, hull_damage > 0.01),
         ("Refill Oxygen", format!("Refill O2 tanks ({:.0}/{:.0})", oxygen_state.current_oxygen, oxygen_state.max_oxygen), o2_cost, o2_missing > 1.0),
         ("Refuel", format!("Fill fuel tanks ({:.0}/{:.0}) - FuelCells used first", fuel_state.current_fuel, fuel_state.max_fuel), fuel_cost, fuel_missing > 1.0),
         ("Rearm Weapons", format!("Resupply {} rounds - AmmoCrates used first", ammo_needed), ammo_cost, ammo_needed > 0),
-        ("Hire Crew", format!("Recruit crew ({}/{} berths)", crew_count, staffing_state.total_berths), hire_cost, (crew_count as u32) < staffing_state.total_berths),
+        ("Hire Crew", format!("Recruit crew ({}/{} berths) - BioSample used first", crew_count, staffing_state.total_berths), hire_cost, (crew_count as u32) < staffing_state.total_berths),
         ("Sell Cargo", format!("Sell all inventory for {} credits", sell_value), 0, sell_value > 0),
         ("Repair Modules", {
             let mut total_module_damage = 0.0f32;

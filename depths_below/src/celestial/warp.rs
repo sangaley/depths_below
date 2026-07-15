@@ -89,6 +89,8 @@ pub fn execute_warp_jump(
     mut ship_query: Query<(&mut Transform, &mut Velocity), With<Ship>>,
     mut notifications: MessageWriter<ShowNotification>,
     mut completed_events: MessageWriter<WarpJumpCompleted>,
+    textures: Res<crate::vfx::procedural_textures::CelestialTextures>,
+    asset_server: Res<AssetServer>,
 ) {
     for event in jump_events.read() {
         let Ok((mut ship_transform, mut ship_velocity)) = ship_query.single_mut() else {
@@ -116,9 +118,11 @@ pub fn execute_warp_jump(
 
         let system_info = spawning::spawn_star_system(
             &mut commands,
+            &asset_server,
             center,
             new_id,
             seed,
+            &textures,
         );
 
         // Spawn asteroids in the new system
@@ -128,6 +132,7 @@ pub fn execute_warp_jump(
         );
         spawning::spawn_asteroid_field(
             &mut commands,
+            &asset_server,
             center + asteroid_offset,
             rng.gen_range(15..30),
             rng.gen_range(20_000.0..40_000.0),

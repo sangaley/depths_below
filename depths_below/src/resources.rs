@@ -349,6 +349,50 @@ impl ItemType {
             ItemType::AmmoCrate => 4.0,
         }
     }
+
+    /// Baseline credit value per unit, before any station price variation
+    /// (see `station_item_price`). This used to be the actual sell price,
+    /// identical at every station.
+    fn base_value(&self) -> u32 {
+        match self {
+            ItemType::ScrapMetal => 10,
+            ItemType::Crystal => 25,
+            ItemType::BioSample => 15,
+            ItemType::FuelCell => 20,
+            ItemType::RareAlloy => 50,
+            ItemType::AncientArtifact => 100,
+            ItemType::AmmoCrate => 30,
+        }
+    }
+}
+
+/// Per-station price multiplier for a given item. Was a pure hash of
+/// (station_idx, item) with no meaning behind it — every station had a
+/// "personality" but there was no way to learn or predict it beyond trial
+/// and error. Now driven by the station's type (see world::station_types —
+/// a Mining Colony pays badly for ore because it's mining its own, a
+/// Research Outpost pays well for crystal/artifacts because it wants to
+/// study them, etc.) with a small +/-15% per-station jitter on top so two
+/// stations of the same type aren't identical twins.
+fn station_price_multiplier(station_idx: usize, item: ItemType) -> f32 {
+    let base = crate::world::station_types::type_price_multiplier(
+        crate::world::station_types::station_type(station_idx),
+        item,
+    );
+    let hash = (station_idx as u32).wrapping_mul(2654435761)
+        .wrapping_add((item as u32).wrapping_mul(40503))
+        .wrapping_add(0x9E3779B9);
+    let normalized = (hash % 1000) as f32 / 1000.0; // 0.0..1.0
+    let jitter = 0.85 + normalized * 0.30; // 0.85..1.15
+    base * jitter
+}
+
+/// Final per-unit sell price for `item` at station `station_idx`
+/// (0 = Haven, 1..=12 = outposts — see world::home_base).
+pub fn station_item_price(station_idx: usize, item: ItemType) -> u32 {
+    ((item.base_value() as f32) * station_price_multiplier(station_idx, item))
+        .round()
+        .max(1.0) as u32
 }
 
 #[derive(Resource, Serialize, Deserialize, Clone)]

@@ -96,6 +96,8 @@ impl Plugin for CelestialPlugin {
 fn spawn_initial_system(
     mut commands: Commands,
     mut galaxy: ResMut<resources::GalaxyState>,
+    textures: Res<crate::vfx::procedural_textures::CelestialTextures>,
+    asset_server: Res<AssetServer>,
 ) {
     // Only spawn if no systems exist yet
     if !galaxy.systems.is_empty() {
@@ -114,14 +116,17 @@ fn spawn_initial_system(
 
     let system_info = spawning::spawn_star_system(
         &mut commands,
+        &asset_server,
         center,
         system_id,
         42, // Seed for first system
+        &textures,
     );
 
     // Also spawn some asteroids
     spawning::spawn_asteroid_field(
         &mut commands,
+        &asset_server,
         center + Vec2::new(50_000.0, 0.0),
         20,
         30_000.0,

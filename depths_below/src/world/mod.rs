@@ -8,6 +8,7 @@ mod generation;
 mod chunks;
 mod biomes;
 pub mod home_base;
+pub mod station_types;
 
 #[allow(unused_imports)]
 pub use generation::*;

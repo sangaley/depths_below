@@ -1194,7 +1194,7 @@ pub fn update_controls_help(
     // the docked hints ("Enter: Launch") for the whole run, so nobody could
     // discover the brake or the shield toggle.
     if *game_state.get() == crate::states::GameState::Exploring {
-        text.0 = "Mouse: Aim | W/S: Thrust | A/D: Strafe | Shift: Brake | Space/Click: Fire | R: Shield | F: Dock | B: Build".to_string();
+        text.0 = "Mouse: Aim | W/S: Thrust | A/D: Strafe | Shift: Brake | Space/Click: Fire | R: Shield | T: Free Look | F: Dock | B: Build".to_string();
         return;
     }
 
