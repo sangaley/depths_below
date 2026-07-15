@@ -3,7 +3,50 @@ use rand::Rng;
 
 use crate::components::*;
 use crate::events::*;
+use crate::resources::ItemType;
 use super::components::*;
+
+/// LOOT IDENTITY — what a wreck yields depends on who you killed and how.
+/// Each faction has signature cargo (a Glass Eye carries intel, a Rust Swarm
+/// carries junk); scrap metal is the filler that survives any kill. The
+/// forensic record then biases composition: a shattered hulk's delicate
+/// cargo is slag (non-scrap weights crushed), a pristine kill preserves and
+/// even concentrates it. Thresholds match the quantity tiers in
+/// ai_ship_death_system (>= 0.7 pristine, < 0.3 shattered).
+pub fn roll_wreck_loot(ship_type: AiShipType, intact_frac: f32, rng: &mut impl Rng) -> ItemType {
+    use ItemType::*;
+    let table: &[(ItemType, f32)] = match ship_type {
+        AiShipType::RustSwarm => &[(ScrapMetal, 8.0), (FuelCell, 1.0), (AmmoCrate, 1.0)],
+        AiShipType::IronTide => &[(ScrapMetal, 4.0), (RareAlloy, 3.0), (AmmoCrate, 3.0)],
+        AiShipType::Blackwater => &[(AmmoCrate, 4.0), (FuelCell, 3.0), (ScrapMetal, 2.0), (RareAlloy, 1.0)],
+        AiShipType::PressureKing => &[(RareAlloy, 4.0), (Crystal, 3.0), (ScrapMetal, 2.0), (FuelCell, 1.0)],
+        AiShipType::GlassEye => &[(Crystal, 4.0), (AncientArtifact, 3.0), (FuelCell, 2.0), (ScrapMetal, 1.0)],
+        AiShipType::Drowned => &[(AncientArtifact, 4.0), (ScrapMetal, 3.0), (Crystal, 2.0), (BioSample, 1.0)],
+        AiShipType::AbyssalCult => &[(BioSample, 4.0), (AncientArtifact, 2.0), (Crystal, 2.0), (ScrapMetal, 2.0)],
+        AiShipType::Leviathan => &[(BioSample, 5.0), (Crystal, 2.0), (ScrapMetal, 2.0), (RareAlloy, 1.0)],
+        AiShipType::Dreadnought => &[(AmmoCrate, 4.0), (RareAlloy, 3.0), (ScrapMetal, 2.0), (FuelCell, 1.0)],
+        AiShipType::VoidTitan => &[(AncientArtifact, 3.0), (RareAlloy, 3.0), (Crystal, 2.0), (AmmoCrate, 1.0), (FuelCell, 1.0)],
+    };
+
+    let good_mult = if intact_frac >= 0.7 {
+        1.5
+    } else if intact_frac < 0.3 {
+        0.35
+    } else {
+        1.0
+    };
+    let weight = |item: ItemType, w: f32| if item == ScrapMetal { w } else { w * good_mult };
+
+    let total: f32 = table.iter().map(|&(i, w)| weight(i, w)).sum();
+    let mut roll = rng.gen_range(0.0..total);
+    for &(item, w) in table {
+        roll -= weight(item, w);
+        if roll <= 0.0 {
+            return item;
+        }
+    }
+    table[0].0
+}
 
 /// Secondary explosions marching across a fresh wreck for a second or two
 /// after the kill, ending in one final boom. Pure spectacle — pops don't
@@ -149,6 +192,7 @@ pub fn ai_ship_death_system(
             AiShipWreck {
                 ship_type: event.ship_type,
                 loot_remaining: loot,
+                intact_frac,
             },
             PointOfInterest {
                 poi_type: PoiType::Wreck,

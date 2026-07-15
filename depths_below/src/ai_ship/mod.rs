@@ -5,7 +5,7 @@ mod ai_brain;
 mod movement;
 mod combat;
 mod noise;
-mod wreck;
+pub mod wreck;
 pub mod simulation;
 
 use bevy::prelude::*;

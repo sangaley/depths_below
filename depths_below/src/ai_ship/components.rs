@@ -125,6 +125,10 @@ pub struct AiShipRadarContact {
 pub struct AiShipWreck {
     pub ship_type: AiShipType,
     pub loot_remaining: u32,
+    /// Fraction of blocks still intact at the moment of death (0..1).
+    /// Forensic record of how gently the kill was done — biases loot
+    /// composition when salvaging, not just quantity.
+    pub intact_frac: f32,
 }
 
 // ============================================================================
