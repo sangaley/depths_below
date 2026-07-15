@@ -230,7 +230,9 @@ fn compute_module_efficiency(
             0.0
         };
 
-        commands.entity(entity).insert(ModuleEfficiency {
+        // try_insert: wreck modules carry CrewStation too, and a drill or
+        // EVA detail may have dismantled (despawned) this block this frame
+        commands.entity(entity).try_insert(ModuleEfficiency {
             value: damage_eff * staffing_factor,
             staffing_factor,
         });
@@ -404,7 +406,8 @@ fn update_crew_room_location(
             loc.room_id = room_id;
             loc.grid_position = grid;
         } else {
-            commands.entity(entity).insert(CrewRoomLocation {
+            // try_insert: the crew member may die and despawn this frame
+            commands.entity(entity).try_insert(CrewRoomLocation {
                 room_id,
                 grid_position: grid,
             });
