@@ -484,14 +484,9 @@ fn setup_ui(mut commands: Commands) {
                 spawn_hud_bar(group, HudBarKind::Hull, 56.0, ThemeColors::ACCENT_GREEN);
             });
 
-            // -- O2 --
-            spawn_hud_group(top_bar, "O2", ThemeColors::ACCENT_CYAN, |group| {
-                group.spawn((
-                    (Text::new("100%"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::ACCENT_CYAN)),
-                    OxygenText,
-                ));
-                spawn_hud_bar(group, HudBarKind::Oxygen, 56.0, ThemeColors::ACCENT_CYAN);
-            });
+            // O2 group removed 2026-07-15 — crew oxygen is gone by design
+            // (room air/decompression physics remain, but there's no life
+            // support stat for the player to watch anymore).
 
             spawn_hud_separator(top_bar);
 
@@ -680,13 +675,11 @@ fn depth_zone_name(depth: f32) -> &'static str {
 pub fn update_hud(
     depth_state: Res<DepthState>,
     power_state: Res<PowerState>,
-    oxygen_state: Res<OxygenState>,
     hull_state: Res<HullState>,
     time: Res<Time>,
     mut depth_query: Query<(&mut Text, &mut TextColor), (With<DepthText>, Without<PowerText>, Without<OxygenText>, Without<HullText>, Without<DepthZoneText>)>,
     mut depth_zone_query: Query<&mut Text, (With<DepthZoneText>, Without<DepthText>, Without<PowerText>, Without<OxygenText>, Without<HullText>)>,
     mut power_query: Query<(&mut Text, &mut TextColor), (With<PowerText>, Without<DepthText>, Without<OxygenText>, Without<HullText>, Without<DepthZoneText>)>,
-    mut oxygen_query: Query<(&mut Text, &mut TextColor), (With<OxygenText>, Without<DepthText>, Without<PowerText>, Without<HullText>, Without<DepthZoneText>)>,
     mut hull_query: Query<(&mut Text, &mut TextColor), (With<HullText>, Without<DepthText>, Without<PowerText>, Without<OxygenText>, Without<DepthZoneText>)>,
     mut bar_query: Query<(&HudBar, &mut Node, &mut BackgroundColor)>,
 ) {
@@ -719,23 +712,6 @@ pub fn update_hud(
         }
     }
 
-    // Oxygen
-    let o2_pct = if oxygen_state.max_oxygen > 0.0 {
-        oxygen_state.current_oxygen / oxygen_state.max_oxygen
-    } else { 1.0 };
-    let o2_pct_i = (o2_pct * 100.0) as i32;
-    if let Ok((mut text, mut text_color)) = oxygen_query.single_mut() {
-        text.0 = format!("{}%", o2_pct_i);
-        if o2_pct_i < 20 {
-            let blink = (time.elapsed_secs() * 5.0).sin() > 0.0;
-            text_color.0 = if blink { Color::srgb(1.0, 0.0, 0.0) } else { Color::srgb(0.5, 0.1, 0.1) };
-        } else if o2_pct_i < 50 {
-            text_color.0 = Color::srgb(1.0, 1.0, 0.0);
-        } else {
-            text_color.0 = Color::srgb(0.0, 1.0, 1.0);
-        }
-    }
-
     // Hull
     let hull_pct = hull_state.hull_integrity;
     let hull_pct_i = (hull_pct * 100.0) as i32;
@@ -758,10 +734,8 @@ pub fn update_hud(
                 let c = if hull_pct < 0.3 { Color::srgb(1.0, 0.0, 0.0) } else if hull_pct < 0.6 { Color::srgb(1.0, 1.0, 0.0) } else { Color::srgb(0.0, 1.0, 0.0) };
                 (hull_pct, c)
             }
-            HudBarKind::Oxygen => {
-                let c = if o2_pct < 0.3 { Color::srgb(1.0, 0.0, 0.0) } else if o2_pct < 0.5 { Color::srgb(1.0, 1.0, 0.0) } else { Color::srgb(0.0, 1.0, 1.0) };
-                (o2_pct, c)
-            }
+            // Oxygen bar removed with crew O2 (its HUD group no longer spawns)
+            HudBarKind::Oxygen => continue,
             HudBarKind::Fuel => continue, // handled in update_hud_secondary
         };
         style.width = Val::Percent(pct * 100.0);
@@ -1115,17 +1089,6 @@ fn handle_game_event_notifications(
         }
     }
 
-    // Oxygen state changes
-    for event in oxygen_events.read() {
-        if event.is_critical {
-            notifications.write(ShowNotification {
-                message: format!("OXYGEN CRITICAL! ({:.0}%) Crew suffocating!", event.new_level * 100.0),
-                notification_type: NotificationType::Danger,
-                duration: 4.0,
-            });
-        }
-    }
-
     // Hull breaches
     for event in breach_events.read() {
         notifications.write(ShowNotification {
@@ -1220,8 +1183,8 @@ fn toggle_crew_menu(
                 format!("{:?} (Idle)", crew.state)
             };
 
-            parent.spawn((Text::new(format!("{} | HP:{:.0} O2:{:.0} Morale:{:.0} | {}",
-                    crew.name, crew.health, crew.oxygen, crew.morale, status)), TextFont { font_size: FontSize::Px(15.0), ..default() }, TextColor(Color::srgb(0.8, 0.8, 0.8))));
+            parent.spawn((Text::new(format!("{} | HP:{:.0} Morale:{:.0} | {}",
+                    crew.name, crew.health, crew.morale, status)), TextFont { font_size: FontSize::Px(15.0), ..default() }, TextColor(Color::srgb(0.8, 0.8, 0.8))));
         }
 
         parent.spawn((Text::new("Press C to close"), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(Color::srgb(0.25, 0.25, 0.25))));
@@ -2075,13 +2038,10 @@ fn spawn_pause_menu(
         parent.spawn((Text::new("PAUSED"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H1), ..default() }, TextColor(theme::ThemeColors::TEXT_TITLE)));
 
         // Vitals line
-        let o2_pct = if oxygen_state.max_oxygen > 0.0 {
-            (oxygen_state.current_oxygen / oxygen_state.max_oxygen * 100.0) as i32
-        } else { 100 };
         let hull_pct = (hull_state.hull_integrity * 100.0) as i32;
         parent.spawn((Text::new(format!(
-                "Distance: {:.0}m  Hull: {}%  O2: {}%  Power: {:.0}/{:.0}",
-                depth_state.current_depth, hull_pct, o2_pct,
+                "Distance: {:.0}m  Hull: {}%  Power: {:.0}/{:.0}",
+                depth_state.current_depth, hull_pct,
                 power_state.total_power_generation, power_state.total_power_consumption,
             )), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(0.8, 0.8, 0.8))));
 

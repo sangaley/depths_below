@@ -42,12 +42,10 @@ pub fn update_ship_state(
 /// Checks game over conditions
 pub fn check_game_over(
     hull_state: Res<HullState>,
-    oxygen_state: Res<OxygenState>,
     crew_query: Query<&CrewMember>,
     mut death_cause: ResMut<DeathCause>,
     mut next_state: ResMut<NextState<GameState>>,
     mut notifications: MessageWriter<ShowNotification>,
-    mut o2_depleted_timer: Local<f32>,
     session_timer: Res<ExploringSessionTimer>,
     time: Res<Time>,
 ) {
@@ -60,14 +58,6 @@ pub fn check_game_over(
     let crew_count = crew_query.iter().count();
     let all_crew_dead = crew_count == 0 || crew_query.iter().all(|c| c.health <= 0.0);
     let hull_destroyed = hull_state.hull_integrity <= 0.0;
-
-    // Phase 3.5: Oxygen depletion game over after 30 seconds at zero
-    if oxygen_state.current_oxygen <= 0.0 {
-        *o2_depleted_timer += time.delta_secs();
-    } else {
-        *o2_depleted_timer = 0.0;
-    }
-    let o2_game_over = *o2_depleted_timer > 30.0;
 
     // Attribute the death to the most recent damage source if it was fresh
     // (within 20s) — "hull destroyed" alone doesn't tell the player anything.
@@ -90,14 +80,6 @@ pub fn check_game_over(
         death_cause.cause = Some(format!("Hull integrity reached zero.{}", attribution));
         notifications.write(ShowNotification {
             message: "Hull integrity zero! The ship is breaking apart!".into(),
-            notification_type: NotificationType::Danger,
-            duration: 5.0,
-        });
-        next_state.set(GameState::GameOver);
-    } else if o2_game_over {
-        death_cause.cause = Some("Crew suffocated — oxygen held at zero for 30 seconds. Check scrubber count, staffing, and power.".to_string());
-        notifications.write(ShowNotification {
-            message: "Life support failure! No oxygen remaining!".into(),
             notification_type: NotificationType::Danger,
             duration: 5.0,
         });

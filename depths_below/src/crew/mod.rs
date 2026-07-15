@@ -42,7 +42,6 @@ impl Plugin for CrewPlugin {
                     update_crew_ai.after(crew_emergency_dispatch),
                     crew_fire_suppression.after(update_crew_ai),
                     crew_repair_system.after(update_crew_ai),
-                    check_crew_suffocation,
                     handle_crew_death,
                     medbay_healing,
                     messhall_morale,
@@ -93,6 +92,8 @@ fn crew_arrive_with_quarters(
     mut placed_events: MessageReader<ModulePlaced>,
     registry: Res<crate::building::ModuleRegistry>,
     ship_query: Query<Entity, With<Ship>>,
+    quarters_query: Query<(&Quarters, &Module)>,
+    crew_query: Query<&CrewMember>,
     mut roster: ResMut<CrewRoster>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
@@ -104,14 +105,28 @@ fn crew_arrive_with_quarters(
 
     let Ok(ship) = ship_query.single() else { return };
     for event in placed_events.read() {
-        let crate::building::registry::CompanionData::Quarters { berths } =
+        let crate::building::registry::CompanionData::Quarters { berths: new_berths } =
             registry.get(event.module_type).companion
         else {
             continue;
         };
 
+        // Fill EVERY empty bunk, not just the new module's — otherwise
+        // adding a barracks moves crew and capacity in lockstep and the
+        // staffing gap never closes (22/30 became 30/38 instead of 38/38).
+        // The just-placed module's Quarters companion isn't flushed yet
+        // this frame, so its berths come from the registry def.
+        let existing_berths: u32 = quarters_query
+            .iter()
+            .filter(|(_, module)| module.is_active && module.health > 0.0)
+            .map(|(quarters, _)| quarters.berths)
+            .sum();
+        let capacity = existing_berths + new_berths;
+        let alive = crew_query.iter().filter(|c| c.health > 0.0).count() as u32;
+        let to_spawn = capacity.saturating_sub(alive);
+
         let mut rng = rand::thread_rng();
-        for i in 0..berths {
+        for i in 0..to_spawn {
             let name = NAMES[rng.gen_range(0..NAMES.len())];
             let crew = commands
                 .spawn((
@@ -139,9 +154,10 @@ fn crew_arrive_with_quarters(
 
         notifications.write(ShowNotification {
             message: format!(
-                "{} crew signed on with the {}.",
-                berths,
-                event.module_type.name()
+                "{} crew signed on — bunks full ({}/{}).",
+                to_spawn,
+                alive + to_spawn,
+                capacity
             ),
             notification_type: NotificationType::Success,
             duration: 3.0,
@@ -351,30 +367,21 @@ fn auto_assign_crew(
     }
 }
 
-/// Updates crew needs (oxygen, morale)
+/// Updates crew needs (morale). Personal oxygen was removed by design
+/// call 2026-07-15 — crew no longer consume O2 or suffocate; room air
+/// and decompression stay as pure physics (vent thrust, breach sealing).
 fn update_crew_needs(
     time: Res<Time>,
-    oxygen_state: Res<OxygenState>,
     depth_state: Res<DepthState>,
     // EVA crew are on suit systems — needs frozen while outside
     mut crew_query: Query<&mut CrewMember, Without<EvaSalvaging>>,
 ) {
-    let oxygen_available = oxygen_state.oxygen_balance >= 0.0;
-
     for mut crew in crew_query.iter_mut() {
         if crew.health <= 0.0 {
             continue;
         }
 
-        if !oxygen_available {
-            crew.oxygen = (crew.oxygen - 10.0 * time.delta_secs()).max(0.0);
-        } else {
-            crew.oxygen = (crew.oxygen + 20.0 * time.delta_secs()).min(100.0);
-        }
-
-        if crew.oxygen < 50.0 {
-            crew.morale = (crew.morale - 5.0 * time.delta_secs()).max(0.0);
-        } else if depth_state.current_depth > 500.0 {
+        if depth_state.current_depth > 500.0 {
             // Deep-space dread erodes morale but bottoms out ABOVE both
             // the panic threshold (20) and the recovery threshold (30):
             // depth alone makes crew jumpy, never permanently catatonic.
@@ -538,7 +545,7 @@ fn update_crew_ai(
             _ => {}
         }
 
-        if crew.oxygen < 20.0 || crew.morale < 20.0 {
+        if crew.morale < 20.0 {
             crew.state = CrewState::Panicking;
         }
     }
@@ -596,40 +603,6 @@ fn crew_fire_suppression(
                 module: entity,
                 cause: FireExtinguishCause::CrewSuppressed,
             });
-        }
-    }
-}
-
-/// Checks for crew suffocation
-fn check_crew_suffocation(
-    time: Res<Time>,
-    config: Res<GameConfig>,
-    mut crew_query: Query<(Entity, &mut CrewMember), Without<EvaSalvaging>>,
-    mut damage_events: MessageWriter<CrewDamaged>,
-    mut death_events: MessageWriter<CrewDied>,
-) {
-    for (entity, mut crew) in crew_query.iter_mut() {
-        if crew.health <= 0.0 {
-            continue;
-        }
-
-        if crew.oxygen <= 0.0 {
-            let damage = config.suffocation_damage_rate * time.delta_secs();
-            crew.health -= damage;
-
-            damage_events.write(CrewDamaged {
-                crew: entity,
-                amount: damage,
-                source: CrewDamageSource::Suffocation,
-            });
-
-            if crew.health <= 0.0 {
-                death_events.write(CrewDied {
-                    crew: entity,
-                    name: crew.name.clone(),
-                    cause: CrewDamageSource::Suffocation,
-                });
-            }
         }
     }
 }
@@ -864,7 +837,7 @@ fn training_room_boost(
             // Morale boost (half of MessHall rate)
             crew.morale = (crew.morale + 1.0 * dt).min(100.0);
             // Trained crew resist panic better: recover from panicking at lower morale
-            if crew.state == CrewState::Panicking && crew.morale > 15.0 && crew.oxygen > 10.0 {
+            if crew.state == CrewState::Panicking && crew.morale > 15.0 {
                 crew.state = CrewState::Idle;
             }
         }
