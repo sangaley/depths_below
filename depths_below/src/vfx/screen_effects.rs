@@ -31,7 +31,6 @@ pub fn update_screen_effects(
     star_query: Query<(&Transform, &Star, &CelestialBody), Without<Ship>>,
     _bh_query: Query<(&Transform, &BlackHole, &CelestialBody), Without<Ship>>,
     gravity_force: Query<&crate::celestial::components::GravityForce, With<Ship>>,
-    oxygen_state: Res<crate::resources::OxygenState>,
     existing_rad: Query<Entity, With<RadiationOverlay>>,
     existing_grav: Query<Entity, With<GravityOverlay>>,
     existing_o2: Query<Entity, With<OxygenWarningOverlay>>,
@@ -79,37 +78,10 @@ pub fn update_screen_effects(
         }
     }
 
-    // === LOW OXYGEN WARNING OVERLAY ===
-    let o2_pct = if oxygen_state.max_oxygen > 0.0 {
-        oxygen_state.current_oxygen / oxygen_state.max_oxygen
-    } else {
-        1.0
-    };
-
-    if o2_pct < 0.25 {
-        if existing_o2.is_empty() {
-            commands.spawn((
-                (Node {
-                        position_type: PositionType::Absolute,
-                        width: Val::Percent(100.0),
-                        height: Val::Percent(100.0),
-                        ..default()
-                    }, BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.0)), ZIndex(6)),
-                OxygenWarningOverlay,
-            ));
-        }
-    }
+    // Low-oxygen warning overlay removed with crew O2 (2026-07-15) —
+    // clean up any leftover overlay entity, same as the radiation one.
     for entity in existing_o2.iter() {
-        if o2_pct > 0.30 {
-            commands.entity(entity).despawn();
-        } else {
-            // Pulsing red-black vignette when suffocating
-            let pulse = (time.elapsed_secs() * 3.0).sin() * 0.5 + 0.5;
-            let severity = 1.0 - (o2_pct / 0.25).clamp(0.0, 1.0);
-            let alpha = severity * 0.3 * pulse;
-            commands.entity(entity).insert(
-                BackgroundColor(Color::srgba(0.5, 0.0, 0.0, alpha))
-            );
-        }
+        commands.entity(entity).despawn();
     }
+    let _ = &time;
 }
