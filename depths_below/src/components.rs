@@ -908,7 +908,7 @@ impl ModuleType {
             ModuleType::Searchlight => "Searchlight",
             ModuleType::AirlockChamber => "Airlock Chamber",
             ModuleType::DockingPort => "Docking Port",
-            ModuleType::SalvageArm => "Salvage Arm",
+            ModuleType::SalvageArm => "Breaker Drill",
             ModuleType::AdvancedRepairBay => "Advanced Repair Bay",
             ModuleType::DroneBay => "Drone Bay",
             ModuleType::DeepFloodlight => "High-Power Spotlight",

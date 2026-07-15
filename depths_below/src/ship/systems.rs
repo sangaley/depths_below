@@ -12,6 +12,7 @@ use crate::events::*;
 pub fn update_ship_state(
     ship_query: Query<(Entity, &Depth), With<Ship>>,
     engine_query: Query<(&Engine, &Module, &ChildOf)>,
+    drill_query: Query<&super::drill::DrillRig>,
     mut depth_state: ResMut<DepthState>,
     mut noise_state: ResMut<NoiseState>,
 ) {
@@ -27,7 +28,15 @@ pub fn update_ship_state(
         .map(|(engine, _, _)| engine.noise_level)
         .sum();
 
-    noise_state.noise_level = noise;
+    // A grinding Breaker Drill is louder than cruising engines — the
+    // racket is the drill's price tag (creatures and AI hear it).
+    let drill_noise: f32 = drill_query
+        .iter()
+        .filter(|rig| rig.target.is_some())
+        .count() as f32
+        * super::drill::DRILL_NOISE;
+
+    noise_state.noise_level = noise + drill_noise;
 }
 
 /// Checks game over conditions

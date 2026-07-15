@@ -14,6 +14,7 @@ mod atmosphere;
 mod subsystems;
 mod heat;
 mod logistics;
+pub mod drill;
 
 pub use movement::*;
 pub use systems::*;
@@ -38,6 +39,8 @@ pub struct ShipPlugin;
 impl Plugin for ShipPlugin {
     fn build(&self, app: &mut App) {
         app
+            // Breaker Drill: contact wreck salvage (see drill.rs)
+            .add_systems(Update, drill::wreck_drill_system.run_if(in_state(GameState::Exploring)))
             // Resources
             .init_resource::<DepthState>()
             .init_resource::<PowerState>()

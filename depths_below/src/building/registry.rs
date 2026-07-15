@@ -1011,8 +1011,8 @@ pub fn build_registry() -> ModuleRegistry {
     });
 
     defs.insert(ModuleType::SalvageArm, ModuleDef {
-        name: "Salvage Arm",
-        description: "Articulated claw on a hydraulic boom. Snatches wreckage, samples, and the occasional drifting debris.",
+        name: "Breaker Drill",
+        description: "Industrial grinder that chews wreck blocks straight into the hold. Faster than an EVA detail and nobody's at risk — but it needs power, an operator, and the racket carries to everything with ears.",
         category: ModuleCategory::Utility,
         size: IVec2::new(1, 1),
         health: 60.0,
