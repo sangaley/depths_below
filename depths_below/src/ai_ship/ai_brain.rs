@@ -21,7 +21,7 @@ pub fn ai_brain_system(
     )>,
     player_ship: Query<(Entity, &Transform), With<Ship>>,
     creature_query: Query<(Entity, &Transform, &Creature), Without<Ship>>,
-    wreck_query: Query<(Entity, &Transform), With<AiShipWreck>>,
+    wreck_query: Query<(Entity, &Transform, &AiShipWreck)>,
     weapon_query: Query<(&Weapon, &Module, &OwnedByAiShip), Without<Engine>>,
     creature_grid: Res<CreatureGrid>,
 ) {
@@ -74,12 +74,16 @@ pub fn ai_brain_system(
                 (e, d, t.translation.truncate(), c.creature_type)
             }));
 
+        // Only the Rust Swarm scorer consumes this — wide range so
+        // scavenger waves spawned at the edge of the area actually smell
+        // the carcass and burn inward; picked-clean wrecks don't count.
         let nearest_wreck = wreck_query.iter()
-            .map(|(e, t)| {
+            .filter(|(_, _, aw)| aw.loot_remaining > 0)
+            .map(|(e, t, _)| {
                 let d = pos.distance(t.translation.truncate());
                 (e, d, t.translation.truncate())
             })
-            .filter(|(_, d, _)| *d < 600.0)
+            .filter(|(_, d, _)| *d < 3000.0)
             .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         struct ScoredAction {

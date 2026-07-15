@@ -6,6 +6,7 @@ mod movement;
 mod combat;
 mod noise;
 pub mod wreck;
+mod scavenger;
 pub mod simulation;
 
 use bevy::prelude::*;
@@ -20,6 +21,7 @@ impl Plugin for AiShipPlugin {
     fn build(&self, app: &mut App) {
         app
             .init_resource::<WorldSimulation>()
+            .init_resource::<scavenger::ScavengerWaves>()
             .add_systems(OnEnter(GameState::Exploring), simulation::init_world_simulation)
             .add_systems(
                 Update,
@@ -44,6 +46,9 @@ impl Plugin for AiShipPlugin {
                     wreck::ai_ship_death_system,
                     wreck::update_death_rattle,
                     wreck::wreck_fire_consumes_loot,
+                    scavenger::schedule_scavenger_waves.after(wreck::ai_ship_death_system),
+                    scavenger::spawn_scavenger_waves,
+                    scavenger::scavengers_feed,
                 )
                     .after(SpatialSet::Update)
                     .run_if(in_state(GameState::Exploring)),
