@@ -125,7 +125,10 @@ pub fn spawn_starter_crew(
 }
 
 /// Computes ModuleEfficiency for all modules with a CrewStation.
-/// staffing_factor: 0.5 unstaffed, 1.0 staffed (crew alive & not panicking/unconscious).
+/// staffing_factor: 0.0 unstaffed, 1.0 staffed (crew alive, aboard, and
+/// not panicking/unconscious) — a station nobody operates DOES NOT RUN.
+/// That's the teeth behind crew scarcity: send everyone out on salvage
+/// and the unmanned reactors/engines/guns go dark until they're back.
 /// value = damage_efficiency * staffing_factor
 fn compute_module_efficiency(
     mut commands: Commands,
@@ -141,20 +144,21 @@ fn compute_module_efficiency(
                 if crew.health > 0.0
                     && crew.state != CrewState::Panicking
                     && crew.state != CrewState::Unconscious
+                    && crew.state != CrewState::Salvaging
                 {
                     1.0
                 } else {
-                    // Dead/panicking/unconscious crew — clear assignment
+                    // Dead/panicking/unconscious/EVA crew — clear assignment
                     station.assigned_crew = None;
-                    0.5
+                    0.0
                 }
             } else {
                 // Crew entity no longer exists — clear assignment
                 station.assigned_crew = None;
-                0.5
+                0.0
             }
         } else {
-            0.5
+            0.0
         };
 
         commands.entity(entity).insert(ModuleEfficiency {
@@ -205,7 +209,7 @@ fn update_staffing_state(
 fn auto_assign_crew(
     time: Res<Time>,
     mut timer: ResMut<AutoAssignTimer>,
-    mut station_query: Query<(Entity, &mut CrewStation)>,
+    mut station_query: Query<(Entity, &mut CrewStation, Has<KeepManned>)>,
     crew_query: Query<(Entity, &CrewMember)>,
 ) {
     timer.timer.tick(time.delta());
@@ -215,14 +219,14 @@ fn auto_assign_crew(
 
     // Collect all crew currently assigned to any station
     let mut assigned_crew: std::collections::HashSet<Entity> = std::collections::HashSet::new();
-    for (_, station) in station_query.iter() {
+    for (_, station, _) in station_query.iter() {
         if let Some(crew_entity) = station.assigned_crew {
             assigned_crew.insert(crew_entity);
         }
     }
 
     // Clean up dead/despawned crew from stations
-    for (_, mut station) in station_query.iter_mut() {
+    for (_, mut station, _) in station_query.iter_mut() {
         if let Some(crew_entity) = station.assigned_crew {
             if let Ok((_, crew)) = crew_query.get(crew_entity) {
                 if crew.health <= 0.0 {
@@ -238,15 +242,15 @@ fn auto_assign_crew(
     }
 
     // Collect unfilled stations (priority > 0, not manually assigned)
-    let mut unfilled: Vec<(Entity, u8)> = Vec::new();
-    for (entity, station) in station_query.iter() {
+    let mut unfilled: Vec<(Entity, u8, bool)> = Vec::new();
+    for (entity, station, pinned) in station_query.iter() {
         if station.priority > 0 && !station.manually_assigned && station.assigned_crew.is_none() {
-            unfilled.push((entity, station.priority));
+            unfilled.push((entity, station.priority, pinned));
         }
     }
 
-    // Sort by priority descending
-    unfilled.sort_by(|a, b| b.1.cmp(&a.1));
+    // Pinned (keep-manned) posts staff first, then by priority descending
+    unfilled.sort_by(|a, b| b.2.cmp(&a.2).then(b.1.cmp(&a.1)));
 
     // Collect available crew (alive, not panicking/unconscious, not assigned)
     let mut available_crew: Vec<Entity> = Vec::new();
@@ -263,14 +267,14 @@ fn auto_assign_crew(
 
     // Assign in order
     let mut crew_idx = 0;
-    for (station_entity, _priority) in unfilled {
+    for (station_entity, _priority, _pinned) in unfilled {
         if crew_idx >= available_crew.len() {
             break;
         }
         let crew_entity = available_crew[crew_idx];
         crew_idx += 1;
 
-        if let Ok((_, mut station)) = station_query.get_mut(station_entity) {
+        if let Ok((_, mut station, _)) = station_query.get_mut(station_entity) {
             station.assigned_crew = Some(crew_entity);
         }
     }

@@ -34,7 +34,6 @@ const ARRIVE_WRECK: f32 = 16.0;
 const ARRIVE_SHIP: f32 = 60.0;
 /// Final-approach standoff: crew aim just outside their block, then hop in.
 const APPROACH_DIST: f32 = 45.0;
-const DETAIL_SIZE: usize = 3;
 /// Blast radius/scale for wreck explosions hitting EVA crew. Suits soak
 /// half the blast — a final-boom at point blank hurts badly but is
 /// survivable for a healthy crew member.
@@ -81,7 +80,7 @@ type BlockQuery<'w, 's> = Query<
 pub fn order_salvage_detail(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
-    ship_query: Query<&GlobalTransform, With<Ship>>,
+    ship_query: Query<(Entity, &GlobalTransform), With<Ship>>,
     wreck_query: Query<(Entity, &GlobalTransform, &Wreck, &PointOfInterest)>,
     mut active_eva: Query<&mut EvaSalvaging>,
     mut crew_query: Query<
@@ -89,6 +88,8 @@ pub fn order_salvage_detail(
         Without<EvaSalvaging>,
     >,
     mut station_query: Query<(Entity, &mut CrewStation)>,
+    station_info: Query<(&Module, Has<KeepManned>), With<CrewStation>>,
+    weapon_marker: Query<(), With<Weapon>>,
     children_query: Query<&Children>,
     block_query: BlockQuery,
     mut notifications: MessageWriter<ShowNotification>,
@@ -110,7 +111,7 @@ pub fn order_salvage_detail(
         return;
     }
 
-    let Ok(ship_gt) = ship_query.single() else { return };
+    let Ok((ship_entity, ship_gt)) = ship_query.single() else { return };
     let ship_pos = ship_gt.translation().truncate();
 
     // Nearest wreck in dispatch range — distance measured to whichever
@@ -135,6 +136,31 @@ pub fn order_salvage_detail(
     }
     let Some((wreck_entity, wreck_center, _)) = best else { return };
 
+    // Which posts keep their operator? Player-pinned stations
+    // (right-click a crew station to toggle), or the default skeleton
+    // crew when nothing is pinned: helm + one gun.
+    let mut pinned_posts: Vec<Entity> = Vec::new();
+    let mut default_helm: Option<Entity> = None;
+    let mut default_gun: Option<Entity> = None;
+    if let Ok(children) = children_query.get(ship_entity) {
+        for child in children.iter() {
+            if let Ok((module, is_pinned)) = station_info.get(child) {
+                if is_pinned {
+                    pinned_posts.push(child);
+                }
+                if default_helm.is_none() && module.module_type == ModuleType::HelmStation {
+                    default_helm = Some(child);
+                }
+                if default_gun.is_none() && weapon_marker.get(child).is_ok() {
+                    default_gun = Some(child);
+                }
+            }
+        }
+    }
+    if pinned_posts.is_empty() {
+        pinned_posts.extend(default_helm.into_iter().chain(default_gun));
+    }
+
     // Manually-assigned crew hold their posts. Auto-assigned crew are fair
     // game — the auto-assigner staffs every free hand within seconds, so
     // "unassigned idler" is an empty set on any crewed ship. Pull them the
@@ -147,6 +173,37 @@ pub fn order_salvage_detail(
                 manual.insert(crew_entity);
             } else {
                 auto_assigned.insert(crew_entity, station_entity);
+            }
+        }
+    }
+
+    // Crew reserved to man the pinned posts. Keep whoever's already
+    // there; an unstaffed pinned post claims an idle hand on the spot
+    // so the reserve is real, not aspirational.
+    let mut reserved: HashSet<Entity> = HashSet::new();
+    for &post in &pinned_posts {
+        if let Ok((_, station)) = station_query.get(post) {
+            if let Some(crew_entity) = station.assigned_crew {
+                reserved.insert(crew_entity);
+            }
+        }
+    }
+    let mut idle_pool: Vec<Entity> = crew_query
+        .iter()
+        .filter(|(entity, crew, ..)| {
+            crew.health > 0.0
+                && crew.state == CrewState::Idle
+                && !manual.contains(entity)
+                && !reserved.contains(entity)
+        })
+        .map(|(entity, ..)| entity)
+        .collect();
+    for &post in &pinned_posts {
+        let Ok((_, mut station)) = station_query.get_mut(post) else { continue };
+        if station.assigned_crew.is_none() {
+            if let Some(crew_entity) = idle_pool.pop() {
+                station.assigned_crew = Some(crew_entity);
+                reserved.insert(crew_entity);
             }
         }
     }
@@ -169,12 +226,10 @@ pub fn order_salvage_detail(
         .unwrap_or_default();
     blocks.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
+    // Everyone not holding a post ships out.
     let mut dispatched = 0usize;
     let (mut panicking, mut busy, mut held) = (0u32, 0u32, 0u32);
     for (entity, mut crew, mut transform, gt, mut sprite) in crew_query.iter_mut() {
-        if dispatched >= DETAIL_SIZE {
-            break;
-        }
         if crew.health <= 0.0 {
             continue;
         }
@@ -184,7 +239,7 @@ pub fn order_salvage_detail(
             panicking += 1;
             continue;
         }
-        if manual.contains(&entity) {
+        if manual.contains(&entity) || reserved.contains(&entity) {
             held += 1;
             continue;
         }

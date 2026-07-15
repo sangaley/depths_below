@@ -167,12 +167,21 @@ pub fn update_radial_menu(
     }
 }
 
-/// System: spawn radial menu on right-click during Exploring
+/// System: spawn radial menu on right-click during Exploring.
+/// Right-clicking one of OUR crew-station blocks instead toggles its
+/// keep-manned pin (crew there never leave for salvage details).
 pub fn spawn_radial_on_right_click(
     mut commands: Commands,
     mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     existing: Query<Entity, With<RadialMenu>>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::MainCamera>>,
+    ship_query: Query<Entity, With<crate::components::Ship>>,
+    station_query: Query<
+        (Entity, &GlobalTransform, &crate::components::Module, &ChildOf, Has<crate::components::KeepManned>),
+        With<crate::components::CrewStation>,
+    >,
+    mut notifications: MessageWriter<crate::events::ShowNotification>,
 ) {
     if !mouse.just_pressed(MouseButton::Right) { return; }
 
@@ -185,6 +194,36 @@ pub fn spawn_radial_on_right_click(
     let Some(cursor_pos) = windows.single().ok()
         .and_then(|w| w.cursor_position())
     else { return };
+
+    // Crew-station block under the cursor? Toggle its pin, no menu.
+    let world_pos = camera_query.single().ok()
+        .and_then(|(cam, gt)| cam.viewport_to_world_2d(gt, cursor_pos).ok());
+    if let (Ok(ship), Some(world_pos)) = (ship_query.single(), world_pos) {
+        for (entity, gt, module, parent, pinned) in station_query.iter() {
+            if parent.0 != ship {
+                continue;
+            }
+            if gt.translation().truncate().distance(world_pos) < 33.0 {
+                let name = module.module_type.name();
+                if pinned {
+                    commands.entity(entity).remove::<crate::components::KeepManned>();
+                    notifications.write(crate::events::ShowNotification {
+                        message: format!("{} unpinned — its crew may leave for salvage.", name),
+                        notification_type: crate::events::NotificationType::Info,
+                        duration: 2.5,
+                    });
+                } else {
+                    commands.entity(entity).insert(crate::components::KeepManned);
+                    notifications.write(crate::events::ShowNotification {
+                        message: format!("{} pinned — will stay manned during salvage.", name),
+                        notification_type: crate::events::NotificationType::Success,
+                        duration: 2.5,
+                    });
+                }
+                return;
+            }
+        }
+    }
 
     spawn_radial_menu(&mut commands, cursor_pos, space_radial_options());
 }

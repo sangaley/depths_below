@@ -1405,6 +1405,13 @@ pub struct CrewStation {
     pub manually_assigned: bool,   // player locked this assignment
 }
 
+/// Right-click pin on a crew station: this post keeps its operator —
+/// salvage details and other crew drafts never pull them. Unpinned
+/// stations lose their crew to salvage duty (and stop working while
+/// unmanned). Defaults when nothing is pinned: helm + one gun.
+#[derive(Component)]
+pub struct KeepManned;
+
 /// Marks a module as providing crew berths.
 #[derive(Component)]
 pub struct Quarters {

@@ -301,10 +301,24 @@ pub fn spawn_module(
         commands.entity(module_entity).insert(FirebreakMarker);
     }
 
-    // Insert CrewStation if this module type requires one
+    // Insert CrewStation if this module type requires one. Priority
+    // orders auto-assignment — vital systems staff first, because an
+    // UNMANNED station doesn't run at all (see compute_module_efficiency),
+    // and 8 crew never cover every station on a real ship.
     if def.crew_station {
+        let priority = match module_type {
+            ModuleType::HelmStation => 9,
+            _ => match module_type.category() {
+                ModuleCategory::Power => 10,
+                ModuleCategory::Propulsion => 9,
+                ModuleCategory::LifeSupport => 8,
+                ModuleCategory::Weapons => 6,
+                ModuleCategory::Control | ModuleCategory::Detection => 4,
+                _ => 3,
+            },
+        };
         commands.entity(module_entity).insert(CrewStation {
-            priority: 5,
+            priority,
             assigned_crew: None,
             manually_assigned: false,
         });
