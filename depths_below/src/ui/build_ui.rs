@@ -307,8 +307,11 @@ pub fn update_build_ghost(
                 );
                 let center_x = (min_x as f32 + max_x as f32) / 2.0 * 66.0;
                 let center_y = (min_y as f32 + max_y as f32) / 2.0 * 66.0 - 33.0;
-                let sprite_w = 48.0 + (max_x - min_x) as f32 * 66.0;
-                let sprite_h = 48.0 + (max_y - min_y) as f32 * 66.0;
+                // Unrotated footprint — the rotation quat below does the
+                // turning (see spawn_module: sizing from rotated bounds
+                // double-rotates multi-cell sprites off their cells).
+                let sprite_w = 48.0 + (def.size.x - 1) as f32 * 66.0;
+                let sprite_h = 48.0 + (def.size.y - 1) as f32 * 66.0;
 
                 transform.translation.x = center_x;
                 transform.translation.y = center_y;

@@ -240,8 +240,12 @@ pub fn spawn_module(
     );
     let center_x = (min_x as f32 + max_x as f32) / 2.0 * 66.0;
     let center_y = (min_y as f32 + max_y as f32) / 2.0 * 66.0 - 33.0;
-    let sprite_w = 60.0 + (max_x - min_x) as f32 * 66.0;
-    let sprite_h = 60.0 + (max_y - min_y) as f32 * 66.0;
+    // Sprite dimensions come from the UNROTATED footprint — cells_for
+    // already returns rotation-adjusted cells, and the visual rotation
+    // below turns the sprite to match. Sizing from the rotated bounds
+    // double-rotated multi-cell modules 90° off their claimed cells.
+    let sprite_w = 60.0 + (def.size.x - 1) as f32 * 66.0;
+    let sprite_h = 60.0 + (def.size.y - 1) as f32 * 66.0;
 
     let sprite_path = sprite_map::module_sprite_path(module_type)
         .unwrap_or("sprites/modules/small_reactor.png");

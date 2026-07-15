@@ -405,7 +405,10 @@ fn update_ghost_preview(
     mut build_state: ResMut<BuildingState>,
     current_state: Res<State<BuildState>>,
     occupancy: Res<GridOccupancy>,
-    module_query: Query<&Module>,
+    // Player modules only — wrecks keep real Module children since the
+    // destruction rework, and their local grid coords poisoned the
+    // positional rules (engines became unplaceable anywhere).
+    module_query: Query<&Module, Without<crate::ai_ship::components::OwnedByAiShip>>,
     hull_query: Query<(&HullSegment, &Transform, &ChildOf)>,
     registry: Res<ModuleRegistry>,
     currency: Res<Currency>,
@@ -608,20 +611,23 @@ fn auto_rotate(grid_pos: IVec2, occupancy: &GridOccupancy) -> Option<Rotation> {
 fn check_position_rules(
     selection: &BuildSelection,
     grid_pos: IVec2,
-    module_query: &Query<&Module>,
+    module_query: &Query<&Module, Without<crate::ai_ship::components::OwnedByAiShip>>,
 ) -> bool {
     match selection {
         BuildSelection::Hull(_) => true,
         BuildSelection::Module(mt) => {
             let cat = mt.category();
             match cat {
-                // Propulsion: should be at the rear (rightmost x positions)
+                // Propulsion: at the rear. The ship builds nose-right —
+                // the starter vessel's engines sit at the LEFTMOST x —
+                // so rear means minimum x, not maximum (the old check
+                // was backwards and rejected every engine placement).
                 ModuleCategory::Propulsion => {
-                    let max_x = module_query.iter()
+                    let min_x = module_query.iter()
                         .filter(|m| m.module_type.category() != ModuleCategory::Propulsion)
                         .map(|m| m.grid_position.x)
-                        .max();
-                    max_x.map_or(true, |mx| grid_pos.x >= mx)
+                        .min();
+                    min_x.map_or(true, |mn| grid_pos.x <= mn)
                 }
                 // Crew: not adjacent to power modules (heat/radiation)
                 ModuleCategory::Crew => {
