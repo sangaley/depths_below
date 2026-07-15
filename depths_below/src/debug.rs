@@ -60,7 +60,8 @@ fn toggle_debug_menu(
     mut commands: Commands,
     panel_query: Query<Entity, With<DebugMenuPanel>>,
 ) {
-    if !keyboard.just_pressed(KeyCode::F10) {
+    // Backquote as primary — F10 is a macOS media key unless Fn is held.
+    if !keyboard.just_pressed(KeyCode::Backquote) && !keyboard.just_pressed(KeyCode::F10) {
         return;
     }
     menu.open = !menu.open;
@@ -83,7 +84,7 @@ fn toggle_debug_menu(
             ))
             .with_children(|panel| {
                 for line in [
-                    "DEBUG  (F10 close)",
+                    "DEBUG  (` close)",
                     "7  +1000 credits",
                     "8  spawn hostile ship",
                     "9  spawn fresh wreck",
