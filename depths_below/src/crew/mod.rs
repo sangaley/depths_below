@@ -6,6 +6,9 @@ use crate::events::*;
 use crate::building::rooms::RoomMap;
 use crate::building::GridOccupancy;
 
+pub mod eva_salvage;
+use eva_salvage::EvaSalvaging;
+
 pub struct CrewPlugin;
 
 impl Plugin for CrewPlugin {
@@ -47,7 +50,19 @@ impl Plugin for CrewPlugin {
                     engineering_station_boost,
                 )
                     .run_if(in_state(GameState::Exploring)),
-            );
+            )
+            // EVA salvage: crew ferry loot from wrecks (see eva_salvage.rs)
+            .add_systems(
+                Update,
+                (
+                    eva_salvage::order_salvage_detail,
+                    eva_salvage::run_salvage_detail,
+                    eva_salvage::eva_blast_damage,
+                )
+                    .chain()
+                    .run_if(in_state(GameState::Exploring)),
+            )
+            .add_systems(OnExit(GameState::Exploring), eva_salvage::abort_eva_on_exit);
     }
 }
 
@@ -239,6 +254,7 @@ fn auto_assign_crew(
         if crew.health > 0.0
             && crew.state != CrewState::Panicking
             && crew.state != CrewState::Unconscious
+            && crew.state != CrewState::Salvaging
             && !assigned_crew.contains(&entity)
         {
             available_crew.push(entity);
@@ -265,7 +281,8 @@ fn update_crew_needs(
     time: Res<Time>,
     oxygen_state: Res<OxygenState>,
     depth_state: Res<DepthState>,
-    mut crew_query: Query<&mut CrewMember>,
+    // EVA crew are on suit systems — needs frozen while outside
+    mut crew_query: Query<&mut CrewMember, Without<EvaSalvaging>>,
 ) {
     let oxygen_available = oxygen_state.oxygen_balance >= 0.0;
 
@@ -291,7 +308,7 @@ fn update_crew_needs(
 /// Maps each crew member's world position to a grid position and room via RoomMap.
 fn update_crew_room_location(
     mut commands: Commands,
-    mut crew_query: Query<(Entity, &GlobalTransform, Option<&mut CrewRoomLocation>), With<CrewMember>>,
+    mut crew_query: Query<(Entity, &GlobalTransform, Option<&mut CrewRoomLocation>), (With<CrewMember>, Without<EvaSalvaging>)>,
     room_map: Res<RoomMap>,
 ) {
     for (entity, global_transform, location) in crew_query.iter_mut() {
@@ -383,7 +400,8 @@ fn crew_emergency_dispatch(
 fn update_crew_ai(
     hull_query: Query<(Entity, &HullSegment, &Transform)>,
     fire_query: Query<Entity, With<OnFire>>,
-    mut crew_query: Query<&mut CrewMember>,
+    // EVA crew's state machine is owned by eva_salvage while they're out
+    mut crew_query: Query<&mut CrewMember, Without<EvaSalvaging>>,
 ) {
     let has_depressurized = hull_query.iter().any(|(_, hull, _)| hull.is_depressurized);
     let has_fires = !fire_query.is_empty();
@@ -469,7 +487,7 @@ fn crew_fire_suppression(
 fn check_crew_suffocation(
     time: Res<Time>,
     config: Res<GameConfig>,
-    mut crew_query: Query<(Entity, &mut CrewMember)>,
+    mut crew_query: Query<(Entity, &mut CrewMember), Without<EvaSalvaging>>,
     mut damage_events: MessageWriter<CrewDamaged>,
     mut death_events: MessageWriter<CrewDied>,
 ) {
@@ -782,7 +800,8 @@ fn engineering_station_boost(
 /// and fixes them. This handles crew hired at docking stations.
 fn reconcile_hired_crew(
     mut commands: Commands,
-    crew_query: Query<(Entity, Option<&ChildOf>), With<CrewMember>>,
+    // EVA crew are deliberately un-parented — don't "fix" them mid-flight
+    crew_query: Query<(Entity, Option<&ChildOf>), (With<CrewMember>, Without<EvaSalvaging>)>,
     ship_query: Query<Entity, With<Ship>>,
     mut roster: ResMut<CrewRoster>,
 ) {

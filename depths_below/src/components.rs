@@ -1393,6 +1393,8 @@ pub enum CrewState {
     Repairing,
     Panicking,
     Unconscious,
+    /// On EVA ferrying loot from a wreck (see crew::eva_salvage)
+    Salvaging,
 }
 
 /// A module that can be staffed by one crew member.

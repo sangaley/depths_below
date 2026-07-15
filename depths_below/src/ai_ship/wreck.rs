@@ -225,11 +225,11 @@ pub fn ai_ship_death_system(
             AiShipType::RustSwarm => "Rust Swarm",
         };
 
-        let mut message = format!("{} vessel destroyed! {} (F to loot)", type_name, condition);
+        let mut message = format!("{} vessel destroyed! {} (F: salvage detail)", type_name, condition);
         if salvage_value > 0.0 {
             let payout = salvage_value.round() as u32;
             currency.credits += payout;
-            message = format!("{} destroyed! +{}c intact salvage. {} (F to loot)", type_name, payout, condition);
+            message = format!("{} destroyed! +{}c intact salvage. {} (F: salvage detail)", type_name, payout, condition);
         }
 
         notifications.write(ShowNotification {

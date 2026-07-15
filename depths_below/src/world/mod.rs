@@ -32,7 +32,6 @@ impl Plugin for WorldPlugin {
                     check_depth_zone_change,
                     update_biome,
                     check_poi_discovery,
-                    salvage_wreck_system,
                     check_docking_proximity,
                     home_base::home_station_docking,
                     home_base::outpost_resupply,
@@ -214,106 +213,8 @@ fn check_docking_proximity(
     }
 }
 
-/// Salvage loot from nearby wrecks with F key.
-/// AI-ship wrecks roll faction loot tables biased by kill forensics
-/// (see ai_ship::wreck::roll_wreck_loot); world-generated wrecks use a
-/// generic table. No flat credit payout — loot is worth what a station
-/// will pay for it, so WHERE you sell matters (see station_types).
-fn salvage_wreck_system(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    ship_query: Query<&GlobalTransform, With<Ship>>,
-    mut wreck_query: Query<(
-        &GlobalTransform,
-        &mut Wreck,
-        &mut PointOfInterest,
-        Option<&crate::ai_ship::components::AiShipWreck>,
-    )>,
-    salvage_query: Query<&SalvageSystem, With<Module>>,
-    mut inventory: ResMut<Inventory>,
-    mut statistics: ResMut<Statistics>,
-    mut notifications: MessageWriter<ShowNotification>,
-) {
-    if !keyboard.just_pressed(KeyCode::KeyF) {
-        return;
-    }
-
-    let Ok(ship_gt) = ship_query.single() else { return };
-    let ship_pos = ship_gt.translation().truncate();
-
-    // Check if we have a salvage module (better range and yield)
-    let has_salvage = salvage_query.iter().next().is_some();
-    let salvage_range = if has_salvage { 150.0 } else { 80.0 };
-    let items_per_salvage = if has_salvage { 2u32 } else { 1u32 };
-
-    for (wreck_gt, mut wreck, mut poi, ai_wreck) in wreck_query.iter_mut() {
-        if poi.poi_type != PoiType::Wreck {
-            continue;
-        }
-
-        let dist = ship_pos.distance(wreck_gt.translation().truncate());
-        if dist > salvage_range {
-            continue;
-        }
-
-        if wreck.loot_remaining == 0 {
-            notifications.write(ShowNotification {
-                message: "This wreck has been fully salvaged.".into(),
-                notification_type: NotificationType::Info,
-                duration: 2.0,
-            });
-            return;
-        }
-
-        let generic_loot = [
-            ItemType::ScrapMetal,
-            ItemType::Crystal,
-            ItemType::FuelCell,
-            ItemType::RareAlloy,
-            ItemType::AmmoCrate,
-        ];
-        let mut rng = rand::thread_rng();
-
-        for _ in 0..items_per_salvage {
-            if wreck.loot_remaining == 0 {
-                break;
-            }
-
-            let item = match ai_wreck {
-                Some(aw) => crate::ai_ship::wreck::roll_wreck_loot(aw.ship_type, aw.intact_frac, &mut rng),
-                None => generic_loot[rand::random::<usize>() % generic_loot.len()],
-            };
-            if inventory.add_item(item, 1) {
-                wreck.loot_remaining -= 1;
-
-                notifications.write(ShowNotification {
-                    message: format!("Salvaged {}", item.name()),
-                    notification_type: NotificationType::Success,
-                    duration: 2.5,
-                });
-            } else {
-                notifications.write(ShowNotification {
-                    message: "Inventory full! Sell cargo at a settlement.".into(),
-                    notification_type: NotificationType::Warning,
-                    duration: 3.0,
-                });
-                break;
-            }
-        }
-
-        if wreck.loot_remaining == 0 {
-            poi.discovered = true;
-            wreck.is_explored = true;
-            statistics.wrecks_salvaged += 1;
-            notifications.write(ShowNotification {
-                message: "Wreck fully salvaged!".into(),
-                notification_type: NotificationType::Info,
-                duration: 3.0,
-            });
-        }
-
-        return; // Only salvage one wreck per keypress
-    }
-}
+// NOTE: wreck looting moved to crew::eva_salvage — F now dispatches a
+// crew salvage detail instead of teleporting loot into the hold.
 
 /// Discover log entries when near POIs that have them
 fn discover_log_entries(
