@@ -23,6 +23,7 @@ impl Plugin for WorldPlugin {
             .init_resource::<WorldState>()
             .init_resource::<ChunkManager>()
             .init_resource::<DiscoveredLocations>()
+            .init_resource::<MarketEvents>()
             // Home station structure exists from the very first (docked) state
             .add_systems(OnEnter(GameState::StationDocked), home_base::spawn_home_station)
             .add_systems(
@@ -32,6 +33,7 @@ impl Plugin for WorldPlugin {
                     check_depth_zone_change,
                     update_biome,
                     check_poi_discovery,
+                    tick_market_events,
                     check_docking_proximity,
                     home_base::home_station_docking,
                     home_base::outpost_resupply,
@@ -215,6 +217,63 @@ fn check_docking_proximity(
 
 // NOTE: wreck looting moved to crew::eva_salvage — F now dispatches a
 // crew salvage detail instead of teleporting loot into the hold.
+
+/// MARKET EVENTS — every few minutes an outpost may develop a shortage
+/// and pay well over the odds for one good for a while. Prices resolve
+/// through resources::live_item_price, so the docking menu reflects the
+/// premium automatically; expiry is silent (the notification names the
+/// duration up front).
+fn tick_market_events(
+    time: Res<Time>,
+    mut events: ResMut<MarketEvents>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    use rand::Rng;
+    let dt = time.delta_secs();
+    events.active.retain_mut(|e| {
+        e.remaining -= dt;
+        e.remaining > 0.0
+    });
+
+    events.next_roll -= dt;
+    if events.next_roll > 0.0 {
+        return;
+    }
+    let mut rng = rand::thread_rng();
+    events.next_roll = rng.gen_range(180.0..300.0);
+    if events.active.len() >= 2 {
+        return;
+    }
+
+    let station_idx = rng.gen_range(1..=12usize);
+    let goods = [
+        ItemType::ScrapMetal,
+        ItemType::Crystal,
+        ItemType::BioSample,
+        ItemType::FuelCell,
+        ItemType::RareAlloy,
+        ItemType::AncientArtifact,
+        ItemType::AmmoCrate,
+    ];
+    let item = goods[rng.gen_range(0..goods.len())];
+    let sell_mult = rng.gen_range(1.6..2.0_f32);
+    let remaining = rng.gen_range(300.0..480.0_f32);
+
+    let type_name = station_types::station_type_name(station_types::station_type(station_idx));
+    notifications.write(ShowNotification {
+        message: format!(
+            "MARKET: Outpost {} ({}) short on {} — paying {:.0}% for ~{:.0} min!",
+            station_idx,
+            type_name,
+            item.name(),
+            sell_mult * 100.0,
+            remaining / 60.0
+        ),
+        notification_type: NotificationType::Info,
+        duration: 6.0,
+    });
+    events.active.push(MarketEvent { station_idx, item, sell_mult, remaining });
+}
 
 /// Discover log entries when near POIs that have them
 fn discover_log_entries(

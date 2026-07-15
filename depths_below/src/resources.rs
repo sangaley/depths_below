@@ -395,14 +395,54 @@ pub fn station_item_price(station_idx: usize, item: ItemType) -> u32 {
         .max(1.0) as u32
 }
 
-/// Per-unit BUY price at a station: 1.5x its sell price. The spread
-/// kills same-station arbitrage, while station identity keeps cross-
-/// station routes alive — a Mining Colony's cheap scrap (0.55x sell →
-/// ~0.83x buy) resells at a Trade Hub (1.2x) at a real margin. This is
-/// what turns station types into trade ROUTES instead of just
-/// differently-colored cash-out points.
-pub fn station_item_buy_price(station_idx: usize, item: ItemType) -> u32 {
-    let sell = station_item_price(station_idx, item);
+/// A temporary shortage: one station pays over the odds for one item
+/// for a few minutes. Keeps trade routes from being solved once and
+/// forever — the best route this run isn't the best route right now.
+pub struct MarketEvent {
+    pub station_idx: usize,
+    pub item: ItemType,
+    pub sell_mult: f32,
+    pub remaining: f32,
+}
+
+#[derive(Resource)]
+pub struct MarketEvents {
+    pub active: Vec<MarketEvent>,
+    /// Seconds until the next shortage roll.
+    pub next_roll: f32,
+}
+
+impl Default for MarketEvents {
+    fn default() -> Self {
+        Self { active: Vec::new(), next_roll: 120.0 }
+    }
+}
+
+impl MarketEvents {
+    pub fn multiplier(&self, station_idx: usize, item: ItemType) -> f32 {
+        self.active
+            .iter()
+            .filter(|e| e.station_idx == station_idx && e.item == item)
+            .map(|e| e.sell_mult)
+            .fold(1.0, f32::max)
+    }
+}
+
+/// Sell price including any active shortage at this station.
+pub fn live_item_price(events: &MarketEvents, station_idx: usize, item: ItemType) -> u32 {
+    ((station_item_price(station_idx, item) as f32) * events.multiplier(station_idx, item))
+        .round()
+        .max(1.0) as u32
+}
+
+/// Per-unit BUY price at a station: 1.5x its (live) sell price. The
+/// spread kills same-station arbitrage, while station identity keeps
+/// cross-station routes alive — a Mining Colony's cheap scrap (0.55x
+/// sell → ~0.83x buy) resells at a Trade Hub (1.2x) at a real margin.
+/// Shortages raise the local buy price too: scarce goods cost more
+/// everywhere they're scarce.
+pub fn live_item_buy_price(events: &MarketEvents, station_idx: usize, item: ItemType) -> u32 {
+    let sell = live_item_price(events, station_idx, item);
     (sell * 3 / 2).max(sell + 2)
 }
 

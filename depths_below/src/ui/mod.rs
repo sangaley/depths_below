@@ -2348,9 +2348,9 @@ fn sell_choices(inventory: &Inventory) -> Vec<Option<ItemType>> {
 }
 
 /// Description + unit cost for the current buy-goods choice.
-fn buy_row(inventory: &Inventory, station_idx: usize, choice_idx: usize) -> (String, u32, ItemType) {
+fn buy_row(inventory: &Inventory, station_idx: usize, choice_idx: usize, market: &MarketEvents) -> (String, u32, ItemType) {
     let item = TRADE_GOODS[choice_idx % TRADE_GOODS.len()];
-    let price = crate::resources::station_item_buy_price(station_idx, item);
+    let price = crate::resources::live_item_buy_price(market, station_idx, item);
     let held = inventory.items.get(&item).copied().unwrap_or(0);
     (
         format!("{} @ {}c each (hold: {})  (Left/Right: browse, Enter: buy 1)", item.name(), price, held),
@@ -2360,20 +2360,21 @@ fn buy_row(inventory: &Inventory, station_idx: usize, choice_idx: usize) -> (Str
 }
 
 /// Description + value for the current sell-cargo choice at this station.
-fn sell_row(inventory: &Inventory, station_idx: usize, choice: Option<ItemType>) -> (String, u32) {
+fn sell_row(inventory: &Inventory, station_idx: usize, choice: Option<ItemType>, market: &MarketEvents) -> (String, u32) {
     match choice {
         None => {
             let mut total = 0u32;
             for (item, count) in &inventory.items {
-                total += crate::resources::station_item_price(station_idx, *item) * count;
+                total += crate::resources::live_item_price(market, station_idx, *item) * count;
             }
             (format!("ALL cargo — {}c  (Left/Right: pick a single stack)", total), total)
         }
         Some(item) => {
             let count = inventory.items.get(&item).copied().unwrap_or(0);
-            let price = crate::resources::station_item_price(station_idx, item);
+            let price = crate::resources::live_item_price(market, station_idx, item);
             let value = price * count;
-            (format!("{}x {} @ {}c each = {}c  (Left/Right: cycle)", count, item.name(), price, value), value)
+            let tag = if market.multiplier(station_idx, item) > 1.0 { "  ★ SHORTAGE" } else { "" };
+            (format!("{}x {} @ {}c each = {}c{}  (Left/Right: cycle)", count, item.name(), price, value, tag), value)
         }
     }
 }
@@ -2387,6 +2388,7 @@ fn get_docking_services(
     total_berths: u32,
     inventory: &Inventory,
     station_idx: usize,
+    market: &MarketEvents,
 ) -> Vec<DockingService> {
     let hull_damage = 1.0 - hull_state.hull_integrity;
     let hull_repair_full_cost = (hull_damage * 500.0) as u32;
@@ -2414,7 +2416,7 @@ fn get_docking_services(
     // Sell value: count total sellable items at this station's prices
     let mut sell_value = 0u32;
     for (item_type, count) in &inventory.items {
-        sell_value += crate::resources::station_item_price(station_idx, *item_type) * count;
+        sell_value += crate::resources::live_item_price(market, station_idx, *item_type) * count;
     }
 
     let fuel_missing = fuel_state.max_fuel - fuel_state.current_fuel;
@@ -2453,7 +2455,7 @@ fn get_docking_services(
         },
         DockingService {
             name: "Sell Cargo",
-            description: sell_row(inventory, station_idx, None).0,
+            description: sell_row(inventory, station_idx, None, market).0,
             cost: 0,
             available: sell_value > 0,
         },
@@ -2465,7 +2467,7 @@ fn get_docking_services(
         },
         DockingService {
             name: "Buy Goods",
-            description: buy_row(inventory, station_idx, 0).0,
+            description: buy_row(inventory, station_idx, 0, market).0,
             cost: 0, // Shown per-choice in the description
             available: true,
         },
@@ -2489,12 +2491,13 @@ fn spawn_docking_menu(
     currency: Res<Currency>,
     staffing_state: Res<StaffingState>,
     ship_query: Query<&Transform, With<Ship>>,
+    market: Res<MarketEvents>,
 ) {
     let crew_count = crew_query.iter().count();
     let station_idx = ship_query.single().ok()
         .and_then(|t| crate::world::home_base::nearest_station_index(t.translation.truncate()))
         .unwrap_or(0);
-    let services = get_docking_services(&hull_state, &oxygen_state, &fuel_state, &weapon_query, crew_count, staffing_state.total_berths, &inventory, station_idx);
+    let services = get_docking_services(&hull_state, &oxygen_state, &fuel_state, &weapon_query, crew_count, staffing_state.total_berths, &inventory, station_idx, &market);
 
     commands.spawn((
         (Node {
@@ -2575,6 +2578,7 @@ fn docking_menu_input(
     staffing_state: Res<StaffingState>,
     mut module_query: Query<&mut Module>,
     ship_query: Query<&Transform, With<Ship>>,
+    market: Res<MarketEvents>,
 ) {
     let (mut hull_state, mut oxygen_state, mut fuel_state, mut currency, mut inventory) = econ_state;
     let Ok(mut selection) = menu_query.single_mut() else { return };
@@ -2893,7 +2897,7 @@ fn docking_menu_input(
                     None => {
                         let mut total_value = 0u32;
                         for (item_type, count) in &inventory.items {
-                            total_value += crate::resources::station_item_price(station_idx, *item_type) * count;
+                            total_value += crate::resources::live_item_price(&market, station_idx, *item_type) * count;
                         }
                         if total_value == 0 {
                             notifications.write(ShowNotification {
@@ -2922,7 +2926,7 @@ fn docking_menu_input(
                                 duration: 2.0,
                             });
                         } else {
-                            let price = crate::resources::station_item_price(station_idx, item);
+                            let price = crate::resources::live_item_price(&market, station_idx, item);
                             let value = price * count;
                             inventory.remove_item(item, count);
                             currency.credits += value;
@@ -2976,7 +2980,7 @@ fn docking_menu_input(
             }
             7 => {
                 // Buy Goods — one unit of the Left/Right choice
-                let (_, price, item) = buy_row(&inventory, station_idx, selection.1);
+                let (_, price, item) = buy_row(&inventory, station_idx, selection.1, &market);
                 if currency.credits < price {
                     notifications.write(ShowNotification {
                         message: format!("Not enough credits (need {}c, have {}c)", price, currency.credits),
@@ -3040,7 +3044,7 @@ fn docking_menu_input(
     let (sell_desc, sell_total) = {
         let choices = sell_choices(&inventory);
         let choice = choices.get(selection.1).copied().flatten();
-        sell_row(&inventory, station_idx, choice)
+        sell_row(&inventory, station_idx, choice, &market)
     };
 
     let fuel_missing = fuel_state.max_fuel - fuel_state.current_fuel;
@@ -3071,7 +3075,7 @@ fn docking_menu_input(
             }
             (total_module_damage * 5.0) as u32
         }, module_query.iter().any(|m| m.health < m.max_health)),
-        ("Buy Goods", buy_row(&inventory, station_idx, selection.1).0, 0, true),
+        ("Buy Goods", buy_row(&inventory, station_idx, selection.1, &market).0, 0, true),
         ("Undock", "Return to exploring".to_string(), 0, true),
     ];
 
