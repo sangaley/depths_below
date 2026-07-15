@@ -69,6 +69,16 @@ impl Plugin for ShipPlugin {
             .configure_sets(Update, ShipSet::Hull.after(ShipSet::Oxygen).run_if(in_state(GameState::Exploring)))
             .configure_sets(Update, ShipSet::State.after(ShipSet::Hull).run_if(in_state(GameState::Exploring)))
 
+            // Cargo capacity must also track while docked/building — the
+            // State set only runs Exploring, so placing a Cargo Hold showed
+            // no capacity change until you undocked.
+            .add_systems(
+                Update,
+                update_inventory_capacity.run_if(
+                    in_state(GameState::StationDocked).or_else(in_state(GameState::Docked)),
+                ),
+            )
+
             // Startup - spawn ship, flush commands, then spawn crew (crew needs ship entity)
             .add_systems(OnEnter(GameState::StationDocked), (
                 (spawn_starter_ship, reset_victory_state),

@@ -89,7 +89,10 @@ pub fn check_game_over(
 
 /// Updates inventory max_capacity based on cargo hold modules
 pub fn update_inventory_capacity(
-    cargo_query: Query<(&CargoHold, &Module)>,
+    // Player holds only — unscoped, every wreck/AI cargo module in the
+    // world inflated the player's max capacity (and made it jump around
+    // as wrecks spawned/got dismantled).
+    cargo_query: Query<(&CargoHold, &Module), Without<crate::ai_ship::components::OwnedByAiShip>>,
     mut inventory: ResMut<Inventory>,
 ) {
     let base_capacity = 50.0f32;
