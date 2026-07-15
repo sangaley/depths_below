@@ -166,9 +166,9 @@ pub fn order_salvage_detail(
 
         commands
             .entity(entity)
-            .remove::<ChildOf>()
-            .remove::<CrewRoomLocation>()
-            .insert(EvaSalvaging {
+            .try_remove::<ChildOf>()
+            .try_remove::<CrewRoomLocation>()
+            .try_insert(EvaSalvaging {
                 wreck: wreck_entity,
                 grab_target,
                 phase: EvaPhase::Outbound,
@@ -445,8 +445,10 @@ fn board_crew(
     if crew.health > 0.0 {
         crew.state = CrewState::Idle;
     }
+    // try_* — the crew member may have died (and been despawned) the
+    // same frame they board; see the despawn-race pattern in wreck.rs.
     commands
         .entity(entity)
-        .insert(ChildOf(ship))
-        .remove::<EvaSalvaging>();
+        .try_insert(ChildOf(ship))
+        .try_remove::<EvaSalvaging>();
 }
