@@ -307,17 +307,28 @@ pub fn update_build_ghost(
                 );
                 let center_x = (min_x as f32 + max_x as f32) / 2.0 * 66.0;
                 let center_y = (min_y as f32 + max_y as f32) / 2.0 * 66.0 - 33.0;
-                // Unrotated footprint — the rotation quat below does the
-                // turning (see spawn_module: sizing from rotated bounds
-                // double-rotates multi-cell sprites off their cells).
-                let sprite_w = 48.0 + (def.size.x - 1) as f32 * 66.0;
-                let sprite_h = 48.0 + (def.size.y - 1) as f32 * 66.0;
+
+                let visual_angle = rotation.to_radians()
+                    + crate::sprite_map::sprite_base_rotation(mt);
+                // Un-rotate the rotated cell bounds by the FINAL visual
+                // angle (cell rotation + texture base offset) — see
+                // spawn_module for the full story; anything else lays
+                // multi-cell ghosts 90° across their claimed cells.
+                let bounds_w = (max_x - min_x) as f32;
+                let bounds_h = (max_y - min_y) as f32;
+                let quarter = ((visual_angle / std::f32::consts::FRAC_PI_2).round() as i32)
+                    .rem_euclid(4);
+                let (cells_w, cells_h) = if quarter % 2 == 1 {
+                    (bounds_h, bounds_w)
+                } else {
+                    (bounds_w, bounds_h)
+                };
+                let sprite_w = 48.0 + cells_w * 66.0;
+                let sprite_h = 48.0 + cells_h * 66.0;
 
                 transform.translation.x = center_x;
                 transform.translation.y = center_y;
                 transform.translation.z = 0.3;
-                let visual_angle = rotation.to_radians()
-                    + crate::sprite_map::sprite_base_rotation(mt);
                 transform.rotation = Quat::from_rotation_z(visual_angle);
                 sprite.custom_size = Some(Vec2::new(sprite_w, sprite_h));
             }
