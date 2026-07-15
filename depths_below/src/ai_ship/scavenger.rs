@@ -16,17 +16,18 @@ use super::components::*;
 // ============================================================================
 
 /// Chance a kill attracts a wave at all.
-const WAVE_CHANCE: f32 = 0.65;
-/// How long after the kill the vultures arrive (randomized per wave).
-const WAVE_DELAY_MIN: f32 = 25.0;
-const WAVE_DELAY_MAX: f32 = 60.0;
+const WAVE_CHANCE: f32 = 0.35;
+/// How long after the kill the vultures arrive (randomized per wave) —
+/// generous enough to strip most of a wreck first if you start promptly.
+const WAVE_DELAY_MIN: f32 = 50.0;
+const WAVE_DELAY_MAX: f32 = 110.0;
 /// How far out the wave spawns from the wreck.
-const SPAWN_DIST_MIN: f32 = 1400.0;
-const SPAWN_DIST_MAX: f32 = 2000.0;
+const SPAWN_DIST_MIN: f32 = 1600.0;
+const SPAWN_DIST_MAX: f32 = 2200.0;
 /// A swarm ship must be this close to a wreck to feed on it.
 const FEED_RANGE: f32 = 260.0;
 /// Seconds per loot unit eaten, per feeding ship.
-const FEED_SECONDS: f32 = 4.0;
+const FEED_SECONDS: f32 = 8.0;
 
 struct PendingWave {
     wreck: Entity,
@@ -56,9 +57,9 @@ pub fn schedule_scavenger_waves(
         }
         // Bigger carcasses draw bigger flocks.
         let ships = match event.ship_type {
-            AiShipType::Dreadnought | AiShipType::VoidTitan => rng.gen_range(4..=5),
-            AiShipType::IronTide | AiShipType::PressureKing => rng.gen_range(3..=4),
-            _ => rng.gen_range(2..=3),
+            AiShipType::Dreadnought | AiShipType::VoidTitan => 3,
+            AiShipType::IronTide | AiShipType::PressureKing => 2,
+            _ => rng.gen_range(1..=2),
         };
         waves.pending.push(PendingWave {
             wreck: event.entity,
