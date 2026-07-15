@@ -26,6 +26,7 @@ impl Plugin for CrewPlugin {
                     update_staffing_state,
                     auto_assign_crew,
                     reconcile_hired_crew,
+                    crew_arrive_with_quarters,
                 )
                     .run_if(in_state(GameState::Exploring)
                         .or_else(in_state(GameState::StationDocked))
@@ -77,6 +78,74 @@ impl Default for AutoAssignTimer {
         Self {
             timer: Timer::from_seconds(2.0, TimerMode::Repeating),
         }
+    }
+}
+
+/// INTERIM CREW SUPPLY — until station hiring exists, crew come WITH
+/// the bunks: placing a quarters module (Barracks etc.) during a refit
+/// spawns its berths' worth of new hands, as if they signed on with the
+/// accommodation. Starter crew are unaffected (the initial ship spawn
+/// doesn't emit ModulePlaced). Berths come from the registry def, not
+/// the entity — the companion component may not be flushed yet in the
+/// frame the placement event fires.
+fn crew_arrive_with_quarters(
+    mut commands: Commands,
+    mut placed_events: MessageReader<ModulePlaced>,
+    registry: Res<crate::building::ModuleRegistry>,
+    ship_query: Query<Entity, With<Ship>>,
+    mut roster: ResMut<CrewRoster>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    use rand::Rng;
+    const NAMES: [&str; 12] = [
+        "Reyes", "Okonkwo", "Falk", "Ito", "Marsh", "Deng",
+        "Ferrara", "Boone", "Ades", "Kowal", "Nyx", "Sorren",
+    ];
+
+    let Ok(ship) = ship_query.single() else { return };
+    for event in placed_events.read() {
+        let crate::building::registry::CompanionData::Quarters { berths } =
+            registry.get(event.module_type).companion
+        else {
+            continue;
+        };
+
+        let mut rng = rand::thread_rng();
+        for i in 0..berths {
+            let name = NAMES[rng.gen_range(0..NAMES.len())];
+            let crew = commands
+                .spawn((
+                    (
+                        Sprite {
+                            color: Color::srgb(0.8, 0.6, 0.5),
+                            custom_size: Some(Vec2::new(16.0, 16.0)),
+                            ..default()
+                        },
+                        Transform::from_xyz(i as f32 * 14.0 - 20.0, -20.0, 0.5),
+                    ),
+                    CrewMember {
+                        name: name.to_string(),
+                        health: 100.0,
+                        max_health: 100.0,
+                        oxygen: 100.0,
+                        morale: 100.0,
+                        state: CrewState::Idle,
+                    },
+                ))
+                .insert(ChildOf(ship))
+                .id();
+            roster.members.push(crew);
+        }
+
+        notifications.write(ShowNotification {
+            message: format!(
+                "{} crew signed on with the {}.",
+                berths,
+                event.module_type.name()
+            ),
+            notification_type: NotificationType::Success,
+            duration: 3.0,
+        });
     }
 }
 
