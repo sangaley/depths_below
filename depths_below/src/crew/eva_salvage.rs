@@ -71,7 +71,7 @@ pub fn order_salvage_detail(
         (Entity, &mut CrewMember, &mut Transform, &GlobalTransform, &mut Sprite),
         Without<EvaSalvaging>,
     >,
-    station_query: Query<&CrewStation>,
+    mut station_query: Query<(Entity, &mut CrewStation)>,
     children_query: Query<&Children>,
     block_filter: Query<(), Or<(With<Module>, With<HullSegment>)>>,
     mut notifications: MessageWriter<ShowNotification>,
@@ -109,11 +109,21 @@ pub fn order_salvage_detail(
     }
     let Some((wreck_entity, _)) = best else { return };
 
-    // Station-assigned crew stay at their posts; only true idlers go out.
-    let assigned: std::collections::HashSet<Entity> = station_query
-        .iter()
-        .filter_map(|s| s.assigned_crew)
-        .collect();
+    // Manually-assigned crew hold their posts. Auto-assigned crew are fair
+    // game — the auto-assigner staffs every free hand within seconds, so
+    // "unassigned idler" is an empty set on any crewed ship. Pull them the
+    // way emergency dispatch does; auto-assign restaffs once they board.
+    let mut manual: std::collections::HashSet<Entity> = std::collections::HashSet::new();
+    let mut auto_assigned: std::collections::HashMap<Entity, Entity> = std::collections::HashMap::new();
+    for (station_entity, station) in station_query.iter() {
+        if let Some(crew_entity) = station.assigned_crew {
+            if station.manually_assigned {
+                manual.insert(crew_entity);
+            } else {
+                auto_assigned.insert(crew_entity, station_entity);
+            }
+        }
+    }
 
     let surviving_blocks: Vec<Entity> = children_query
         .get(wreck_entity)
@@ -131,8 +141,13 @@ pub fn order_salvage_detail(
         if dispatched >= DETAIL_SIZE {
             break;
         }
-        if crew.health <= 0.0 || crew.state != CrewState::Idle || assigned.contains(&entity) {
+        if crew.health <= 0.0 || crew.state != CrewState::Idle || manual.contains(&entity) {
             continue;
+        }
+        if let Some(&station_entity) = auto_assigned.get(&entity) {
+            if let Ok((_, mut station)) = station_query.get_mut(station_entity) {
+                station.assigned_crew = None;
+            }
         }
 
         let home_local = transform.translation;

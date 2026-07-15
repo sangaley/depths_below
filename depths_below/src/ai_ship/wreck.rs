@@ -123,8 +123,6 @@ pub fn ai_ship_death_system(
     children_query: Query<&Children>,
     mut module_query: Query<(&mut Module, &mut Sprite, Has<DestroyedModule>), Without<HullSegment>>,
     mut hull_query: Query<(&mut Sprite, &HullSegment, Has<HullDestroyed>), Without<Module>>,
-    registry: Res<crate::building::ModuleRegistry>,
-    mut currency: ResMut<crate::resources::Currency>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     for event in destroyed_events.read() {
@@ -142,11 +140,10 @@ pub fn ai_ship_death_system(
         };
 
         // Power off and darken every block — dead reactor, no power,
-        // nothing left running. Blocks that survived the fight (not
-        // individually destroyed) pay out half their build cost in
-        // credits — salvage value for the parts that are still intact.
+        // nothing left running. No instant credit payout here anymore:
+        // wreck value is whatever the salvage detail physically carries
+        // home (crew::eva_salvage), priced by whichever station buys it.
         const WRECK_TINT: Color = Color::srgb(0.18, 0.18, 0.2);
-        let mut salvage_value = 0.0_f32;
         let mut block_count = 0u32;
         let mut intact_count = 0u32;
         if let Ok(children) = children_query.get(event.entity) {
@@ -155,15 +152,13 @@ pub fn ai_ship_death_system(
                     block_count += 1;
                     if !is_destroyed {
                         intact_count += 1;
-                        salvage_value += registry.get(module.module_type).cost as f32 * 0.5;
                     }
                     module.is_active = false;
                     sprite.color = WRECK_TINT;
-                } else if let Ok((mut sprite, hull, is_destroyed)) = hull_query.get_mut(child) {
+                } else if let Ok((mut sprite, _hull, is_destroyed)) = hull_query.get_mut(child) {
                     block_count += 1;
                     if !is_destroyed {
                         intact_count += 1;
-                        salvage_value += hull.material.cost() as f32 * 0.5;
                     }
                     sprite.color = WRECK_TINT;
                 }
@@ -225,15 +220,8 @@ pub fn ai_ship_death_system(
             AiShipType::RustSwarm => "Rust Swarm",
         };
 
-        let mut message = format!("{} vessel destroyed! {} (F: salvage detail)", type_name, condition);
-        if salvage_value > 0.0 {
-            let payout = salvage_value.round() as u32;
-            currency.credits += payout;
-            message = format!("{} destroyed! +{}c intact salvage. {} (F: salvage detail)", type_name, payout, condition);
-        }
-
         notifications.write(ShowNotification {
-            message,
+            message: format!("{} vessel destroyed! {} (F: salvage detail)", type_name, condition),
             notification_type: NotificationType::Success,
             duration: 4.0,
         });

@@ -334,8 +334,10 @@ fn update_crew_room_location(
 /// Scans for rooms with decompression or fire and dispatches idle crew to handle emergencies.
 /// Temporarily clears non-manual CrewStation assignments for dispatched crew.
 fn crew_emergency_dispatch(
+    ship_query: Query<Entity, With<Ship>>,
+    child_query: Query<&ChildOf>,
     mut crew_query: Query<(Entity, &mut CrewMember)>,
-    fire_query: Query<&Module, With<OnFire>>,
+    fire_query: Query<(Entity, &Module), With<OnFire>>,
     room_map: Res<RoomMap>,
     mut station_query: Query<(Entity, &mut CrewStation)>,
     mut dispatch_events: MessageWriter<CrewDispatched>,
@@ -349,8 +351,13 @@ fn crew_emergency_dispatch(
         }
     }
 
-    // Check for rooms with fire
-    for module in fire_query.iter() {
+    // Check for rooms with fire — our modules only; a burning wreck's
+    // grid positions can phantom-match our room map's tiles.
+    let ship = ship_query.single().ok();
+    for (entity, module) in fire_query.iter() {
+        if child_query.get(entity).ok().map(|p| p.0) != ship {
+            continue;
+        }
         if let Some(&room_id) = room_map.tile_to_room.get(&module.grid_position) {
             if !emergency_rooms.iter().any(|(id, _)| *id == room_id) {
                 emergency_rooms.push((room_id, DispatchReason::Fire));
@@ -398,13 +405,22 @@ fn crew_emergency_dispatch(
 
 /// Updates crew AI behavior — now aware of both decompression and fires.
 fn update_crew_ai(
+    ship_query: Query<Entity, With<Ship>>,
+    child_query: Query<&ChildOf>,
     hull_query: Query<(Entity, &HullSegment, &Transform)>,
     fire_query: Query<Entity, With<OnFire>>,
     // EVA crew's state machine is owned by eva_salvage while they're out
     mut crew_query: Query<&mut CrewMember, Without<EvaSalvaging>>,
 ) {
-    let has_depressurized = hull_query.iter().any(|(_, hull, _)| hull.is_depressurized);
-    let has_fires = !fire_query.is_empty();
+    let Ok(ship) = ship_query.single() else { return };
+    // Danger must be OUR danger — unscoped, any holed/burning wreck
+    // drifting nearby kept the crew stuck in Repairing forever.
+    let has_depressurized = hull_query.iter().any(|(entity, hull, _)| {
+        hull.is_depressurized && child_query.get(entity).is_ok_and(|p| p.0 == ship)
+    });
+    let has_fires = fire_query
+        .iter()
+        .any(|entity| child_query.get(entity).is_ok_and(|p| p.0 == ship));
     let has_danger = has_depressurized || has_fires;
 
     for mut crew in crew_query.iter_mut() {
@@ -438,6 +454,8 @@ fn update_crew_ai(
 fn crew_fire_suppression(
     time: Res<Time>,
     mut commands: Commands,
+    ship_query: Query<Entity, With<Ship>>,
+    child_query: Query<&ChildOf>,
     crew_query: Query<(&CrewMember, &CrewRoomLocation)>,
     mut fire_query: Query<(Entity, &mut OnFire, &Module, &mut Sprite), Without<DestroyedModule>>,
     room_map: Res<RoomMap>,
@@ -460,8 +478,12 @@ fn crew_fire_suppression(
         return;
     }
 
-    // Apply suppression to fires
+    // Apply suppression to fires — our modules only (see dispatch note)
+    let ship = ship_query.single().ok();
     for (entity, mut fire, module, mut sprite) in fire_query.iter_mut() {
+        if child_query.get(entity).ok().map(|p| p.0) != ship {
+            continue;
+        }
         let Some(&room_id) = room_map.tile_to_room.get(&module.grid_position) else {
             continue;
         };
