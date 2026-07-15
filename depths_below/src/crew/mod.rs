@@ -7,6 +7,7 @@ use crate::building::rooms::RoomMap;
 use crate::building::GridOccupancy;
 
 pub mod eva_salvage;
+pub mod hiring;
 use eva_salvage::EvaSalvaging;
 
 pub struct CrewPlugin;
@@ -62,7 +63,22 @@ impl Plugin for CrewPlugin {
                     .chain()
                     .run_if(in_state(GameState::Exploring)),
             )
-            .add_systems(OnExit(GameState::Exploring), eva_salvage::abort_eva_on_exit);
+            .add_systems(OnExit(GameState::Exploring), eva_salvage::abort_eva_on_exit)
+            // Hiring board (H near/at a station) — see hiring.rs
+            .init_resource::<hiring::HiringBoardOpen>()
+            .init_resource::<hiring::HiringPool>()
+            .init_resource::<hiring::HiringSelection>()
+            .add_systems(
+                Update,
+                (
+                    hiring::toggle_hiring_board,
+                    hiring::hiring_board_input,
+                    hiring::update_hiring_display,
+                )
+                    .chain()
+                    .run_if(in_state(GameState::Exploring)
+                        .or_else(in_state(GameState::StationDocked))),
+            );
     }
 }
 
