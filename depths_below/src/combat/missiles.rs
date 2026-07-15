@@ -88,11 +88,13 @@ pub fn fire_missiles_system(
             continue;
         };
 
-        // Fixed-mount launchers can't swivel outside their arc — skip firing
-        // at a target behind the ship instead of launching through the hull.
-        if !is_in_firing_arc(ship_physics.rotation, &module.rotation, mount, target_pos - weapon_pos) {
-            continue;
-        }
+        // Fixed-mount launchers can't swivel outside their arc, but they
+        // never silently refuse to fire (players read that as "rockets are
+        // broken" — aiming at a far cursor put every pod off-cone). Launch
+        // direction is clamped to the arc edge instead: at worst the salvo
+        // flies visibly off-aim, still never backwards through the hull.
+        let aim_dir = (target_pos - weapon_pos).normalize_or_zero();
+        let launch_dir = clamp_to_firing_arc(ship_physics.rotation, &module.rotation, mount, aim_dir);
 
         // Determine missile properties based on module type and bay chain length
         let bay_count = machine_stats.get(entity)
@@ -142,7 +144,7 @@ pub fn fire_missiles_system(
             from_player: true,
         });
 
-        let direction = (target_pos - weapon_pos).normalize_or_zero();
+        let direction = launch_dir;
         let initial_vel = direction * 100.0; // Slow launch
 
         // Visual size scales with bay count

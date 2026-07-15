@@ -137,6 +137,40 @@ pub(crate) fn is_in_firing_arc(
     }
 }
 
+/// Clamps an aim direction into a mount's firing arc. Turrets pass the aim
+/// through; fixed/broadside mounts return the nearest arc-edge direction
+/// when the aim falls outside their cone. Used so launchers never silently
+/// refuse to fire — an off-axis salvo is visible feedback that the mount
+/// points elsewhere, a gun that eats the trigger press reads as broken.
+pub(crate) fn clamp_to_firing_arc(
+    ship_rotation: f32,
+    module_rotation: &Rotation,
+    mount: &WeaponMount,
+    aim_dir: Vec2,
+) -> Vec2 {
+    use std::f32::consts::FRAC_PI_2;
+    let forward = match mount.mount_type {
+        MountType::Turret => return aim_dir,
+        MountType::Fixed => {
+            let angle = ship_rotation + module_rotation.to_radians();
+            Vec2::new(angle.cos(), angle.sin())
+        }
+        MountType::Broadside => {
+            // Two mirrored cones — clamp against the side nearer the aim
+            let angle = ship_rotation + FRAC_PI_2;
+            let side = Vec2::new(angle.cos(), angle.sin());
+            if side.dot(aim_dir) >= 0.0 { side } else { -side }
+        }
+    };
+    let half_arc = (mount.firing_arc / 2.0).to_radians();
+    let offset = forward.angle_to(aim_dir);
+    if offset.abs() <= half_arc {
+        aim_dir
+    } else {
+        Vec2::from_angle(offset.clamp(-half_arc, half_arc)).rotate(forward)
+    }
+}
+
 pub struct CombatPlugin;
 
 impl Plugin for CombatPlugin {

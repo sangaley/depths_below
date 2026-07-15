@@ -333,10 +333,15 @@ fn update_crew_room_location(
 
 /// Scans for rooms with decompression or fire and dispatches idle crew to handle emergencies.
 /// Temporarily clears non-manual CrewStation assignments for dispatched crew.
+/// Room-scoped both ways: only crew IN an emergency room get flagged
+/// (repair/suppression power is room-local and crew can't walk between
+/// rooms, so flagging distant crew just locked them in Repairing doing
+/// nothing — which starved every other job, e.g. salvage details), and
+/// Repairing crew whose room is calm get released back to Idle.
 fn crew_emergency_dispatch(
     ship_query: Query<Entity, With<Ship>>,
     child_query: Query<&ChildOf>,
-    mut crew_query: Query<(Entity, &mut CrewMember)>,
+    mut crew_query: Query<(Entity, &mut CrewMember, Option<&CrewRoomLocation>)>,
     fire_query: Query<(Entity, &Module), With<OnFire>>,
     room_map: Res<RoomMap>,
     mut station_query: Query<(Entity, &mut CrewStation)>,
@@ -365,10 +370,6 @@ fn crew_emergency_dispatch(
         }
     }
 
-    if emergency_rooms.is_empty() {
-        return;
-    }
-
     // Collect crew assigned to stations (to know who to pull)
     let mut station_assignments: std::collections::HashMap<Entity, Entity> = std::collections::HashMap::new();
     for (station_entity, station) in station_query.iter() {
@@ -379,26 +380,36 @@ fn crew_emergency_dispatch(
         }
     }
 
-    // Dispatch idle crew to emergencies
-    for (entity, mut crew) in crew_query.iter_mut() {
-        if crew.health <= 0.0 || crew.state != CrewState::Idle {
+    for (entity, mut crew, location) in crew_query.iter_mut() {
+        if crew.health <= 0.0 {
             continue;
         }
-        if let Some(&(room_id, reason)) = emergency_rooms.first() {
-            crew.state = CrewState::Repairing;
+        let room = location.and_then(|l| l.room_id);
+        let emergency_here = room.and_then(|r| {
+            emergency_rooms.iter().find(|(id, _)| *id == r).copied()
+        });
 
-            // Clear station assignment if not manually assigned
-            if let Some(station_entity) = station_assignments.get(&entity) {
-                if let Ok((_, mut station)) = station_query.get_mut(*station_entity) {
-                    station.assigned_crew = None;
+        match (crew.state, emergency_here) {
+            (CrewState::Idle, Some((room_id, reason))) => {
+                crew.state = CrewState::Repairing;
+
+                // Clear station assignment if not manually assigned
+                if let Some(station_entity) = station_assignments.get(&entity) {
+                    if let Ok((_, mut station)) = station_query.get_mut(*station_entity) {
+                        station.assigned_crew = None;
+                    }
                 }
-            }
 
-            dispatch_events.write(CrewDispatched {
-                crew: entity,
-                room_id,
-                reason,
-            });
+                dispatch_events.write(CrewDispatched {
+                    crew: entity,
+                    room_id,
+                    reason,
+                });
+            }
+            (CrewState::Repairing, None) => {
+                crew.state = CrewState::Idle;
+            }
+            _ => {}
         }
     }
 }
