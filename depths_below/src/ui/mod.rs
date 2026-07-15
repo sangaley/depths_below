@@ -2322,6 +2322,48 @@ struct DockingService {
     available: bool,
 }
 
+/// Sell-cargo choices at a station: index 0 = everything, then one entry
+/// per item stack actually held (stable order). Lets the player dump
+/// scrap at a Trade Hub while holding artifacts back for the Research
+/// Outpost, instead of the old all-or-nothing dump.
+fn sell_choices(inventory: &Inventory) -> Vec<Option<ItemType>> {
+    const SELLABLE: [ItemType; 7] = [
+        ItemType::ScrapMetal,
+        ItemType::Crystal,
+        ItemType::BioSample,
+        ItemType::FuelCell,
+        ItemType::RareAlloy,
+        ItemType::AncientArtifact,
+        ItemType::AmmoCrate,
+    ];
+    let mut choices = vec![None];
+    for item in SELLABLE {
+        if inventory.items.get(&item).copied().unwrap_or(0) > 0 {
+            choices.push(Some(item));
+        }
+    }
+    choices
+}
+
+/// Description + value for the current sell-cargo choice at this station.
+fn sell_row(inventory: &Inventory, station_idx: usize, choice: Option<ItemType>) -> (String, u32) {
+    match choice {
+        None => {
+            let mut total = 0u32;
+            for (item, count) in &inventory.items {
+                total += crate::resources::station_item_price(station_idx, *item) * count;
+            }
+            (format!("ALL cargo — {}c  (Left/Right: pick a single stack)", total), total)
+        }
+        Some(item) => {
+            let count = inventory.items.get(&item).copied().unwrap_or(0);
+            let price = crate::resources::station_item_price(station_idx, item);
+            let value = price * count;
+            (format!("{}x {} @ {}c each = {}c  (Left/Right: cycle)", count, item.name(), price, value), value)
+        }
+    }
+}
+
 fn get_docking_services(
     hull_state: &HullState,
     oxygen_state: &OxygenState,
@@ -2397,7 +2439,7 @@ fn get_docking_services(
         },
         DockingService {
             name: "Sell Cargo",
-            description: format!("Sell all inventory for {} credits", sell_value),
+            description: sell_row(inventory, station_idx, None).0,
             cost: 0,
             available: sell_value > 0,
         },
@@ -2445,7 +2487,7 @@ fn spawn_docking_menu(
                 ..default()
             }, BackgroundColor(theme::ThemeColors::BG_VOID), ZIndex(100)),
         DockingOverlay,
-        DockingMenuSelection(0),
+        DockingMenuSelection(0, 0),
     )).with_children(|parent| {
         parent.spawn((Text::new("HAVEN STATION — SHIPYARD"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H1), ..default() }, TextColor(theme::ThemeColors::ACCENT_CYAN)));
 
@@ -2485,7 +2527,7 @@ fn spawn_docking_menu(
 
         parent.spawn((Text::new(""), TextFont { font_size: FontSize::Px(8.0), ..default() }, TextColor(Color::WHITE)));
 
-        parent.spawn((Text::new("Up/Down: Select | Enter: Purchase | ESC: Undock"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.25, 0.25, 0.25))));
+        parent.spawn((Text::new("Up/Down: Select | Left/Right: cargo choice | Enter: Purchase | ESC: Undock"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.25, 0.25, 0.25))));
     });
 }
 
@@ -2532,6 +2574,23 @@ fn docking_menu_input(
     if keyboard.just_pressed(KeyCode::ArrowDown) {
         selection.0 = if old_idx + 1 >= service_count { 0 } else { old_idx + 1 };
         changed = true;
+    }
+
+    // Left/Right cycles WHAT to sell while the Sell Cargo row is selected
+    // (ALL, or a single held stack priced for this station).
+    if selection.0 == 5 {
+        let choices = sell_choices(&inventory);
+        if selection.1 >= choices.len() {
+            selection.1 = 0;
+        }
+        if keyboard.just_pressed(KeyCode::ArrowRight) {
+            selection.1 = (selection.1 + 1) % choices.len();
+            changed = true;
+        }
+        if keyboard.just_pressed(KeyCode::ArrowLeft) {
+            selection.1 = (selection.1 + choices.len() - 1) % choices.len();
+            changed = true;
+        }
     }
 
     if keyboard.just_pressed(KeyCode::Enter) {
@@ -2801,32 +2860,56 @@ fn docking_menu_input(
                 }
             }
             5 => {
-                // Sell Cargo
-                let mut total_value = 0u32;
-                let mut items_sold = Vec::new();
-                for (item_type, count) in &inventory.items {
-                    let price = crate::resources::station_item_price(station_idx, *item_type);
-                    let value = price * count;
-                    total_value += value;
-                    items_sold.push((*item_type, *count));
-                }
-
-                if total_value == 0 {
-                    notifications.write(ShowNotification {
-                        message: "No cargo to sell".into(),
-                        notification_type: NotificationType::Info,
-                        duration: 2.0,
-                    });
-                } else {
-                    currency.credits += total_value;
-                    inventory.items.clear();
-                    inventory.current_weight = 0.0;
-                    notifications.write(ShowNotification {
-                        message: format!("Sold all cargo for {}c!", total_value),
-                        notification_type: NotificationType::Success,
-                        duration: 3.0,
-                    });
-                    changed = true;
+                // Sell Cargo — whatever the Left/Right choice says:
+                // everything, or one specific stack.
+                let choices = sell_choices(&inventory);
+                let choice = choices.get(selection.1).copied().flatten();
+                match choice {
+                    None => {
+                        let mut total_value = 0u32;
+                        for (item_type, count) in &inventory.items {
+                            total_value += crate::resources::station_item_price(station_idx, *item_type) * count;
+                        }
+                        if total_value == 0 {
+                            notifications.write(ShowNotification {
+                                message: "No cargo to sell".into(),
+                                notification_type: NotificationType::Info,
+                                duration: 2.0,
+                            });
+                        } else {
+                            currency.credits += total_value;
+                            inventory.items.clear();
+                            inventory.current_weight = 0.0;
+                            notifications.write(ShowNotification {
+                                message: format!("Sold all cargo for {}c!", total_value),
+                                notification_type: NotificationType::Success,
+                                duration: 3.0,
+                            });
+                            changed = true;
+                        }
+                    }
+                    Some(item) => {
+                        let count = inventory.items.get(&item).copied().unwrap_or(0);
+                        if count == 0 {
+                            notifications.write(ShowNotification {
+                                message: format!("No {} in the hold.", item.name()),
+                                notification_type: NotificationType::Info,
+                                duration: 2.0,
+                            });
+                        } else {
+                            let price = crate::resources::station_item_price(station_idx, item);
+                            let value = price * count;
+                            inventory.remove_item(item, count);
+                            currency.credits += value;
+                            selection.1 = 0;
+                            notifications.write(ShowNotification {
+                                message: format!("Sold {}x {} for {}c ({}c each)", count, item.name(), value, price),
+                                notification_type: NotificationType::Success,
+                                duration: 3.0,
+                            });
+                            changed = true;
+                        }
+                    }
                 }
             }
             6 => {
@@ -2904,10 +2987,11 @@ fn docking_menu_input(
     let bio_have = inventory.items.get(&ItemType::BioSample).copied().unwrap_or(0);
     let bio_usable = (hire_full_cost / 60).min(bio_have);
     let hire_cost = hire_full_cost.saturating_sub(bio_usable * 60);
-    let mut sell_value = 0u32;
-    for (item_type, count) in &inventory.items {
-        sell_value += crate::resources::station_item_price(station_idx, *item_type) * count;
-    }
+    let (sell_desc, sell_total) = {
+        let choices = sell_choices(&inventory);
+        let choice = choices.get(selection.1).copied().flatten();
+        sell_row(&inventory, station_idx, choice)
+    };
 
     let fuel_missing = fuel_state.max_fuel - fuel_state.current_fuel;
     let fuel_cost = (fuel_missing * 0.5) as u32;
@@ -2919,7 +3003,7 @@ fn docking_menu_input(
         ("Refuel", format!("Fill fuel tanks ({:.0}/{:.0}) - FuelCells used first", fuel_state.current_fuel, fuel_state.max_fuel), fuel_cost, fuel_missing > 1.0),
         ("Rearm Weapons", format!("Resupply {} rounds - AmmoCrates used first", ammo_needed), ammo_cost, ammo_needed > 0),
         ("Hire Crew", format!("Recruit crew ({}/{} berths) - BioSample used first", crew_count, staffing_state.total_berths), hire_cost, (crew_count as u32) < staffing_state.total_berths),
-        ("Sell Cargo", format!("Sell all inventory for {} credits", sell_value), 0, sell_value > 0),
+        ("Sell Cargo", sell_desc, 0, sell_total > 0),
         ("Repair Modules", {
             let mut total_module_damage = 0.0f32;
             for module in module_query.iter() {

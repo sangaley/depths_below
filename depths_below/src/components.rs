@@ -2032,7 +2032,9 @@ pub struct DockingOverlay;
 
 /// Currently selected service in the docking menu
 #[derive(Component)]
-pub struct DockingMenuSelection(pub usize);
+/// (selected service row, sell-cargo choice index — 0 = ALL, then one
+/// per held item stack; see ui sell_choices)
+pub struct DockingMenuSelection(pub usize, pub usize);
 
 /// Individual service row in the docking menu
 #[derive(Component)]
