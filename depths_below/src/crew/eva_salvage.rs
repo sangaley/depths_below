@@ -324,6 +324,8 @@ pub fn run_salvage_detail(
                     continue;
                 }
                 if let Ok((_, mut wreck, mut poi, ai_wreck)) = wreck_query.get_mut(eva.wreck) {
+                    let dismantling_block = eva.grab_target != eva.wreck;
+
                     if wreck.loot_remaining > 0 {
                         wreck.loot_remaining -= 1;
                         eva.carrying = Some(match ai_wreck {
@@ -334,37 +336,63 @@ pub fn run_salvage_detail(
                             ),
                             None => generic_loot[rng.gen_range(0..generic_loot.len())],
                         });
-                        sprite.color = CARRY_TINT;
-
-                        // DISMANTLE: the claimed block physically comes off
-                        // the hulk — flash + chunks in its own color.
-                        if eva.grab_target != eva.wreck {
-                            if let Ok((block_gt, block_sprite)) = block_query.get(eva.grab_target) {
-                                let block_pos = block_gt.translation().truncate();
-                                crate::combat::spawn_hit_effect(
-                                    &mut commands,
-                                    block_pos,
-                                    Color::srgb(0.7, 0.8, 1.0),
-                                    35.0,
-                                );
-                                crate::vfx::debris::spawn_chunks(
-                                    &mut commands,
-                                    &mut rng,
-                                    block_pos,
-                                    block_sprite.color,
-                                    Vec2::ZERO,
-                                );
-                            }
-                            commands.entity(eva.grab_target).try_despawn();
-                        }
 
                         if wreck.loot_remaining == 0 {
                             poi.discovered = true;
                             wreck.is_explored = true;
                             statistics.wrecks_salvaged += 1;
                             notifications.write(ShowNotification {
-                                message: "Wreck stripped — detail returning.".into(),
+                                message: "Cargo stripped — hauling hull scrap now (F to recall).".into(),
                                 notification_type: NotificationType::Info,
+                                duration: 3.0,
+                            });
+                        }
+                    } else if dismantling_block {
+                        // Cargo's gone — the hull metal itself is the haul.
+                        // Crew keep breaking the carcass down into scrap
+                        // until recalled or nothing's left.
+                        eva.carrying = Some(ItemType::ScrapMetal);
+                    }
+                    if eva.carrying.is_some() {
+                        sprite.color = CARRY_TINT;
+                    }
+
+                    // DISMANTLE: the claimed block physically comes off
+                    // the hulk — flash + chunks in its own color.
+                    if dismantling_block {
+                        if let Ok((block_gt, block_sprite)) = block_query.get(eva.grab_target) {
+                            let block_pos = block_gt.translation().truncate();
+                            crate::combat::spawn_hit_effect(
+                                &mut commands,
+                                block_pos,
+                                Color::srgb(0.7, 0.8, 1.0),
+                                35.0,
+                            );
+                            crate::vfx::debris::spawn_chunks(
+                                &mut commands,
+                                &mut rng,
+                                block_pos,
+                                block_sprite.color,
+                                Vec2::ZERO,
+                            );
+                        }
+                        commands.entity(eva.grab_target).try_despawn();
+
+                        // Last block gone? The wreck ceases to exist.
+                        let blocks_left = children_query
+                            .get(eva.wreck)
+                            .map(|children| {
+                                children
+                                    .iter()
+                                    .filter(|c| *c != eva.grab_target && block_query.get(*c).is_ok())
+                                    .count()
+                            })
+                            .unwrap_or(0);
+                        if blocks_left == 0 {
+                            commands.entity(eva.wreck).try_despawn();
+                            notifications.write(ShowNotification {
+                                message: "Wreck fully dismantled.".into(),
+                                notification_type: NotificationType::Success,
                                 duration: 3.0,
                             });
                         }
@@ -387,21 +415,24 @@ pub fn run_salvage_detail(
                 deposit(eva, &mut inventory, &mut notifications);
                 sprite.color = EVA_TINT;
 
-                // Another trip, or board?
+                // Another trip, or board? Worth going back while the wreck
+                // still has cargo OR blocks to break down into scrap.
+                let center = bounds.map(|(c, _)| c).unwrap_or(ship_pos);
+                let next_block =
+                    pick_block(eva.wreck, center, &children_query, &block_query, &reserved);
                 let more_work = !eva.recalled
                     && wreck_query
                         .get_mut(eva.wreck)
                         .map(|(gt, wreck, ..)| {
-                            wreck.loot_remaining > 0
+                            (wreck.loot_remaining > 0 || next_block.is_some())
                                 && ship_pos.distance(gt.translation().truncate()) < BREAK_RANGE
                         })
                         .unwrap_or(false);
 
                 if more_work {
-                    let center = bounds.map(|(c, _)| c).unwrap_or(ship_pos);
-                    eva.grab_target =
-                        pick_block(eva.wreck, center, &children_query, &block_query, &reserved)
-                            .unwrap_or(eva.wreck);
+                    // Root fallback only matters for block-less world
+                    // wrecks, which still carry abstract cargo.
+                    eva.grab_target = next_block.unwrap_or(eva.wreck);
                     eva.phase = EvaPhase::Outbound;
                 } else {
                     board_crew(&mut commands, ship_entity, entity, eva, &mut transform, &mut crew, &mut sprite);
