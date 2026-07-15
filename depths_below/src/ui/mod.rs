@@ -2322,27 +2322,41 @@ struct DockingService {
     available: bool,
 }
 
+/// Every tradeable item, in stable menu order.
+const TRADE_GOODS: [ItemType; 7] = [
+    ItemType::ScrapMetal,
+    ItemType::Crystal,
+    ItemType::BioSample,
+    ItemType::FuelCell,
+    ItemType::RareAlloy,
+    ItemType::AncientArtifact,
+    ItemType::AmmoCrate,
+];
+
 /// Sell-cargo choices at a station: index 0 = everything, then one entry
 /// per item stack actually held (stable order). Lets the player dump
 /// scrap at a Trade Hub while holding artifacts back for the Research
 /// Outpost, instead of the old all-or-nothing dump.
 fn sell_choices(inventory: &Inventory) -> Vec<Option<ItemType>> {
-    const SELLABLE: [ItemType; 7] = [
-        ItemType::ScrapMetal,
-        ItemType::Crystal,
-        ItemType::BioSample,
-        ItemType::FuelCell,
-        ItemType::RareAlloy,
-        ItemType::AncientArtifact,
-        ItemType::AmmoCrate,
-    ];
     let mut choices = vec![None];
-    for item in SELLABLE {
+    for item in TRADE_GOODS {
         if inventory.items.get(&item).copied().unwrap_or(0) > 0 {
             choices.push(Some(item));
         }
     }
     choices
+}
+
+/// Description + unit cost for the current buy-goods choice.
+fn buy_row(inventory: &Inventory, station_idx: usize, choice_idx: usize) -> (String, u32, ItemType) {
+    let item = TRADE_GOODS[choice_idx % TRADE_GOODS.len()];
+    let price = crate::resources::station_item_buy_price(station_idx, item);
+    let held = inventory.items.get(&item).copied().unwrap_or(0);
+    (
+        format!("{} @ {}c each (hold: {})  (Left/Right: browse, Enter: buy 1)", item.name(), price, held),
+        price,
+        item,
+    )
 }
 
 /// Description + value for the current sell-cargo choice at this station.
@@ -2448,6 +2462,12 @@ fn get_docking_services(
             description: "Restore all damaged modules to full health".to_string(),
             cost: 0, // Calculated dynamically in the input handler
             available: true, // Checked dynamically
+        },
+        DockingService {
+            name: "Buy Goods",
+            description: buy_row(inventory, station_idx, 0).0,
+            cost: 0, // Shown per-choice in the description
+            available: true,
         },
         DockingService {
             name: "Undock",
@@ -2563,7 +2583,7 @@ fn docking_menu_input(
         .and_then(|t| crate::world::home_base::nearest_station_index(t.translation.truncate()))
         .unwrap_or(0);
 
-    let service_count = 8usize;
+    let service_count = 9usize;
     let old_idx = selection.0;
     let mut changed = false;
 
@@ -2576,19 +2596,24 @@ fn docking_menu_input(
         changed = true;
     }
 
-    // Left/Right cycles WHAT to sell while the Sell Cargo row is selected
-    // (ALL, or a single held stack priced for this station).
-    if selection.0 == 5 {
-        let choices = sell_choices(&inventory);
-        if selection.1 >= choices.len() {
+    // Left/Right cycles the cargo choice while Sell Cargo (5) or Buy
+    // Goods (7) is selected — what to sell (ALL or one held stack) or
+    // which good to buy, both priced for this station.
+    if selection.0 == 5 || selection.0 == 7 {
+        let len = if selection.0 == 5 {
+            sell_choices(&inventory).len()
+        } else {
+            TRADE_GOODS.len()
+        };
+        if selection.1 >= len {
             selection.1 = 0;
         }
         if keyboard.just_pressed(KeyCode::ArrowRight) {
-            selection.1 = (selection.1 + 1) % choices.len();
+            selection.1 = (selection.1 + 1) % len;
             changed = true;
         }
         if keyboard.just_pressed(KeyCode::ArrowLeft) {
-            selection.1 = (selection.1 + choices.len() - 1) % choices.len();
+            selection.1 = (selection.1 + len - 1) % len;
             changed = true;
         }
     }
@@ -2950,6 +2975,31 @@ fn docking_menu_input(
                 }
             }
             7 => {
+                // Buy Goods — one unit of the Left/Right choice
+                let (_, price, item) = buy_row(&inventory, station_idx, selection.1);
+                if currency.credits < price {
+                    notifications.write(ShowNotification {
+                        message: format!("Not enough credits (need {}c, have {}c)", price, currency.credits),
+                        notification_type: NotificationType::Warning,
+                        duration: 2.0,
+                    });
+                } else if !inventory.add_item(item, 1) {
+                    notifications.write(ShowNotification {
+                        message: "Cargo hold full!".into(),
+                        notification_type: NotificationType::Warning,
+                        duration: 2.0,
+                    });
+                } else {
+                    currency.credits -= price;
+                    notifications.write(ShowNotification {
+                        message: format!("Bought 1x {} (-{}c)", item.name(), price),
+                        notification_type: NotificationType::Success,
+                        duration: 2.0,
+                    });
+                    changed = true;
+                }
+            }
+            8 => {
                 // Undock
                 next_state.set(GameState::Exploring);
                 notifications.write(ShowNotification {
@@ -3021,6 +3071,7 @@ fn docking_menu_input(
             }
             (total_module_damage * 5.0) as u32
         }, module_query.iter().any(|m| m.health < m.max_health)),
+        ("Buy Goods", buy_row(&inventory, station_idx, selection.1).0, 0, true),
         ("Undock", "Return to exploring".to_string(), 0, true),
     ];
 

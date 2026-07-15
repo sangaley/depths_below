@@ -395,6 +395,17 @@ pub fn station_item_price(station_idx: usize, item: ItemType) -> u32 {
         .max(1.0) as u32
 }
 
+/// Per-unit BUY price at a station: 1.5x its sell price. The spread
+/// kills same-station arbitrage, while station identity keeps cross-
+/// station routes alive — a Mining Colony's cheap scrap (0.55x sell →
+/// ~0.83x buy) resells at a Trade Hub (1.2x) at a real margin. This is
+/// what turns station types into trade ROUTES instead of just
+/// differently-colored cash-out points.
+pub fn station_item_buy_price(station_idx: usize, item: ItemType) -> u32 {
+    let sell = station_item_price(station_idx, item);
+    (sell * 3 / 2).max(sell + 2)
+}
+
 #[derive(Resource, Serialize, Deserialize, Clone)]
 pub struct Inventory {
     pub items: HashMap<ItemType, u32>,
