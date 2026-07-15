@@ -23,6 +23,7 @@ mod vfx;
 mod spatial;
 mod demo;
 mod audio;
+mod debug;
 
 use states::GameState;
 use events::EventsPlugin;
@@ -46,6 +47,7 @@ use vfx::VfxPlugin;
 use spatial::SpatialPlugin;
 use demo::DemoPlugin;
 use audio::GameAudioPlugin;
+use debug::DebugPlugin;
 
 fn main() {
     App::new()
@@ -94,6 +96,7 @@ fn main() {
         ))
         .add_plugins(SpatialPlugin)
         .add_plugins(DemoPlugin)
+        .add_plugins(DebugPlugin)
         .add_plugins(GameAudioPlugin)
 
         .run();
