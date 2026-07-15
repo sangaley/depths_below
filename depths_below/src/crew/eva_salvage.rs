@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use rand::Rng;
+use std::collections::HashSet;
 
 use crate::components::*;
 use crate::events::*;
@@ -8,25 +9,29 @@ use crate::ai_ship::components::AiShipWreck;
 
 // ============================================================================
 // EVA SALVAGE — Cosmoteer-style crew looting.
-// F near a wreck dispatches a detail of idle crew: they leave the ship,
-// fly to the hulk, pry a unit of cargo loose, and ferry it home, trip
-// after trip, until the wreck is stripped or they're recalled (F again).
-// Loot is only banked when a crew member makes it back aboard — a crew
-// death mid-ferry loses whatever they were carrying, and wreck
-// explosions (death rattles, cook-offs on hot wrecks) hurt crew working
-// the hulk. This replaces the old instant press-F-to-loot flow.
+// F near a wreck dispatches a detail of idle crew. Each crew member
+// CLAIMS A SPECIFIC BLOCK on the hulk (farthest from the core first, so
+// the wreck peels outside-in), flies to it around the hull rather than
+// through it, spends a moment prying it loose — the block is physically
+// removed, chunks fly — then ferries the haul home. Trip after trip
+// until the wreck's loot is stripped or they're recalled (F again).
+// Loot only banks when a crew member makes it back aboard; a death
+// mid-ferry loses the carried haul, and wreck explosions (death
+// rattles, hot-wreck cook-offs) hurt crew working the hulk.
 // ============================================================================
 
 /// How close the ship must be to a wreck to dispatch a detail.
 const ORDER_RANGE: f32 = 420.0;
-/// Ship drifting further than this from the wreck recalls the detail.
+/// Ship drifting further than this from the worksite recalls the detail.
 const BREAK_RANGE: f32 = 750.0;
 /// Crew stranded further than this from the ship emergency-board instantly.
 const TELEPORT_RANGE: f32 = 1300.0;
 const EVA_SPEED: f32 = 130.0;
-const GRAB_SECONDS: f32 = 1.0;
+const GRAB_SECONDS: f32 = 1.2;
 const ARRIVE_WRECK: f32 = 16.0;
 const ARRIVE_SHIP: f32 = 60.0;
+/// Final-approach standoff: crew aim just outside their block, then hop in.
+const APPROACH_DIST: f32 = 45.0;
 const DETAIL_SIZE: usize = 3;
 /// Blast radius/scale for wreck explosions hitting EVA crew. Suits soak
 /// half the blast — a final-boom at point blank hurts badly but is
@@ -35,6 +40,8 @@ const BLAST_RADIUS: f32 = 90.0;
 const BLAST_SCALE: f32 = 0.5;
 
 const EVA_TINT: Color = Color::srgb(0.75, 0.85, 1.0);
+/// Slightly amber while hauling a block home — reads as "carrying".
+const CARRY_TINT: Color = Color::srgb(1.0, 0.85, 0.55);
 
 pub enum EvaPhase {
     Outbound,
@@ -48,8 +55,9 @@ pub enum EvaPhase {
 #[derive(Component)]
 pub struct EvaSalvaging {
     pub wreck: Entity,
-    /// Block (or wreck root) this crew member is flying at. Re-rolled
-    /// every trip; if it despawns mid-flight we fall back to the root.
+    /// The specific block this crew member has claimed for dismantling
+    /// (the wreck root as fallback for block-less world wrecks). Other
+    /// crew skip claimed blocks, so everyone works their own corner.
     pub grab_target: Entity,
     pub phase: EvaPhase,
     pub carrying: Option<ItemType>,
@@ -58,6 +66,13 @@ pub struct EvaSalvaging {
     pub home_local: Vec3,
     pub base_color: Color,
 }
+
+type BlockQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static GlobalTransform, &'static Sprite),
+    (Or<(With<Module>, With<HullSegment>)>, Without<CrewMember>),
+>;
 
 /// F key: dispatch a salvage detail at the nearest lootable wreck in
 /// range, or recall the detail that's already out.
@@ -73,7 +88,7 @@ pub fn order_salvage_detail(
     >,
     mut station_query: Query<(Entity, &mut CrewStation)>,
     children_query: Query<&Children>,
-    block_filter: Query<(), Or<(With<Module>, With<HullSegment>)>>,
+    block_query: BlockQuery,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyF) {
@@ -97,23 +112,24 @@ pub fn order_salvage_detail(
     let ship_pos = ship_gt.translation().truncate();
 
     // Nearest wreck with loot left, in dispatch range
-    let mut best: Option<(Entity, f32)> = None;
+    let mut best: Option<(Entity, Vec2, f32)> = None;
     for (entity, gt, wreck, poi) in wreck_query.iter() {
         if poi.poi_type != PoiType::Wreck || wreck.loot_remaining == 0 {
             continue;
         }
-        let dist = ship_pos.distance(gt.translation().truncate());
-        if dist < ORDER_RANGE && best.map_or(true, |(_, d)| dist < d) {
-            best = Some((entity, dist));
+        let pos = gt.translation().truncate();
+        let dist = ship_pos.distance(pos);
+        if dist < ORDER_RANGE && best.map_or(true, |(_, _, d)| dist < d) {
+            best = Some((entity, pos, dist));
         }
     }
-    let Some((wreck_entity, _)) = best else { return };
+    let Some((wreck_entity, wreck_center, _)) = best else { return };
 
     // Manually-assigned crew hold their posts. Auto-assigned crew are fair
     // game — the auto-assigner staffs every free hand within seconds, so
     // "unassigned idler" is an empty set on any crewed ship. Pull them the
     // way emergency dispatch does; auto-assign restaffs once they board.
-    let mut manual: std::collections::HashSet<Entity> = std::collections::HashSet::new();
+    let mut manual: HashSet<Entity> = HashSet::new();
     let mut auto_assigned: std::collections::HashMap<Entity, Entity> = std::collections::HashMap::new();
     for (station_entity, station) in station_query.iter() {
         if let Some(crew_entity) = station.assigned_crew {
@@ -125,17 +141,24 @@ pub fn order_salvage_detail(
         }
     }
 
-    let surviving_blocks: Vec<Entity> = children_query
+    // Blocks sorted farthest-from-core first: crew_0 gets the outermost,
+    // crew_1 the next, and so on — everyone flies somewhere different.
+    let mut blocks: Vec<(Entity, f32)> = children_query
         .get(wreck_entity)
         .map(|children| {
             children
                 .iter()
-                .filter(|c| block_filter.get(*c).is_ok())
+                .filter_map(|c| {
+                    block_query
+                        .get(c)
+                        .ok()
+                        .map(|(gt, _)| (c, gt.translation().truncate().distance_squared(wreck_center)))
+                })
                 .collect()
         })
         .unwrap_or_default();
+    blocks.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-    let mut rng = rand::thread_rng();
     let mut dispatched = 0usize;
     for (entity, mut crew, mut transform, gt, mut sprite) in crew_query.iter_mut() {
         if dispatched >= DETAIL_SIZE {
@@ -158,11 +181,10 @@ pub fn order_salvage_detail(
         let base_color = sprite.color;
         sprite.color = EVA_TINT;
 
-        let grab_target = if surviving_blocks.is_empty() {
-            wreck_entity
-        } else {
-            surviving_blocks[rng.gen_range(0..surviving_blocks.len())]
-        };
+        let grab_target = blocks
+            .get(dispatched)
+            .map(|(e, _)| *e)
+            .unwrap_or(wreck_entity);
 
         commands
             .entity(entity)
@@ -195,17 +217,17 @@ pub fn order_salvage_detail(
     }
 }
 
-/// Flies each EVA crew member through their trip loop:
-/// outbound → grab (1s dwell at the hulk) → return → deposit → repeat.
+/// Flies each EVA crew member through their trip loop: swing around the
+/// hulk to their claimed block → pry it loose (block pops off as debris)
+/// → haul it home around the hull → deposit → claim the next block.
 pub fn run_salvage_detail(
     time: Res<Time>,
     mut commands: Commands,
     ship_query: Query<(Entity, &GlobalTransform), With<Ship>>,
     mut eva_query: Query<(Entity, &mut Transform, &mut CrewMember, &mut EvaSalvaging, &mut Sprite)>,
     mut wreck_query: Query<(&GlobalTransform, &mut Wreck, &mut PointOfInterest, Option<&AiShipWreck>)>,
-    target_gt_query: Query<&GlobalTransform>,
     children_query: Query<&Children>,
-    block_filter: Query<(), Or<(With<Module>, With<HullSegment>)>>,
+    block_query: BlockQuery,
     mut inventory: ResMut<Inventory>,
     mut statistics: ResMut<Statistics>,
     mut notifications: MessageWriter<ShowNotification>,
@@ -214,6 +236,9 @@ pub fn run_salvage_detail(
     let ship_pos = ship_gt.translation().truncate();
     let dt = time.delta_secs();
     let mut rng = rand::thread_rng();
+
+    // Blocks already claimed by someone this frame — nobody double-books.
+    let reserved: HashSet<Entity> = eva_query.iter().map(|(.., eva, _)| eva.grab_target).collect();
 
     let generic_loot = [
         ItemType::ScrapMetal,
@@ -228,11 +253,18 @@ pub fn run_salvage_detail(
         if crew.health <= 0.0 {
             continue; // death event handling despawns them
         }
+        let pos = transform.translation.truncate();
+
+        // Wreck geometry for avoidance steering (None once it's gone)
+        let bounds = wreck_query
+            .get(eva.wreck)
+            .ok()
+            .map(|(gt, ..)| wreck_bounds(gt, eva.wreck, &children_query, &block_query));
 
         // Ship drifted too far from the worksite — break off.
         if !eva.recalled {
-            if let Ok((wreck_gt, ..)) = wreck_query.get_mut(eva.wreck) {
-                if ship_pos.distance(wreck_gt.translation().truncate()) > BREAK_RANGE {
+            if let Some((center, _)) = bounds {
+                if ship_pos.distance(center) > BREAK_RANGE {
                     eva.recalled = true;
                     notifications.write(ShowNotification {
                         message: "Salvage detail breaking off — out of range.".into(),
@@ -245,21 +277,44 @@ pub fn run_salvage_detail(
 
         match &mut eva.phase {
             EvaPhase::Outbound => {
-                if eva.recalled || wreck_query.get_mut(eva.wreck).is_err() {
-                    eva.phase = EvaPhase::Returning;
-                    continue;
-                }
-                // Follow the grab target; fall back to the wreck root if
-                // that block burned away or popped since we launched.
-                let target = target_gt_query
-                    .get(eva.grab_target)
-                    .or_else(|_| target_gt_query.get(eva.wreck));
-                let Ok(target_gt) = target else {
+                let Some((center, radius)) = bounds else {
                     eva.phase = EvaPhase::Returning;
                     continue;
                 };
-                let target_pos = target_gt.translation().truncate();
-                if fly_towards(&mut transform, target_pos, dt) < ARRIVE_WRECK {
+                if eva.recalled {
+                    eva.phase = EvaPhase::Returning;
+                    continue;
+                }
+                // Claimed block gone (burned, popped, dismantled by a
+                // faster colleague)? Claim a fresh one.
+                let block_pos = match block_query.get(eva.grab_target) {
+                    Ok((gt, _)) => Some(gt.translation().truncate()),
+                    Err(_) if eva.grab_target == eva.wreck => Some(center),
+                    Err(_) => None,
+                };
+                let Some(block_pos) = block_pos else {
+                    match pick_block(eva.wreck, center, &children_query, &block_query, &reserved) {
+                        Some(next) => eva.grab_target = next,
+                        None => eva.grab_target = eva.wreck,
+                    }
+                    continue;
+                };
+
+                // Aim for a standoff point on the block's outward side and
+                // swing around the hull to get there; the last short hop
+                // goes straight in. The avoidance radius is capped just
+                // inside the standoff so the orbit always converges onto
+                // it, even for blocks buried deeper than the hulk's rim.
+                let outward = (block_pos - center).normalize_or_zero();
+                let standoff = block_pos + outward * APPROACH_DIST;
+                let avoid_radius = radius.min(standoff.distance(center) - 15.0).max(30.0);
+                let final_approach = pos.distance(block_pos) < APPROACH_DIST + 40.0;
+                if final_approach {
+                    fly_towards(&mut transform, block_pos, None, dt);
+                } else {
+                    fly_towards(&mut transform, standoff, Some((center, avoid_radius)), dt);
+                }
+                if transform.translation.truncate().distance(block_pos) < ARRIVE_WRECK {
                     eva.phase = EvaPhase::Grabbing(Timer::from_seconds(GRAB_SECONDS, TimerMode::Once));
                 }
             }
@@ -279,6 +334,30 @@ pub fn run_salvage_detail(
                             ),
                             None => generic_loot[rng.gen_range(0..generic_loot.len())],
                         });
+                        sprite.color = CARRY_TINT;
+
+                        // DISMANTLE: the claimed block physically comes off
+                        // the hulk — flash + chunks in its own color.
+                        if eva.grab_target != eva.wreck {
+                            if let Ok((block_gt, block_sprite)) = block_query.get(eva.grab_target) {
+                                let block_pos = block_gt.translation().truncate();
+                                crate::combat::spawn_hit_effect(
+                                    &mut commands,
+                                    block_pos,
+                                    Color::srgb(0.7, 0.8, 1.0),
+                                    35.0,
+                                );
+                                crate::vfx::debris::spawn_chunks(
+                                    &mut commands,
+                                    &mut rng,
+                                    block_pos,
+                                    block_sprite.color,
+                                    Vec2::ZERO,
+                                );
+                            }
+                            commands.entity(eva.grab_target).try_despawn();
+                        }
+
                         if wreck.loot_remaining == 0 {
                             poi.discovered = true;
                             wreck.is_explored = true;
@@ -294,9 +373,9 @@ pub fn run_salvage_detail(
                 eva.phase = EvaPhase::Returning;
             }
             EvaPhase::Returning => {
-                let dist = fly_towards(&mut transform, ship_pos, dt);
+                let dist = fly_towards(&mut transform, ship_pos, bounds, dt);
                 if dist > TELEPORT_RANGE {
-                    // Stranded — emergency board, drop nothing (they made it).
+                    // Stranded — emergency board, keep the haul (they made it).
                     deposit(eva, &mut inventory, &mut notifications);
                     board_crew(&mut commands, ship_entity, entity, eva, &mut transform, &mut crew, &mut sprite);
                     continue;
@@ -306,6 +385,7 @@ pub fn run_salvage_detail(
                 }
 
                 deposit(eva, &mut inventory, &mut notifications);
+                sprite.color = EVA_TINT;
 
                 // Another trip, or board?
                 let more_work = !eva.recalled
@@ -318,17 +398,10 @@ pub fn run_salvage_detail(
                         .unwrap_or(false);
 
                 if more_work {
-                    let blocks: Vec<Entity> = children_query
-                        .get(eva.wreck)
-                        .map(|children| {
-                            children.iter().filter(|c| block_filter.get(*c).is_ok()).collect()
-                        })
-                        .unwrap_or_default();
-                    eva.grab_target = if blocks.is_empty() {
-                        eva.wreck
-                    } else {
-                        blocks[rng.gen_range(0..blocks.len())]
-                    };
+                    let center = bounds.map(|(c, _)| c).unwrap_or(ship_pos);
+                    eva.grab_target =
+                        pick_block(eva.wreck, center, &children_query, &block_query, &reserved)
+                            .unwrap_or(eva.wreck);
                     eva.phase = EvaPhase::Outbound;
                 } else {
                     board_crew(&mut commands, ship_entity, entity, eva, &mut transform, &mut crew, &mut sprite);
@@ -393,17 +466,86 @@ pub fn abort_eva_on_exit(
     }
 }
 
+/// Next block worth prying off: farthest surviving block from the core
+/// that nobody else has claimed — the hulk peels outside-in.
+fn pick_block(
+    wreck: Entity,
+    center: Vec2,
+    children_query: &Query<&Children>,
+    block_query: &BlockQuery,
+    reserved: &HashSet<Entity>,
+) -> Option<Entity> {
+    let children = children_query.get(wreck).ok()?;
+    children
+        .iter()
+        .filter(|c| !reserved.contains(c))
+        .filter_map(|c| {
+            block_query
+                .get(c)
+                .ok()
+                .map(|(gt, _)| (c, gt.translation().truncate().distance_squared(center)))
+        })
+        .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        .map(|(entity, _)| entity)
+}
+
+/// Wreck center + bounding radius (with clearance margin) for steering.
+fn wreck_bounds(
+    wreck_gt: &GlobalTransform,
+    wreck: Entity,
+    children_query: &Query<&Children>,
+    block_query: &BlockQuery,
+) -> (Vec2, f32) {
+    let center = wreck_gt.translation().truncate();
+    let mut radius: f32 = 60.0;
+    if let Ok(children) = children_query.get(wreck) {
+        for child in children.iter() {
+            if let Ok((gt, _)) = block_query.get(child) {
+                radius = radius.max(gt.translation().truncate().distance(center) + 50.0);
+            }
+        }
+    }
+    (center, radius)
+}
+
 /// Moves toward `target` at EVA speed, returns remaining distance.
-fn fly_towards(transform: &mut Transform, target: Vec2, dt: f32) -> f32 {
+/// Basic pathfinding: if the straight line ahead would cut through the
+/// hulk's bounding circle, slide along the tangent instead — crew visibly
+/// swing AROUND the wreck instead of clipping through its blocks.
+fn fly_towards(
+    transform: &mut Transform,
+    target: Vec2,
+    obstacle: Option<(Vec2, f32)>,
+    dt: f32,
+) -> f32 {
     let pos = transform.translation.truncate();
     let delta = target - pos;
     let dist = delta.length();
-    if dist > 1.0 {
-        let step = (EVA_SPEED * dt).min(dist);
-        let dir = delta / dist;
-        transform.translation.x += dir.x * step;
-        transform.translation.y += dir.y * step;
+    if dist <= 1.0 {
+        return dist;
     }
+    let mut dir = delta / dist;
+
+    if let Some((center, radius)) = obstacle {
+        let from_center = pos - center;
+        // Only dodge while we're outside the hull ourselves and the leg
+        // ahead actually clips the circle; the final approach (handled by
+        // the caller with obstacle = None) is allowed to go in.
+        if from_center.length() > radius * 0.6 {
+            let along = (center - pos).dot(dir);
+            if along > 0.0 && along < dist {
+                let closest = pos + dir * along;
+                if closest.distance(center) < radius {
+                    let side = if from_center.perp_dot(delta) >= 0.0 { 1.0 } else { -1.0 };
+                    dir = (from_center.perp() * side).normalize_or_zero();
+                }
+            }
+        }
+    }
+
+    let step = (EVA_SPEED * dt).min(dist);
+    transform.translation.x += dir.x * step;
+    transform.translation.y += dir.y * step;
     dist
 }
 
