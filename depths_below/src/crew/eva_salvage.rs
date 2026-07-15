@@ -20,10 +20,12 @@ use crate::ai_ship::components::AiShipWreck;
 // rattles, hot-wreck cook-offs) hurt crew working the hulk.
 // ============================================================================
 
-/// How close the ship must be to a wreck to dispatch a detail.
-const ORDER_RANGE: f32 = 420.0;
+/// How close the ship must be to a wreck's NEAREST BLOCK to dispatch a
+/// detail — root-origin distance made big hulks (whose origin sits far
+/// from their rim) demand parking inside the wreck.
+const ORDER_RANGE: f32 = 500.0;
 /// Ship drifting further than this from the worksite recalls the detail.
-const BREAK_RANGE: f32 = 750.0;
+const BREAK_RANGE: f32 = 900.0;
 /// Crew stranded further than this from the ship emergency-board instantly.
 const TELEPORT_RANGE: f32 = 1300.0;
 const EVA_SPEED: f32 = 130.0;
@@ -111,16 +113,24 @@ pub fn order_salvage_detail(
     let Ok(ship_gt) = ship_query.single() else { return };
     let ship_pos = ship_gt.translation().truncate();
 
-    // Nearest wreck with loot left, in dispatch range
+    // Nearest wreck in dispatch range — distance measured to whichever
+    // of its blocks is closest, not to the root origin.
     let mut best: Option<(Entity, Vec2, f32)> = None;
     for (entity, gt, wreck, poi) in wreck_query.iter() {
         if poi.poi_type != PoiType::Wreck || wreck.loot_remaining == 0 {
             continue;
         }
-        let pos = gt.translation().truncate();
-        let dist = ship_pos.distance(pos);
+        let root_pos = gt.translation().truncate();
+        let mut dist = ship_pos.distance(root_pos);
+        if let Ok(children) = children_query.get(entity) {
+            for child in children.iter() {
+                if let Ok((block_gt, _)) = block_query.get(child) {
+                    dist = dist.min(ship_pos.distance(block_gt.translation().truncate()));
+                }
+            }
+        }
         if dist < ORDER_RANGE && best.map_or(true, |(_, _, d)| dist < d) {
-            best = Some((entity, pos, dist));
+            best = Some((entity, root_pos, dist));
         }
     }
     let Some((wreck_entity, wreck_center, _)) = best else { return };
@@ -160,11 +170,26 @@ pub fn order_salvage_detail(
     blocks.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
     let mut dispatched = 0usize;
+    let (mut panicking, mut busy, mut held) = (0u32, 0u32, 0u32);
     for (entity, mut crew, mut transform, gt, mut sprite) in crew_query.iter_mut() {
         if dispatched >= DETAIL_SIZE {
             break;
         }
-        if crew.health <= 0.0 || crew.state != CrewState::Idle || manual.contains(&entity) {
+        if crew.health <= 0.0 {
+            continue;
+        }
+        // Tally WHY nobody is available — a bare "no idle crew" hides
+        // whether the problem is panic, emergencies, or manned posts.
+        if crew.state == CrewState::Panicking || crew.state == CrewState::Unconscious {
+            panicking += 1;
+            continue;
+        }
+        if manual.contains(&entity) {
+            held += 1;
+            continue;
+        }
+        if crew.state != CrewState::Idle {
+            busy += 1;
             continue;
         }
         if let Some(&station_entity) = auto_assigned.get(&entity) {
@@ -210,9 +235,12 @@ pub fn order_salvage_detail(
         });
     } else {
         notifications.write(ShowNotification {
-            message: "No idle crew for salvage duty.".into(),
+            message: format!(
+                "No crew free for salvage ({} panicking, {} busy, {} at manned posts).",
+                panicking, busy, held
+            ),
             notification_type: NotificationType::Warning,
-            duration: 2.5,
+            duration: 3.0,
         });
     }
 }

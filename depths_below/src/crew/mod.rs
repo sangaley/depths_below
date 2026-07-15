@@ -297,8 +297,16 @@ fn update_crew_needs(
             crew.oxygen = (crew.oxygen + 20.0 * time.delta_secs()).min(100.0);
         }
 
-        if crew.oxygen < 50.0 || depth_state.current_depth > 500.0 {
+        if crew.oxygen < 50.0 {
             crew.morale = (crew.morale - 5.0 * time.delta_secs()).max(0.0);
+        } else if depth_state.current_depth > 500.0 {
+            // Deep-space dread erodes morale but bottoms out ABOVE both
+            // the panic threshold (20) and the recovery threshold (30):
+            // depth alone makes crew jumpy, never permanently catatonic.
+            // Draining to 0 locked every deep-zone crew into panic forever
+            // — nobody could man a station or crew a salvage detail out
+            // where the wrecks actually are.
+            crew.morale = (crew.morale - 5.0 * time.delta_secs()).max(35.0);
         } else {
             crew.morale = (crew.morale + 1.0 * time.delta_secs()).min(100.0);
         }
