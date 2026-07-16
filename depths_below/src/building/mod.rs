@@ -139,7 +139,7 @@ impl Plugin for BuildingPlugin {
                 Update,
                 (
                     multiblock::build_helpers::draw_connection_lines,
-                    build_history::undo_redo_input,
+                    build_history::undo_input,
                     symmetry::toggle_symmetry,
                     build_info::toggle_cost_summary,
                     build_info::update_center_of_mass,
@@ -811,6 +811,7 @@ fn process_hull_placement(
     ship_query: Query<Entity, With<Ship>>,
     mut notifications: MessageWriter<ShowNotification>,
     mut currency: ResMut<Currency>,
+    mut history: ResMut<build_history::BuildHistory>,
 ) {
     let Ok(ship) = ship_query.single() else { return };
 
@@ -828,7 +829,7 @@ fn process_hull_placement(
 
         let texture = asset_server.load(sprite_map::hull_sprite_path(material));
 
-        commands.spawn((
+        let hull_entity = commands.spawn((
             (Sprite {
                     image: texture,
                     color,
@@ -853,7 +854,7 @@ fn process_hull_placement(
                 grid_position: grid_pos,
                 ..default()
             },
-        )).insert(ChildOf(ship));
+        )).insert(ChildOf(ship)).id();
 
         let layer_name = match event.layer {
             HullLayer::Outer => "Outer Hull",
@@ -865,6 +866,11 @@ fn process_hull_placement(
         if !event.free {
             let cost = material.cost();
             currency.credits = currency.credits.saturating_sub(cost);
+            history.record(build_history::BuildAction::PlaceHull {
+                entity: hull_entity,
+                material,
+                cost,
+            });
 
             notifications.write(ShowNotification {
                 message: format!("Placed {} ({}) -{}c", layer_name, material.name(), cost),
@@ -885,6 +891,7 @@ fn process_module_placement(
     mut placed_events: MessageWriter<ModulePlaced>,
     mut notifications: MessageWriter<ShowNotification>,
     mut currency: ResMut<Currency>,
+    mut history: ResMut<build_history::BuildHistory>,
 ) {
     let Ok(ship) = ship_query.single() else { return };
 
@@ -925,6 +932,11 @@ fn process_module_placement(
         if !event.free {
             let cost = registry.get(event.module_type).cost;
             currency.credits = currency.credits.saturating_sub(cost);
+            history.record(build_history::BuildAction::PlaceModule {
+                entity,
+                module_type: event.module_type,
+                cost,
+            });
 
             let message = if event.custom_name.is_some() {
                 format!("Placed Custom {} -{}c", event.module_type.name(), cost)
