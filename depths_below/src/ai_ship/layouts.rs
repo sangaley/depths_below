@@ -24,6 +24,50 @@ pub struct AiShipLayout {
     pub hull_material: HullMaterial,
 }
 
+impl AiShipLayout {
+    /// Converts a built-in layout to the canonical design format
+    /// (building::blueprint). The layouts in this file are the FALLBACK —
+    /// designs/factions/<slug>.json wins when present, and each layout
+    /// self-exports there on first spawn. Edit the JSON, not this file.
+    pub fn to_design(&self, name: &str) -> crate::building::blueprint::Blueprint {
+        use crate::building::blueprint::{Blueprint, BlueprintHullCell, BlueprintModule, BLUEPRINT_VERSION};
+        Blueprint {
+            name: name.into(),
+            hull_cells: self.hull_cells.iter().map(|c| BlueprintHullCell {
+                grid_pos: c.grid_pos,
+                layer: c.layer,
+                material: c.material,
+            }).collect(),
+            modules: self.modules.iter().map(|m| BlueprintModule {
+                module_type: m.module_type,
+                grid_pos: m.grid_pos,
+                rotation: m.rotation,
+                custom_name: None,
+                subcomponents: None,
+                extras: None,
+            }).collect(),
+            created_at: "builtin".into(),
+            version: BLUEPRINT_VERSION,
+        }
+    }
+}
+
+/// Stable file name per faction (designs/factions/<slug>.json).
+pub fn design_slug(ship_type: AiShipType) -> &'static str {
+    match ship_type {
+        AiShipType::Leviathan => "leviathan",
+        AiShipType::AbyssalCult => "abyssal_cult",
+        AiShipType::Drowned => "drowned",
+        AiShipType::PressureKing => "pressure_king",
+        AiShipType::GlassEye => "glass_eye",
+        AiShipType::IronTide => "iron_tide",
+        AiShipType::Blackwater => "blackwater",
+        AiShipType::RustSwarm => "rust_swarm",
+        AiShipType::Dreadnought => "dreadnought",
+        AiShipType::VoidTitan => "void_titan",
+    }
+}
+
 pub fn get_layout(ship_type: AiShipType) -> AiShipLayout {
     match ship_type {
         AiShipType::Leviathan => leviathan_layout(),

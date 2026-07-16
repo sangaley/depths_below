@@ -1,12 +1,57 @@
 use bevy::prelude::*;
 use rand::Rng;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
+use crate::building::blueprint::{self, apply_module_extras, Blueprint, BlueprintHullCell};
 use crate::building::registry::{CompanionData, ModuleRegistry};
 use crate::components::*;
 use crate::ship::spawn_module;
 
 use super::components::*;
-use super::layouts::{self, HullCellDef};
+use super::layouts;
+
+/// Faction designs, loaded once per run. designs/factions/<slug>.json wins;
+/// missing files are converted from the built-in layouts and self-exported
+/// so every faction ship exists as editable JSON after the first encounter.
+static DESIGN_CACHE: OnceLock<Mutex<HashMap<AiShipType, Blueprint>>> = OnceLock::new();
+
+fn faction_design(ship_type: AiShipType) -> Blueprint {
+    let cache = DESIGN_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut cache = cache.lock().unwrap();
+    cache
+        .entry(ship_type)
+        .or_insert_with(|| {
+            let slug = layouts::design_slug(ship_type);
+            let path = format!("designs/factions/{}.json", slug);
+            blueprint::load_design_file(&path).unwrap_or_else(|| {
+                let design = layouts::get_layout(ship_type).to_design(slug);
+                if let Err(e) = blueprint::write_design_file(&path, &design) {
+                    warn!("Could not export faction design {}: {}", slug, e);
+                }
+                design
+            })
+        })
+        .clone()
+}
+
+/// Root sprite bounds from the design's hull extent.
+fn design_body_size(design: &Blueprint) -> Vec2 {
+    let (mut min_x, mut max_x, mut min_y, mut max_y) = (i32::MAX, i32::MIN, i32::MAX, i32::MIN);
+    for cell in &design.hull_cells {
+        min_x = min_x.min(cell.grid_pos.x);
+        max_x = max_x.max(cell.grid_pos.x);
+        min_y = min_y.min(cell.grid_pos.y);
+        max_y = max_y.max(cell.grid_pos.y);
+    }
+    if design.hull_cells.is_empty() {
+        return Vec2::splat(66.0);
+    }
+    Vec2::new(
+        (max_x - min_x + 1) as f32 * 66.0,
+        (max_y - min_y + 1) as f32 * 66.0,
+    )
+}
 
 /// How much tougher and harder-hitting a ship gets the farther its spawn
 /// position sits from Haven Station (world origin). Distance is normalized
@@ -46,7 +91,8 @@ pub fn spawn_ai_ship(
     registry: &ModuleRegistry,
     asset_server: &AssetServer,
 ) -> Entity {
-    let layout = layouts::get_layout(ship_type);
+    let design = faction_design(ship_type);
+    let body_size = design_body_size(&design);
 
     let mut rng = rand::thread_rng();
 
@@ -104,7 +150,7 @@ pub fn spawn_ai_ship(
         (Sprite {
                 image: asset_server.load(crate::sprite_map::effect_sprite_path("ship_body")),
                 color: Color::NONE,
-                custom_size: Some(layout.body_size),
+                custom_size: Some(body_size),
                 ..default()
             }, Transform {
                 translation: Vec3::new(position.x, position.y, 0.05),
@@ -132,10 +178,10 @@ pub fn spawn_ai_ship(
     let (health_mult, damage_mult) = distance_difficulty(position);
 
     // Spawn hull segments as children
-    spawn_ai_hull(commands, asset_server, root, &layout.hull_cells, health_mult);
+    spawn_ai_hull(commands, asset_server, root, &design.hull_cells, health_mult);
 
     // Spawn modules as children, reusing existing spawn_module
-    for mp in &layout.modules {
+    for mp in &design.modules {
         let module_entity = spawn_module(
             commands,
             asset_server,
@@ -146,6 +192,12 @@ pub fn spawn_ai_ship(
             registry,
         );
         commands.entity(module_entity).insert(OwnedByAiShip { root });
+
+        // Faction design state — a design file can ship tuned guns, fire
+        // groups, ammo choices, and they apply here like on the player ship
+        if let Some(extras) = &mp.extras {
+            apply_module_extras(commands, module_entity, extras);
+        }
 
         // Distant ships hit harder too — scale weapon damage by the same
         // distance factor (see distance_difficulty doc comment).
@@ -170,7 +222,7 @@ fn spawn_ai_hull(
     commands: &mut Commands,
     asset_server: &AssetServer,
     parent: Entity,
-    hull_cells: &[HullCellDef],
+    hull_cells: &[BlueprintHullCell],
     health_mult: f32,
 ) {
     for cell in hull_cells {
