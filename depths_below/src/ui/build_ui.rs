@@ -1217,10 +1217,10 @@ pub fn update_controls_help(
             "B: Build Mode | U: Shop | J: Contracts | Enter: Launch | ESC: Pause".to_string()
         }
         BuildState::Placing => {
-            "Tab: Category | [/]: Item | R: Rotate | Click: Place | Right-Click: Remove | X: Delete Mode | B: Exit".to_string()
+            "Tab: Category | [/]: Item | R: Rotate | Click/Drag: Place | RMB: Remove | Ctrl+Z: Undo | Ctrl+Click, Ctrl+C/V: Copy/Paste | X: Delete | Esc/B: Exit".to_string()
         }
         BuildState::Deleting => {
-            "Click: Remove | X: Place Mode | B: Exit".to_string()
+            "Click or Drag: Remove | Ctrl+Z: Undo | X: Place Mode | Esc/B: Exit".to_string()
         }
         BuildState::PlacingComponent => {
             "Click Piece → Click Grid: Place | Right-Click: Remove/Customize | Enter: Finalize | ESC: Cancel".to_string()
