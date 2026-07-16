@@ -126,6 +126,12 @@ pub struct RemoveModuleRequest {
     pub module: Entity,
 }
 
+/// Request to remove a hull segment (build mode deletion)
+#[derive(Message)]
+pub struct RemoveHullRequest {
+    pub hull: Entity,
+}
+
 /// Module was removed
 #[derive(Message)]
 pub struct ModuleRemoved {
@@ -482,6 +488,7 @@ impl Plugin for EventsPlugin {
             .add_message::<PlaceHullRequest>()
             .add_message::<ModulePlaced>()
             .add_message::<RemoveModuleRequest>()
+            .add_message::<RemoveHullRequest>()
             .add_message::<ModuleRemoved>()
             // Crew events
             .add_message::<CrewDamaged>()

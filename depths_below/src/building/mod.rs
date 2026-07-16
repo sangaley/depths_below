@@ -66,6 +66,7 @@ impl Plugin for BuildingPlugin {
                     process_hull_placement,
                     process_module_placement,
                     process_module_removal,
+                    process_hull_removal,
                     blueprint::save_blueprint_system,
                     blueprint::load_blueprint_system,
                     blueprint::delete_blueprint_system,
@@ -647,7 +648,10 @@ fn check_position_rules(
 // PLACEMENT & REMOVAL INPUT
 // ============================================================================
 
-/// Handles placing new modules/hull via click
+/// Handles placing new modules/hull via click.
+/// Hull can also be painted by holding the button and dragging — one block
+/// per cell the ghost passes through. Modules stay click-per-place so a drag
+/// can't accidentally buy three reactors.
 fn handle_module_placement(
     mouse: Res<ButtonInput<MouseButton>>,
     build_state: Res<BuildingState>,
@@ -656,9 +660,14 @@ fn handle_module_placement(
     mut place_hull_events: MessageWriter<PlaceHullRequest>,
     symmetry_state: Res<symmetry::SymmetryState>,
     occupancy: Res<GridOccupancy>,
+    mut last_painted: Local<Option<IVec2>>,
 ) {
     if *current_state.get() != BuildState::Placing {
         return;
+    }
+
+    if !mouse.pressed(MouseButton::Left) {
+        *last_painted = None;
     }
 
     // TEMP [DEBUG_BUILD]: diagnosing a report of placement silently failing
@@ -671,9 +680,15 @@ fn handle_module_placement(
         );
     }
 
-    if mouse.just_pressed(MouseButton::Left) && build_state.is_valid_placement {
+    let is_hull = matches!(build_state.current_selection(), BuildSelection::Hull(_));
+    let drag_paint = is_hull
+        && mouse.pressed(MouseButton::Left)
+        && *last_painted != Some(build_state.ghost_position);
+
+    if (mouse.just_pressed(MouseButton::Left) || drag_paint) && build_state.is_valid_placement {
         let pos = build_state.ghost_position;
         let rot = build_state.rotation;
+        *last_painted = Some(pos);
 
         match build_state.current_selection() {
             BuildSelection::Hull(layer) => {
@@ -725,14 +740,20 @@ fn handle_module_placement(
     }
 }
 
-/// Handles removing modules
+/// Handles removing modules.
+/// In delete mode the button can be held and dragged to sweep away several
+/// blocks — one removal per cell entered. Right-click removal while placing
+/// stays single-click.
 fn handle_module_removal(
     mouse: Res<ButtonInput<MouseButton>>,
     build_state: Res<BuildingState>,
     current_state: Res<State<BuildState>>,
     occupancy: Res<GridOccupancy>,
     module_query: Query<(Entity, &Module)>,
+    hull_query: Query<Entity, With<HullSegment>>,
     mut remove_events: MessageWriter<RemoveModuleRequest>,
+    mut remove_hull_events: MessageWriter<RemoveHullRequest>,
+    mut last_deleted: Local<Option<IVec2>>,
 ) {
     let state = *current_state.get();
     let in_deleting = state == BuildState::Deleting;
@@ -742,10 +763,21 @@ fn handle_module_removal(
         return;
     }
 
-    let should_delete = (in_deleting && mouse.just_pressed(MouseButton::Left))
+    if !mouse.pressed(MouseButton::Left) {
+        *last_deleted = None;
+    }
+
+    let drag_delete = in_deleting
+        && mouse.pressed(MouseButton::Left)
+        && *last_deleted != Some(build_state.ghost_position);
+
+    let should_delete = drag_delete
         || (in_placing && mouse.just_pressed(MouseButton::Right));
 
     if should_delete {
+        if in_deleting {
+            *last_deleted = Some(build_state.ghost_position);
+        }
         // Use GridOccupancy to find the entity at the clicked cell
         // This works for any cell a multi-cell module occupies, not just origin
         if let Some(&entity) = occupancy.cells.get(&build_state.ghost_position) {
@@ -760,6 +792,8 @@ fn handle_module_removal(
                     }
                 }
                 remove_events.write(RemoveModuleRequest { module: entity });
+            } else if hull_query.get(entity).is_ok() {
+                remove_hull_events.write(RemoveHullRequest { hull: entity });
             }
         }
     }
@@ -935,6 +969,31 @@ fn process_module_removal(
             });
 
             commands.entity(event.module).despawn();
+        }
+    }
+}
+
+/// Processes RemoveHullRequest events (build-mode hull deletion, 75% refund
+/// like modules)
+fn process_hull_removal(
+    mut commands: Commands,
+    mut events: MessageReader<RemoveHullRequest>,
+    hull_query: Query<&HullSegment>,
+    mut notifications: MessageWriter<ShowNotification>,
+    mut currency: ResMut<Currency>,
+) {
+    for event in events.read() {
+        if let Ok(hull) = hull_query.get(event.hull) {
+            let refund = (hull.material.cost() as f32 * 0.75) as u32;
+            currency.credits += refund;
+
+            notifications.write(ShowNotification {
+                message: format!("Removed {} hull +{}c refund", hull.material.name(), refund),
+                notification_type: NotificationType::Warning,
+                duration: 1.5,
+            });
+
+            commands.entity(event.hull).despawn();
         }
     }
 }
