@@ -16,7 +16,7 @@ pub fn fire_missiles_system(
     fire_state: Res<FireGroupState>,
     power_state: Res<crate::resources::PowerState>,
     selection: Res<TargetSelection>,
-    ship_query: Query<(Entity, &ShipPhysics), With<Ship>>,
+    ship_query: Query<(Entity, &ShipPhysics, &Transform), With<Ship>>,
     mut weapon_query: Query<(
         Entity, &Module, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
@@ -28,11 +28,12 @@ pub fn fire_missiles_system(
     mut fuel_state: ResMut<crate::resources::FuelState>,
     windows_query: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::MainCamera>>,
+    input_state: Res<crate::resources::InputState>,
     mut commands: Commands,
     mut notifications: MessageWriter<ShowNotification>,
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
 ) {
-    let Ok((player_ship, ship_physics)) = ship_query.single() else { return };
+    let Ok((player_ship, ship_physics, ship_transform)) = ship_query.single() else { return };
 
     // Weapons need power — grid deficit silences launchers too.
     if power_state.power_balance < 0.0 {
@@ -46,6 +47,11 @@ pub fn fire_missiles_system(
             camera_query.single().ok()
                 .and_then(|(cam, gt)| cam.viewport_to_world_2d(gt, c).ok())
         });
+    // Controller right-stick aim beats the mouse while it owns aim (see
+    // InputState.gamepad_aim).
+    let cursor_world = input_state.gamepad_aim
+        .map(|dir| ship_transform.translation.truncate() + dir * 2000.0)
+        .or(cursor_world);
 
     for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning, temp) in weapon_query.iter_mut() {
         // Player ship only — see fire_weapons_system for why this matters:

@@ -102,32 +102,39 @@ pub fn ship_movement(
         })
         .sum();
 
-    // --- FACING: nose follows the mouse cursor ---
-    // Proportional controller: turn rate scales with how far off-target the
-    // nose is, capped at MAX_TURN_RATE, so the ship settles on the cursor
-    // smoothly instead of oscillating past it.
+    // --- FACING: nose follows the aim source ---
+    // Controller right stick when it has aim (see InputState.gamepad_aim),
+    // the mouse cursor otherwise. Proportional controller: turn rate scales
+    // with how far off-target the nose is, capped at MAX_TURN_RATE, so the
+    // ship settles on the target smoothly instead of oscillating past it.
     physics.rudder = input_state.movement.x;
     // While free-looking (holding T), the cursor is being used to pan the
     // camera, not aim — freezing the turn here stops the ship spinning to
     // face wherever the player happens to be looking.
     if !camera_state.free_look_active {
-    if let (Ok(window), Ok((camera, cam_gt))) = (windows_query.single(), camera_query.single()) {
-        if let Some(cursor) = window.cursor_position() {
-            if let Ok(cursor_world) = camera.viewport_to_world_2d(cam_gt, cursor) {
-                let to_cursor = cursor_world - transform.translation.truncate();
-                if to_cursor.length_squared() > 4.0 {
-                    let target_angle = to_cursor.y.atan2(to_cursor.x);
-                    let mut diff = target_angle - physics.rotation;
-                    while diff > std::f32::consts::PI { diff -= std::f32::consts::TAU; }
-                    while diff < -std::f32::consts::PI { diff += std::f32::consts::TAU; }
+        let target_angle = if let Some(aim) = input_state.gamepad_aim {
+            Some(aim.y.atan2(aim.x))
+        } else if let (Ok(window), Ok((camera, cam_gt))) =
+            (windows_query.single(), camera_query.single())
+        {
+            window.cursor_position()
+                .and_then(|cursor| camera.viewport_to_world_2d(cam_gt, cursor).ok())
+                .map(|cursor_world| cursor_world - transform.translation.truncate())
+                .filter(|to_cursor| to_cursor.length_squared() > 4.0)
+                .map(|to_cursor| to_cursor.y.atan2(to_cursor.x))
+        } else {
+            None
+        };
 
-                    let target_rate = (diff * TURN_GAIN).clamp(-MAX_TURN_RATE, MAX_TURN_RATE);
-                    let blend = (TURN_RESPONSE * dt).min(1.0);
-                    physics.angular_velocity += (target_rate - physics.angular_velocity) * blend;
-                }
-            }
+        if let Some(target_angle) = target_angle {
+            let mut diff = target_angle - physics.rotation;
+            while diff > std::f32::consts::PI { diff -= std::f32::consts::TAU; }
+            while diff < -std::f32::consts::PI { diff += std::f32::consts::TAU; }
+
+            let target_rate = (diff * TURN_GAIN).clamp(-MAX_TURN_RATE, MAX_TURN_RATE);
+            let blend = (TURN_RESPONSE * dt).min(1.0);
+            physics.angular_velocity += (target_rate - physics.angular_velocity) * blend;
         }
-    }
     } else {
         // Decay any leftover turn rate instead of leaving it frozen —
         // otherwise the ship keeps coasting on whatever angular velocity

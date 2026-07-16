@@ -618,6 +618,10 @@ pub struct InputState {
     pub mouse_grid_pos: IVec2,
     pub thruster_input: f32,    // Q/E for vertical thruster control
     pub brake: bool,            // Shift — retro-thrust against current velocity
+    /// Right-stick aim direction (ship-facing + dumb-fire weapons). Persists
+    /// after the stick releases so the nose holds heading; cleared when the
+    /// mouse moves and takes aim back. See gamepad::gamepad_flight.
+    pub gamepad_aim: Option<Vec2>,
 }
 
 // ============================================================================

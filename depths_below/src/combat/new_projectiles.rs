@@ -100,10 +100,11 @@ pub fn fire_weapons_system(
     targeting_computer_query: Query<&Module, Without<DestroyedModule>>,
     windows_query: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::MainCamera>>,
+    input_state: Res<crate::resources::InputState>,
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
     mut commands: Commands,
 ) {
-    let Ok((player_ship, _ship_transform, ship_physics, ship_velocity)) = ship_query.single() else { return };
+    let Ok((player_ship, ship_transform, ship_physics, ship_velocity)) = ship_query.single() else { return };
     let _dt = time.delta_secs();
 
     // Weapons need power: a grid in deficit (e.g. shield surging under fire)
@@ -119,6 +120,12 @@ pub fn fire_weapons_system(
             camera_query.single().ok()
                 .and_then(|(cam, gt)| cam.viewport_to_world_2d(gt, c).ok())
         });
+    // Controller right-stick aim beats the mouse while it owns aim (see
+    // InputState.gamepad_aim): dumb-fire at a point projected out along
+    // the stick direction.
+    let cursor_world = input_state.gamepad_aim
+        .map(|dir| ship_transform.translation.truncate() + dir * 2000.0)
+        .or(cursor_world);
 
     // Build module position list for adjacency checks
     let all_modules: Vec<(IVec2, ModuleType, bool)> = targeting_computer_query.iter()
