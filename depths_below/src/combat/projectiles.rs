@@ -24,20 +24,20 @@ pub(crate) fn spawn_projectile(
     damage: f32,
     speed: f32,
     range: f32,
-    from_player: bool,
+    owner: ProjectileOwner,
     ammo_type: AmmoType,
 ) {
     let direction = (target - origin).normalize_or_zero();
     let angle = direction.y.atan2(direction.x);
 
-    let texture_path = if from_player {
+    let texture_path = if owner.is_player() {
         crate::sprite_map::effect_sprite_path("torpedo")
     } else {
         crate::sprite_map::effect_sprite_path("enemy_projectile")
     };
 
     // Enemy projectiles keep red tint regardless of ammo type
-    let final_color = if from_player { ammo_type.projectile_color() } else { Color::srgb(1.0, 0.2, 0.2) };
+    let final_color = if owner.is_player() { ammo_type.projectile_color() } else { Color::srgb(1.0, 0.2, 0.2) };
 
     let final_speed = speed * ammo_type.speed_mult();
     let lifetime_secs = (range / final_speed.max(1.0)).max(0.1);
@@ -58,7 +58,7 @@ pub(crate) fn spawn_projectile(
             speed: final_speed,
             direction,
             lifetime: Timer::from_seconds(lifetime_secs, TimerMode::Once),
-            from_player,
+            owner,
             ammo_type,
         },
     ));
@@ -99,7 +99,11 @@ pub(super) fn projectile_collision(
     for (proj_entity, projectile, proj_transform) in projectile_query.iter() {
         let proj_pos = proj_transform.translation.truncate();
 
-        if projectile.from_player {
+        // Stage 1 of the ownership rework: behavior-preserving. Player
+        // shots resolve against creatures + AI ships; AI/creature shots
+        // resolve against the player. Stage 2 generalizes the non-player
+        // arm so AI shots can hit OTHER AI ships (minus their own root).
+        if projectile.owner.is_player() {
             let effective_radius = PROJECTILE_RADIUS * projectile.ammo_type.hit_radius_mult() + CREATURE_RADIUS;
             let is_aoe = projectile.ammo_type.is_aoe();
             let mut hit_any = false;

@@ -1059,6 +1059,27 @@ pub struct Weapon {
     pub max_ammo: u32,
 }
 
+/// Who fired a shot. Replaces the old `from_player: bool` — carries the
+/// actual shooter so collision resolution can eventually go any-vs-any
+/// (AI ships fighting each other), not just player-vs-AI. This is the
+/// legacy projectile's owner; the block-resolving path
+/// (combat::new_projectiles::Projectile) tracks the firing WEAPON entity
+/// instead and derives its ship via ChildOf.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ProjectileOwner {
+    Player,
+    /// The AI ship ROOT entity that fired.
+    AiShip(Entity),
+    /// Creature ranged attacks (see combat::effects).
+    Creature,
+}
+
+impl ProjectileOwner {
+    pub fn is_player(self) -> bool {
+        matches!(self, ProjectileOwner::Player)
+    }
+}
+
 /// Projectile entity - travels through the world and damages on contact
 #[derive(Component)]
 pub struct Projectile {
@@ -1066,7 +1087,7 @@ pub struct Projectile {
     pub speed: f32,
     pub direction: Vec2,
     pub lifetime: Timer,
-    pub from_player: bool,
+    pub owner: ProjectileOwner,
     pub ammo_type: AmmoType,
 }
 

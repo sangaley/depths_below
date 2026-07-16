@@ -33,7 +33,7 @@ pub fn ai_weapon_fire_system(
     let Ok(player_transform) = player_query.single() else { return };
     let player_pos = player_transform.translation.truncate();
 
-    for (_ai_entity, ai_transform, behavior, children) in ai_ships.iter() {
+    for (ai_entity, ai_transform, behavior, children) in ai_ships.iter() {
         if *behavior != AiShipBehavior::Engaging {
             continue;
         }
@@ -83,7 +83,7 @@ pub fn ai_weapon_fire_system(
                 weapon.damage,
                 crate::combat::PROJECTILE_SPEED,
                 weapon.range,
-                false, // not from player
+                crate::components::ProjectileOwner::AiShip(ai_entity),
                 ammo_storage.ammo_type,
             );
         }
