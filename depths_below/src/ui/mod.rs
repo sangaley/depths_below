@@ -1004,6 +1004,10 @@ fn handle_menu_input(
             return;
         }
         match current_state.get() {
+            // While build mode is active, Escape backs out of build layers
+            // (paste → selection → build mode, see clipboard_input) instead
+            // of opening the pause menu.
+            GameState::StationDocked if *build_state.get() != BuildState::Inactive => {}
             GameState::Exploring | GameState::StationDocked => {
                 pre_pause.0 = Some(*current_state.get());
                 next_state.set(GameState::Paused);

@@ -3,13 +3,17 @@ use crate::components::*;
 use crate::resources::*;
 use crate::events::*;
 use crate::states::BuildState;
-use crate::building::{GridOccupancy, ModuleRegistry};
+use crate::building::{cursor_to_ship_grid, footprints, GridOccupancy, ModuleRegistry};
 use crate::building::multiblock::components::*;
 
 // ============================================================================
 // COPY/PASTE SELECTION SYSTEM
-// Ctrl+click to select modules. Ctrl+C copies. Ctrl+V pastes.
-// Handles multi-block weapon chains as a unit.
+// Ctrl+click to select modules. Ctrl+C copies. Ctrl+V pastes. R rotates the
+// pending paste. Handles multi-block weapon chains as a unit.
+//
+// All cursor→grid math goes through cursor_to_ship_grid (ship-local space),
+// and all highlight/ghost sprites are children of the ship — world-space
+// versions of both only lined up while the ship sat at the world origin.
 // ============================================================================
 
 /// A copied module definition
@@ -39,22 +43,39 @@ pub struct BuildClipboard {
 #[derive(Component)]
 pub struct SelectionHighlight;
 
-/// System: Ctrl+click to toggle select modules, Ctrl+C to copy, Ctrl+V to paste
+/// All grid cells an entry occupies when pasted at `origin`.
+fn entry_cells(
+    entry: &ClipboardEntry,
+    origin: IVec2,
+    registry: &ModuleRegistry,
+) -> smallvec::SmallVec<[IVec2; 4]> {
+    let size = registry.get(entry.module_type).size;
+    let footprint = footprints::footprint_override(entry.module_type);
+    GridOccupancy::cells_for(origin + entry.offset, size, entry.rotation, footprint)
+}
+
+/// System: Ctrl+click to toggle select modules, Ctrl+C to copy, Ctrl+V to
+/// paste, Escape to back out one level (paste → selection → build mode)
 pub fn clipboard_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
-    camera_query: Query<(&Camera, &GlobalTransform)>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera>>,
+    ship_query: Query<(Entity, &GlobalTransform), (With<Ship>, Without<Camera>)>,
     mut clipboard: ResMut<BuildClipboard>,
     occupancy: Res<GridOccupancy>,
-    module_query: Query<(Entity, &Module, Option<&MachineBlock>)>,
+    module_query: Query<
+        (Entity, &Module, Option<&MachineBlock>),
+        Without<crate::ai_ship::components::OwnedByAiShip>,
+    >,
     mut commands: Commands,
     existing_highlights: Query<Entity, With<SelectionHighlight>>,
     mut notifications: MessageWriter<ShowNotification>,
     current_state: Res<State<BuildState>>,
-    _registry: Res<ModuleRegistry>,
+    mut next_build_state: ResMut<NextState<BuildState>>,
 ) {
     if *current_state.get() == BuildState::Inactive { return; }
+    let Ok((ship, ship_gt)) = ship_query.single() else { return };
 
     let ctrl = keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
 
@@ -62,19 +83,13 @@ pub fn clipboard_input(
     if ctrl && mouse.just_pressed(MouseButton::Left) && !clipboard.paste_mode {
         let Ok(window) = windows.single() else { return };
         let Ok((camera, camera_transform)) = camera_query.single() else { return };
-        let Some(cursor) = window.cursor_position()
-            .and_then(|p| camera.viewport_to_world_2d(camera_transform, p).ok())
+        let Some(grid_pos) = cursor_to_ship_grid(window, camera, camera_transform, ship_gt)
         else { return };
-
-        let grid_pos = IVec2::new(
-            (cursor.x / 66.0).round() as i32,
-            ((cursor.y + 33.0) / 66.0).round() as i32,
-        );
 
         if let Some(&entity) = occupancy.cells.get(&grid_pos) {
             if clipboard.selected.contains(&entity) {
                 clipboard.selected.retain(|&e| e != entity);
-            } else {
+            } else if module_query.get(entity).is_ok() {
                 clipboard.selected.push(entity);
 
                 // Auto-select entire multi-block chain
@@ -95,25 +110,31 @@ pub fn clipboard_input(
             }
         }
 
-        // Update highlights
+        // Update highlights (children of the ship, one tile per occupied cell)
         for entity in existing_highlights.iter() {
             commands.entity(entity).despawn();
         }
         for &entity in &clipboard.selected {
             if let Ok((_, module, _)) = module_query.get(entity) {
-                let pos = module.grid_position;
-                commands.spawn((
-                    (Sprite {
-                            color: Color::srgba(0.3, 0.6, 1.0, 0.3),
-                            custom_size: Some(Vec2::splat(64.0)),
-                            ..default()
-                        }, Transform::from_xyz(
-                            pos.x as f32 * 66.0,
-                            pos.y as f32 * 66.0 - 33.0,
-                            0.9,
-                        )),
-                    SelectionHighlight,
-                ));
+                let footprint = footprints::footprint_override(module.module_type);
+                let cells = GridOccupancy::cells_for(
+                    module.grid_position, module.size, module.rotation, footprint,
+                );
+                for cell in cells {
+                    commands.spawn((
+                        (Sprite {
+                                color: Color::srgba(0.3, 0.6, 1.0, 0.3),
+                                custom_size: Some(Vec2::splat(64.0)),
+                                ..default()
+                            }, Transform::from_xyz(
+                                cell.x as f32 * 66.0,
+                                cell.y as f32 * 66.0 - 33.0,
+                                0.9,
+                            )),
+                        SelectionHighlight,
+                        ChildOf(ship),
+                    ));
+                }
             }
         }
         return;
@@ -161,25 +182,35 @@ pub fn clipboard_input(
     if ctrl && keyboard.just_pressed(KeyCode::KeyV) && !clipboard.copied.is_empty() {
         clipboard.paste_mode = true;
         notifications.write(ShowNotification {
-            message: "Paste mode — click to place, Escape to cancel".into(),
+            message: "Paste mode — click to place, R to rotate, Escape to cancel".into(),
             notification_type: NotificationType::Info,
             duration: 3.0,
         });
     }
 
-    // === ESCAPE: Cancel selection or paste ===
+    // === R: Rotate pending paste 90° clockwise ===
+    if clipboard.paste_mode && keyboard.just_pressed(KeyCode::KeyR) {
+        for entry in clipboard.copied.iter_mut() {
+            entry.offset = IVec2::new(entry.offset.y, -entry.offset.x);
+            entry.rotation = entry.rotation.rotate_cw();
+        }
+    }
+
+    // === ESCAPE: back out one level — paste, then selection, then build mode ===
     if keyboard.just_pressed(KeyCode::Escape) {
         if clipboard.paste_mode {
             clipboard.paste_mode = false;
-        } else {
+        } else if !clipboard.selected.is_empty() {
             clipboard.selected.clear();
             for entity in existing_highlights.iter() {
                 commands.entity(entity).despawn();
             }
+        } else {
+            next_build_state.set(BuildState::Inactive);
         }
     }
 
-    // === CTRL+A: Select all ===
+    // === CTRL+A: Select all (player modules only) ===
     if ctrl && keyboard.just_pressed(KeyCode::KeyA) {
         clipboard.selected.clear();
         for (entity, _, _) in module_query.iter() {
@@ -197,11 +228,14 @@ pub fn clipboard_input(
 pub fn clipboard_paste(
     mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
-    camera_query: Query<(&Camera, &GlobalTransform)>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera>>,
+    ship_query: Query<&GlobalTransform, (With<Ship>, Without<Camera>)>,
     mut clipboard: ResMut<BuildClipboard>,
     occupancy: Res<GridOccupancy>,
     registry: Res<ModuleRegistry>,
     currency: ResMut<Currency>,
+    module_count: Query<&Module, Without<crate::ai_ship::components::OwnedByAiShip>>,
+    hull_count: Query<(), With<HullSegment>>,
     mut place_events: MessageWriter<PlaceModuleRequest>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
@@ -210,14 +244,9 @@ pub fn clipboard_paste(
 
     let Ok(window) = windows.single() else { return };
     let Ok((camera, camera_transform)) = camera_query.single() else { return };
-    let Some(cursor) = window.cursor_position()
-        .and_then(|p| camera.viewport_to_world_2d(camera_transform, p).ok())
+    let Ok(ship_gt) = ship_query.single() else { return };
+    let Some(grid_pos) = cursor_to_ship_grid(window, camera, camera_transform, ship_gt)
     else { return };
-
-    let grid_pos = IVec2::new(
-        (cursor.x / 66.0).round() as i32,
-        ((cursor.y + 33.0) / 66.0).round() as i32,
-    );
 
     // Check total cost
     let total_cost: u32 = clipboard.copied.iter()
@@ -233,10 +262,27 @@ pub fn clipboard_paste(
         return;
     }
 
-    // Check all positions are free
+    // Block limit — a paste is the easy way to blow straight past it
+    let block_count = module_count.iter().count() + hull_count.iter().count();
+    if block_count + clipboard.copied.len() > crate::combat::limits::MAX_SHIP_BLOCKS {
+        notifications.write(ShowNotification {
+            message: format!(
+                "Paste would exceed block limit ({}/{})",
+                block_count + clipboard.copied.len(),
+                crate::combat::limits::MAX_SHIP_BLOCKS
+            ),
+            notification_type: NotificationType::Warning,
+            duration: 3.0,
+        });
+        return;
+    }
+
+    // Check every cell of every module's footprint, not just origins —
+    // origin-only let 2x1 modules paste half-overlapped
     let all_free = clipboard.copied.iter().all(|entry| {
-        let target = grid_pos + entry.offset;
-        !occupancy.cells.contains_key(&target)
+        entry_cells(entry, grid_pos, &registry)
+            .iter()
+            .all(|cell| !occupancy.cells.contains_key(cell))
     });
 
     if !all_free {
@@ -280,8 +326,10 @@ pub fn paste_ghost_preview(
     mut commands: Commands,
     clipboard: Res<BuildClipboard>,
     windows: Query<&Window>,
-    camera_query: Query<(&Camera, &GlobalTransform)>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera>>,
+    ship_query: Query<(Entity, &GlobalTransform), (With<Ship>, Without<Camera>)>,
     occupancy: Res<GridOccupancy>,
+    registry: Res<ModuleRegistry>,
     existing_ghosts: Query<Entity, With<PasteGhostBlock>>,
 ) {
     // Despawn old ghosts
@@ -293,33 +341,31 @@ pub fn paste_ghost_preview(
 
     let Ok(window) = windows.single() else { return };
     let Ok((camera, camera_transform)) = camera_query.single() else { return };
-    let Some(cursor) = window.cursor_position()
-        .and_then(|p| camera.viewport_to_world_2d(camera_transform, p).ok())
+    let Ok((ship, ship_gt)) = ship_query.single() else { return };
+    let Some(grid_pos) = cursor_to_ship_grid(window, camera, camera_transform, ship_gt)
     else { return };
 
-    let grid_pos = IVec2::new(
-        (cursor.x / 66.0).round() as i32,
-        ((cursor.y + 33.0) / 66.0).round() as i32,
-    );
-
     for entry in &clipboard.copied {
-        let pos = grid_pos + entry.offset;
-        let world_x = pos.x as f32 * 66.0;
-        let world_y = pos.y as f32 * 66.0 - 33.0;
+        for cell in entry_cells(entry, grid_pos, &registry) {
+            let color = if occupancy.cells.contains_key(&cell) {
+                Color::srgba(0.8, 0.2, 0.2, 0.3)
+            } else {
+                Color::srgba(0.3, 0.7, 1.0, 0.3)
+            };
 
-        let color = if occupancy.cells.contains_key(&pos) {
-            Color::srgba(0.8, 0.2, 0.2, 0.3)
-        } else {
-            Color::srgba(0.3, 0.7, 1.0, 0.3)
-        };
-
-        commands.spawn((
-            (Sprite {
-                    color,
-                    custom_size: Some(Vec2::splat(60.0)),
-                    ..default()
-                }, Transform::from_xyz(world_x, world_y, 0.95)),
-            PasteGhostBlock,
-        ));
+            commands.spawn((
+                (Sprite {
+                        color,
+                        custom_size: Some(Vec2::splat(60.0)),
+                        ..default()
+                    }, Transform::from_xyz(
+                        cell.x as f32 * 66.0,
+                        cell.y as f32 * 66.0 - 33.0,
+                        0.95,
+                    )),
+                PasteGhostBlock,
+                ChildOf(ship),
+            ));
+        }
     }
 }

@@ -47,7 +47,8 @@ pub fn assign_fire_group(
     keyboard: Res<ButtonInput<KeyCode>>,
     _mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
-    camera_query: Query<(&Camera, &GlobalTransform)>,
+    camera_query: Query<(&Camera, &GlobalTransform), With<Camera>>,
+    ship_query: Query<&GlobalTransform, (With<Ship>, Without<Camera>)>,
     occupancy: Res<crate::building::GridOccupancy>,
     mut weapon_query: Query<(Entity, &Module, &mut FireGroup), With<Weapon>>,
     mut notifications: MessageWriter<crate::events::ShowNotification>,
@@ -63,17 +64,16 @@ pub fn assign_fire_group(
 
     let Some(group) = group else { return };
 
-    // Find weapon under cursor
+    // Find weapon under cursor — grid cells are ship-local, so the cursor
+    // has to be converted through the ship's transform (see
+    // building::cursor_to_ship_grid), not divided by the cell size in
+    // world space
     let Ok(window) = windows.single() else { return };
     let Ok((camera, cam_transform)) = camera_query.single() else { return };
-    let Some(cursor) = window.cursor_position()
-        .and_then(|p| camera.viewport_to_world_2d(cam_transform, p).ok())
+    let Ok(ship_gt) = ship_query.single() else { return };
+    let Some(grid_pos) =
+        crate::building::cursor_to_ship_grid(window, camera, cam_transform, ship_gt)
     else { return };
-
-    let grid_pos = IVec2::new(
-        (cursor.x / 66.0).round() as i32,
-        ((cursor.y + 33.0) / 66.0).round() as i32,
-    );
 
     if let Some(&entity) = occupancy.cells.get(&grid_pos) {
         if let Ok((_, module, mut fire_group)) = weapon_query.get_mut(entity) {

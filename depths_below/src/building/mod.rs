@@ -397,6 +397,35 @@ fn handle_build_input(
 // GHOST PREVIEW & VALIDATION
 // ============================================================================
 
+/// Converts the mouse cursor to a ship-local grid cell.
+///
+/// Grid coordinates are ship-local (hull/module tiles are children of
+/// the ship, positioned relative to it — see spawn_module /
+/// process_hull_placement / rooms::transform_to_grid, all of which
+/// use `grid_y * 66 - 33` as the local Y). The cursor position from
+/// viewport_to_world_2d is in WORLD space, so it has to be
+/// transformed into the ship's local space first — dividing world
+/// coordinates directly by grid_size only produces the right cell when
+/// the ship happens to be sitting exactly at world origin with zero
+/// rotation, which is essentially never true once you've actually flown
+/// anywhere. Every cursor→grid conversion must go through here.
+pub fn cursor_to_ship_grid(
+    window: &Window,
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    ship_gt: &GlobalTransform,
+) -> Option<IVec2> {
+    let cursor_pos = window.cursor_position()
+        .and_then(|p| camera.viewport_to_world_2d(camera_transform, p).ok())?;
+    let grid_size = 66.0;
+    let cursor_world = Vec3::new(cursor_pos.x, cursor_pos.y, 0.0);
+    let local = ship_gt.rotation().inverse() * (cursor_world - ship_gt.translation());
+    Some(IVec2::new(
+        (local.x / grid_size).round() as i32,
+        ((local.y + 33.0) / grid_size).round() as i32,
+    ))
+}
+
 /// Updates ghost position and validates placement.
 /// Tracks mouse in both Placing and Deleting modes.
 fn update_ghost_preview(
@@ -424,29 +453,7 @@ fn update_ghost_preview(
     let Ok((camera, camera_transform)) = camera_query.single() else { return };
     let Ok(ship_gt) = ship_query.single() else { return };
 
-    if let Some(cursor_pos) = window.cursor_position()
-        .and_then(|p| camera.viewport_to_world_2d(camera_transform, p).ok())
-    {
-        // Grid coordinates are ship-local (hull/module tiles are children of
-        // the ship, positioned relative to it — see spawn_module /
-        // process_hull_placement / rooms::transform_to_grid, all of which
-        // use `grid_y * 66 - 33` as the local Y). The cursor position from
-        // viewport_to_world_2d is in WORLD space, so it has to be
-        // transformed into the ship's local space first — dividing world
-        // coordinates directly by grid_size (the old code) only produced
-        // the right cell when the ship happened to be sitting exactly at
-        // world origin with zero rotation, which is essentially never true
-        // once you've actually flown anywhere. That's why the grid overlay
-        // never lined up with the ship, and why placement kept failing:
-        // clicks were resolving to the wrong cell relative to the hull.
-        let grid_size = 66.0;
-        let cursor_world = Vec3::new(cursor_pos.x, cursor_pos.y, 0.0);
-        let local = ship_gt.rotation().inverse() * (cursor_world - ship_gt.translation());
-        let grid_pos = IVec2::new(
-            (local.x / grid_size).round() as i32,
-            ((local.y + 33.0) / grid_size).round() as i32,
-        );
-
+    if let Some(grid_pos) = cursor_to_ship_grid(window, camera, camera_transform, ship_gt) {
         let ghost_moved = build_state.ghost_position != grid_pos;
         build_state.ghost_position = grid_pos;
 
