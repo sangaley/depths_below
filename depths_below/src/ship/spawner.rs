@@ -16,12 +16,17 @@ pub fn spawn_starter_ship(
     registry: Res<ModuleRegistry>,
     mut notifications: MessageWriter<ShowNotification>,
     existing_ship: Query<Entity, With<Ship>>,
+    mut rebuild_queue: ResMut<crate::ship::rebuild::RebuildQueue>,
 ) {
     // Guard: don't spawn a second ship
     if !existing_ship.is_empty() {
         return;
     }
     info!("Spawning starter vessel...");
+
+    // Fresh run — stale ghosts belonged to the previous ship (their
+    // sprites died with it as children of the old root).
+    rebuild_queue.ghosts.clear();
 
     // Initialize oxygen
     oxygen_state.max_oxygen = 1800.0;

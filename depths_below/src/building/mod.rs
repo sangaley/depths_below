@@ -63,10 +63,6 @@ impl Plugin for BuildingPlugin {
                     update_ghost_preview,
                     handle_module_placement,
                     handle_module_removal,
-                    process_hull_placement,
-                    process_module_placement,
-                    process_module_removal,
-                    process_hull_removal,
                     blueprint::save_blueprint_system,
                     blueprint::load_blueprint_system,
                     blueprint::delete_blueprint_system,
@@ -77,6 +73,22 @@ impl Plugin for BuildingPlugin {
                 )
                     .chain()
                     .run_if(in_state(GameState::StationDocked)),
+            )
+            // Placement/removal event processors also run while EXPLORING —
+            // the ghost-rebuild system (ship::rebuild) respawns destroyed
+            // blocks in flight via the same PlaceHullRequest /
+            // PlaceModuleRequest events the build mode uses.
+            .add_systems(
+                Update,
+                (
+                    process_hull_placement,
+                    process_module_placement,
+                    process_module_removal,
+                    process_hull_removal,
+                )
+                    .chain()
+                    .run_if(in_state(GameState::StationDocked)
+                        .or_else(in_state(GameState::Exploring))),
             )
             // Room detection runs in both surface and exploring
             .add_systems(

@@ -15,6 +15,7 @@ mod subsystems;
 mod heat;
 mod logistics;
 pub mod drill;
+pub mod rebuild;
 
 pub use movement::*;
 pub use systems::*;
@@ -146,8 +147,24 @@ impl Plugin for ShipPlugin {
                 (
                     hull::queue_hull_removal.after(hull::tint_destroyed_hull),
                     damage::queue_module_removal.after(damage::process_module_destruction),
-                    damage::tick_pending_removal,
+                    // Ghost recording must see the block's Module/HullSegment
+                    // data before tick_pending_removal despawns it.
+                    rebuild::record_rebuild_ghosts
+                        .after(hull::queue_hull_removal)
+                        .after(damage::queue_module_removal),
+                    damage::tick_pending_removal.after(rebuild::record_rebuild_ghosts),
                 ).in_set(ShipSet::Hull),
+            )
+            // Ghost rebuild: crew reconstruct destroyed blocks in flight;
+            // manual dock rebuilding clears built-over ghosts.
+            .init_resource::<rebuild::RebuildQueue>()
+            .add_systems(
+                Update,
+                rebuild::crew_rebuild_system.run_if(in_state(GameState::Exploring)),
+            )
+            .add_systems(
+                Update,
+                rebuild::cleanup_built_over_ghosts.run_if(in_state(GameState::StationDocked)),
             )
 
             // Heat network (7 systems, chained)
