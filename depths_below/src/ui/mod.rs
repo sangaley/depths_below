@@ -2394,8 +2394,15 @@ fn get_docking_services(
     station_idx: usize,
     market: &MarketEvents,
 ) -> Vec<DockingService> {
+    // Station identity: repairs/fuel/ammo are cheaper at the right outpost
+    // type (Mining/Refuel/Military — see world::station_types). These same
+    // multipliers must be applied when charging in docking_menu_input.
+    let discounts = crate::world::station_types::service_discounts(
+        crate::world::station_types::station_type(station_idx),
+    );
+
     let hull_damage = 1.0 - hull_state.hull_integrity;
-    let hull_repair_full_cost = (hull_damage * 500.0) as u32;
+    let hull_repair_full_cost = (hull_damage * 500.0 * discounts.hull_repair) as u32;
     let scrap_have = inventory.items.get(&ItemType::ScrapMetal).copied().unwrap_or(0);
     let scrap_usable = (hull_repair_full_cost / 50).min(scrap_have);
     let hull_repair_cost = hull_repair_full_cost.saturating_sub(scrap_usable * 50);
@@ -2424,7 +2431,7 @@ fn get_docking_services(
     }
 
     let fuel_missing = fuel_state.max_fuel - fuel_state.current_fuel;
-    let fuel_cost = (fuel_missing * 0.5) as u32;
+    let fuel_cost = (fuel_missing * 0.5 * discounts.fuel) as u32;
 
     vec![
         DockingService {
@@ -2516,7 +2523,17 @@ fn spawn_docking_menu(
         DockingOverlay,
         DockingMenuSelection(0, 0),
     )).with_children(|parent| {
-        parent.spawn((Text::new("HAVEN STATION — SHIPYARD"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H1), ..default() }, TextColor(theme::ThemeColors::ACCENT_CYAN)));
+        let title = if station_idx == 0 {
+            "HAVEN STATION — SHIPYARD".to_string()
+        } else {
+            let s_type = crate::world::station_types::station_type(station_idx);
+            format!(
+                "OUTPOST {} — {}",
+                station_idx,
+                crate::world::station_types::station_type_name(s_type).to_uppercase()
+            )
+        };
+        parent.spawn((Text::new(title), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H1), ..default() }, TextColor(theme::ThemeColors::ACCENT_CYAN)));
 
         parent.spawn((Text::new(format!("Credits: {}", currency.credits)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() }, TextColor(theme::ThemeColors::ACCENT_YELLOW)));
 
@@ -2590,6 +2607,11 @@ fn docking_menu_input(
     let station_idx = ship_query.single().ok()
         .and_then(|t| crate::world::home_base::nearest_station_index(t.translation.truncate()))
         .unwrap_or(0);
+    // Must match the multipliers used for the displayed costs in
+    // get_docking_services / the refresh block below.
+    let discounts = crate::world::station_types::service_discounts(
+        crate::world::station_types::station_type(station_idx),
+    );
 
     let service_count = 9usize;
     let old_idx = selection.0;
@@ -2640,7 +2662,7 @@ fn docking_menu_input(
                 // fuel/ammo's partial fill, so a failed attempt must not
                 // waste resources the player can't get back.
                 let hull_damage = 1.0 - hull_state.hull_integrity;
-                let full_cost = (hull_damage * 500.0) as u32;
+                let full_cost = (hull_damage * 500.0 * discounts.hull_repair) as u32;
                 if hull_damage < 0.01 {
                     notifications.write(ShowNotification {
                         message: "Hull already at full integrity".into(),
@@ -2739,7 +2761,7 @@ fn docking_menu_input(
 
                     let remaining_missing = fuel_state.max_fuel - fuel_state.current_fuel;
                     if remaining_missing > 1.0 {
-                        let cost = (remaining_missing * 0.5) as u32;
+                        let cost = (remaining_missing * 0.5 * discounts.fuel) as u32;
                         if currency.credits >= cost {
                             currency.credits -= cost;
                             fuel_state.current_fuel = fuel_state.max_fuel;
@@ -2794,7 +2816,7 @@ fn docking_menu_input(
                     }
 
                     let remaining_ammo = ammo_needed - ammo_from_crates;
-                    let cost = remaining_ammo * 5;
+                    let cost = (remaining_ammo as f32 * 5.0 * discounts.ammo) as u32;
                     if remaining_ammo > 0 && currency.credits < cost {
                         notifications.write(ShowNotification {
                             message: format!("Not enough credits for full rearm (need {}c)", cost),
@@ -3028,7 +3050,7 @@ fn docking_menu_input(
     let weapon_data: Vec<_> = weapon_query.iter().map(|w| (w.ammo, w.max_ammo)).collect();
 
     let hull_damage = 1.0 - hull_state.hull_integrity;
-    let hull_repair_full_cost = (hull_damage * 500.0) as u32;
+    let hull_repair_full_cost = (hull_damage * 500.0 * discounts.hull_repair) as u32;
     let scrap_have = inventory.items.get(&ItemType::ScrapMetal).copied().unwrap_or(0);
     let scrap_usable = (hull_repair_full_cost / 50).min(scrap_have);
     let hull_repair_cost = hull_repair_full_cost.saturating_sub(scrap_usable * 50);
@@ -3040,7 +3062,7 @@ fn docking_menu_input(
             ammo_needed += max_ammo - ammo;
         }
     }
-    let ammo_cost = ammo_needed * 5;
+    let ammo_cost = (ammo_needed as f32 * 5.0 * discounts.ammo) as u32;
     let hire_full_cost = 200 + (crew_count as u32) * 50;
     let bio_have = inventory.items.get(&ItemType::BioSample).copied().unwrap_or(0);
     let bio_usable = (hire_full_cost / 60).min(bio_have);
@@ -3052,7 +3074,7 @@ fn docking_menu_input(
     };
 
     let fuel_missing = fuel_state.max_fuel - fuel_state.current_fuel;
-    let fuel_cost = (fuel_missing * 0.5) as u32;
+    let fuel_cost = (fuel_missing * 0.5 * discounts.fuel) as u32;
 
     let new_idx = selection.0;
     let service_info: Vec<(&str, String, u32, bool)> = vec![

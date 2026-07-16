@@ -36,7 +36,7 @@ impl Plugin for WorldPlugin {
                     tick_market_events,
                     check_docking_proximity,
                     home_base::home_station_docking,
-                    home_base::outpost_resupply,
+                    home_base::outpost_docking,
                     home_base::update_base_arrow,
                     discover_log_entries,
                     apply_hazard_damage,
