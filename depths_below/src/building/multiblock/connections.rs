@@ -21,26 +21,35 @@ struct ConnectionResult {
 }
 
 /// Rebuild all machine connections each frame.
+///
+/// The position lookup is keyed by (SHIP ROOT, grid cell), not grid cell
+/// alone — grid coordinates are ship-local, and every ship/wreck reuses
+/// the same small numbers. A global map chained the player's machine
+/// cores into machine blocks on wrecks and AI ships that happened to be
+/// grid-adjacent in their OWN coordinates: kilometers-long connection
+/// lines on screen, and nearby wrecks silently changing the player's
+/// composed weapon stats.
 pub fn rebuild_machine_connections(
     mut commands: Commands,
-    mut machine_query: Query<(Entity, &Module, &mut MachineBlock)>,
+    mut machine_query: Query<(Entity, &Module, &mut MachineBlock, &ChildOf)>,
     mut core_stats: Query<&mut MachineStats>,
 ) {
-    // Build position → entity lookup
-    let mut pos_to_entity: HashMap<IVec2, Entity> = HashMap::new();
+    // Build (ship, position) → entity lookup
+    let mut pos_to_entity: HashMap<(Entity, IVec2), Entity> = HashMap::new();
     let mut entity_to_pos: HashMap<Entity, IVec2> = HashMap::new();
     let mut entity_roles: HashMap<Entity, BlockRole> = HashMap::new();
-    let mut cores: Vec<(Entity, IVec2)> = Vec::new();
+    let mut cores: Vec<(Entity, IVec2, Entity)> = Vec::new();
     let mut all_machine_entities: HashSet<Entity> = HashSet::new();
 
-    for (entity, module, block) in machine_query.iter_mut() {
-        pos_to_entity.insert(module.grid_position, entity);
+    for (entity, module, block, parent) in machine_query.iter_mut() {
+        let ship = parent.parent();
+        pos_to_entity.insert((ship, module.grid_position), entity);
         entity_to_pos.insert(entity, module.grid_position);
         entity_roles.insert(entity, block.role);
         all_machine_entities.insert(entity);
 
         if block.role == BlockRole::Core {
-            cores.push((entity, module.grid_position));
+            cores.push((entity, module.grid_position, ship));
         }
     }
 
@@ -49,7 +58,7 @@ pub fn rebuild_machine_connections(
     let mut connected_this_frame: HashSet<Entity> = HashSet::new();
     let mut core_counts: HashMap<Entity, MachineStats> = HashMap::new();
 
-    for (core_entity, core_pos) in &cores {
+    for (core_entity, core_pos, core_ship) in &cores {
         connected_this_frame.insert(*core_entity);
         core_counts.insert(*core_entity, MachineStats::default());
 
@@ -67,10 +76,10 @@ pub fn rebuild_machine_connections(
         let mut visited: HashSet<Entity> = HashSet::new();
         visited.insert(*core_entity);
 
-        // Seed with adjacent blocks
+        // Seed with adjacent blocks (same ship only)
         for offset in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
             let adj_pos = *core_pos + offset;
-            if let Some(&adj_entity) = pos_to_entity.get(&adj_pos) {
+            if let Some(&adj_entity) = pos_to_entity.get(&(*core_ship, adj_pos)) {
                 if adj_entity != *core_entity && all_machine_entities.contains(&adj_entity) {
                     queue.push_back((adj_entity, adj_pos, 1, *core_entity));
                 }
@@ -106,11 +115,11 @@ pub fn rebuild_machine_connections(
                 }
             }
 
-            // Continue BFS for chainable blocks
+            // Continue BFS for chainable blocks (same ship only)
             if role.can_chain() {
                 for offset in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
                     let adj_pos = pos + offset;
-                    if let Some(&adj_entity) = pos_to_entity.get(&adj_pos) {
+                    if let Some(&adj_entity) = pos_to_entity.get(&(*core_ship, adj_pos)) {
                         if !visited.contains(&adj_entity) && all_machine_entities.contains(&adj_entity) {
                             queue.push_back((adj_entity, adj_pos, distance + 1, entity));
                         }
@@ -130,7 +139,7 @@ pub fn rebuild_machine_connections(
 
     // === PASS 2: Apply connection data ===
     for conn in &connections {
-        if let Ok((_, _, mut block)) = machine_query.get_mut(conn.entity) {
+        if let Ok((_, _, mut block, _)) = machine_query.get_mut(conn.entity) {
             block.connected_core = Some(conn.core);
             block.chain_distance = conn.distance;
             block.prev_in_chain = conn.prev;
@@ -148,7 +157,7 @@ pub fn rebuild_machine_connections(
     // Mark disconnected blocks
     for entity in &all_machine_entities {
         if !connected_this_frame.contains(entity) {
-            if let Ok((_, _, mut block)) = machine_query.get_mut(*entity) {
+            if let Ok((_, _, mut block, _)) = machine_query.get_mut(*entity) {
                 block.connected_core = None;
                 block.chain_distance = 0;
                 block.next_in_chain = None;
