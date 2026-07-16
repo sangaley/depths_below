@@ -18,6 +18,7 @@ impl Plugin for CrewPlugin {
             .init_resource::<CrewRoster>()
             .init_resource::<StaffingState>()
             .init_resource::<AutoAssignTimer>()
+            .init_resource::<RepairScrapPool>()
             // Staffing / efficiency systems run at both StationDocked and Exploring
             // so the HUD shows correct crew/station counts at the surface.
             .add_systems(
@@ -623,8 +624,48 @@ fn crew_fire_suppression(
     }
 }
 
+/// HP restored per ScrapMetal consumed by field repair.
+const HP_PER_SCRAP: f32 = 25.0;
+/// Idle crew patch at half the rate of crew actively dispatched to an
+/// emergency.
+const IDLE_REPAIR_POWER: f32 = 0.5;
+
+/// Field-repair material budget. Hull/module HP healing draws from this;
+/// when the credit runs dry it converts ScrapMetal from the hold, and when
+/// there's no scrap left, patching stalls (breach sealing and fire
+/// suppression stay free — damage control needs hands, not plates).
+#[derive(Resource, Default)]
+pub struct RepairScrapPool {
+    hp_credit: f32,
+}
+
+impl RepairScrapPool {
+    /// Grant up to `want` HP of repair, converting scrap as needed.
+    /// Returns how much was actually granted.
+    fn draw(&mut self, want: f32, inventory: &mut Inventory) -> f32 {
+        let mut granted = 0.0;
+        let mut remaining = want;
+        while remaining > 0.0 {
+            if self.hp_credit <= 0.0 {
+                if !inventory.remove_item(ItemType::ScrapMetal, 1) {
+                    break;
+                }
+                self.hp_credit += HP_PER_SCRAP;
+            }
+            let take = remaining.min(self.hp_credit);
+            self.hp_credit -= take;
+            granted += take;
+            remaining -= take;
+        }
+        granted
+    }
+}
+
 /// Room-local crew repair system with RepairBay boost.
-/// Crew contribute flat repair power (no skills).
+/// Crew contribute flat repair power (no skills). Emergency-dispatched
+/// (Repairing) crew work at full power; IDLE crew in a damaged room pitch
+/// in at half power — the ship self-heals in the field as long as there's
+/// ScrapMetal aboard to feed the patches.
 fn crew_repair_system(
     time: Res<Time>,
     crew_query: Query<(&CrewMember, &CrewRoomLocation)>,
@@ -633,19 +674,27 @@ fn crew_repair_system(
     mut module_query: Query<&mut Module, (Without<DestroyedModule>, Without<RepairSystem>)>,
     room_map: Res<RoomMap>,
     occupancy: Res<GridOccupancy>,
+    mut inventory: ResMut<Inventory>,
+    mut pool: ResMut<RepairScrapPool>,
     mut notifications: MessageWriter<ShowNotification>,
     mut repaired_notified: Local<bool>,
+    mut stall_notified: Local<bool>,
 ) {
     let dt = time.delta_secs();
 
-    // Build per-room repair power from repairing crew (flat 1.0 per crew)
+    // Build per-room repair power: emergency crew at 1.0, idle hands at half
     let mut room_repair_power: std::collections::HashMap<usize, f32> = std::collections::HashMap::new();
     for (crew, location) in crew_query.iter() {
-        if crew.state != CrewState::Repairing || crew.health <= 0.0 {
+        if crew.health <= 0.0 {
             continue;
         }
+        let power = match crew.state {
+            CrewState::Repairing => 1.0,
+            CrewState::Idle => IDLE_REPAIR_POWER,
+            _ => continue,
+        };
         if let Some(room_id) = location.room_id {
-            *room_repair_power.entry(room_id).or_insert(0.0) += 1.0;
+            *room_repair_power.entry(room_id).or_insert(0.0) += power;
         }
     }
 
@@ -659,29 +708,45 @@ fn crew_repair_system(
     }
 
     let mut any_repaired = false;
+    let mut repair_stalled = false;
 
-    // Repair hull segments room-by-room
+    // Repair hull segments and modules room-by-room
     for (room_id, crew_power) in room_repair_power.iter() {
         let boost = room_repair_boost.get(room_id).copied().unwrap_or(0.0);
         let total_power = crew_power + boost;
 
         if let Some(room) = room_map.rooms.get(*room_id) {
             for &tile in &room.tiles {
-                // Find hull segments at this tile via occupancy
-                if let Some(&entity) = occupancy.cells.get(&tile) {
-                    if let Ok(mut hull) = hull_query.get_mut(entity) {
-                        if hull.is_depressurized && hull.depressurization_level > 0.0 {
-                            let repair_rate = total_power * 0.05 * dt;
-                            hull.depressurization_level = (hull.depressurization_level - repair_rate).max(0.0);
-                            if hull.depressurization_level <= 0.0 {
-                                hull.is_depressurized = false;
-                                any_repaired = true;
-                            }
+                let Some(&entity) = occupancy.cells.get(&tile) else { continue };
+                if let Ok(mut hull) = hull_query.get_mut(entity) {
+                    // Breach sealing is free — damage control, not materials
+                    if hull.is_depressurized && hull.depressurization_level > 0.0 {
+                        let repair_rate = total_power * 0.05 * dt;
+                        hull.depressurization_level = (hull.depressurization_level - repair_rate).max(0.0);
+                        if hull.depressurization_level <= 0.0 {
+                            hull.is_depressurized = false;
+                            any_repaired = true;
                         }
-                        // Repair hull health if damaged and not depressurized
-                        if hull.health < hull.max_health && !hull.is_depressurized {
-                            let heal_rate = total_power * 2.0 * dt;
-                            hull.health = (hull.health + heal_rate).min(hull.max_health);
+                    }
+                    // Patch hull health if damaged and not depressurized —
+                    // costs ScrapMetal via the pool
+                    if hull.health < hull.max_health && !hull.is_depressurized {
+                        let want = (total_power * 2.0 * dt).min(hull.max_health - hull.health);
+                        let granted = pool.draw(want, &mut inventory);
+                        hull.health += granted;
+                        if granted < want {
+                            repair_stalled = true;
+                        }
+                    }
+                } else if let Ok(mut module) = module_query.get_mut(entity) {
+                    // Crew also patch damaged modules in their room (new —
+                    // previously only the RepairBay touched module health)
+                    if module.health < module.max_health && module.health > 0.0 {
+                        let want = (total_power * 2.0 * dt).min(module.max_health - module.health);
+                        let granted = pool.draw(want, &mut inventory);
+                        module.health += granted;
+                        if granted < want {
+                            repair_stalled = true;
                         }
                     }
                 }
@@ -716,6 +781,20 @@ fn crew_repair_system(
     }
     if !any_repaired {
         *repaired_notified = false;
+    }
+
+    // Out of scrap with damage still waiting — tell the player once, and
+    // again if it happens again after resupplying.
+    if repair_stalled && !*stall_notified {
+        *stall_notified = true;
+        notifications.write(ShowNotification {
+            message: "Field repairs stalled — no ScrapMetal aboard".into(),
+            notification_type: NotificationType::Warning,
+            duration: 4.0,
+        });
+    }
+    if !repair_stalled {
+        *stall_notified = false;
     }
 }
 
