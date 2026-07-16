@@ -101,6 +101,7 @@ pub fn template_input(
             rotation,
             custom_name: None,
             subcomponents: None,
+            extras: None,
             free: false,
         });
 
@@ -112,6 +113,7 @@ pub fn template_input(
                 rotation,
                 custom_name: None,
                 subcomponents: None,
+            extras: None,
                 free: false,
             });
         }

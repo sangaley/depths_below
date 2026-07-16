@@ -229,6 +229,7 @@ pub fn crew_rebuild_system(
                 rotation,
                 custom_name: None,
                 subcomponents: None,
+            extras: None,
                 free: true,
             });
         }

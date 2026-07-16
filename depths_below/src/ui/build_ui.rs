@@ -1492,6 +1492,7 @@ fn apply_customization(
         rotation: build_state.rotation,
         custom_name: Some(custom_name),
         subcomponents: Some(subcomponents),
+            extras: None,
         free: false,
     });
 }
@@ -2075,6 +2076,7 @@ pub fn handle_component_placement_keyboard(
             rotation: build_state.rotation,
             custom_name: Some(custom_name),
             subcomponents: Some(subcomponents),
+            extras: None,
             free: false,
         });
 

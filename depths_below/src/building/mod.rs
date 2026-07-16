@@ -737,6 +737,7 @@ fn handle_module_placement(
                     rotation: rot,
                     custom_name: None,
                     subcomponents: None,
+            extras: None,
                     free: false,
                 });
                 // Symmetry: mirror module placement
@@ -750,6 +751,7 @@ fn handle_module_placement(
                             rotation: mirror_rot,
                             custom_name: None,
                             subcomponents: None,
+            extras: None,
                             free: false,
                         });
                     }
@@ -941,6 +943,12 @@ fn process_module_placement(
                 &registry,
             )
         };
+
+        // Restore design state (tuning, fire group, ammo) if the request
+        // carried any — blueprint loads and ghost rebuilds do.
+        if let Some(extras) = &event.extras {
+            blueprint::apply_module_extras(&mut commands, entity, extras);
+        }
 
         placed_events.write(ModulePlaced {
             module: entity,

@@ -304,6 +304,7 @@ pub fn clipboard_paste(
             rotation: entry.rotation,
             custom_name: None,
             subcomponents: None,
+            extras: None,
             free: false,
         });
         placed += 1;

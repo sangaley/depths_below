@@ -98,6 +98,9 @@ pub struct PlaceModuleRequest {
     pub rotation: Rotation,
     pub custom_name: Option<String>,
     pub subcomponents: Option<Vec<SubComponentType>>,
+    /// Per-module design state (tuning, fire group, ammo) restored on spawn.
+    /// None = registry defaults. See building::blueprint::ModuleExtras.
+    pub extras: Option<crate::building::blueprint::ModuleExtras>,
     /// If true, skip cost deduction (used by blueprint loading)
     pub free: bool,
 }
