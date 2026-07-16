@@ -65,10 +65,10 @@ impl HullMaterial {
 
     pub fn cost(&self) -> u32 {
         match self {
-            HullMaterial::Steel => 10,
-            HullMaterial::Titanium => 30,
-            HullMaterial::Composite => 80,
-            HullMaterial::AbyssalAlloy => 200,
+            HullMaterial::Steel => 8,
+            HullMaterial::Titanium => 23,
+            HullMaterial::Composite => 60,
+            HullMaterial::AbyssalAlloy => 150,
         }
     }
 
