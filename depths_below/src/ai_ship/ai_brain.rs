@@ -118,10 +118,23 @@ pub fn ai_brain_system(
         // player + every OTHER living AI ship within THIS ship's own
         // engage_range. Only consulted by the "attack anything in range"
         // arms below — see the function doc comment for which ones.
+        //
+        // STICKY: the target this ship already has (ai_target.entity, from
+        // last tick) gets its score boosted before comparing. Recomputing
+        // a fresh "best" from scratch every 0.25s meant that in any cluster
+        // of 3+ ships, near-tied scores flipped the winner tick to tick —
+        // nav.destination jumped to a totally different ship's position
+        // each time, and the standoff-orbit logic in movement.rs whipped
+        // the heading around chasing it (the "moving all over the place"
+        // playtest report). A held target now stays locked until something
+        // clearly outclasses it (40%+ better score) or it dies/leaves range.
+        const TARGET_STICKINESS: f32 = 1.4;
+        let held_target = ai_target.entity;
         let best_target: Option<(Entity, Vec2)> = player_snapshot.iter()
             .map(|&(e, p, v)| (e, p, v))
             .chain(ai_snapshot.iter().filter(|(e, _, _)| *e != entity).map(|&(e, p, v)| (e, p, v)))
             .filter(|(_, p, _)| pos.distance(*p) < engage_range)
+            .map(|(e, p, v)| (e, p, if Some(e) == held_target { v * TARGET_STICKINESS } else { v }))
             .max_by(|(_, pa, va), (_, pb, vb)| {
                 let score_a = va / pos.distance(*pa).max(200.0);
                 let score_b = vb / pos.distance(*pb).max(200.0);
