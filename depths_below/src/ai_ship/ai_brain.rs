@@ -391,17 +391,20 @@ pub fn ai_brain_system(
                         target: None,
                     });
                 } else {
-                    // RAM player upward - primary behavior (detection must
-                    // exceed the standoff — see AbyssalCult comment)
-                    if let Some((_, p_pos, dist)) = player_info {
-                        if dist < engage_range {
-                            // Position above the player to push them up
-                            let ram_pos = Vec2::new(p_pos.x, p_pos.y + 150.0);
+                    // RAM anyone upward, out of the deep territory — their
+                    // own flavor text says "anyone," not "the player"
+                    // specifically. Mis-scoped player-only in an earlier
+                    // pass; best_target fixes it (detection must exceed the
+                    // standoff — see Abyssal Cult's kamikaze comment).
+                    if let Some((t_entity, t_pos)) = best_target {
+                        if pos.distance(t_pos) < engage_range {
+                            // Position above the target to push it up
+                            let ram_pos = Vec2::new(t_pos.x, t_pos.y + 150.0);
                             actions.push(ScoredAction {
                                 score: 90.0,
                                 behavior: AiShipBehavior::Engaging,
                                 destination: Some(ram_pos),
-                                target: player_info.map(|(pe, pp, _)| (pe, pp)),
+                                target: Some((t_entity, t_pos)),
                             });
                         }
                     }
@@ -777,6 +780,11 @@ pub fn ai_brain_system(
 
         // Pick highest score
         if let Some(best) = actions.iter().max_by(|a, b| a.score.partial_cmp(&b.score).unwrap_or(std::cmp::Ordering::Equal)) {
+            // TEMP [AI_VS_AI_DIAGNOSTIC]
+            if std::env::var("DEPTHS_AI_VS_AI_TEST").is_ok() {
+                info!("[AI_VS_AI brain] {:?} ({:?}) score={:.0} behavior={:?} engage_range={:.0} best_target={:?} attacker_target={:?}",
+                    entity, ship_type, best.score, best.behavior, engage_range, best_target, attacker_target);
+            }
             *behavior = best.behavior;
             if let Some(dest) = best.destination {
                 nav.destination = Some(dest);

@@ -71,6 +71,33 @@ pub fn init_world_simulation(
             });
             info!("MOVETEST: single non-shooting {:?} dummy spawned at (500, 0) for damage-model testing", faction);
         }
+
+        // TEMP [AI_VS_AI_DIAGNOSTIC]: spawns a tight cluster of guaranteed
+        // combat-capable ships (alternating Iron Tide / Rust Swarm / Drowned
+        // / Blackwater, all "attack anything in range" factions per
+        // ai_brain.rs) close enough together to be within engage range from
+        // the start, for headlessly verifying AI-vs-AI combat actually
+        // lands hits. Remove once the diagnosis is confirmed.
+        if let Ok(count) = std::env::var("DEPTHS_AI_VS_AI_TEST").unwrap_or_default().parse::<usize>() {
+            let factions = [AiShipType::IronTide, AiShipType::RustSwarm, AiShipType::Drowned, AiShipType::Blackwater];
+            for i in 0..count {
+                let angle = (i as f32 / count as f32) * std::f32::consts::TAU;
+                let pos = Vec2::new(angle.cos(), angle.sin()) * 400.0;
+                sim.ships.push(SimulatedShip {
+                    faction: factions[i % factions.len()],
+                    position: pos,
+                    velocity: Vec2::ZERO,
+                    health: 1.0,
+                    fuel: 1.0,
+                    behavior: SimBehavior::Patrolling,
+                    home_zone: pos,
+                    patrol_radius: 2000.0,
+                    spawned: false,
+                    bounty_id: None,
+                });
+            }
+            info!("AI_VS_AI_TEST: spawned {} combat-capable ships in a 400u cluster", count);
+        }
         return;
     }
 
