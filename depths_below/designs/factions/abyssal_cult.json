@@ -1017,7 +1017,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.1,
+          "fire_rate": 1.2,
+          "damage": 1.25
+        },
+        "fire_group": 0,
+        "ammo": null
+      }
     },
     {
       "module_type": "PlasmaCaster",
@@ -1028,7 +1036,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.1,
+          "fire_rate": 1.2,
+          "damage": 1.25
+        },
+        "fire_group": 0,
+        "ammo": null
+      }
     },
     {
       "module_type": "PlasmaCaster",
@@ -1039,7 +1055,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.1,
+          "fire_rate": 1.2,
+          "damage": 1.25
+        },
+        "fire_group": 0,
+        "ammo": null
+      }
     },
     {
       "module_type": "PlasmaCaster",
@@ -1050,7 +1074,15 @@
       "rotation": "North",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.1,
+          "fire_rate": 1.2,
+          "damage": 1.25
+        },
+        "fire_group": 0,
+        "ammo": null
+      }
     },
     {
       "module_type": "IonDisruptor",
@@ -1061,7 +1093,15 @@
       "rotation": "North",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.1,
+          "damage": 1.15
+        },
+        "fire_group": 1,
+        "ammo": null
+      }
     },
     {
       "module_type": "IonDisruptor",
@@ -1072,7 +1112,15 @@
       "rotation": "South",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.1,
+          "damage": 1.15
+        },
+        "fire_group": 1,
+        "ammo": null
+      }
     },
     {
       "module_type": "RepairBay",

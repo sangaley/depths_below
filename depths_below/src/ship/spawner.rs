@@ -157,6 +157,24 @@ fn builtin_starter_design() -> crate::building::blueprint::Blueprint {
         extras: None,
     };
 
+    // Weapon variant: fire group + tuning multipliers (0.5-2.0x, see
+    // TUNING_MIN/MAX) + optional kinetic ammo (Bullet-type weapons only —
+    // Cannon/Railgun/Coilgun/Gatling; missiles/energy weapons pass None).
+    let mw = |module_type: ModuleType, x: i32, y: i32, rotation: Rotation,
+              fire_group: u8, velocity: f32, fire_rate: f32, damage: f32,
+              ammo: Option<crate::combat::ammo_types::KineticAmmoType>| BlueprintModule {
+        module_type,
+        grid_pos: IVec2::new(x, y),
+        rotation,
+        custom_name: None,
+        subcomponents: None,
+        extras: Some(crate::building::blueprint::ModuleExtras {
+            tuning: Some(crate::building::customization::tuning::WeaponTuning { velocity, fire_rate, damage }),
+            fire_group: Some(fire_group),
+            ammo: ammo.map(crate::building::customization::tuning::SelectedAmmo),
+        }),
+    };
+
     let modules = vec![
         // Stern: engineering (4 engines, twin reactors, fuel)
         m(ModuleType::StandardEngine, -7, 0, Rotation::West),
@@ -179,11 +197,11 @@ fn builtin_starter_design() -> crate::building::blueprint::Blueprint {
         m(ModuleType::GalleyMess, -1, 2, Rotation::North),
         m(ModuleType::SurgicalBay, -2, -3, Rotation::North),
         // Gun deck: railgun spine + twin cannons + twin gatlings
-        m(ModuleType::Railgun, 0, 0, Rotation::East),
-        m(ModuleType::Cannon, 0, 1, Rotation::East),
-        m(ModuleType::Cannon, 0, -1, Rotation::East),
-        m(ModuleType::Gatling, 2, 2, Rotation::East),
-        m(ModuleType::Gatling, 0, -2, Rotation::East),
+        mw(ModuleType::Railgun, 0, 0, Rotation::East, 2, 1.15, 0.85, 1.2, Some(crate::combat::ammo_types::KineticAmmoType::APFSDS)),
+        mw(ModuleType::Cannon, 0, 1, Rotation::East, 0, 1.0, 1.0, 1.15, Some(crate::combat::ammo_types::KineticAmmoType::APHE)),
+        mw(ModuleType::Cannon, 0, -1, Rotation::East, 0, 1.0, 1.0, 1.15, Some(crate::combat::ammo_types::KineticAmmoType::APHE)),
+        mw(ModuleType::Gatling, 2, 2, Rotation::East, 1, 1.0, 1.2, 1.0, Some(crate::combat::ammo_types::KineticAmmoType::Flak)),
+        mw(ModuleType::Gatling, 0, -2, Rotation::East, 1, 1.0, 1.2, 1.0, Some(crate::combat::ammo_types::KineticAmmoType::Flak)),
         // Shields + logistics
         m(ModuleType::ShieldEmitter, 4, 2, Rotation::North),
         m(ModuleType::ShieldEmitter, 6, -1, Rotation::North),
@@ -194,8 +212,8 @@ fn builtin_starter_design() -> crate::building::blueprint::Blueprint {
         // Bridge
         m(ModuleType::BridgeWing, 4, -2, Rotation::North),
         // Bow: missile battery + armor prow
-        m(ModuleType::HeavyMissile, 7, 1, Rotation::East),
-        m(ModuleType::HeavyMissile, 7, -1, Rotation::East),
+        mw(ModuleType::HeavyMissile, 7, 1, Rotation::East, 3, 1.0, 1.0, 1.1, None),
+        mw(ModuleType::HeavyMissile, 7, -1, Rotation::East, 3, 1.0, 1.0, 1.1, None),
         m(ModuleType::CornerArmorPlate, 8, 0, Rotation::North),
         m(ModuleType::AngledArmorPlate, 10, 0, Rotation::North),
         m(ModuleType::StaggeredArmorPlate, 1, -3, Rotation::North),

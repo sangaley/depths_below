@@ -917,7 +917,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.0,
+          "damage": 1.05
+        },
+        "fire_group": 2,
+        "ammo": null
+      }
     },
     {
       "module_type": "HeavyMissile",
@@ -928,7 +936,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.0,
+          "damage": 1.05
+        },
+        "fire_group": 2,
+        "ammo": null
+      }
     },
     {
       "module_type": "Railgun",
@@ -939,7 +955,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.3,
+          "fire_rate": 0.9,
+          "damage": 1.2
+        },
+        "fire_group": 1,
+        "ammo": "APFSDS"
+      }
     },
     {
       "module_type": "Gatling",
@@ -950,7 +974,15 @@
       "rotation": "North",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.2,
+          "damage": 1.0
+        },
+        "fire_group": 0,
+        "ammo": "AP"
+      }
     },
     {
       "module_type": "Gatling",
@@ -961,7 +993,15 @@
       "rotation": "South",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.2,
+          "damage": 1.0
+        },
+        "fire_group": 0,
+        "ammo": "AP"
+      }
     },
     {
       "module_type": "IonDisruptor",
@@ -972,7 +1012,15 @@
       "rotation": "North",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.0,
+          "damage": 1.1
+        },
+        "fire_group": 3,
+        "ammo": null
+      }
     }
   ],
   "created_at": "builtin",

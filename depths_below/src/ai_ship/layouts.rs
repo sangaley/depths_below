@@ -3,6 +3,7 @@
 
 use bevy::prelude::*;
 use crate::components::{ModuleType, HullMaterial, HullLayer, Rotation};
+use crate::combat::ammo_types::KineticAmmoType;
 use super::components::AiShipType;
 
 pub struct HullCellDef {
@@ -17,11 +18,41 @@ pub struct ModulePlacement {
     pub rotation: Rotation,
 }
 
+/// Combat loadout for one weapon placement, matched back to its
+/// ModulePlacement by grid_pos (positions are unique within a ship) rather
+/// than touching every ModulePlacement literal in this file. A weapon with
+/// no matching entry gets pure registry defaults (fire group 0, 1.0x
+/// tuning, AP ammo where applicable) — this is additive, not required.
+pub struct WeaponLoadout {
+    pub grid_pos: IVec2,
+    pub fire_group: u8,
+    pub tuning: crate::building::customization::tuning::WeaponTuning,
+    pub ammo: Option<crate::combat::ammo_types::KineticAmmoType>,
+}
+
+/// Shorthand for a WeaponLoadout entry.
+pub fn wl(
+    grid_pos: IVec2,
+    fire_group: u8,
+    velocity: f32,
+    fire_rate: f32,
+    damage: f32,
+    ammo: Option<crate::combat::ammo_types::KineticAmmoType>,
+) -> WeaponLoadout {
+    WeaponLoadout {
+        grid_pos,
+        fire_group,
+        tuning: crate::building::customization::tuning::WeaponTuning { velocity, fire_rate, damage },
+        ammo,
+    }
+}
+
 pub struct AiShipLayout {
     pub hull_cells: Vec<HullCellDef>,
     pub modules: Vec<ModulePlacement>,
     pub body_size: Vec2,
     pub hull_material: HullMaterial,
+    pub loadouts: Vec<WeaponLoadout>,
 }
 
 impl AiShipLayout {
@@ -30,7 +61,8 @@ impl AiShipLayout {
     /// designs/factions/<slug>.json wins when present, and each layout
     /// self-exports there on first spawn. Edit the JSON, not this file.
     pub fn to_design(&self, name: &str) -> crate::building::blueprint::Blueprint {
-        use crate::building::blueprint::{Blueprint, BlueprintHullCell, BlueprintModule, BLUEPRINT_VERSION};
+        use crate::building::blueprint::{Blueprint, BlueprintHullCell, BlueprintModule, ModuleExtras, BLUEPRINT_VERSION};
+        use crate::building::customization::tuning::SelectedAmmo;
         Blueprint {
             name: name.into(),
             hull_cells: self.hull_cells.iter().map(|c| BlueprintHullCell {
@@ -38,13 +70,21 @@ impl AiShipLayout {
                 layer: c.layer,
                 material: c.material,
             }).collect(),
-            modules: self.modules.iter().map(|m| BlueprintModule {
-                module_type: m.module_type,
-                grid_pos: m.grid_pos,
-                rotation: m.rotation,
-                custom_name: None,
-                subcomponents: None,
-                extras: None,
+            modules: self.modules.iter().map(|m| {
+                let loadout = self.loadouts.iter().find(|l| l.grid_pos == m.grid_pos);
+                let extras = loadout.map(|l| ModuleExtras {
+                    tuning: Some(l.tuning),
+                    fire_group: Some(l.fire_group),
+                    ammo: l.ammo.map(SelectedAmmo),
+                });
+                BlueprintModule {
+                    module_type: m.module_type,
+                    grid_pos: m.grid_pos,
+                    rotation: m.rotation,
+                    custom_name: None,
+                    subcomponents: None,
+                    extras,
+                }
             }).collect(),
             created_at: "builtin".into(),
             version: BLUEPRINT_VERSION,
@@ -147,7 +187,9 @@ fn leviathan_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::Floodlight, grid_pos: IVec2::new(10, 0), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::BasicQuarters, grid_pos: IVec2::new(5, 0), rotation: Rotation::North },
     ];
-    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material }
+    // Avoids combat entirely (flee-only per ai_brain.rs) — no combat
+    // identity to tune, registry defaults on its pair of defensive Gatlings.
+    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts: vec![] }
 }
 
 // ============================================================================
@@ -193,7 +235,17 @@ fn abyssal_cult_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::RepairBay, grid_pos: IVec2::new(4, 0), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::BasicQuarters, grid_pos: IVec2::new(5, 0), rotation: Rotation::North },
     ];
-    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material }
+    // Zealots: reckless power draw (quadratic tuning cost be damned),
+    // fire fast and hot on everything they've got.
+    let loadouts = vec![
+        wl(IVec2::new(9, 1), 0, 1.1, 1.2, 1.25, None),
+        wl(IVec2::new(9, -2), 0, 1.1, 1.2, 1.25, None),
+        wl(IVec2::new(8, 0), 0, 1.1, 1.2, 1.25, None),
+        wl(IVec2::new(7, 2), 0, 1.1, 1.2, 1.25, None),
+        wl(IVec2::new(6, 0), 1, 1.0, 1.1, 1.15, None),
+        wl(IVec2::new(7, -3), 1, 1.0, 1.1, 1.15, None),
+    ];
+    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
 // ============================================================================
@@ -233,7 +285,17 @@ fn drowned_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::SmallCargo, grid_pos: IVec2::new(6, 0), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::SmallCargo, grid_pos: IVec2::new(3, -2), rotation: Rotation::North },
     ];
-    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material }
+    // Battle-damaged and mindless: worn warheads (damage down), gatlings
+    // spraying fire indiscriminately (fire rate up, accuracy/damage down),
+    // Incendiary fits the derelict-ghost-ship theme.
+    let loadouts = vec![
+        wl(IVec2::new(6, 2), 0, 1.0, 1.3, 0.85, Some(KineticAmmoType::Incendiary)),
+        wl(IVec2::new(7, -4), 0, 1.0, 1.3, 0.85, Some(KineticAmmoType::Incendiary)),
+        wl(IVec2::new(11, 0), 1, 0.9, 1.0, 0.9, None),
+        wl(IVec2::new(9, -4), 1, 0.9, 1.0, 0.9, None),
+        wl(IVec2::new(8, 1), 1, 0.9, 1.0, 0.9, None),
+    ];
+    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
 // ============================================================================
@@ -281,7 +343,18 @@ fn pressure_king_layout() -> AiShipLayout {
         // Deep sensors
         ModulePlacement { module_type: ModuleType::DepthScanner, grid_pos: IVec2::new(7, 0), rotation: Rotation::East },
     ];
-    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material }
+    // Crushing pressure made physical: slow, heavy hits. HESH (shockwave
+    // through armor, no penetration needed) over AP — this is about
+    // crushing force, not piercing.
+    let loadouts = vec![
+        wl(IVec2::new(11, 1), 1, 1.0, 0.9, 1.2, None),
+        wl(IVec2::new(11, -2), 1, 1.0, 0.9, 1.2, None),
+        wl(IVec2::new(12, 0), 0, 1.1, 0.7, 1.4, Some(KineticAmmoType::HESH)),
+        wl(IVec2::new(10, 2), 0, 1.1, 0.7, 1.4, Some(KineticAmmoType::HESH)),
+        wl(IVec2::new(9, -3), 2, 1.0, 1.0, 1.1, None),
+        wl(IVec2::new(11, 0), 3, 1.0, 1.0, 1.0, None),
+    ];
+    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
 // ============================================================================
@@ -323,7 +396,8 @@ fn glass_eye_layout() -> AiShipLayout {
         // Signal buoy (broadcasts intel)
         ModulePlacement { module_type: ModuleType::SignalBuoy, grid_pos: IVec2::new(13, 0), rotation: Rotation::East },
     ];
-    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material }
+    // Carries zero weapons — nothing to tune.
+    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts: vec![] }
 }
 
 // ============================================================================
@@ -385,7 +459,21 @@ fn iron_tide_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::RadarArray, grid_pos: IVec2::new(11, 0), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::TargetingComputer, grid_pos: IVec2::new(10, -1), rotation: Rotation::East },
     ];
-    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material }
+    // Tanky battleship: hits hard, doesn't rush. APFSDS on the railguns
+    // (electromagnetic accelerator + fastest penetrator is a natural pair).
+    let loadouts = vec![
+        wl(IVec2::new(9, 3), 0, 1.0, 0.9, 1.2, Some(KineticAmmoType::APHE)),
+        wl(IVec2::new(9, -4), 0, 1.0, 0.9, 1.2, Some(KineticAmmoType::APHE)),
+        wl(IVec2::new(8, 2), 1, 1.0, 1.1, 1.0, Some(KineticAmmoType::Flak)),
+        wl(IVec2::new(8, -3), 1, 1.0, 1.1, 1.0, Some(KineticAmmoType::Flak)),
+        wl(IVec2::new(13, 0), 2, 1.1, 0.8, 1.3, Some(KineticAmmoType::APFSDS)),
+        wl(IVec2::new(13, 2), 2, 1.1, 0.8, 1.3, Some(KineticAmmoType::APFSDS)),
+        wl(IVec2::new(13, -3), 2, 1.1, 0.8, 1.3, Some(KineticAmmoType::APFSDS)),
+        wl(IVec2::new(12, 1), 3, 1.0, 1.0, 1.1, None),
+        wl(IVec2::new(12, -2), 3, 1.0, 1.0, 1.1, None),
+        wl(IVec2::new(11, 4), 3, 1.0, 1.0, 1.1, None),
+    ];
+    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
 // ============================================================================
@@ -429,7 +517,17 @@ fn blackwater_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::Gatling, grid_pos: IVec2::new(8, -2), rotation: Rotation::South },
         ModulePlacement { module_type: ModuleType::IonDisruptor, grid_pos: IVec2::new(6, 2), rotation: Rotation::North },
     ];
-    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material }
+    // Tactical mercs: precise over spray-and-pray. APFSDS on the railgun —
+    // fastest, sharpest penetrator for a single clean kill shot.
+    let loadouts = vec![
+        wl(IVec2::new(8, 1), 0, 1.0, 1.2, 1.0, Some(KineticAmmoType::AP)),
+        wl(IVec2::new(8, -2), 0, 1.0, 1.2, 1.0, Some(KineticAmmoType::AP)),
+        wl(IVec2::new(11, 2), 1, 1.3, 0.9, 1.2, Some(KineticAmmoType::APFSDS)),
+        wl(IVec2::new(12, 0), 2, 1.0, 1.0, 1.05, None),
+        wl(IVec2::new(12, -1), 2, 1.0, 1.0, 1.05, None),
+        wl(IVec2::new(6, 2), 3, 1.0, 1.0, 1.1, None),
+    ];
+    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
 // ============================================================================
@@ -461,7 +559,14 @@ fn rust_swarm_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::SmallCargo, grid_pos: IVec2::new(2, 0), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::SmallCargo, grid_pos: IVec2::new(3, -1), rotation: Rotation::North },
     ];
-    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material }
+    // Junk weapons spraying everything they've got — fire rate way up,
+    // damage/accuracy down. Flak fits scrappy proximity-fused junk shells
+    // and gives paper-shield swarmers rare anti-missile utility.
+    let loadouts = vec![
+        wl(IVec2::new(4, 1), 0, 1.0, 1.5, 0.7, Some(KineticAmmoType::Flak)),
+        wl(IVec2::new(5, 0), 1, 1.0, 1.3, 0.8, None),
+    ];
+    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
 // ============================================================================
@@ -539,7 +644,29 @@ fn dreadnought_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::TargetingComputer, grid_pos: IVec2::new(13, 0), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::TargetingComputer, grid_pos: IVec2::new(15, 0), rotation: Rotation::East },
     ];
-    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material }
+    // Overwhelming firepower across the board — grinds anything down with
+    // sheer coverage rather than any single specialty.
+    let loadouts = vec![
+        wl(IVec2::new(11, 5), 0, 1.0, 0.9, 1.2, Some(KineticAmmoType::APHE)),
+        wl(IVec2::new(11, -6), 0, 1.0, 0.9, 1.2, Some(KineticAmmoType::APHE)),
+        wl(IVec2::new(9, 6), 0, 1.0, 0.9, 1.2, Some(KineticAmmoType::APHE)),
+        wl(IVec2::new(9, -7), 0, 1.0, 0.9, 1.2, Some(KineticAmmoType::APHE)),
+        wl(IVec2::new(10, 4), 1, 1.0, 1.1, 1.05, Some(KineticAmmoType::Flak)),
+        wl(IVec2::new(10, -5), 1, 1.0, 1.1, 1.05, Some(KineticAmmoType::Flak)),
+        wl(IVec2::new(7, 4), 1, 1.0, 1.1, 1.05, Some(KineticAmmoType::Flak)),
+        wl(IVec2::new(7, -5), 1, 1.0, 1.1, 1.05, Some(KineticAmmoType::Flak)),
+        wl(IVec2::new(12, 1), 1, 1.0, 1.0, 1.15, None),
+        wl(IVec2::new(12, -2), 1, 1.0, 1.0, 1.15, None),
+        wl(IVec2::new(16, 0), 2, 1.1, 0.85, 1.25, Some(KineticAmmoType::APFSDS)),
+        wl(IVec2::new(16, 3), 2, 1.1, 0.85, 1.25, Some(KineticAmmoType::APFSDS)),
+        wl(IVec2::new(16, -4), 2, 1.1, 0.85, 1.25, Some(KineticAmmoType::APFSDS)),
+        wl(IVec2::new(15, 5), 2, 1.1, 0.85, 1.25, Some(KineticAmmoType::APFSDS)),
+        wl(IVec2::new(14, 2), 3, 1.0, 1.0, 1.15, None),
+        wl(IVec2::new(14, -3), 3, 1.0, 1.0, 1.15, None),
+        wl(IVec2::new(13, 4), 3, 1.0, 1.0, 1.15, None),
+        wl(IVec2::new(13, -5), 3, 1.0, 1.0, 1.15, None),
+    ];
+    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
 // ============================================================================
@@ -619,5 +746,28 @@ fn void_titan_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::TargetingComputer, grid_pos: IVec2::new(13, 1), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::TargetingComputer, grid_pos: IVec2::new(13, -1), rotation: Rotation::East },
     ];
-    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material }
+    // The apex: strongest tuning in the game across every weapon it
+    // carries. The hardest kill in the game should feel like it.
+    let loadouts = vec![
+        wl(IVec2::new(12, 6), 0, 1.0, 1.0, 1.3, Some(KineticAmmoType::APHE)),
+        wl(IVec2::new(12, -7), 0, 1.0, 1.0, 1.3, Some(KineticAmmoType::APHE)),
+        wl(IVec2::new(10, 7), 0, 1.0, 1.2, 1.15, Some(KineticAmmoType::Flak)),
+        wl(IVec2::new(10, -8), 0, 1.0, 1.2, 1.15, Some(KineticAmmoType::Flak)),
+        wl(IVec2::new(15, 2), 1, 1.0, 1.0, 1.3, None),
+        wl(IVec2::new(15, -3), 1, 1.0, 1.0, 1.3, None),
+        wl(IVec2::new(14, 7), 1, 1.0, 1.0, 1.3, None),
+        wl(IVec2::new(14, -8), 1, 1.0, 1.0, 1.3, None),
+        wl(IVec2::new(19, 4), 2, 1.2, 0.9, 1.4, Some(KineticAmmoType::APFSDS)),
+        wl(IVec2::new(19, -5), 2, 1.2, 0.9, 1.4, Some(KineticAmmoType::APFSDS)),
+        wl(IVec2::new(18, 6), 2, 1.2, 0.9, 1.4, Some(KineticAmmoType::APFSDS)),
+        wl(IVec2::new(18, -7), 2, 1.2, 0.9, 1.4, Some(KineticAmmoType::APFSDS)),
+        wl(IVec2::new(20, 1), 2, 1.15, 1.0, 1.35, None),
+        wl(IVec2::new(20, -1), 2, 1.15, 1.0, 1.35, None),
+        wl(IVec2::new(21, 0), 2, 1.15, 1.0, 1.35, None),
+        wl(IVec2::new(17, 3), 3, 1.0, 1.05, 1.25, None),
+        wl(IVec2::new(17, -4), 3, 1.0, 1.05, 1.25, None),
+        wl(IVec2::new(16, 5), 3, 1.0, 1.05, 1.25, None),
+        wl(IVec2::new(16, -6), 3, 1.0, 1.05, 1.25, None),
+    ];
+    AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }

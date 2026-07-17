@@ -914,7 +914,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.15,
+          "fire_rate": 0.85,
+          "damage": 1.2
+        },
+        "fire_group": 2,
+        "ammo": "APFSDS"
+      }
     },
     {
       "module_type": "Cannon",
@@ -925,7 +933,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.0,
+          "damage": 1.15
+        },
+        "fire_group": 0,
+        "ammo": "APHE"
+      }
     },
     {
       "module_type": "Cannon",
@@ -936,7 +952,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.0,
+          "damage": 1.15
+        },
+        "fire_group": 0,
+        "ammo": "APHE"
+      }
     },
     {
       "module_type": "Gatling",
@@ -947,7 +971,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.2,
+          "damage": 1.0
+        },
+        "fire_group": 1,
+        "ammo": "Flak"
+      }
     },
     {
       "module_type": "Gatling",
@@ -958,7 +990,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.2,
+          "damage": 1.0
+        },
+        "fire_group": 1,
+        "ammo": "Flak"
+      }
     },
     {
       "module_type": "ShieldEmitter",
@@ -1046,7 +1086,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.0,
+          "damage": 1.1
+        },
+        "fire_group": 3,
+        "ammo": null
+      }
     },
     {
       "module_type": "HeavyMissile",
@@ -1057,7 +1105,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.0,
+          "damage": 1.1
+        },
+        "fire_group": 3,
+        "ammo": null
+      }
     },
     {
       "module_type": "CornerArmorPlate",

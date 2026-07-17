@@ -1060,7 +1060,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.0,
+          "damage": 1.0
+        },
+        "fire_group": 3,
+        "ammo": null
+      }
     },
     {
       "module_type": "IonDisruptor",
@@ -1071,7 +1079,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 0.9,
+          "damage": 1.2
+        },
+        "fire_group": 1,
+        "ammo": null
+      }
     },
     {
       "module_type": "IonDisruptor",
@@ -1082,7 +1098,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 0.9,
+          "damage": 1.2
+        },
+        "fire_group": 1,
+        "ammo": null
+      }
     },
     {
       "module_type": "Railgun",
@@ -1093,7 +1117,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.1,
+          "fire_rate": 0.7,
+          "damage": 1.4
+        },
+        "fire_group": 0,
+        "ammo": "HESH"
+      }
     },
     {
       "module_type": "Railgun",
@@ -1104,7 +1136,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.1,
+          "fire_rate": 0.7,
+          "damage": 1.4
+        },
+        "fire_group": 0,
+        "ammo": "HESH"
+      }
     },
     {
       "module_type": "HeavyMissile",
@@ -1115,7 +1155,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.0,
+          "damage": 1.1
+        },
+        "fire_group": 2,
+        "ammo": null
+      }
     },
     {
       "module_type": "RepairBay",

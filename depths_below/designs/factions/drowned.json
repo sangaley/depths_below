@@ -744,7 +744,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 0.9,
+          "fire_rate": 1.0,
+          "damage": 0.9
+        },
+        "fire_group": 1,
+        "ammo": null
+      }
     },
     {
       "module_type": "HeavyMissile",
@@ -755,7 +763,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 0.9,
+          "fire_rate": 1.0,
+          "damage": 0.9
+        },
+        "fire_group": 1,
+        "ammo": null
+      }
     },
     {
       "module_type": "Gatling",
@@ -766,7 +782,15 @@
       "rotation": "North",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.3,
+          "damage": 0.85
+        },
+        "fire_group": 0,
+        "ammo": "Incendiary"
+      }
     },
     {
       "module_type": "Gatling",
@@ -777,7 +801,15 @@
       "rotation": "South",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.3,
+          "damage": 0.85
+        },
+        "fire_group": 0,
+        "ammo": "Incendiary"
+      }
     },
     {
       "module_type": "ClusterRocket",
@@ -788,7 +820,15 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 0.9,
+          "fire_rate": 1.0,
+          "damage": 0.9
+        },
+        "fire_group": 1,
+        "ammo": null
+      }
     },
     {
       "module_type": "BasicQuarters",
