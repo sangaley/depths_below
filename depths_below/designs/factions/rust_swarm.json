@@ -1,0 +1,411 @@
+{
+  "name": "rust_swarm",
+  "hull_cells": [
+    {
+      "grid_pos": [
+        2,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        3,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        4,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        5,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        -1,
+        1
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        0,
+        1
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        1,
+        1
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        2,
+        1
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        3,
+        1
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        4,
+        1
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        5,
+        1
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        6,
+        1
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        -2,
+        0
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        -1,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        0,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        1,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        2,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        3,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        4,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        5,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        6,
+        0
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        -2,
+        -1
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        -1,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        0,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        1,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        2,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        3,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        4,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        5,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        6,
+        -1
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        -1,
+        -2
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        0,
+        -2
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        1,
+        -2
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        2,
+        -2
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        3,
+        -2
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        4,
+        -2
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        5,
+        -2
+      ],
+      "layer": "Inner",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        6,
+        -2
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        2,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        3,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        4,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    },
+    {
+      "grid_pos": [
+        5,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Steel"
+    }
+  ],
+  "modules": [
+    {
+      "module_type": "SmallEngine",
+      "grid_pos": [
+        -1,
+        0
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "SmallReactor",
+      "grid_pos": [
+        0,
+        0
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "ClusterRocket",
+      "grid_pos": [
+        5,
+        0
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "Gatling",
+      "grid_pos": [
+        4,
+        1
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "SmallCargo",
+      "grid_pos": [
+        2,
+        0
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "SmallCargo",
+      "grid_pos": [
+        3,
+        -1
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    }
+  ],
+  "created_at": "builtin",
+  "version": 2
+}

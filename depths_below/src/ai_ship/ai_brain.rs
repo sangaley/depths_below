@@ -478,14 +478,20 @@ pub fn ai_brain_system(
                     });
                 }
 
-                // Under fire → immediately engage (battle-hardened)
+                // Under fire → immediately engage (battle-hardened). No
+                // attacker tracking exists, so retaliate against the
+                // biggest threat in range rather than assuming it's the
+                // player — otherwise this outscores the generic engage arm
+                // below every time the PLAYER is the one shooting, and a
+                // battleship never gets the chance to turn on something
+                // else even when it's a much bigger threat.
                 if under_fire {
-                    if let Some((_, p_pos, _)) = player_info {
+                    if let Some((_, t_pos)) = best_target {
                         actions.push(ScoredAction {
                             score: 95.0,
                             behavior: AiShipBehavior::Engaging,
-                            destination: Some(p_pos),
-                            target: player_info.map(|(pe, pp, _)| (pe, pp)),
+                            destination: Some(t_pos),
+                            target: best_target,
                         });
                     }
                 }
@@ -551,18 +557,20 @@ pub fn ai_brain_system(
                     });
                 }
 
-                // Under fire → fight back
+                // Under fire → fight back. No attacker tracking exists, so
+                // flank whatever's actually the biggest threat in range —
+                // see Iron Tide's identical reasoning.
                 if under_fire {
-                    if let Some((_, p_pos, _)) = player_info {
+                    if let Some((t_entity, t_pos)) = best_target {
                         // FLANK - don't go straight at target, offset to the side
-                        let to_target = (p_pos - pos).normalize_or_zero();
+                        let to_target = (t_pos - pos).normalize_or_zero();
                         let flank = Vec2::new(-to_target.y, to_target.x); // perpendicular
-                        let flank_pos = p_pos + flank * 200.0;
+                        let flank_pos = t_pos + flank * 200.0;
                         actions.push(ScoredAction {
                             score: 85.0,
                             behavior: AiShipBehavior::Engaging,
                             destination: Some(flank_pos),
-                            target: player_info.map(|(pe, pp, _)| (pe, pp)),
+                            target: Some((t_entity, t_pos)),
                         });
                     }
                 }
@@ -666,13 +674,15 @@ pub fn ai_brain_system(
             // grinds it down with sheer weapon coverage.
             // ----------------------------------------------------------------
             AiShipType::Dreadnought => {
+                // No attacker tracking exists, so retaliate against the
+                // biggest threat in range — see Iron Tide's reasoning.
                 if under_fire {
-                    if let Some((_, p_pos, _)) = player_info {
+                    if let Some((_, t_pos)) = best_target {
                         actions.push(ScoredAction {
                             score: 95.0,
                             behavior: AiShipBehavior::Engaging,
-                            destination: Some(p_pos),
-                            target: player_info.map(|(pe, pp, _)| (pe, pp)),
+                            destination: Some(t_pos),
+                            target: best_target,
                         });
                     }
                 }

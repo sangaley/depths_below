@@ -1,0 +1,985 @@
+{
+  "name": "glass_eye",
+  "hull_cells": [
+    {
+      "grid_pos": [
+        4,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        5,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        6,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        7,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        8,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        9,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        10,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        11,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        12,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -4,
+        1
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -3,
+        1
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -2,
+        1
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -1,
+        1
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        0,
+        1
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        1,
+        1
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        2,
+        1
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        3,
+        1
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        4,
+        1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        5,
+        1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        6,
+        1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        7,
+        1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        8,
+        1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        9,
+        1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        10,
+        1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        11,
+        1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        12,
+        1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        13,
+        1
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        14,
+        1
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -6,
+        0
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -5,
+        0
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -4,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -3,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -2,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -1,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        0,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        1,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        2,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        3,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        4,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        5,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        6,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        7,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        8,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        9,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        10,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        11,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        12,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        13,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        14,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        15,
+        0
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -6,
+        -1
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -5,
+        -1
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -4,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -3,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -2,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -1,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        0,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        1,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        2,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        3,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        4,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        5,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        6,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        7,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        8,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        9,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        10,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        11,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        12,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        13,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        14,
+        -1
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        15,
+        -1
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -4,
+        -2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -3,
+        -2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -2,
+        -2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -1,
+        -2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        0,
+        -2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        1,
+        -2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        2,
+        -2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        3,
+        -2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        4,
+        -2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        5,
+        -2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        6,
+        -2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        7,
+        -2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        8,
+        -2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        9,
+        -2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        10,
+        -2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        11,
+        -2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        12,
+        -2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        13,
+        -2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        14,
+        -2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        4,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        5,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        6,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        7,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        8,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        9,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        10,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        11,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        12,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    }
+  ],
+  "modules": [
+    {
+      "module_type": "SmallEngine",
+      "grid_pos": [
+        -4,
+        1
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "SmallEngine",
+      "grid_pos": [
+        -4,
+        -1
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "SmallEngine",
+      "grid_pos": [
+        -4,
+        0
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "SmallReactor",
+      "grid_pos": [
+        -1,
+        0
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "SmallReactor",
+      "grid_pos": [
+        0,
+        0
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "ManeuverThruster",
+      "grid_pos": [
+        -2,
+        0
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "StealthCoating",
+      "grid_pos": [
+        1,
+        0
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "StealthCoating",
+      "grid_pos": [
+        2,
+        0
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AdvancedRadar",
+      "grid_pos": [
+        11,
+        0
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "PassiveRadar",
+      "grid_pos": [
+        10,
+        1
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "PassiveRadar",
+      "grid_pos": [
+        10,
+        -1
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "HydrophoneArray",
+      "grid_pos": [
+        12,
+        0
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "CreatureScanner",
+      "grid_pos": [
+        8,
+        0
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "MineralScanner",
+      "grid_pos": [
+        6,
+        0
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "DepthScanner",
+      "grid_pos": [
+        4,
+        0
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "SignalBuoy",
+      "grid_pos": [
+        13,
+        0
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    }
+  ],
+  "created_at": "builtin",
+  "version": 2
+}
