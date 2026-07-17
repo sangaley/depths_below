@@ -7,10 +7,13 @@ use super::components::*;
 
 /// AI ships in Engaging state fire weapons at their current AiShipTarget —
 /// the player OR another AI ship, whichever ai_brain picked this tick (see
-/// AiShipTarget's doc comment). Falls back to the player if a ship somehow
-/// ends up Engaging with no target set (shouldn't happen — every Engaging
-/// action in ai_brain sets one — but firing at nothing would be worse than
-/// a safe fallback).
+/// AiShipTarget's doc comment). WHO to target is only re-decided every
+/// 0.25s (the brain tick); WHERE to aim is re-read from that target's live
+/// Transform every single frame this system runs — AiShipTarget.position is
+/// a snapshot from the moment it was picked, stale by up to 0.25s, which
+/// was enough for an orbiting/strafing ship (standard combat maneuver, see
+/// movement.rs's standoff-orbit) to be gone from that point by the time a
+/// shot arrived. Live lookup fixes shots consistently whiffing at range.
 pub fn ai_weapon_fire_system(
     time: Res<Time>,
     mut commands: Commands,
@@ -24,6 +27,7 @@ pub fn ai_weapon_fire_system(
         &OwnedByAiShip,
     )>,
     player_query: Query<&Transform, With<Ship>>,
+    target_transform_query: Query<&Transform>,
     mut fired_events: MessageWriter<WeaponFired>,
 ) {
     // DEPTHS_MOVETEST_ENEMY spawns a target dummy that's shot-free by
@@ -42,9 +46,14 @@ pub fn ai_weapon_fire_system(
             continue;
         }
 
-        // Fallback to the player only if the brain genuinely set no
-        // target — see the fn doc comment for why this shouldn't happen.
-        let Some(target_pos) = Some(ai_target.position).filter(|_| ai_target.entity.is_some())
+        // Live position of whoever the brain picked, re-read fresh every
+        // frame. Falls back to the last-known snapshot (target despawned
+        // mid-frame, say), then to the player, only if the live lookup
+        // fails — see the fn doc comment for why this shouldn't happen.
+        let Some(target_pos) = ai_target.entity
+            .and_then(|e| target_transform_query.get(e).ok())
+            .map(|t| t.translation.truncate())
+            .or_else(|| Some(ai_target.position).filter(|_| ai_target.entity.is_some()))
             .or(player_pos)
         else { continue };
 
