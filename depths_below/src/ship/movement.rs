@@ -80,7 +80,12 @@ pub fn ship_movement(
     input_state: Res<InputState>,
     _config: Res<GameConfig>,
     camera_state: Res<crate::camera::CameraState>,
-    engine_query: Query<(&Engine, &Module, Option<&CalculatedStats>, Option<&ModuleEfficiency>)>,
+    // Without<OwnedByAiShip>: AI ships now carry real Engine/ModuleEfficiency
+    // data too (see ai_ship::crew) — unscoped, this sum would let nearby AI
+    // ships' staffed engines add thrust to the PLAYER's own ship the moment
+    // any AI ship has crew (same class of leak the projectile-ownership and
+    // staffing-HUD work already had to guard against elsewhere).
+    engine_query: Query<(&Engine, &Module, Option<&CalculatedStats>, Option<&ModuleEfficiency>), Without<crate::ai_ship::components::OwnedByAiShip>>,
     thruster_query: Query<(&mut Thruster, &Module)>,
     mut ship_query: Query<(&mut Transform, &mut Velocity, &mut ShipPhysics, &mut ThrusterState), With<Ship>>,
     windows_query: Query<&Window>,

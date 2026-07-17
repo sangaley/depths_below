@@ -215,6 +215,18 @@ pub fn spawn_ai_ship(
         }
     }
 
+    // Crew: count this design's crew-eligible stations (Reactor/Engine/
+    // Weapon/etc — whatever the registry marks crew_station:true) and staff
+    // a per-faction fraction of them. auto_assign_crew (crew::mod.rs) does
+    // the actual station assignment on its own timer, same as the player.
+    let total_stations = design.modules.iter()
+        .filter(|m| registry.get(m.module_type).crew_station)
+        .count();
+    let crew_complement = ((total_stations as f32) * super::components::crew_fill_fraction(ship_type))
+        .round()
+        .max(1.0) as u32;
+    super::crew::spawn_ai_crew(commands, root, crew_complement);
+
     root
 }
 

@@ -8,6 +8,8 @@ mod noise;
 pub mod wreck;
 mod scavenger;
 pub mod simulation;
+mod crew;
+mod power;
 
 use bevy::prelude::*;
 
@@ -37,7 +39,8 @@ impl Plugin for AiShipPlugin {
                     movement::ai_ship_movement_system,
                     movement::ai_thruster_system,
                     movement::ai_fuel_system,
-                    combat::ai_weapon_fire_system,
+                    power::update_ai_power,
+                    combat::ai_weapon_fire_system.after(power::update_ai_power),
                     combat::process_ai_ship_damage_system,
                     combat::check_ai_reactor_destruction,
                     noise::ai_ship_noise_system,

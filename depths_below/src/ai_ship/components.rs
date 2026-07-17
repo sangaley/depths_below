@@ -391,6 +391,32 @@ pub fn faction_power(faction: AiShipType) -> f32 {
     }
 }
 
+/// Fraction of a faction's crew-eligible stations (Reactor/Engine/Weapon/
+/// etc — anything the module registry marks crew_station:true) that
+/// actually get a warm body. The AI-side equivalent of the player's own
+/// chronic short-staffing ("8 crew never cover every station on a real
+/// ship" — ship/spawner.rs): auto_assign_crew fills stations by priority
+/// (Power, then Propulsion, then Weapons last), so below 1.0 means guns go
+/// dark first while reactors/engines keep running; above 1.0 means spare
+/// hands ready to backfill when someone dies. This is deliberately separate
+/// from faction_power (a combat-strength RATING) — it's the mechanism that
+/// makes weak factions mechanically weak (RustSwarm ships that only half-
+/// fire) rather than just numerically weak.
+pub fn crew_fill_fraction(faction: AiShipType) -> f32 {
+    match faction {
+        AiShipType::VoidTitan => 1.3,      // apex predator, crew to spare
+        AiShipType::Dreadnought => 1.2,
+        AiShipType::IronTide => 1.1,       // disciplined battleship, fully crewed
+        AiShipType::Blackwater => 1.0,     // tight professional crew, no slack
+        AiShipType::PressureKing => 0.95,
+        AiShipType::AbyssalCult => 0.9,    // reckless zealots, not undercrewed by design
+        AiShipType::Leviathan => 0.8,
+        AiShipType::GlassEye => 0.7,       // silent skeleton crew (no weapons anyway)
+        AiShipType::RustSwarm => 0.6,      // scrappy, individually weak — half their guns dark
+        AiShipType::Drowned => 0.55,       // ghost ship, half-crewed by nature
+    }
+}
+
 /// Returns whether two factions are hostile to each other
 pub fn factions_hostile(a: AiShipType, b: AiShipType) -> bool {
     use AiShipType::*;

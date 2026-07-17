@@ -273,14 +273,21 @@ fn compute_module_efficiency(
 }
 
 /// Counts total berths, crew, staffed/total stations. Writes to StaffingState.
+/// Player-scoped: this feeds the player's own crew HUD, and both Quarters/
+/// CrewStation/CrewMember exist on AI ships too now — an unscoped count
+/// here would blend every AI ship in render range into the player's own
+/// crew numbers (see OwnedByAiShip usage below, same marker the AI-vs-AI
+/// projectile-ownership work already established for this exact class of
+/// "unscoped query silently picks up AI ship data" bug).
 fn update_staffing_state(
-    quarters_query: Query<(&Quarters, &Module)>,
-    station_query: Query<&CrewStation>,
-    crew_query: Query<&CrewMember>,
+    quarters_query: Query<(&Quarters, &Module, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
+    station_query: Query<(&CrewStation, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
+    crew_query: Query<(&CrewMember, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
     mut staffing: ResMut<StaffingState>,
 ) {
     let mut total_berths = 0u32;
-    for (quarters, module) in quarters_query.iter() {
+    for (quarters, module, owned) in quarters_query.iter() {
+        if owned.is_some() { continue; }
         if module.is_active && module.health > 0.0 {
             total_berths += quarters.berths;
         }
@@ -288,11 +295,12 @@ fn update_staffing_state(
 
     let mut staffed = 0u32;
     let mut total = 0u32;
-    for station in station_query.iter() {
+    for (station, owned) in station_query.iter() {
+        if owned.is_some() { continue; }
         total += 1;
         if let Some(crew_entity) = station.assigned_crew {
             // Only count as staffed if the crew is alive and still exists
-            if let Ok(crew) = crew_query.get(crew_entity) {
+            if let Ok((crew, _)) = crew_query.get(crew_entity) {
                 if crew.health > 0.0 {
                     staffed += 1;
                 }
@@ -300,8 +308,10 @@ fn update_staffing_state(
         }
     }
 
-    // Count living crew
-    let alive_crew = crew_query.iter().filter(|c| c.health > 0.0).count() as u32;
+    // Count living player crew
+    let alive_crew = crew_query.iter()
+        .filter(|(c, owned)| c.health > 0.0 && owned.is_none())
+        .count() as u32;
 
     staffing.total_berths = total_berths;
     staffing.total_crew = alive_crew;
@@ -309,30 +319,42 @@ fn update_staffing_state(
     staffing.total_stations = total;
 }
 
-/// Priority-based auto-assignment of crew to stations.
+/// Priority-based auto-assignment of crew to stations. Grouped per owning
+/// ship (player ship or a specific AI ship root) via OwnedByAiShip — AI
+/// ships now carry real CrewStation/CrewMember data too (see ai_ship::crew),
+/// and without this grouping a single global pool would happily staff one
+/// ship's idle crew onto a completely different ship's open stations the
+/// next tick this system runs.
 fn auto_assign_crew(
     time: Res<Time>,
     mut timer: ResMut<AutoAssignTimer>,
-    mut station_query: Query<(Entity, &mut CrewStation, Has<KeepManned>)>,
-    crew_query: Query<(Entity, &CrewMember)>,
+    mut station_query: Query<(Entity, &mut CrewStation, Has<KeepManned>, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
+    crew_query: Query<(Entity, &CrewMember, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
+    ship_query: Query<Entity, With<Ship>>,
 ) {
     timer.timer.tick(time.delta());
     if !timer.timer.just_finished() {
         return;
     }
 
+    let player_ship = ship_query.single().ok();
+    // Absent OwnedByAiShip => player-owned (the only other kind of ship).
+    let owner_of = |owned: Option<&crate::ai_ship::components::OwnedByAiShip>| -> Option<Entity> {
+        owned.map(|o| o.root).or(player_ship)
+    };
+
     // Collect all crew currently assigned to any station
     let mut assigned_crew: std::collections::HashSet<Entity> = std::collections::HashSet::new();
-    for (_, station, _) in station_query.iter() {
+    for (_, station, _, _) in station_query.iter() {
         if let Some(crew_entity) = station.assigned_crew {
             assigned_crew.insert(crew_entity);
         }
     }
 
     // Clean up dead/despawned crew from stations
-    for (_, mut station, _) in station_query.iter_mut() {
+    for (_, mut station, _, _) in station_query.iter_mut() {
         if let Some(crew_entity) = station.assigned_crew {
-            if let Ok((_, crew)) = crew_query.get(crew_entity) {
+            if let Ok((_, crew, _)) = crew_query.get(crew_entity) {
                 if crew.health <= 0.0 {
                     station.assigned_crew = None;
                     assigned_crew.remove(&crew_entity);
@@ -345,41 +367,49 @@ fn auto_assign_crew(
         }
     }
 
-    // Collect unfilled stations (priority > 0, not manually assigned)
-    let mut unfilled: Vec<(Entity, u8, bool)> = Vec::new();
-    for (entity, station, pinned) in station_query.iter() {
+    // Collect unfilled stations (priority > 0, not manually assigned), bucketed by owning ship
+    let mut unfilled_by_ship: std::collections::HashMap<Entity, Vec<(Entity, u8, bool)>> = std::collections::HashMap::new();
+    for (entity, station, pinned, owned) in station_query.iter() {
         if station.priority > 0 && !station.manually_assigned && station.assigned_crew.is_none() {
-            unfilled.push((entity, station.priority, pinned));
+            if let Some(ship) = owner_of(owned) {
+                unfilled_by_ship.entry(ship).or_default().push((entity, station.priority, pinned));
+            }
         }
     }
 
-    // Pinned (keep-manned) posts staff first, then by priority descending
-    unfilled.sort_by(|a, b| b.2.cmp(&a.2).then(b.1.cmp(&a.1)));
-
-    // Collect available crew (alive, not panicking/unconscious, not assigned)
-    let mut available_crew: Vec<Entity> = Vec::new();
-    for (entity, crew) in crew_query.iter() {
+    // Collect available crew (alive, not panicking/unconscious, not assigned), bucketed by owning ship
+    let mut available_by_ship: std::collections::HashMap<Entity, Vec<Entity>> = std::collections::HashMap::new();
+    for (entity, crew, owned) in crew_query.iter() {
         if crew.health > 0.0
             && crew.state != CrewState::Panicking
             && crew.state != CrewState::Unconscious
             && crew.state != CrewState::Salvaging
             && !assigned_crew.contains(&entity)
         {
-            available_crew.push(entity);
+            if let Some(ship) = owner_of(owned) {
+                available_by_ship.entry(ship).or_default().push(entity);
+            }
         }
     }
 
-    // Assign in order
-    let mut crew_idx = 0;
-    for (station_entity, _priority, _pinned) in unfilled {
-        if crew_idx >= available_crew.len() {
-            break;
-        }
-        let crew_entity = available_crew[crew_idx];
-        crew_idx += 1;
+    // Assign in order, independently per ship
+    for (ship, mut unfilled) in unfilled_by_ship {
+        let Some(available_crew) = available_by_ship.get(&ship) else { continue };
 
-        if let Ok((_, mut station, _)) = station_query.get_mut(station_entity) {
-            station.assigned_crew = Some(crew_entity);
+        // Pinned (keep-manned) posts staff first, then by priority descending
+        unfilled.sort_by(|a, b| b.2.cmp(&a.2).then(b.1.cmp(&a.1)));
+
+        let mut crew_idx = 0;
+        for (station_entity, _priority, _pinned) in unfilled {
+            if crew_idx >= available_crew.len() {
+                break;
+            }
+            let crew_entity = available_crew[crew_idx];
+            crew_idx += 1;
+
+            if let Ok((_, mut station, _, _)) = station_query.get_mut(station_entity) {
+                station.assigned_crew = Some(crew_entity);
+            }
         }
     }
 }

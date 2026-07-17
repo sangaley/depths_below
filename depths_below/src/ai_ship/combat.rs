@@ -18,13 +18,14 @@ pub fn ai_weapon_fire_system(
     time: Res<Time>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    ai_ships: Query<(Entity, &Transform, &AiShipBehavior, &AiShipTarget, &Children), With<AiShip>>,
+    ai_ships: Query<(Entity, &Transform, &AiShipBehavior, &AiShipTarget, &Children, Option<&super::power::AiPowerState>), With<AiShip>>,
     mut weapon_query: Query<(
         &mut Weapon,
         &mut WeaponCooldown,
         &Module,
         &AmmoStorage,
         &OwnedByAiShip,
+        Option<&ModuleEfficiency>,
     )>,
     player_query: Query<&Transform, With<Ship>>,
     target_transform_query: Query<&Transform>,
@@ -46,8 +47,17 @@ pub fn ai_weapon_fire_system(
 
     let player_pos = player_query.single().ok().map(|t| t.translation.truncate());
 
-    for (ai_entity, ai_transform, behavior, ai_target, children) in ai_ships.iter() {
+    for (ai_entity, ai_transform, behavior, ai_target, children, ai_power) in ai_ships.iter() {
         if *behavior != AiShipBehavior::Engaging {
+            continue;
+        }
+
+        // Power-starved ships hold fire — same hard cutoff the player's own
+        // kinetic/missile weapons already use (combat/new_projectiles.rs,
+        // combat/missiles.rs). None (graph not computed yet this tick, e.g.
+        // the ship just spawned) defaults to permissive so a fresh ship
+        // isn't blocked before its first power tick ever runs.
+        if ai_power.is_some_and(|p| p.power_balance < 0.0) {
             continue;
         }
 
@@ -69,7 +79,7 @@ pub fn ai_weapon_fire_system(
         let dist_to_target = ai_pos.distance(target_pos);
 
         for child in children.iter() {
-            let Ok((mut weapon, mut cooldown, module, ammo_storage, _owned)) =
+            let Ok((mut weapon, mut cooldown, module, ammo_storage, _owned, eff)) =
                 weapon_query.get_mut(child)
             else {
                 continue;
@@ -77,6 +87,16 @@ pub fn ai_weapon_fire_system(
 
             if !module.is_active || module.health <= 0.0
                 || (!crate::combat::INFINITE_AMMO && weapon.ammo == 0) {
+                continue;
+            }
+
+            // Unstaffed weapon stations produce nothing — same rule the
+            // player's own ship runs under (compute_module_efficiency,
+            // crew/mod.rs). Every weapon module is crew_station:true in the
+            // registry, so this is a real gate for every AI faction, scaled
+            // by crew_fill_fraction per faction (ai_ship::components).
+            let efficiency = effective_efficiency(module, eff);
+            if efficiency <= 0.0 {
                 continue;
             }
 
@@ -106,7 +126,7 @@ pub fn ai_weapon_fire_system(
                 &asset_server,
                 ai_pos,
                 target_pos,
-                weapon.damage,
+                weapon.damage * efficiency,
                 crate::combat::PROJECTILE_SPEED,
                 weapon.range,
                 crate::components::ProjectileOwner::AiShip(ai_entity),

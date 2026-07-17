@@ -15,8 +15,11 @@ fn get_o2_generation(calculated: Option<&CalculatedStats>, scrubber: &OxygenScru
 pub fn update_oxygen_system(
     time: Res<Time>,
     config: Res<GameConfig>,
-    scrubber_query: Query<(&OxygenScrubber, &Module, Option<&CalculatedStats>, Option<&ModuleEfficiency>)>,
-    crew_query: Query<&CrewMember>,
+    // Without<OwnedByAiShip>: player-only ship air pool — AI ships carry
+    // real CrewMember data now too (see ai_ship::crew), unscoped this would
+    // let nearby AI crews inflate the player's own O2 consumption.
+    scrubber_query: Query<(&OxygenScrubber, &Module, Option<&CalculatedStats>, Option<&ModuleEfficiency>), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    crew_query: Query<&CrewMember, Without<crate::ai_ship::components::OwnedByAiShip>>,
     mut tank_query: Query<(&mut OxygenTankComp, &Module), Without<DestroyedModule>>,
     mut oxygen_state: ResMut<OxygenState>,
     mut oxygen_events: MessageWriter<OxygenStateChanged>,
