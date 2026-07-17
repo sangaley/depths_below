@@ -90,8 +90,20 @@ pub(super) fn projectile_collision(
     mut commands: Commands,
     projectile_query: Query<(Entity, &Projectile, &Transform)>,
     mut creature_query: Query<(Entity, &Transform, &mut Creature), Without<Ship>>,
-    mut ship_query: Query<(Entity, &Transform, Option<&mut crate::combat::shields::ShipShield>), With<Ship>>,
-    ai_ship_query: Query<(Entity, &Transform), With<AiShip>>,
+    // Without<AiShip>: this system also reads AI ships' ShipShield
+    // (immutably) via ai_ship_query below. Bevy's conflict checker can't
+    // infer From With<Ship>/With<AiShip> alone that these two queries are
+    // disjoint — same missing-canceling-pair issue documented on the
+    // laser/ion systems in energy_weapons.rs.
+    mut ship_query: Query<(Entity, &Transform, Option<&mut crate::combat::shields::ShipShield>), (With<Ship>, Without<AiShip>)>,
+    // Every AI ship gets a ShipShield on spawn (attach_ai_shields) sized to
+    // its actual hull extent — SUBMARINE_RADIUS below is only the fallback
+    // for the brief window before that attaches. Without this, hit
+    // detection used a flat 60-unit circle around the ship ROOT regardless
+    // of actual size, so a shot aimed dead-center at a large ship (most of
+    // the roster — Iron Tide, Dreadnought, Void Titan...) could sail
+    // straight through its visible hull without ever registering as a hit.
+    ai_ship_query: Query<(Entity, &Transform, Option<&crate::combat::shields::ShipShield>), With<AiShip>>,
     mut damage_events: MessageWriter<ShipDamaged>,
     mut ai_damage_events: MessageWriter<AiShipDamaged>,
     mut notifications: MessageWriter<ShowNotification>,
@@ -138,11 +150,13 @@ pub(super) fn projectile_collision(
 
             // Check AI ships if no creature was hit (single-target) or always for AoE
             if !hit_any || is_aoe {
-                for (ai_entity, ai_transform) in ai_ship_query.iter() {
-                    let ai_pos = ai_transform.translation.truncate();
+                for (ai_entity, ai_transform, shield) in ai_ship_query.iter() {
+                    let ai_pos = shield.map(|s| s.world_center(ai_transform))
+                        .unwrap_or_else(|| ai_transform.translation.truncate());
+                    let hit_radius = shield.map(|s| s.radius).unwrap_or(SUBMARINE_RADIUS);
                     let dist = proj_pos.distance(ai_pos);
 
-                    if dist < PROJECTILE_RADIUS + SUBMARINE_RADIUS {
+                    if dist < PROJECTILE_RADIUS + hit_radius {
                         ai_damage_events.write(AiShipDamaged {
                             target: ai_entity,
                             source: DamageSource::Explosion,
@@ -230,12 +244,14 @@ pub(super) fn projectile_collision(
             // don't get this arm — creatures don't fight AI ships here.
             if !hit_player {
                 if let Some(owner_root) = owner_ai_root {
-                    for (ai_entity, ai_transform) in ai_ship_query.iter() {
+                    for (ai_entity, ai_transform, shield) in ai_ship_query.iter() {
                         if ai_entity == owner_root { continue; }
-                        let ai_pos = ai_transform.translation.truncate();
+                        let ai_pos = shield.map(|s| s.world_center(ai_transform))
+                            .unwrap_or_else(|| ai_transform.translation.truncate());
+                        let hit_radius = shield.map(|s| s.radius).unwrap_or(SUBMARINE_RADIUS);
                         let dist = proj_pos.distance(ai_pos);
 
-                        if dist < PROJECTILE_RADIUS + SUBMARINE_RADIUS {
+                        if dist < PROJECTILE_RADIUS + hit_radius {
                             ai_damage_events.write(AiShipDamaged {
                                 target: ai_entity,
                                 source: DamageSource::Explosion,

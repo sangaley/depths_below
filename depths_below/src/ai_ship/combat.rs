@@ -28,6 +28,11 @@ pub fn ai_weapon_fire_system(
     )>,
     player_query: Query<&Transform, With<Ship>>,
     target_transform_query: Query<&Transform>,
+    // Ship hit detection (combat/projectiles.rs) centers on the shield's
+    // world_center — the blocks' centroid, not the root, since the root is
+    // often at one end of the layout. Aiming at the raw root position was
+    // consistent geometry mismatch on any ship with an off-center layout.
+    target_shield_query: Query<&crate::combat::shields::ShipShield>,
     mut fired_events: MessageWriter<WeaponFired>,
 ) {
     // DEPTHS_MOVETEST_ENEMY spawns a target dummy that's shot-free by
@@ -51,8 +56,11 @@ pub fn ai_weapon_fire_system(
         // mid-frame, say), then to the player, only if the live lookup
         // fails — see the fn doc comment for why this shouldn't happen.
         let Some(target_pos) = ai_target.entity
-            .and_then(|e| target_transform_query.get(e).ok())
-            .map(|t| t.translation.truncate())
+            .and_then(|e| target_transform_query.get(e).ok().map(|t| {
+                target_shield_query.get(e).ok()
+                    .map(|s| s.world_center(t))
+                    .unwrap_or_else(|| t.translation.truncate())
+            }))
             .or_else(|| Some(ai_target.position).filter(|_| ai_target.entity.is_some()))
             .or(player_pos)
         else { continue };
