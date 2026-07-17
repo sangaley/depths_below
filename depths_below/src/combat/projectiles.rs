@@ -99,10 +99,18 @@ pub(super) fn projectile_collision(
     for (proj_entity, projectile, proj_transform) in projectile_query.iter() {
         let proj_pos = proj_transform.translation.truncate();
 
-        // Stage 1 of the ownership rework: behavior-preserving. Player
-        // shots resolve against creatures + AI ships; AI/creature shots
-        // resolve against the player. Stage 2 generalizes the non-player
-        // arm so AI shots can hit OTHER AI ships (minus their own root).
+        // Stage 2 of the ownership rework: an AI shot that whiffs past the
+        // player now still resolves against every OTHER ai ship it's near
+        // (never its own — see the `owner_ai_root` filter below). Player
+        // shots and creature shots keep their stage-1 behavior; brains
+        // still only aim at the player (that's slice 5), so this mostly
+        // catches stray fire in crowded fights — but a shot flying through
+        // a ship no longer does structurally nothing.
+        let owner_ai_root = match projectile.owner {
+            ProjectileOwner::AiShip(root) => Some(root),
+            _ => None,
+        };
+
         if projectile.owner.is_player() {
             let effective_radius = PROJECTILE_RADIUS * projectile.ammo_type.hit_radius_mult() + CREATURE_RADIUS;
             let is_aoe = projectile.ammo_type.is_aoe();
@@ -158,7 +166,12 @@ pub(super) fn projectile_collision(
                 commands.entity(proj_entity).despawn();
             }
         } else {
-            // Enemy projectile -> player shield first, then the hull
+            // Non-player projectile (AI ship or creature) -> player shield
+            // first, then the hull. Tracks whether the player was actually
+            // hit, so an AI-owned shot that whiffs can fall through to the
+            // stage-2 AI-vs-AI check below instead of flying on forever.
+            let mut hit_player = false;
+
             if let Ok((ship_transform, shield)) = ship_query.single_mut() {
                 let ship_pos = ship_transform.translation.truncate();
                 let mut dist = proj_pos.distance(ship_pos);
@@ -205,6 +218,38 @@ pub(super) fn projectile_collision(
                     });
 
                     commands.entity(proj_entity).despawn();
+                    hit_player = true;
+                }
+            }
+
+            // Stage 2: an AI-owned shot that missed the player is still
+            // live — check it against every OTHER ai ship (never its own;
+            // firing-arc/adjacency already keeps a ship from hitting
+            // itself, this is belt-and-suspenders). Creature-owned shots
+            // don't get this arm — creatures don't fight AI ships here.
+            if !hit_player {
+                if let Some(owner_root) = owner_ai_root {
+                    for (ai_entity, ai_transform) in ai_ship_query.iter() {
+                        if ai_entity == owner_root { continue; }
+                        let ai_pos = ai_transform.translation.truncate();
+                        let dist = proj_pos.distance(ai_pos);
+
+                        if dist < PROJECTILE_RADIUS + SUBMARINE_RADIUS {
+                            ai_damage_events.write(AiShipDamaged {
+                                target: ai_entity,
+                                source: DamageSource::Explosion,
+                                amount: projectile.damage,
+                                position: Some(proj_pos),
+                                direction: Some(projectile.direction),
+                            });
+
+                            spawn_hit_effect(&mut commands, ai_pos, Color::srgb(1.0, 0.5, 0.2), 16.0);
+                            spawn_floating_damage(&mut commands, ai_pos, projectile.damage, Color::srgb(1.0, 0.8, 0.3));
+
+                            commands.entity(proj_entity).despawn();
+                            break;
+                        }
+                    }
                 }
             }
         }
