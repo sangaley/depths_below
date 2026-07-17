@@ -124,6 +124,13 @@ pub fn process_ai_ship_damage_system(
         };
 
         state.last_hit_timer = 0.0;
+        // Preserve the last known attributable attacker across non-
+        // attributable damage ticks (fire DoT, self-detonation) rather
+        // than clearing it — a ship mid-burn from an earlier shot should
+        // still remember who fired it.
+        if event.attacker.is_some() {
+            state.last_attacker = event.attacker;
+        }
 
         let impact_pos = event.position.unwrap_or(Vec2::ZERO);
         let mut remaining_damage = event.amount;

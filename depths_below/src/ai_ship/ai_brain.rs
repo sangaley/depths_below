@@ -23,9 +23,15 @@ use crate::spatial::CreatureGrid;
 /// FROM the player, Pressure King ramming intruders out of their depth
 /// zone, Glass Eye's player-shadowing, Leviathan's flee-only) keep
 /// targeting the player exactly as before — generalizing those would blur
-/// what makes each faction distinct. "Under fire → retaliate" arms also
-/// stay player-only everywhere: there's no per-hit attacker tracking yet
-/// to know WHO actually shot at a ship, only that IT WAS hit.
+/// what makes each faction distinct.
+///
+/// "Under fire → retaliate" arms (every faction that has one) use
+/// `attacker_target` — resolved from AiShipState.last_attacker, which
+/// process_ai_ship_damage_system fills in from AiShipDamaged.attacker (the
+/// actual ship, player or AI, that fired the shot). A ship caught in
+/// another AI ship's crossfire now fights back against THAT ship instead
+/// of reflexively assuming it was the player. Falls back to best_target if
+/// the real attacker died, left range, or was never recorded.
 pub fn ai_brain_system(
     time: Res<Time>,
     mut ai_ships: Query<(
@@ -141,6 +147,20 @@ pub fn ai_brain_system(
                 score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
             })
             .map(|(e, p, _)| (e, p));
+
+        // Real attacker resolution for "under fire" retaliation — replaces
+        // guessing "it was probably the player" or "whatever's biggest"
+        // with "whoever ACTUALLY shot me" (state.last_attacker, set by
+        // process_ai_ship_damage_system from AiShipDamaged.attacker).
+        // Falls back to best_target if the attacker died, left range, or
+        // was never recorded (fresh spawn, only non-attributable damage
+        // like fire DoT so far).
+        let attacker_target: Option<(Entity, Vec2)> = state.last_attacker
+            .and_then(|a| {
+                player_snapshot.filter(|(e, _, _)| *e == a).map(|(e, p, _)| (e, p))
+                    .or_else(|| ai_snapshot.iter().find(|(e, _, _)| *e == a).map(|&(e, p, _)| (e, p)))
+            })
+            .or(best_target);
 
         // Spatial-grid narrowed: only the creature(s) in nearby cells are distance-checked,
         // instead of every creature in the world, every 0.25s, for every AI ship.
@@ -268,14 +288,15 @@ pub fn ai_brain_system(
                     }
                 }
 
-                // Under fire → fight back (fanatics don't flee easily)
+                // Under fire → fight back (fanatics don't flee easily),
+                // against whoever actually shot them.
                 if under_fire {
-                    if let Some((_, p_pos, _)) = player_info {
+                    if let Some((_, t_pos)) = attacker_target {
                         actions.push(ScoredAction {
                             score: 82.0,
                             behavior: AiShipBehavior::Engaging,
-                            destination: Some(p_pos),
-                            target: player_info.map(|(pe, pp, _)| (pe, pp)),
+                            destination: Some(t_pos),
+                            target: attacker_target,
                         });
                     }
                 }
@@ -385,14 +406,15 @@ pub fn ai_brain_system(
                         }
                     }
 
-                    // Attack anyone under fire (never retreat in deep zone)
+                    // Attack whoever's under fire — retaliate against the
+                    // actual attacker, not just whoever's player-shaped.
                     if under_fire {
-                        if let Some((_, p_pos, _)) = player_info {
+                        if let Some((_, t_pos)) = attacker_target {
                             actions.push(ScoredAction {
                                 score: 95.0,
                                 behavior: AiShipBehavior::Engaging,
-                                destination: Some(p_pos),
-                                target: player_info.map(|(pe, pp, _)| (pe, pp)),
+                                destination: Some(t_pos),
+                                target: attacker_target,
                             });
                         }
                     }
@@ -491,20 +513,15 @@ pub fn ai_brain_system(
                     });
                 }
 
-                // Under fire → immediately engage (battle-hardened). No
-                // attacker tracking exists, so retaliate against the
-                // biggest threat in range rather than assuming it's the
-                // player — otherwise this outscores the generic engage arm
-                // below every time the PLAYER is the one shooting, and a
-                // battleship never gets the chance to turn on something
-                // else even when it's a much bigger threat.
+                // Under fire → immediately engage (battle-hardened),
+                // against whoever actually shot them.
                 if under_fire {
-                    if let Some((_, t_pos)) = best_target {
+                    if let Some((_, t_pos)) = attacker_target {
                         actions.push(ScoredAction {
                             score: 95.0,
                             behavior: AiShipBehavior::Engaging,
                             destination: Some(t_pos),
-                            target: best_target,
+                            target: attacker_target,
                         });
                     }
                 }
@@ -570,11 +587,10 @@ pub fn ai_brain_system(
                     });
                 }
 
-                // Under fire → fight back. No attacker tracking exists, so
-                // flank whatever's actually the biggest threat in range —
-                // see Iron Tide's identical reasoning.
+                // Under fire → fight back, flanking whoever actually shot
+                // them.
                 if under_fire {
-                    if let Some((t_entity, t_pos)) = best_target {
+                    if let Some((t_entity, t_pos)) = attacker_target {
                         // FLANK - don't go straight at target, offset to the side
                         let to_target = (t_pos - pos).normalize_or_zero();
                         let flank = Vec2::new(-to_target.y, to_target.x); // perpendicular
@@ -687,15 +703,14 @@ pub fn ai_brain_system(
             // grinds it down with sheer weapon coverage.
             // ----------------------------------------------------------------
             AiShipType::Dreadnought => {
-                // No attacker tracking exists, so retaliate against the
-                // biggest threat in range — see Iron Tide's reasoning.
+                // Under fire → retaliate against whoever actually shot them.
                 if under_fire {
-                    if let Some((_, t_pos)) = best_target {
+                    if let Some((_, t_pos)) = attacker_target {
                         actions.push(ScoredAction {
                             score: 95.0,
                             behavior: AiShipBehavior::Engaging,
                             destination: Some(t_pos),
-                            target: best_target,
+                            target: attacker_target,
                         });
                     }
                 }

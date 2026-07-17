@@ -621,6 +621,7 @@ pub fn check_projectile_hits(
                     amount: 0.0, // damage already applied directly above — this is bookkeeping only
                     position: Some(hit_pos),
                     direction: None,
+                    attacker: owner_ship,
                 });
                 if !penetrates {
                     commands.entity(proj_entity).despawn();
@@ -756,6 +757,7 @@ pub fn tick_burning_blocks(
             amount: 0.0,
             position: None,
             direction: None,
+            attacker: None,
         });
         if burning.remaining <= 0.0 {
             commands.entity(entity).remove::<BlockBurning>();

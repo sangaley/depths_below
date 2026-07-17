@@ -90,7 +90,7 @@ pub(super) fn projectile_collision(
     mut commands: Commands,
     projectile_query: Query<(Entity, &Projectile, &Transform)>,
     mut creature_query: Query<(Entity, &Transform, &mut Creature), Without<Ship>>,
-    mut ship_query: Query<(&Transform, Option<&mut crate::combat::shields::ShipShield>), With<Ship>>,
+    mut ship_query: Query<(Entity, &Transform, Option<&mut crate::combat::shields::ShipShield>), With<Ship>>,
     ai_ship_query: Query<(Entity, &Transform), With<AiShip>>,
     mut damage_events: MessageWriter<ShipDamaged>,
     mut ai_damage_events: MessageWriter<AiShipDamaged>,
@@ -149,6 +149,7 @@ pub(super) fn projectile_collision(
                             amount: projectile.damage,
                             position: Some(proj_pos),
                             direction: Some(projectile.direction),
+                            attacker: ship_query.single().ok().map(|(e, _, _)| e),
                         });
                         hit_any = true;
 
@@ -172,7 +173,7 @@ pub(super) fn projectile_collision(
             // stage-2 AI-vs-AI check below instead of flying on forever.
             let mut hit_player = false;
 
-            if let Ok((ship_transform, shield)) = ship_query.single_mut() {
+            if let Ok((_, ship_transform, shield)) = ship_query.single_mut() {
                 let ship_pos = ship_transform.translation.truncate();
                 let mut dist = proj_pos.distance(ship_pos);
 
@@ -241,6 +242,7 @@ pub(super) fn projectile_collision(
                                 amount: projectile.damage,
                                 position: Some(proj_pos),
                                 direction: Some(projectile.direction),
+                                attacker: Some(owner_root),
                             });
 
                             spawn_hit_effect(&mut commands, ai_pos, Color::srgb(1.0, 0.5, 0.2), 16.0);

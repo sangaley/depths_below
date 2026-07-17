@@ -230,6 +230,7 @@ pub fn fire_laser_system(
                             amount: 0.0,
                             position: hit_pos,
                             direction: None,
+                            attacker: Some(player_ship),
                         });
                         total_damage_dealt += damage;
                         hit_count += 1;
@@ -245,6 +246,7 @@ pub fn fire_laser_system(
                         amount: 0.0,
                         position: hit_pos,
                         direction: None,
+                        attacker: Some(player_ship),
                     });
                     total_damage_dealt += damage;
                     hit_count += 1;
@@ -443,7 +445,7 @@ pub fn fire_ion_system(
                 current_energy: 100.0,
                 decay_rate: 15.0, // Loses 15 energy per second in flight
                 disable_duration: 5.0,
-                owner: Entity::PLACEHOLDER,
+                owner: player_ship,
             },
             Velocity(direction * speed),
             GravityAffected { mass: 0.2 },
@@ -545,6 +547,7 @@ pub fn update_ion_pulses(
                             amount: 0.0,
                             position: Some(hit_pos),
                             direction: None,
+                            attacker: Some(pulse.owner),
                         });
                     }
                     commands.entity(entity).despawn();
@@ -829,12 +832,16 @@ pub fn emp_detonation(
     mut module_query: Query<(Entity, &Module, &GlobalTransform, &ChildOf), Without<DestroyedModule>>,
     target_position_query: Query<&GlobalTransform>,
     ship_query: Query<Entity, With<Ship>>,
+    // MissileProjectile.owner is the launching WEAPON entity, not a ship —
+    // resolve to the actual ship root the same way check_missile_hits does.
+    owner_parent_query: Query<&ChildOf>,
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     let player_ship = ship_query.single().ok();
 
     for (missile_entity, missile_transform, emp, missile) in missile_query.iter() {
+        let owner_ship = owner_parent_query.get(missile.owner).ok().map(|p| p.parent());
         if !missile.armed { continue; }
 
         let missile_pos = missile_transform.translation.truncate();
@@ -868,6 +875,7 @@ pub fn emp_detonation(
                     amount: 0.0,
                     position: Some(module_pos),
                     direction: None,
+                    attacker: owner_ship,
                 });
                 emp.disable_duration
             };

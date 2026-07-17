@@ -362,6 +362,7 @@ pub fn check_missile_hits(
                         amount: 0.0,
                         position: Some(missile_pos),
                         direction: None,
+                        attacker: owner_ship,
                     });
                     commands.entity(missile_entity).despawn();
                     continue 'missiles;

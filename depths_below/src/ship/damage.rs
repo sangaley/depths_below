@@ -669,6 +669,7 @@ pub fn process_ai_detonations(
             amount: 0.0, // damage already applied block-by-block above
             position: Some(det.position),
             direction: None,
+            attacker: None, // self-inflicted detonation cascade, no external attacker
         });
         boom_events.write(crate::events::AiModuleExploded {
             position: det.position,

@@ -389,6 +389,12 @@ pub struct AiShipDamaged {
     pub amount: f32,
     pub position: Option<Vec2>,
     pub direction: Option<Vec2>,
+    /// The ship (player Ship entity or AI ship ROOT entity) that fired the
+    /// shot responsible for this damage, if attributable. Lets a hit ship's
+    /// "under fire" retaliation target whoever ACTUALLY shot it instead of
+    /// defaulting to a guess. None for non-attributable sources (fire DoT
+    /// ticks, a ship's own destruction cascade, creature attacks).
+    pub attacker: Option<Entity>,
 }
 
 /// Fired when a module on an AI ship cooks off (ammo/fuel/reactor blast) —

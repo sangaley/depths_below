@@ -545,6 +545,7 @@ fn creature_attack_system(
                     amount: rage_damage,
                     position: Some(creature_pos),
                     direction: Some((creature_pos - ai_pos).normalize_or_zero()),
+                    attacker: None, // creatures aren't part of the ship-target system
                 });
             }
         }

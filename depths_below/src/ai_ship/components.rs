@@ -36,6 +36,12 @@ pub struct AiShipState {
     pub depth: f32,
     pub is_destroyed: bool,
     pub last_hit_timer: f32,     // Seconds since last damage (for "under fire" AI)
+    /// Ship (player Ship entity or AI ship root) that last hit this ship,
+    /// if attributable — see events::AiShipDamaged.attacker. "Under fire"
+    /// retaliation targets this instead of guessing, so a ship caught in
+    /// another AI ship's crossfire fights back against THAT ship, not
+    /// reflexively the player.
+    pub last_attacker: Option<Entity>,
 }
 
 impl Default for AiShipState {
@@ -48,6 +54,7 @@ impl Default for AiShipState {
             depth: 0.0,
             is_destroyed: false,
             last_hit_timer: 999.0,
+            last_attacker: None,
         }
     }
 }
