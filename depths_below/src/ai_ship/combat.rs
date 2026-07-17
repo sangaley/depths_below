@@ -5,12 +5,17 @@ use crate::events::*;
 use crate::combat::{spawn_floating_damage, spawn_hit_effect};
 use super::components::*;
 
-/// AI ships in Engaging state fire weapons at the player
+/// AI ships in Engaging state fire weapons at their current AiShipTarget —
+/// the player OR another AI ship, whichever ai_brain picked this tick (see
+/// AiShipTarget's doc comment). Falls back to the player if a ship somehow
+/// ends up Engaging with no target set (shouldn't happen — every Engaging
+/// action in ai_brain sets one — but firing at nothing would be worse than
+/// a safe fallback).
 pub fn ai_weapon_fire_system(
     time: Res<Time>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    ai_ships: Query<(Entity, &Transform, &AiShipBehavior, &Children), With<AiShip>>,
+    ai_ships: Query<(Entity, &Transform, &AiShipBehavior, &AiShipTarget, &Children), With<AiShip>>,
     mut weapon_query: Query<(
         &mut Weapon,
         &mut WeaponCooldown,
@@ -30,16 +35,21 @@ pub fn ai_weapon_fire_system(
         return;
     }
 
-    let Ok(player_transform) = player_query.single() else { return };
-    let player_pos = player_transform.translation.truncate();
+    let player_pos = player_query.single().ok().map(|t| t.translation.truncate());
 
-    for (ai_entity, ai_transform, behavior, children) in ai_ships.iter() {
+    for (ai_entity, ai_transform, behavior, ai_target, children) in ai_ships.iter() {
         if *behavior != AiShipBehavior::Engaging {
             continue;
         }
 
+        // Fallback to the player only if the brain genuinely set no
+        // target — see the fn doc comment for why this shouldn't happen.
+        let Some(target_pos) = Some(ai_target.position).filter(|_| ai_target.entity.is_some())
+            .or(player_pos)
+        else { continue };
+
         let ai_pos = ai_transform.translation.truncate();
-        let dist_to_player = ai_pos.distance(player_pos);
+        let dist_to_target = ai_pos.distance(target_pos);
 
         for child in children.iter() {
             let Ok((mut weapon, mut cooldown, module, ammo_storage, _owned)) =
@@ -53,8 +63,8 @@ pub fn ai_weapon_fire_system(
                 continue;
             }
 
-            // Only fire if player is within weapon range
-            if dist_to_player > weapon.range {
+            // Only fire if the target is within weapon range
+            if dist_to_target > weapon.range {
                 continue;
             }
 
@@ -74,12 +84,11 @@ pub fn ai_weapon_fire_system(
                 from_player: false,
             });
 
-            // Spawn projectile toward player
             crate::combat::projectiles::spawn_projectile(
                 &mut commands,
                 &asset_server,
                 ai_pos,
-                player_pos,
+                target_pos,
                 weapon.damage,
                 crate::combat::PROJECTILE_SPEED,
                 weapon.range,

@@ -93,6 +93,20 @@ impl Default for AiShipNav {
     }
 }
 
+/// The ship's current combat target — separate from AiShipNav.destination
+/// because destination is often an OFFSET from the target (Blackwater's
+/// flank position, PressureKing's ram-from-above point), not the target's
+/// actual position. Weapons fire at `position`; movement still uses
+/// AiShipNav.destination. Recomputed every brain tick (0.25s) in
+/// ai_brain::ai_brain_system via a faction-agnostic distance/value scoring
+/// pass over the player + every other living AI ship — see that file's
+/// doc comment for which factions actually use it vs. staying player-only.
+#[derive(Component, Default)]
+pub struct AiShipTarget {
+    pub entity: Option<Entity>,
+    pub position: Vec2,
+}
+
 /// Timer for AI decision ticks (0.25s)
 #[derive(Component)]
 pub struct AiShipDecisionTimer {
