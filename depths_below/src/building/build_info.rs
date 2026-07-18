@@ -208,7 +208,7 @@ pub fn update_center_of_mass(
 // POWER OVERLAY
 // ============================================================================
 
-/// Toggle power overlay with P+O keys (hold P then press O)
+/// Toggle power overlay with F2
 pub fn toggle_power_overlay(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,

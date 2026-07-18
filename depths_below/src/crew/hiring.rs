@@ -6,6 +6,7 @@ use crate::events::*;
 use crate::resources::*;
 use crate::states::GameState;
 use crate::world::home_base;
+use crate::ui::theme::{ThemeColors, ThemeFonts, ThemeSpacing};
 
 // ============================================================================
 // HIRING BOARD — station recruitment panel, same idiom as the contracts
@@ -122,16 +123,16 @@ pub fn toggle_hiring_board(
                 width: Val::Percent(60.0),
                 height: Val::Percent(70.0),
                 flex_direction: FlexDirection::Column,
-                padding: UiRect::all(Val::Px(16.0)),
+                padding: UiRect::all(Val::Px(ThemeSpacing::XL)),
                 ..default()
-            }, BackgroundColor(Color::srgba(0.02, 0.05, 0.15, 0.95)), ZIndex(100)),
+            }, BackgroundColor(ThemeColors::BG_PANEL), ZIndex(100)),
         HiringPanel,
     )).with_children(|parent| {
         parent.spawn((
             Text::new(format!("CREW FOR HIRE — STATION {}", station)),
-            TextFont { font_size: FontSize::Px(28.0), ..default() },
-            TextColor(Color::WHITE),
-            Node { margin: UiRect::bottom(Val::Px(12.0)), ..default() },
+            TextFont { font_size: FontSize::Px(ThemeFonts::H2), ..default() },
+            TextColor(ThemeColors::TEXT_TITLE),
+            Node { margin: UiRect::bottom(Val::Px(ThemeSpacing::LG)), ..default() },
         ));
         parent.spawn((
             (Node {
@@ -144,9 +145,9 @@ pub fn toggle_hiring_board(
         ));
         parent.spawn((
             Text::new("Up/Down: Select | Enter: Hire | H: Close"),
-            TextFont { font_size: FontSize::Px(14.0), ..default() },
-            TextColor(Color::srgb(0.5, 0.5, 0.5)),
-            Node { margin: UiRect::top(Val::Px(8.0)), ..default() },
+            TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() },
+            TextColor(ThemeColors::TEXT_MUTED),
+            Node { margin: UiRect::top(Val::Px(ThemeSpacing::MD)), ..default() },
         ));
     });
 }
@@ -262,31 +263,57 @@ pub fn update_hiring_display(
     commands.entity(content).with_children(|parent| {
         parent.spawn((
             Text::new(format!("Bunks: {}/{}", alive, staffing.total_berths)),
-            TextFont { font_size: FontSize::Px(16.0), ..default() },
+            TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() },
             TextColor(if alive < staffing.total_berths {
-                Color::srgb(0.5, 0.9, 0.5)
+                ThemeColors::STATUS_OK
             } else {
-                Color::srgb(0.8, 0.6, 0.3)
+                ThemeColors::STATUS_WARN
             }),
-            Node { margin: UiRect::bottom(Val::Px(10.0)), ..default() },
+            Node { margin: UiRect::bottom(Val::Px(ThemeSpacing::LG)), ..default() },
         ));
 
         if pool.candidates.is_empty() {
             parent.spawn((
                 Text::new("No one's looking for work here right now."),
-                TextFont { font_size: FontSize::Px(16.0), ..default() },
-                TextColor(Color::srgb(0.6, 0.6, 0.6)),
+                TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() },
+                TextColor(ThemeColors::TEXT_SECONDARY),
             ));
         }
         for (i, candidate) in pool.candidates.iter().enumerate() {
             let selected = i == selection.0;
-            let cursor = if selected { "> " } else { "  " };
             parent.spawn((
-                Text::new(format!("{}{} — {}  [{}c]", cursor, candidate.name, candidate.role, candidate.cost)),
-                TextFont { font_size: FontSize::Px(18.0), ..default() },
-                TextColor(if selected { Color::WHITE } else { Color::srgb(0.7, 0.7, 0.75) }),
-                Node { margin: UiRect::bottom(Val::Px(4.0)), ..default() },
-            ));
+                Node {
+                    flex_direction: FlexDirection::Row,
+                    justify_content: JustifyContent::SpaceBetween,
+                    align_items: AlignItems::Center,
+                    padding: UiRect::all(Val::Px(ThemeSpacing::SM)),
+                    margin: UiRect::bottom(Val::Px(ThemeSpacing::XS)),
+                    ..default()
+                },
+                BackgroundColor(if selected { ThemeColors::BG_ELEVATED } else { ThemeColors::BG_CARD }),
+            )).with_children(|card| {
+                card.spawn(Node {
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(ThemeSpacing::XS),
+                    ..default()
+                }).with_children(|info| {
+                    info.spawn((
+                        Text::new(candidate.name.clone()),
+                        TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() },
+                        TextColor(if selected { ThemeColors::TEXT_PRIMARY } else { ThemeColors::TEXT_SECONDARY }),
+                    ));
+                    info.spawn((
+                        Text::new(candidate.role),
+                        TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() },
+                        TextColor(ThemeColors::TEXT_MUTED),
+                    ));
+                });
+                card.spawn((
+                    Text::new(format!("{}c", candidate.cost)),
+                    TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() },
+                    TextColor(ThemeColors::ACCENT_YELLOW),
+                ));
+            });
         }
     });
 }

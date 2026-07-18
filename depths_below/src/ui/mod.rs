@@ -277,11 +277,6 @@ pub struct NoiseText;
 #[derive(Component)]
 pub struct CreditsText;
 
-/// Dedicated top-right money counter — separate from the CRED entry buried
-/// in the crowded top stat bar, so credits are visible at a glance.
-#[derive(Component)]
-pub struct TopRightCreditsText;
-
 #[derive(Component)]
 pub struct CrewText;
 
@@ -423,27 +418,10 @@ fn setup_ui(mut commands: Commands) {
             }),
         HudRoot,
     )).with_children(|parent| {
-        // ===== TOP-RIGHT MONEY COUNTER =====
-        parent.spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Px(ThemeSpacing::SM),
-                right: Val::Px(ThemeSpacing::LG),
-                padding: UiRect::axes(Val::Px(ThemeSpacing::MD), Val::Px(ThemeSpacing::XS)),
-                column_gap: Val::Px(ThemeSpacing::XS),
-                align_items: AlignItems::Center,
-                ..default()
-            },
-            BackgroundColor(ThemeColors::HUD_BG),
-        )).with_children(|money| {
-            money.spawn((Text::new("¤"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::ACCENT_YELLOW)));
-            money.spawn((
-                (Text::new("500"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::ACCENT_YELLOW)),
-                TopRightCreditsText,
-            ));
-        });
-
         // ===== TOP BAR — Ship Vitals =====
+        // Credits used to also show as a separate top-right floating counter
+        // (removed — same currency.credits value shown twice on screen at
+        // once; the CRED group below is now the one place to look).
         parent.spawn((Node {
                 width: Val::Percent(100.0),
                 padding: UiRect::new(Val::Px(ThemeSpacing::LG), Val::Px(ThemeSpacing::LG), Val::Px(ThemeSpacing::SM), Val::Px(ThemeSpacing::SM)),
@@ -451,7 +429,13 @@ fn setup_ui(mut commands: Commands) {
                 align_items: AlignItems::Center,
                 ..default()
             }, BackgroundColor(ThemeColors::HUD_BG))).with_children(|top_bar| {
-            // -- SYSTEM + ZONE --
+            // Grouped into four sections with a separator BETWEEN sections
+            // only (not between every widget) — Navigation / Ship Status /
+            // Combat / Crew & Econ. Previously every widget got its own
+            // separator or none at all, an uneven pattern left over from the
+            // 2026-07-15 O2 group removal (see below).
+
+            // ---- NAVIGATION: system, gravity, distance ----
             spawn_hud_group(top_bar, "SYS", ThemeColors::ACCENT_PURPLE, |group| {
                 group.spawn((
                     (Text::new("System-0"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::ACCENT_PURPLE)),
@@ -462,20 +446,22 @@ fn setup_ui(mut commands: Commands) {
                     DepthZoneText,
                 ));
             });
-
-            spawn_hud_separator(top_bar);
-
-            // -- GRAVITY --
             spawn_hud_group(top_bar, "GRAV", ThemeColors::TEXT_MUTED, |group| {
                 group.spawn((
                     (Text::new(""), TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() }, TextColor(ThemeColors::TEXT_SECONDARY)),
                     GravityIndicatorText,
                 ));
             });
+            spawn_hud_group(top_bar, "DIST", ThemeColors::TEXT_MUTED, |group| {
+                group.spawn((
+                    (Text::new("0"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::TEXT_PRIMARY)),
+                    DepthText,
+                ));
+            });
 
             spawn_hud_separator(top_bar);
 
-            // -- HULL --
+            // ---- SHIP STATUS: hull, power, fuel, thrusters ----
             spawn_hud_group(top_bar, "HULL", ThemeColors::ACCENT_GREEN, |group| {
                 group.spawn((
                     (Text::new("100%"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::ACCENT_GREEN)),
@@ -483,22 +469,15 @@ fn setup_ui(mut commands: Commands) {
                 ));
                 spawn_hud_bar(group, HudBarKind::Hull, 56.0, ThemeColors::ACCENT_GREEN);
             });
-
             // O2 group removed 2026-07-15 — crew oxygen is gone by design
             // (room air/decompression physics remain, but there's no life
             // support stat for the player to watch anymore).
-
-            spawn_hud_separator(top_bar);
-
-            // -- POWER --
             spawn_hud_group(top_bar, "PWR", ThemeColors::ACCENT_YELLOW, |group| {
                 group.spawn((
                     (Text::new("0/0"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::ACCENT_YELLOW)),
                     PowerText,
                 ));
             });
-
-            // -- FUEL --
             spawn_hud_group(top_bar, "FUEL", ThemeColors::ACCENT_ORANGE, |group| {
                 group.spawn((
                     (Text::new("100%"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::ACCENT_ORANGE)),
@@ -506,10 +485,6 @@ fn setup_ui(mut commands: Commands) {
                 ));
                 spawn_hud_bar(group, HudBarKind::Fuel, 44.0, ThemeColors::ACCENT_ORANGE);
             });
-
-            spawn_hud_separator(top_bar);
-
-            // -- THRUSTERS --
             spawn_hud_group(top_bar, "THRS", ThemeColors::ACCENT_BLUE, |group| {
                 group.spawn((
                     (Text::new("50%"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::ACCENT_BLUE)),
@@ -517,7 +492,9 @@ fn setup_ui(mut commands: Commands) {
                 ));
             });
 
-            // -- AMMO --
+            spawn_hud_separator(top_bar);
+
+            // ---- COMBAT: ammo, noise ----
             spawn_hud_group(top_bar, "AMMO", ThemeColors::ACCENT_ORANGE, |group| {
                 group.spawn((
                     Node {
@@ -528,8 +505,6 @@ fn setup_ui(mut commands: Commands) {
                     AmmoLinesContainer,
                 ));
             });
-
-            // -- NOISE --
             spawn_hud_group(top_bar, "NOISE", ThemeColors::TEXT_MUTED, |group| {
                 group.spawn((
                     (Text::new("0"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::TEXT_SECONDARY)),
@@ -539,27 +514,17 @@ fn setup_ui(mut commands: Commands) {
 
             spawn_hud_separator(top_bar);
 
-            // -- CREDITS --
+            // ---- CREW & ECON: credits, crew ----
             spawn_hud_group(top_bar, "CRED", ThemeColors::ACCENT_YELLOW, |group| {
                 group.spawn((
                     (Text::new("500"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::ACCENT_YELLOW)),
                     CreditsText,
                 ));
             });
-
-            // -- CREW --
             spawn_hud_group(top_bar, "CREW", ThemeColors::ACCENT_GREEN, |group| {
                 group.spawn((
                     (Text::new("0/0"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::ACCENT_GREEN)),
                     CrewText,
-                ));
-            });
-
-            // -- DISTANCE (replaces old DEPTH) --
-            spawn_hud_group(top_bar, "DIST", ThemeColors::TEXT_MUTED, |group| {
-                group.spawn((
-                    (Text::new("0"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::TEXT_PRIMARY)),
-                    DepthText,
                 ));
             });
         });
@@ -587,7 +552,9 @@ fn setup_ui(mut commands: Commands) {
                 ..default()
             }, BackgroundColor(ThemeColors::HUD_BG))).with_children(|bar| {
             bar.spawn((
-                (Text::new("WASD Move  Q/E Thrust  SPACE Fire  Z Radar  V Warp  N Map  L Log  B Build  ESC Pause"), TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() }, TextColor(ThemeColors::TEXT_MUTED)),
+                // Immediately overwritten every frame by build_ui::update_controls_help
+                // once GameState resolves — this is just the pre-first-frame fallback.
+                (Text::new("Mouse: Aim | WASD: Move | Space: Fire | B: Build | ESC: Pause"), TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() }, TextColor(ThemeColors::TEXT_MUTED)),
                 build_ui::ControlsHelpText,
             ));
         });
@@ -763,7 +730,6 @@ pub fn update_hud_secondary(
     ),
     mut noise_query: Query<(&mut Text, &mut TextColor), (With<NoiseText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<CreditsText>, Without<CrewText>)>,
     mut credits_query: Query<&mut Text, (With<CreditsText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CrewText>)>,
-    mut top_right_credits_query: Query<&mut Text, (With<TopRightCreditsText>, Without<CreditsText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CrewText>)>,
     mut crew_query_hud: Query<(&mut Text, &mut TextColor), (With<CrewText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>)>,
     mut bar_query: Query<(&HudBar, &mut Node, &mut BackgroundColor)>,
 ) {
@@ -876,9 +842,6 @@ pub fn update_hud_secondary(
 
     // Credits
     if let Ok(mut text) = credits_query.single_mut() {
-        text.0 = format!("{}", currency.credits);
-    }
-    if let Ok(mut text) = top_right_credits_query.single_mut() {
         text.0 = format!("{}", currency.credits);
     }
 
@@ -1137,17 +1100,24 @@ fn handle_game_event_notifications(
 fn toggle_crew_menu(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
-    existing_menu: Query<Entity, With<CrewMenuOverlay>>,
-    crew_query: Query<(Entity, &CrewMember)>,
-    station_query: Query<(&CrewStation, &Module)>,
+    existing_menu: Query<(Entity, &windows::framework::FloatingWindow)>,
+    // Without<OwnedByAiShip>: player-only — AI ships carry CrewMember/
+    // CrewStation now too (see ai_ship::crew), unscoped this menu would show
+    // AI crew mixed into the player's own crew roster.
+    crew_query: Query<(Entity, &CrewMember), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    station_query: Query<(&CrewStation, &Module), Without<crate::ai_ship::components::OwnedByAiShip>>,
     staffing_state: Res<StaffingState>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyC) {
         return;
     }
 
-    // Toggle off if already open
-    if let Ok(entity) = existing_menu.single() {
+    const WINDOW_ID: &str = "crew_menu";
+
+    // Toggle off if already open — despawn the window ROOT (found via
+    // FloatingWindow.id), not the content entity spawn_floating_window
+    // returns, so the title bar/border don't linger orphaned on screen.
+    if let Some((entity, _)) = existing_menu.iter().find(|(_, w)| w.id == WINDOW_ID) {
         commands.entity(entity).despawn();
         return;
     }
@@ -1160,38 +1130,78 @@ fn toggle_crew_menu(
         }
     }
 
-    // Spawn crew management panel
-    commands.spawn((
-        (Node {
-                position_type: PositionType::Absolute,
-                left: Val::Px(10.0),
-                top: Val::Px(60.0),
-                width: Val::Px(380.0),
-                flex_direction: FlexDirection::Column,
-                padding: UiRect::all(Val::Px(10.0)),
-                row_gap: Val::Px(6.0),
-                ..default()
-            }, BackgroundColor(Color::srgba(0.0, 0.0, 0.1, 0.85))),
-        CrewMenuOverlay,
-    )).with_children(|parent| {
-        parent.spawn((Text::new(format!("CREW MANAGEMENT - {}/{} berths - {}/{} stations",
+    let content = windows::framework::spawn_floating_window(
+        &mut commands,
+        WINDOW_ID,
+        "Crew Management",
+        Vec2::new(380.0, 320.0),
+        Vec2::new(10.0, 60.0),
+    );
+
+    commands.entity(content).with_children(|parent| {
+        parent.spawn((
+            Text::new(format!("{}/{} berths — {}/{} stations staffed",
                 staffing_state.total_crew, staffing_state.total_berths,
-                staffing_state.staffed_stations, staffing_state.total_stations)), TextFont { font_size: FontSize::Px(20.0), ..default() }, TextColor(Color::WHITE)));
+                staffing_state.staffed_stations, staffing_state.total_stations)),
+            TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() },
+            TextColor(theme::ThemeColors::TEXT_TITLE),
+            Node { margin: UiRect::bottom(Val::Px(theme::ThemeSpacing::SM)), ..default() },
+        ));
+    });
+    theme::spawn_divider(&mut commands, content);
 
-        for (entity, crew) in crew_query.iter() {
-            let status = if crew.health <= 0.0 {
-                "DEAD".to_string()
-            } else if let Some(grid) = crew_assignments.get(&entity) {
-                format!("{:?} -> ({},{})", crew.state, grid.x, grid.y)
-            } else {
-                format!("{:?} (Idle)", crew.state)
-            };
+    commands.entity(content).with_children(|parent| {
+        parent.spawn(Node {
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(theme::ThemeSpacing::SM),
+            ..default()
+        }).with_children(|list| {
+            for (entity, crew) in crew_query.iter() {
+                let (status, dot_color) = if crew.health <= 0.0 {
+                    ("DEAD".to_string(), theme::ThemeColors::STATUS_DANGER)
+                } else if crew.state == CrewState::Panicking {
+                    (format!("{:?}", crew.state), theme::ThemeColors::STATUS_WARN)
+                } else if let Some(grid) = crew_assignments.get(&entity) {
+                    (format!("{:?} → ({},{})", crew.state, grid.x, grid.y), theme::ThemeColors::STATUS_OK)
+                } else {
+                    ("Idle".to_string(), theme::ThemeColors::TEXT_MUTED)
+                };
 
-            parent.spawn((Text::new(format!("{} | HP:{:.0} Morale:{:.0} | {}",
-                    crew.name, crew.health, crew.morale, status)), TextFont { font_size: FontSize::Px(15.0), ..default() }, TextColor(Color::srgb(0.8, 0.8, 0.8))));
-        }
-
-        parent.spawn((Text::new("Press C to close"), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(Color::srgb(0.25, 0.25, 0.25))));
+                list.spawn((
+                    Node {
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::Center,
+                        column_gap: Val::Px(theme::ThemeSpacing::MD),
+                        padding: UiRect::all(Val::Px(theme::ThemeSpacing::SM)),
+                        ..default()
+                    },
+                    BackgroundColor(theme::ThemeColors::BG_CARD),
+                )).with_children(|row| {
+                    // Status dot — one glance instead of parsing text
+                    row.spawn((
+                        Node { width: Val::Px(8.0), height: Val::Px(8.0), ..default() },
+                        BackgroundColor(dot_color),
+                    ));
+                    row.spawn(Node {
+                        flex_direction: FlexDirection::Column,
+                        flex_grow: 1.0,
+                        row_gap: Val::Px(theme::ThemeSpacing::XS),
+                        ..default()
+                    }).with_children(|info| {
+                        info.spawn((
+                            Text::new(format!("{}  —  {}", crew.name, status)),
+                            TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() },
+                            TextColor(if crew.health <= 0.0 { theme::ThemeColors::TEXT_MUTED } else { theme::ThemeColors::TEXT_PRIMARY }),
+                        ));
+                        info.spawn((
+                            Text::new(format!("HP {:.0}   Morale {:.0}", crew.health, crew.morale)),
+                            TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                            TextColor(theme::ThemeColors::TEXT_MUTED),
+                        ));
+                    });
+                });
+            }
+        });
     });
 }
 
@@ -1295,7 +1305,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
                 column_gap: Val::Px(20.0),
                 padding: UiRect::all(Val::Px(20.0)),
                 ..default()
-            }, BackgroundColor(Color::srgba(0.0, 0.0, 0.05, 0.97)), ZIndex(50)),
+            }, BackgroundColor(theme::ThemeColors::BG_VOID), ZIndex(50)),
         MapOverlay,
     )).with_children(|parent| {
         // Left column: map panel + legend stacked underneath it.
@@ -1319,7 +1329,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
                 flex_shrink: 0.0,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.02, 0.03, 0.08, 1.0)),
+            BackgroundColor(theme::ThemeColors::HUD_BG),
             Interaction::None,
             MapPanel,
         )).with_children(|map| {
@@ -1475,7 +1485,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
                         Node { width: Val::Px(9.0), height: Val::Px(9.0), ..default() },
                         BackgroundColor(*color),
                     ));
-                    row.spawn((Text::new(*label), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(Color::srgb(0.75, 0.75, 0.8))));
+                    row.spawn((Text::new(*label), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(theme::ThemeColors::TEXT_SECONDARY)));
                 });
             }
         });
@@ -1493,54 +1503,83 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
                 flex_shrink: 0.0,
                 ..default()
             },
-            BackgroundColor(Color::srgba(0.0, 0.0, 0.1, 0.85)),
+            BackgroundColor(theme::ThemeColors::BG_PANEL),
         )).with_children(|parent| {
-            parent.spawn((Text::new("MAP & INVENTORY"), TextFont { font_size: FontSize::Px(22.0), ..default() }, TextColor(Color::WHITE)));
+            parent.spawn((Text::new("MAP & INVENTORY"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() }, TextColor(theme::ThemeColors::TEXT_TITLE)));
+
+            // Section headers below are all styled identically (uppercase
+            // CAPTION/TEXT_MUTED, same treatment theme::spawn_section_header
+            // uses elsewhere) instead of each picking its own accent color —
+            // four different header colors read as inconsistent, not as
+            // useful category coding.
+            let section_header = |parent: &mut ChildSpawnerCommands, label: &str| {
+                parent.spawn((
+                    Text::new(label.to_uppercase()),
+                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                    TextColor(theme::ThemeColors::TEXT_MUTED),
+                    Node { margin: UiRect::top(Val::Px(theme::ThemeSpacing::SM)), ..default() },
+                ));
+            };
 
             // Warp dash: destination + projected cost
-            parent.spawn((Text::new("--- Warp Dash ---"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(1.0, 0.85, 0.1))));
+            section_header(parent, "Warp Dash");
             if let Some(target) = snap.pending_target {
                 let dist = snap.player_pos.distance(target);
                 let fuel_cost = warp_dash_fuel_cost((dist - WARP_DASH_ARRIVAL_BUFFER).max(0.0));
                 let charge_time = warp_dash_charge_time((dist - WARP_DASH_ARRIVAL_BUFFER).max(0.0));
                 let can_afford = snap.current_fuel >= fuel_cost;
                 let cost_color = if can_afford { Color::srgb(0.7, 0.9, 1.0) } else { Color::srgb(1.0, 0.4, 0.4) };
-                parent.spawn((Text::new(format!("Target: {:.0} units away", dist)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::WHITE)));
-                parent.spawn((Text::new(format!("Cost: {:.0} fuel ({:.0} available)", fuel_cost, snap.current_fuel)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(cost_color)));
-                parent.spawn((Text::new(format!("Charge time: {:.0}s", charge_time)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.7, 0.9, 1.0))));
-                parent.spawn((Text::new("Close map (M), hold G to charge and jump."), TextFont { font_size: FontSize::Px(13.0), ..default() }, TextColor(Color::srgb(0.6, 0.9, 0.6))));
+                parent.spawn((Text::new(format!("Target: {:.0} units away", dist)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_PRIMARY)));
+                parent.spawn((Text::new(format!("Cost: {:.0} fuel ({:.0} available)", fuel_cost, snap.current_fuel)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(cost_color)));
+                parent.spawn((Text::new(format!("Charge time: {:.0}s", charge_time)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(Color::srgb(0.7, 0.9, 1.0))));
+                parent.spawn((Text::new("Close map (M), hold G to charge and jump."), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() }, TextColor(Color::srgb(0.6, 0.9, 0.6))));
             } else {
-                parent.spawn((Text::new("Click the map to set a destination."), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.6, 0.6, 0.6))));
+                parent.spawn((Text::new("Click the map to set a destination."), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
             }
 
             // Discovered locations
-            parent.spawn((Text::new("--- Discovered ---"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(0.6, 0.7, 0.9))));
-            parent.spawn((Text::new(format!("Wrecks found: {}", snap.wrecks_found)), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.8, 0.6, 0.4))));
-            parent.spawn((Text::new(format!("Caves found: {}", snap.caves_found)), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.6, 0.6, 0.6))));
-            parent.spawn((Text::new(format!("Settlements: {}", snap.settlements_found)), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.4, 0.8, 0.4))));
+            section_header(parent, "Discovered");
+            parent.spawn((Text::new(format!("Wrecks {}   Caves {}   Settlements {}", snap.wrecks_found, snap.caves_found, snap.settlements_found)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_PRIMARY)));
 
-            // Inventory
-            parent.spawn((Text::new("--- Inventory ---"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(1.0, 1.0, 0.0))));
-
+            // Inventory — same card-row treatment as the crew/module/hiring lists
+            section_header(parent, "Inventory");
             if snap.inventory_items.is_empty() {
-                parent.spawn((Text::new("(empty)"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.5, 0.5, 0.5))));
+                parent.spawn((Text::new("(empty)"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
             } else {
-                for (name, count) in &snap.inventory_items {
-                    parent.spawn((Text::new(format!("{}: x{}", name, count)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::WHITE)));
-                }
+                parent.spawn(Node {
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(theme::ThemeSpacing::XS),
+                    margin: UiRect::top(Val::Px(theme::ThemeSpacing::XS)),
+                    ..default()
+                }).with_children(|list| {
+                    for (name, count) in &snap.inventory_items {
+                        list.spawn((
+                            Node {
+                                flex_direction: FlexDirection::Row,
+                                justify_content: JustifyContent::SpaceBetween,
+                                padding: UiRect::new(Val::Px(theme::ThemeSpacing::SM), Val::Px(theme::ThemeSpacing::SM), Val::Px(theme::ThemeSpacing::XS), Val::Px(theme::ThemeSpacing::XS)),
+                                ..default()
+                            },
+                            BackgroundColor(theme::ThemeColors::BG_CARD),
+                        )).with_children(|row| {
+                            row.spawn((Text::new(name.clone()), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_PRIMARY)));
+                            row.spawn((Text::new(format!("x{}", count)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_SECONDARY)));
+                        });
+                    }
+                });
             }
 
-            parent.spawn((Text::new(format!("Weight: {:.0}/{:.0}", snap.inventory_weight.0, snap.inventory_weight.1)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.5, 0.5, 0.5))));
+            parent.spawn((Text::new(format!("Weight: {:.0}/{:.0}", snap.inventory_weight.0, snap.inventory_weight.1)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
 
             // Logs found
             if !snap.logs_found.is_empty() {
-                parent.spawn((Text::new("--- Logs ---"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(0.0, 1.0, 1.0))));
+                section_header(parent, "Logs");
                 for log in &snap.logs_found {
-                    parent.spawn((Text::new(log.clone()), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.7, 0.7, 0.8))));
+                    parent.spawn((Text::new(log.clone()), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_SECONDARY)));
                 }
             }
 
-            parent.spawn((Text::new("Press M to close"), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(Color::srgb(0.25, 0.25, 0.25))));
+            parent.spawn((Text::new("Press M to close"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
         });
     });
 }
@@ -2161,7 +2200,10 @@ fn toggle_module_panel(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
     existing_panel: Query<Entity, With<ModulePanelOverlay>>,
-    module_query: Query<(Entity, &Module)>,
+    // Without<OwnedByAiShip>: player-only — AI ships carry Module entities
+    // too, unscoped this panel would list AI ship modules alongside the
+    // player's own.
+    module_query: Query<(Entity, &Module), Without<crate::ai_ship::components::OwnedByAiShip>>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyP) {
         return;
@@ -2195,18 +2237,18 @@ fn toggle_module_panel(
                 padding: UiRect::all(Val::Px(10.0)),
                 row_gap: Val::Px(4.0),
                 ..default()
-            }, BackgroundColor(Color::srgba(0.0, 0.05, 0.15, 0.95)), ZIndex(110)),
+            }, BackgroundColor(theme::ThemeColors::BG_PANEL), ZIndex(110)),
         ModulePanelOverlay,
         ModuleListSelection(0),
     )).with_children(|parent| {
-        parent.spawn((Text::new("MODULE MANAGEMENT"), TextFont { font_size: FontSize::Px(22.0), ..default() }, TextColor(Color::WHITE)));
+        parent.spawn((Text::new("MODULE MANAGEMENT"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() }, TextColor(theme::ThemeColors::TEXT_TITLE)));
 
         let mut row_index: usize = 0;
         for cat in ModuleCategory::ALL {
             let Some(modules) = by_cat.get(cat) else { continue };
 
             // Category header
-            parent.spawn((Text::new(format!("--- {} ---", cat.name())), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(1.0, 1.0, 0.0))));
+            parent.spawn((Text::new(format!("--- {} ---", cat.name())), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H3), ..default() }, TextColor(theme::ThemeColors::ACCENT_YELLOW)));
 
             for &(entity, module) in modules {
                 let status = if module.is_active { "[ON] " } else { "[OFF]" };
@@ -2224,24 +2266,33 @@ fn toggle_module_panel(
                     module.health, module.max_health, pwr,
                 );
                 let color = if module.is_active {
-                    Color::srgb(0.0, 1.0, 0.0)
+                    theme::ThemeColors::STATUS_OK
                 } else {
-                    Color::srgb(0.6, 0.3, 0.3)
+                    theme::ThemeColors::TEXT_MUTED
                 };
 
                 parent.spawn((
-                    (Text::new(&text), TextFont { font_size: FontSize::Px(15.0), ..default() }, TextColor(color)),
-                    ModuleListItem(entity),
-                ));
+                    Node {
+                        padding: UiRect::new(Val::Px(theme::ThemeSpacing::SM), Val::Px(theme::ThemeSpacing::SM), Val::Px(theme::ThemeSpacing::XS), Val::Px(theme::ThemeSpacing::XS)),
+                        margin: UiRect::bottom(Val::Px(theme::ThemeSpacing::XS)),
+                        ..default()
+                    },
+                    BackgroundColor(if row_index == 0 { theme::ThemeColors::BG_ELEVATED } else { theme::ThemeColors::BG_CARD }),
+                )).with_children(|card| {
+                    card.spawn((
+                        (Text::new(&text), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(color)),
+                        ModuleListItem(entity),
+                    ));
+                });
                 row_index += 1;
             }
         }
 
         if row_index == 0 {
-            parent.spawn((Text::new("No modules installed"), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.5, 0.5, 0.5))));
+            parent.spawn((Text::new("No modules installed"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
         }
 
-        parent.spawn((Text::new("Up/Down: Select  Enter: Toggle  P: Close"), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(Color::srgb(0.25, 0.25, 0.25))));
+        parent.spawn((Text::new("Up/Down: Select  Enter: Toggle  P: Close"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
     });
 }
 
@@ -2249,13 +2300,14 @@ fn toggle_module_panel(
 fn module_panel_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut panel_query: Query<&mut ModuleListSelection, With<ModulePanelOverlay>>,
-    mut item_query: Query<(&ModuleListItem, &mut Text, &mut TextColor)>,
+    mut item_query: Query<(&ModuleListItem, &mut Text, &mut TextColor, &ChildOf)>,
+    mut card_query: Query<&mut BackgroundColor>,
     mut module_query: Query<&mut Module>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     let Ok(mut selection) = panel_query.single_mut() else { return };
 
-    let items: Vec<Entity> = item_query.iter().map(|(item, _, _)| item.0).collect();
+    let items: Vec<Entity> = item_query.iter().map(|(item, ..)| item.0).collect();
     let count = items.len();
     if count == 0 { return; }
 
@@ -2288,9 +2340,9 @@ fn module_panel_input(
 
     if !changed { return; }
 
-    // Rebuild text for all rows
+    // Rebuild text for all rows, and highlight the selected row's card background
     let new_idx = selection.0;
-    for (i, (item, mut text, mut text_color)) in item_query.iter_mut().enumerate() {
+    for (i, (item, mut text, mut text_color, card)) in item_query.iter_mut().enumerate() {
         let Ok(module) = module_query.get(item.0) else { continue };
         let cursor = if i == new_idx { "> " } else { "  " };
         let status = if module.is_active { "[ON] " } else { "[OFF]" };
@@ -2307,10 +2359,13 @@ fn module_panel_input(
             module.health, module.max_health, pwr,
         );
         text_color.0 = if module.is_active {
-            Color::srgb(0.0, 1.0, 0.0)
+            theme::ThemeColors::STATUS_OK
         } else {
-            Color::srgb(0.6, 0.3, 0.3)
+            theme::ThemeColors::TEXT_MUTED
         };
+        if let Ok(mut bg) = card_query.get_mut(card.0) {
+            bg.0 = if i == new_idx { theme::ThemeColors::BG_ELEVATED } else { theme::ThemeColors::BG_CARD };
+        }
     }
 }
 
@@ -2535,38 +2590,110 @@ fn spawn_docking_menu(
         };
         parent.spawn((Text::new(title), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H1), ..default() }, TextColor(theme::ThemeColors::ACCENT_CYAN)));
 
+        // Station identity subtitle — discounts were already silently baked
+        // into displayed prices with nothing explaining why; this states it
+        // plainly. discounts < 1.0 is a genuine price cut (service_discounts
+        // multiplies cost), so only surface the ones actually below 1.0.
+        let discounts = crate::world::station_types::service_discounts(
+            crate::world::station_types::station_type(station_idx),
+        );
+        let mut perks = Vec::new();
+        if discounts.fuel < 1.0 { perks.push(format!("Fuel -{:.0}%", (1.0 - discounts.fuel) * 100.0)); }
+        if discounts.hull_repair < 1.0 { perks.push(format!("Repairs -{:.0}%", (1.0 - discounts.hull_repair) * 100.0)); }
+        if discounts.ammo < 1.0 { perks.push(format!("Ammo -{:.0}%", (1.0 - discounts.ammo) * 100.0)); }
+        if !perks.is_empty() {
+            parent.spawn((
+                Text::new(perks.join("  •  ")),
+                TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                TextColor(theme::ThemeColors::TEXT_MUTED),
+            ));
+        }
+
         parent.spawn((Text::new(format!("Credits: {}", currency.credits)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() }, TextColor(theme::ThemeColors::ACCENT_YELLOW)));
 
+        // Cargo hold — was invisible inside this menu entirely (only
+        // visible via the Map overlay, which doesn't even open while
+        // docked) even though half this menu is about what to do with it.
+        // Static snapshot at open time — the menu doesn't otherwise
+        // rebuild live, matching how the rest of this screen already works.
+        if !inventory.items.is_empty() {
+            parent.spawn((
+                Text::new("CARGO HOLD"),
+                TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                TextColor(theme::ThemeColors::TEXT_MUTED),
+            ));
+            parent.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                flex_wrap: FlexWrap::Wrap,
+                column_gap: Val::Px(theme::ThemeSpacing::SM),
+                row_gap: Val::Px(theme::ThemeSpacing::XS),
+                ..default()
+            }).with_children(|cargo| {
+                for (item_type, count) in inventory.items.iter() {
+                    cargo.spawn((
+                        Node {
+                            padding: UiRect::new(Val::Px(theme::ThemeSpacing::SM), Val::Px(theme::ThemeSpacing::SM), Val::Px(theme::ThemeSpacing::XS), Val::Px(theme::ThemeSpacing::XS)),
+                            ..default()
+                        },
+                        BackgroundColor(theme::ThemeColors::BG_CARD),
+                    )).with_children(|card| {
+                        card.spawn((
+                            Text::new(format!("{} x{}", item_type.name(), count)),
+                            TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() },
+                            TextColor(theme::ThemeColors::TEXT_SECONDARY),
+                        ));
+                    });
+                }
+            });
+        }
         parent.spawn((Text::new(""), TextFont { font_size: FontSize::Px(8.0), ..default() }, TextColor(Color::WHITE)));
 
-        for (i, service) in services.iter().enumerate() {
-            let cursor = if i == 0 { "> " } else { "  " };
-            let cost_str = if service.cost > 0 {
-                format!(" [{}c]", service.cost)
-            } else {
-                String::new()
-            };
-
-            let color = if !service.available {
-                Color::srgb(0.4, 0.4, 0.4)
-            } else if i == 0 {
-                Color::WHITE
-            } else {
-                Color::srgb(0.8, 0.8, 0.8)
-            };
-
-            parent.spawn((
-                Text::new(format!("{}{}{}\n", cursor, service.name, cost_str)),
-                TextFont { font_size: FontSize::Px(20.0), ..default() },
-                TextColor(color),
-                DockingServiceItem(i),
-            )).with_children(|section| {
-                section.spawn((
-                    TextSpan::new(format!("    {}", service.description)),
-                    TextFont { font_size: FontSize::Px(14.0), ..default() },
-                    TextColor(Color::srgb(0.6, 0.6, 0.7)),
+        // Row order/numbering must stay exactly as-is — docking_menu_input
+        // (below) matches on these indices by number throughout its ~550
+        // lines, so this groups the EXISTING order visually rather than
+        // reordering rows into cleaner categories (Repair Modules sits
+        // between Sell/Buy in the source order, hence "Trade & Upkeep"
+        // rather than a pure "Trade" label).
+        for (group_start, group_label) in [(0usize, "Services"), (5, "Trade & Upkeep"), (8, "")] {
+            if !group_label.is_empty() {
+                parent.spawn((
+                    Text::new(group_label.to_uppercase()),
+                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                    TextColor(theme::ThemeColors::TEXT_MUTED),
+                    Node { margin: UiRect::top(Val::Px(theme::ThemeSpacing::SM)), ..default() },
                 ));
-            });
+            }
+            let group_end = match group_start { 0 => 5, 5 => 8, _ => services.len() };
+            for i in group_start..group_end {
+                let service = &services[i];
+                let cursor = if i == 0 { "> " } else { "  " };
+                let cost_str = if service.cost > 0 {
+                    format!(" [{}c]", service.cost)
+                } else {
+                    String::new()
+                };
+
+                let color = if !service.available {
+                    Color::srgb(0.4, 0.4, 0.4)
+                } else if i == 0 {
+                    Color::WHITE
+                } else {
+                    Color::srgb(0.8, 0.8, 0.8)
+                };
+
+                parent.spawn((
+                    Text::new(format!("{}{}{}\n", cursor, service.name, cost_str)),
+                    TextFont { font_size: FontSize::Px(20.0), ..default() },
+                    TextColor(color),
+                    DockingServiceItem(i),
+                )).with_children(|section| {
+                    section.spawn((
+                        TextSpan::new(format!("    {}", service.description)),
+                        TextFont { font_size: FontSize::Px(14.0), ..default() },
+                        TextColor(Color::srgb(0.6, 0.6, 0.7)),
+                    ));
+                });
+            }
         }
 
         parent.spawn((Text::new(""), TextFont { font_size: FontSize::Px(8.0), ..default() }, TextColor(Color::WHITE)));
