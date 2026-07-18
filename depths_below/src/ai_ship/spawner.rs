@@ -218,13 +218,28 @@ pub fn spawn_ai_ship(
     // Crew: count this design's crew-eligible stations (Reactor/Engine/
     // Weapon/etc — whatever the registry marks crew_station:true) and staff
     // a per-faction fraction of them. auto_assign_crew (crew::mod.rs) does
-    // the actual station assignment on its own timer, same as the player.
+    // the actual station assignment on its own timer, same as the player,
+    // by priority: Power(10) > Propulsion(9) > LifeSupport(8) > Weapons(6).
+    //
+    // Floor: a small ship's non-weapon stations alone can eat its entire
+    // complement before priority ever reaches a gun — RustSwarm (2 crew for
+    // Reactor+Engine+2 Gatlings) staffed Reactor+Engine and left BOTH guns
+    // permanently dark, not "half dark" as crew_fill_fraction intended.
+    // Guarantee at least one weapon slot for any faction that has weapons,
+    // so "understaffed" always means fewer guns firing, never zero.
+    let non_weapon_stations = design.modules.iter()
+        .filter(|m| {
+            let def = registry.get(m.module_type);
+            def.crew_station && def.category != crate::components::ModuleCategory::Weapons
+        })
+        .count();
     let total_stations = design.modules.iter()
         .filter(|m| registry.get(m.module_type).crew_station)
         .count();
-    let crew_complement = ((total_stations as f32) * super::components::crew_fill_fraction(ship_type))
-        .round()
-        .max(1.0) as u32;
+    let has_weapons = total_stations > non_weapon_stations;
+    let fraction_complement = ((total_stations as f32) * super::components::crew_fill_fraction(ship_type)).round() as u32;
+    let min_floor = if has_weapons { (non_weapon_stations as u32 + 1).min(total_stations as u32) } else { 1 };
+    let crew_complement = fraction_complement.max(min_floor);
     super::crew::spawn_ai_crew(commands, root, crew_complement);
 
     root

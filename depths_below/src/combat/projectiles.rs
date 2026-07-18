@@ -103,7 +103,7 @@ pub(super) fn projectile_collision(
     // of actual size, so a shot aimed dead-center at a large ship (most of
     // the roster — Iron Tide, Dreadnought, Void Titan...) could sail
     // straight through its visible hull without ever registering as a hit.
-    ai_ship_query: Query<(Entity, &Transform, Option<&crate::combat::shields::ShipShield>), With<AiShip>>,
+    mut ai_ship_query: Query<(Entity, &Transform, Option<&mut crate::combat::shields::ShipShield>), With<AiShip>>,
     mut damage_events: MessageWriter<ShipDamaged>,
     mut ai_damage_events: MessageWriter<AiShipDamaged>,
     mut notifications: MessageWriter<ShowNotification>,
@@ -150,13 +150,27 @@ pub(super) fn projectile_collision(
 
             // Check AI ships if no creature was hit (single-target) or always for AoE
             if !hit_any || is_aoe {
-                for (ai_entity, ai_transform, shield) in ai_ship_query.iter() {
-                    let ai_pos = shield.map(|s| s.world_center(ai_transform))
+                for (ai_entity, ai_transform, mut shield) in ai_ship_query.iter_mut() {
+                    let ai_pos = shield.as_ref().map(|s| s.world_center(ai_transform))
                         .unwrap_or_else(|| ai_transform.translation.truncate());
-                    let hit_radius = shield.map(|s| s.radius).unwrap_or(SUBMARINE_RADIUS);
+                    let hit_radius = shield.as_ref().map(|s| s.radius).unwrap_or(SUBMARINE_RADIUS);
                     let dist = proj_pos.distance(ai_pos);
 
                     if dist < PROJECTILE_RADIUS + hit_radius {
+                        // Shield absorbs first — this used to skip straight
+                        // to hull/module damage regardless of shield state.
+                        if let Some(shield) = shield.as_deref_mut() {
+                            if shield.is_up() {
+                                shield.absorb(projectile.damage);
+                                hit_any = true;
+                                spawn_hit_effect(&mut commands, proj_pos, Color::srgb(0.5, 0.8, 1.0), 16.0);
+                                if !is_aoe {
+                                    break;
+                                }
+                                continue;
+                            }
+                        }
+
                         ai_damage_events.write(AiShipDamaged {
                             target: ai_entity,
                             source: DamageSource::Explosion,
@@ -244,14 +258,29 @@ pub(super) fn projectile_collision(
             // don't get this arm — creatures don't fight AI ships here.
             if !hit_player {
                 if let Some(owner_root) = owner_ai_root {
-                    for (ai_entity, ai_transform, shield) in ai_ship_query.iter() {
+                    for (ai_entity, ai_transform, mut shield) in ai_ship_query.iter_mut() {
                         if ai_entity == owner_root { continue; }
-                        let ai_pos = shield.map(|s| s.world_center(ai_transform))
+                        let ai_pos = shield.as_ref().map(|s| s.world_center(ai_transform))
                             .unwrap_or_else(|| ai_transform.translation.truncate());
-                        let hit_radius = shield.map(|s| s.radius).unwrap_or(SUBMARINE_RADIUS);
+                        let hit_radius = shield.as_ref().map(|s| s.radius).unwrap_or(SUBMARINE_RADIUS);
                         let dist = proj_pos.distance(ai_pos);
 
                         if dist < PROJECTILE_RADIUS + hit_radius {
+                            // Shield absorbs first, same as the player's own
+                            // hit path above — this arm used to skip straight
+                            // to hull/module damage, so an AI ship's shield
+                            // never visibly took a hit (or blocked anything)
+                            // even though the hull underneath WAS being
+                            // damaged correctly.
+                            if let Some(shield) = shield.as_deref_mut() {
+                                if shield.is_up() {
+                                    shield.absorb(projectile.damage);
+                                    spawn_hit_effect(&mut commands, proj_pos, Color::srgb(0.5, 0.8, 1.0), 16.0);
+                                    commands.entity(proj_entity).despawn();
+                                    break;
+                                }
+                            }
+
                             ai_damage_events.write(AiShipDamaged {
                                 target: ai_entity,
                                 source: DamageSource::Explosion,
