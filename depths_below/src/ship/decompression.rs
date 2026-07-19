@@ -14,6 +14,7 @@ pub fn update_decompression(
     mut room_map: ResMut<RoomMap>,
     mut oxygen_state: ResMut<OxygenState>,
     mut room_depressurize_events: MessageReader<RoomDepressurized>,
+    mut player_body: Query<(&GlobalTransform, &mut Velocity, &mut ShipPhysics), With<Ship>>,
 ) {
     // Player ship only: hull_query spans every ship in the world (this
     // component is shared with AI ships). Unscoped, an AI ship whose local
@@ -74,6 +75,62 @@ pub fn update_decompression(
     // Each unit of air loss drains oxygen at 3.0 per second — breach without bulkheads = crew dies
     let oxygen_drain = total_air_loss * 3.0 * dt;
     oxygen_state.current_oxygen = (oxygen_state.current_oxygen - oxygen_drain).max(0.0);
+
+    // VENT THRUST — air jetting out of a breach is reaction mass. While a
+    // room is actively draining, each breached hull tile bordering it pushes
+    // the ship away from the hole (jet goes out, ship goes the other way)
+    // and, being off-center, slowly yaws it. Subtle by design: a full 7s
+    // vent adds roughly a hundred u/s of drift, not a spin-out — but it
+    // makes WHERE you got holed matter.
+    let mut vent_accel_local = Vec2::ZERO;
+    let mut vent_torque = 0.0_f32;
+    let mut vent_tiles = 0u32;
+    for (hull, _t, parent) in hull_query.iter() {
+        if parent.parent() != player_ship { continue; }
+        if !hull.is_depressurized { continue; }
+        // Air still escaping from this hole? Either an adjacent detected
+        // room is actively draining, or the segment's own direct
+        // depressurization is still in progress (ships without enclosed
+        // rooms never populate tile_to_room, which made venting silently
+        // impossible on open layouts).
+        let room_draining = [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y].iter().any(|off| {
+            room_map.tile_to_room.get(&(hull.grid_position + *off))
+                .and_then(|id| room_map.rooms.get(*id))
+                .map(|room| room.is_breached && room.air_level > 0.0)
+                .unwrap_or(false)
+        });
+        let segment_draining = hull.depressurization_level < 1.0;
+        if !room_draining && !segment_draining { continue; }
+        vent_tiles += 1;
+
+        // Ship-local tile offset from the ship origin (grid_y*66-33 layout)
+        let tile_local = Vec2::new(
+            hull.grid_position.x as f32 * 66.0,
+            hull.grid_position.y as f32 * 66.0 - 33.0,
+        );
+        if let Some(inward) = (-tile_local).try_normalize() {
+            vent_accel_local += inward;
+            // Off-center hole = slight yaw (2D cross of position × force)
+            vent_torque += tile_local.x * inward.y - tile_local.y * inward.x;
+        }
+    }
+
+    if vent_tiles > 0 {
+        if let Ok((gt, mut velocity, mut physics)) = player_body.single_mut() {
+            // Per-tile force flattens out past a few holes — a colander
+            // doesn't vent harder than a puncture, it just empties faster.
+            let strength = 45.0 * (vent_tiles as f32).sqrt() / vent_tiles as f32;
+            let world_accel = gt.rotation() * (vent_accel_local * strength).extend(0.0);
+            velocity.0 += world_accel.truncate() * dt;
+            physics.angular_velocity += (vent_torque * 0.00008).clamp(-0.25, 0.25) * dt;
+
+            // Throttled trace so playtests can confirm venting actually
+            // fires (it silently never triggered on room-less layouts).
+            if (time.elapsed_secs() % 1.0) < dt {
+                info!("[VENT] {} hole(s) venting, accel {:.1} u/s²", vent_tiles, (vent_accel_local * strength).length());
+            }
+        }
+    }
 }
 
 /// Crew in Repairing state seal breaches in their room.

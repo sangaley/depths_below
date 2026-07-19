@@ -126,9 +126,18 @@ pub fn update_power_system(
     }
 }
 
-/// Manages reactor heat warnings, auto-shutdown, and explosion.
+/// Heat fraction a shut-down reactor must cool back below before it
+/// auto-restarts (see the `!module.is_active` branch below). Below 100% so
+/// it doesn't immediately re-trip the moment it dips under the shutdown
+/// line, but well below 90% so it doesn't sit there re-arming right at the
+/// "critical" threshold either.
+const REACTOR_RESTART_THRESHOLD: f32 = 0.5;
+
+/// Manages reactor heat warnings, auto-shutdown, explosion, and restart.
 /// Heat generation and cooling are now handled by the heat network (heat.rs).
-/// Reactor.heat is synced from ModuleTemperature by heat::sync_reactor_heat.
+/// Reactor.heat is synced from ModuleTemperature by heat::sync_reactor_heat
+/// (that sync runs unconditionally, active or not, so a shut-down reactor's
+/// heat keeps dropping in the background — restart just watches for it).
 pub fn update_reactor_heat(
     mut reactor_query: Query<(&mut Reactor, &mut Module)>,
     mut notifications: MessageWriter<ShowNotification>,
@@ -137,6 +146,19 @@ pub fn update_reactor_heat(
 ) {
     for (mut reactor, mut module) in reactor_query.iter_mut() {
         if !module.is_active {
+            // Was a permanent lockout until a station "Repair Modules" visit
+            // — a heat-only shutdown (reactor still has health) now clears
+            // itself once it's cooled down instead of ending the run.
+            // Destroyed reactors (health <= 0, e.g. the explosion branch
+            // below) are excluded — those need an actual repair.
+            if module.health > 0.0 && reactor.heat <= reactor.max_heat * REACTOR_RESTART_THRESHOLD {
+                module.is_active = true;
+                notifications.write(ShowNotification {
+                    message: "Reactor back online — heat dissipated.".into(),
+                    notification_type: NotificationType::Success,
+                    duration: 3.0,
+                });
+            }
             continue;
         }
 

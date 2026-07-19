@@ -63,9 +63,6 @@ impl Plugin for BuildingPlugin {
                     update_ghost_preview,
                     handle_module_placement,
                     handle_module_removal,
-                    process_hull_placement,
-                    process_module_placement,
-                    process_module_removal,
                     blueprint::save_blueprint_system,
                     blueprint::load_blueprint_system,
                     blueprint::delete_blueprint_system,
@@ -76,6 +73,22 @@ impl Plugin for BuildingPlugin {
                 )
                     .chain()
                     .run_if(in_state(GameState::StationDocked)),
+            )
+            // Placement/removal event processors also run while EXPLORING —
+            // the ghost-rebuild system (ship::rebuild) respawns destroyed
+            // blocks in flight via the same PlaceHullRequest /
+            // PlaceModuleRequest events the build mode uses.
+            .add_systems(
+                Update,
+                (
+                    process_hull_placement,
+                    process_module_placement,
+                    process_module_removal,
+                    process_hull_removal,
+                )
+                    .chain()
+                    .run_if(in_state(GameState::StationDocked)
+                        .or_else(in_state(GameState::Exploring))),
             )
             // Room detection runs in both surface and exploring
             .add_systems(
@@ -138,7 +151,7 @@ impl Plugin for BuildingPlugin {
                 Update,
                 (
                     multiblock::build_helpers::draw_connection_lines,
-                    build_history::undo_redo_input,
+                    build_history::undo_input,
                     symmetry::toggle_symmetry,
                     build_info::toggle_cost_summary,
                     build_info::update_center_of_mass,
@@ -396,6 +409,35 @@ fn handle_build_input(
 // GHOST PREVIEW & VALIDATION
 // ============================================================================
 
+/// Converts the mouse cursor to a ship-local grid cell.
+///
+/// Grid coordinates are ship-local (hull/module tiles are children of
+/// the ship, positioned relative to it — see spawn_module /
+/// process_hull_placement / rooms::transform_to_grid, all of which
+/// use `grid_y * 66 - 33` as the local Y). The cursor position from
+/// viewport_to_world_2d is in WORLD space, so it has to be
+/// transformed into the ship's local space first — dividing world
+/// coordinates directly by grid_size only produces the right cell when
+/// the ship happens to be sitting exactly at world origin with zero
+/// rotation, which is essentially never true once you've actually flown
+/// anywhere. Every cursor→grid conversion must go through here.
+pub fn cursor_to_ship_grid(
+    window: &Window,
+    camera: &Camera,
+    camera_transform: &GlobalTransform,
+    ship_gt: &GlobalTransform,
+) -> Option<IVec2> {
+    let cursor_pos = window.cursor_position()
+        .and_then(|p| camera.viewport_to_world_2d(camera_transform, p).ok())?;
+    let grid_size = 66.0;
+    let cursor_world = Vec3::new(cursor_pos.x, cursor_pos.y, 0.0);
+    let local = ship_gt.rotation().inverse() * (cursor_world - ship_gt.translation());
+    Some(IVec2::new(
+        (local.x / grid_size).round() as i32,
+        ((local.y + 33.0) / grid_size).round() as i32,
+    ))
+}
+
 /// Updates ghost position and validates placement.
 /// Tracks mouse in both Placing and Deleting modes.
 fn update_ghost_preview(
@@ -405,7 +447,10 @@ fn update_ghost_preview(
     mut build_state: ResMut<BuildingState>,
     current_state: Res<State<BuildState>>,
     occupancy: Res<GridOccupancy>,
-    module_query: Query<&Module>,
+    // Player modules only — wrecks keep real Module children since the
+    // destruction rework, and their local grid coords poisoned the
+    // positional rules (engines became unplaceable anywhere).
+    module_query: Query<&Module, Without<crate::ai_ship::components::OwnedByAiShip>>,
     hull_query: Query<(&HullSegment, &Transform, &ChildOf)>,
     registry: Res<ModuleRegistry>,
     currency: Res<Currency>,
@@ -420,29 +465,7 @@ fn update_ghost_preview(
     let Ok((camera, camera_transform)) = camera_query.single() else { return };
     let Ok(ship_gt) = ship_query.single() else { return };
 
-    if let Some(cursor_pos) = window.cursor_position()
-        .and_then(|p| camera.viewport_to_world_2d(camera_transform, p).ok())
-    {
-        // Grid coordinates are ship-local (hull/module tiles are children of
-        // the ship, positioned relative to it — see spawn_module /
-        // process_hull_placement / rooms::transform_to_grid, all of which
-        // use `grid_y * 66 - 33` as the local Y). The cursor position from
-        // viewport_to_world_2d is in WORLD space, so it has to be
-        // transformed into the ship's local space first — dividing world
-        // coordinates directly by grid_size (the old code) only produced
-        // the right cell when the ship happened to be sitting exactly at
-        // world origin with zero rotation, which is essentially never true
-        // once you've actually flown anywhere. That's why the grid overlay
-        // never lined up with the ship, and why placement kept failing:
-        // clicks were resolving to the wrong cell relative to the hull.
-        let grid_size = 66.0;
-        let cursor_world = Vec3::new(cursor_pos.x, cursor_pos.y, 0.0);
-        let local = ship_gt.rotation().inverse() * (cursor_world - ship_gt.translation());
-        let grid_pos = IVec2::new(
-            (local.x / grid_size).round() as i32,
-            ((local.y + 33.0) / grid_size).round() as i32,
-        );
-
+    if let Some(grid_pos) = cursor_to_ship_grid(window, camera, camera_transform, ship_gt) {
         let ghost_moved = build_state.ghost_position != grid_pos;
         build_state.ghost_position = grid_pos;
 
@@ -608,20 +631,23 @@ fn auto_rotate(grid_pos: IVec2, occupancy: &GridOccupancy) -> Option<Rotation> {
 fn check_position_rules(
     selection: &BuildSelection,
     grid_pos: IVec2,
-    module_query: &Query<&Module>,
+    module_query: &Query<&Module, Without<crate::ai_ship::components::OwnedByAiShip>>,
 ) -> bool {
     match selection {
         BuildSelection::Hull(_) => true,
         BuildSelection::Module(mt) => {
             let cat = mt.category();
             match cat {
-                // Propulsion: should be at the rear (rightmost x positions)
+                // Propulsion: at the rear. The ship builds nose-right —
+                // the starter vessel's engines sit at the LEFTMOST x —
+                // so rear means minimum x, not maximum (the old check
+                // was backwards and rejected every engine placement).
                 ModuleCategory::Propulsion => {
-                    let max_x = module_query.iter()
+                    let min_x = module_query.iter()
                         .filter(|m| m.module_type.category() != ModuleCategory::Propulsion)
                         .map(|m| m.grid_position.x)
-                        .max();
-                    max_x.map_or(true, |mx| grid_pos.x >= mx)
+                        .min();
+                    min_x.map_or(true, |mn| grid_pos.x <= mn)
                 }
                 // Crew: not adjacent to power modules (heat/radiation)
                 ModuleCategory::Crew => {
@@ -641,7 +667,10 @@ fn check_position_rules(
 // PLACEMENT & REMOVAL INPUT
 // ============================================================================
 
-/// Handles placing new modules/hull via click
+/// Handles placing new modules/hull via click.
+/// Hull can also be painted by holding the button and dragging — one block
+/// per cell the ghost passes through. Modules stay click-per-place so a drag
+/// can't accidentally buy three reactors.
 fn handle_module_placement(
     mouse: Res<ButtonInput<MouseButton>>,
     build_state: Res<BuildingState>,
@@ -650,9 +679,14 @@ fn handle_module_placement(
     mut place_hull_events: MessageWriter<PlaceHullRequest>,
     symmetry_state: Res<symmetry::SymmetryState>,
     occupancy: Res<GridOccupancy>,
+    mut last_painted: Local<Option<IVec2>>,
 ) {
     if *current_state.get() != BuildState::Placing {
         return;
+    }
+
+    if !mouse.pressed(MouseButton::Left) {
+        *last_painted = None;
     }
 
     // TEMP [DEBUG_BUILD]: diagnosing a report of placement silently failing
@@ -665,9 +699,15 @@ fn handle_module_placement(
         );
     }
 
-    if mouse.just_pressed(MouseButton::Left) && build_state.is_valid_placement {
+    let is_hull = matches!(build_state.current_selection(), BuildSelection::Hull(_));
+    let drag_paint = is_hull
+        && mouse.pressed(MouseButton::Left)
+        && *last_painted != Some(build_state.ghost_position);
+
+    if (mouse.just_pressed(MouseButton::Left) || drag_paint) && build_state.is_valid_placement {
         let pos = build_state.ghost_position;
         let rot = build_state.rotation;
+        *last_painted = Some(pos);
 
         match build_state.current_selection() {
             BuildSelection::Hull(layer) => {
@@ -697,6 +737,7 @@ fn handle_module_placement(
                     rotation: rot,
                     custom_name: None,
                     subcomponents: None,
+            extras: None,
                     free: false,
                 });
                 // Symmetry: mirror module placement
@@ -710,6 +751,7 @@ fn handle_module_placement(
                             rotation: mirror_rot,
                             custom_name: None,
                             subcomponents: None,
+            extras: None,
                             free: false,
                         });
                     }
@@ -719,14 +761,20 @@ fn handle_module_placement(
     }
 }
 
-/// Handles removing modules
+/// Handles removing modules.
+/// In delete mode the button can be held and dragged to sweep away several
+/// blocks — one removal per cell entered. Right-click removal while placing
+/// stays single-click.
 fn handle_module_removal(
     mouse: Res<ButtonInput<MouseButton>>,
     build_state: Res<BuildingState>,
     current_state: Res<State<BuildState>>,
     occupancy: Res<GridOccupancy>,
     module_query: Query<(Entity, &Module)>,
+    hull_query: Query<Entity, With<HullSegment>>,
     mut remove_events: MessageWriter<RemoveModuleRequest>,
+    mut remove_hull_events: MessageWriter<RemoveHullRequest>,
+    mut last_deleted: Local<Option<IVec2>>,
 ) {
     let state = *current_state.get();
     let in_deleting = state == BuildState::Deleting;
@@ -736,10 +784,21 @@ fn handle_module_removal(
         return;
     }
 
-    let should_delete = (in_deleting && mouse.just_pressed(MouseButton::Left))
+    if !mouse.pressed(MouseButton::Left) {
+        *last_deleted = None;
+    }
+
+    let drag_delete = in_deleting
+        && mouse.pressed(MouseButton::Left)
+        && *last_deleted != Some(build_state.ghost_position);
+
+    let should_delete = drag_delete
         || (in_placing && mouse.just_pressed(MouseButton::Right));
 
     if should_delete {
+        if in_deleting {
+            *last_deleted = Some(build_state.ghost_position);
+        }
         // Use GridOccupancy to find the entity at the clicked cell
         // This works for any cell a multi-cell module occupies, not just origin
         if let Some(&entity) = occupancy.cells.get(&build_state.ghost_position) {
@@ -754,6 +813,8 @@ fn handle_module_removal(
                     }
                 }
                 remove_events.write(RemoveModuleRequest { module: entity });
+            } else if hull_query.get(entity).is_ok() {
+                remove_hull_events.write(RemoveHullRequest { hull: entity });
             }
         }
     }
@@ -771,6 +832,7 @@ fn process_hull_placement(
     ship_query: Query<Entity, With<Ship>>,
     mut notifications: MessageWriter<ShowNotification>,
     mut currency: ResMut<Currency>,
+    mut history: ResMut<build_history::BuildHistory>,
 ) {
     let Ok(ship) = ship_query.single() else { return };
 
@@ -788,7 +850,7 @@ fn process_hull_placement(
 
         let texture = asset_server.load(sprite_map::hull_sprite_path(material));
 
-        commands.spawn((
+        let hull_entity = commands.spawn((
             (Sprite {
                     image: texture,
                     color,
@@ -813,7 +875,7 @@ fn process_hull_placement(
                 grid_position: grid_pos,
                 ..default()
             },
-        )).insert(ChildOf(ship));
+        )).insert(ChildOf(ship)).id();
 
         let layer_name = match event.layer {
             HullLayer::Outer => "Outer Hull",
@@ -825,6 +887,11 @@ fn process_hull_placement(
         if !event.free {
             let cost = material.cost();
             currency.credits = currency.credits.saturating_sub(cost);
+            history.record(build_history::BuildAction::PlaceHull {
+                entity: hull_entity,
+                material,
+                cost,
+            });
 
             notifications.write(ShowNotification {
                 message: format!("Placed {} ({}) -{}c", layer_name, material.name(), cost),
@@ -845,6 +912,7 @@ fn process_module_placement(
     mut placed_events: MessageWriter<ModulePlaced>,
     mut notifications: MessageWriter<ShowNotification>,
     mut currency: ResMut<Currency>,
+    mut history: ResMut<build_history::BuildHistory>,
 ) {
     let Ok(ship) = ship_query.single() else { return };
 
@@ -876,6 +944,12 @@ fn process_module_placement(
             )
         };
 
+        // Restore design state (tuning, fire group, ammo) if the request
+        // carried any — blueprint loads and ghost rebuilds do.
+        if let Some(extras) = &event.extras {
+            blueprint::apply_module_extras(&mut commands, entity, extras);
+        }
+
         placed_events.write(ModulePlaced {
             module: entity,
             module_type: event.module_type,
@@ -885,6 +959,11 @@ fn process_module_placement(
         if !event.free {
             let cost = registry.get(event.module_type).cost;
             currency.credits = currency.credits.saturating_sub(cost);
+            history.record(build_history::BuildAction::PlaceModule {
+                entity,
+                module_type: event.module_type,
+                cost,
+            });
 
             let message = if event.custom_name.is_some() {
                 format!("Placed Custom {} -{}c", event.module_type.name(), cost)
@@ -929,6 +1008,31 @@ fn process_module_removal(
             });
 
             commands.entity(event.module).despawn();
+        }
+    }
+}
+
+/// Processes RemoveHullRequest events (build-mode hull deletion, 75% refund
+/// like modules)
+fn process_hull_removal(
+    mut commands: Commands,
+    mut events: MessageReader<RemoveHullRequest>,
+    hull_query: Query<&HullSegment>,
+    mut notifications: MessageWriter<ShowNotification>,
+    mut currency: ResMut<Currency>,
+) {
+    for event in events.read() {
+        if let Ok(hull) = hull_query.get(event.hull) {
+            let refund = (hull.material.cost() as f32 * 0.75) as u32;
+            currency.credits += refund;
+
+            notifications.write(ShowNotification {
+                message: format!("Removed {} hull +{}c refund", hull.material.name(), refund),
+                notification_type: NotificationType::Warning,
+                duration: 1.5,
+            });
+
+            commands.entity(event.hull).despawn();
         }
     }
 }

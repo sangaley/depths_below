@@ -98,6 +98,9 @@ pub struct PlaceModuleRequest {
     pub rotation: Rotation,
     pub custom_name: Option<String>,
     pub subcomponents: Option<Vec<SubComponentType>>,
+    /// Per-module design state (tuning, fire group, ammo) restored on spawn.
+    /// None = registry defaults. See building::blueprint::ModuleExtras.
+    pub extras: Option<crate::building::blueprint::ModuleExtras>,
     /// If true, skip cost deduction (used by blueprint loading)
     pub free: bool,
 }
@@ -124,6 +127,12 @@ pub struct ModulePlaced {
 #[derive(Message)]
 pub struct RemoveModuleRequest {
     pub module: Entity,
+}
+
+/// Request to remove a hull segment (build mode deletion)
+#[derive(Message)]
+pub struct RemoveHullRequest {
+    pub hull: Entity,
 }
 
 /// Module was removed
@@ -380,6 +389,20 @@ pub struct AiShipDamaged {
     pub amount: f32,
     pub position: Option<Vec2>,
     pub direction: Option<Vec2>,
+    /// The ship (player Ship entity or AI ship ROOT entity) that fired the
+    /// shot responsible for this damage, if attributable. Lets a hit ship's
+    /// "under fire" retaliation target whoever ACTUALLY shot it instead of
+    /// defaulting to a guess. None for non-attributable sources (fire DoT
+    /// ticks, a ship's own destruction cascade, creature attacks).
+    pub attacker: Option<Entity>,
+}
+
+/// Fired when a module on an AI ship cooks off (ammo/fuel/reactor blast) —
+/// world position so audio/vfx can attenuate by distance to the player.
+#[derive(Message)]
+pub struct AiModuleExploded {
+    pub position: Vec2,
+    pub blast_damage: f32,
 }
 
 /// Fired when an AI ship is destroyed
@@ -474,6 +497,7 @@ impl Plugin for EventsPlugin {
             .add_message::<PlaceHullRequest>()
             .add_message::<ModulePlaced>()
             .add_message::<RemoveModuleRequest>()
+            .add_message::<RemoveHullRequest>()
             .add_message::<ModuleRemoved>()
             // Crew events
             .add_message::<CrewDamaged>()
@@ -506,6 +530,7 @@ impl Plugin for EventsPlugin {
             .add_message::<CrewDispatched>()
             // AI ship events
             .add_message::<AiShipDamaged>()
+            .add_message::<AiModuleExploded>()
             .add_message::<AiShipDestroyed>()
             // Contract events
             .add_message::<ContractAccepted>()

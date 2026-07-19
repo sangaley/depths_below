@@ -1,0 +1,7 @@
+Planet sprites (planets/planet00-09.png):
+  Kenney "Planets" pack — https://kenney.nl/assets/planets
+  License: CC0 1.0 Universal (public domain, no attribution required)
+
+Asteroid sprites (asteroids/meteor*.png) and starfield sparkles (starfield/star*.png):
+  Kenney "Space Shooter Redux" pack (via OpenGameArt) — https://opengameart.org/content/space-shooter-redux
+  License: CC0 1.0 Universal (public domain, no attribution required)

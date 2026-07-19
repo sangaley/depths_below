@@ -492,7 +492,7 @@ pub fn process_detonations(
         }
 
         // Fuel/Battery explosions start fires on 4-adjacent non-destroyed modules
-        if matches!(det.explosive_type, ExplosiveType::Fuel | ExplosiveType::Battery) {
+        if matches!(det.explosive_type, ExplosiveType::Fuel | ExplosiveType::Battery | ExplosiveType::Ammo) {
             for offset in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
                 let adj_pos = det.grid_position + offset;
                 if let Some(&adj_entity) = occupancy.cells.get(&adj_pos) {
@@ -536,5 +536,244 @@ pub fn process_detonations(
             notification_type: NotificationType::Danger,
             duration: 3.0,
         });
+    }
+}
+
+// ============================================================================
+// AI SHIP DETONATIONS
+// The player-ship path above resolves blasts through GridOccupancy, which
+// only knows the PLAYER's grid — that's why queue_detonation skips AI ships.
+// This pair resolves against the AI ship's own child blocks in world space
+// instead, so shooting out an enemy's cannon cooks off ITS ammo and chains
+// into ITS neighbors.
+// ============================================================================
+
+/// A queued explosion on an AI ship's module (world-space resolution).
+#[derive(Component)]
+pub struct AiPendingDetonation {
+    pub timer: Timer,
+    pub blast_radius_world: f32,
+    pub blast_damage: f32,
+    pub explosive_type: ExplosiveType,
+    pub position: Vec2,
+    pub ship: Entity,
+}
+
+/// Freshly destroyed explosive module on an AI ship → short fuse.
+pub fn queue_ai_detonation(
+    mut commands: Commands,
+    query: Query<(Entity, &Explosive, &GlobalTransform, &ChildOf), Added<DestroyedModule>>,
+    ai_ships: Query<(), With<crate::ai_ship::components::AiShip>>,
+) {
+    for (entity, explosive, gt, parent) in query.iter() {
+        if ai_ships.get(parent.parent()).is_err() {
+            continue; // player ship handled by queue_detonation above
+        }
+        let fuse_secs = match explosive.explosive_type {
+            ExplosiveType::Reactor => 0.15,
+            ExplosiveType::Ammo => 0.05,
+            ExplosiveType::Fuel => 0.2,
+            ExplosiveType::Battery => 0.1,
+        };
+        commands.entity(entity).try_insert(AiPendingDetonation {
+            timer: Timer::from_seconds(fuse_secs, TimerMode::Once),
+            blast_radius_world: explosive.blast_radius * 66.0,
+            blast_damage: explosive.blast_damage,
+            explosive_type: explosive.explosive_type,
+            position: gt.translation().truncate(),
+            ship: parent.parent(),
+        });
+    }
+}
+
+/// Ticks AI detonation fuses; on boom, damages every block of that ship in
+/// radius (with falloff) and sets survivors near the center burning.
+pub fn process_ai_detonations(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut det_query: Query<(Entity, &mut AiPendingDetonation)>,
+    children_query: Query<&Children>,
+    mut module_query: Query<
+        (&mut Module, &GlobalTransform),
+        (Without<DestroyedModule>, With<crate::ai_ship::components::OwnedByAiShip>),
+    >,
+    mut hull_query: Query<
+        (&mut HullSegment, &GlobalTransform),
+        (Without<HullDestroyed>, With<crate::ai_ship::components::OwnedByAiShip>),
+    >,
+    mut ai_damage_events: MessageWriter<AiShipDamaged>,
+    mut boom_events: MessageWriter<crate::events::AiModuleExploded>,
+) {
+    for (det_entity, mut det) in det_query.iter_mut() {
+        det.timer.tick(time.delta());
+        if !det.timer.is_finished() { continue; }
+        commands.entity(det_entity).remove::<AiPendingDetonation>();
+
+        let Ok(children) = children_query.get(det.ship) else { continue };
+        // Fires start on surviving blocks close to the blast center.
+        let fire_radius = det.blast_radius_world * 0.6;
+        let starts_fires = matches!(det.explosive_type,
+            ExplosiveType::Ammo | ExplosiveType::Fuel | ExplosiveType::Battery);
+
+        for child in children.iter() {
+            if child == det_entity { continue; }
+            let (block_pos, dealt) = if let Ok((mut module, gt)) = module_query.get_mut(child) {
+                let pos = gt.translation().truncate();
+                let dist = det.position.distance(pos);
+                if dist > det.blast_radius_world { continue; }
+                let falloff = 1.0 - (dist / det.blast_radius_world) * 0.7;
+                let damage = det.blast_damage * falloff;
+                module.health = (module.health - damage).max(0.0);
+                (pos, damage)
+            } else if let Ok((mut hull, gt)) = hull_query.get_mut(child) {
+                let pos = gt.translation().truncate();
+                let dist = det.position.distance(pos);
+                if dist > det.blast_radius_world { continue; }
+                let falloff = 1.0 - (dist / det.blast_radius_world) * 0.7;
+                let damage = det.blast_damage * falloff;
+                hull.health = (hull.health - damage).max(0.0);
+                (pos, damage)
+            } else {
+                continue;
+            };
+
+            crate::combat::spawn_floating_damage(
+                &mut commands, block_pos, dealt, Color::srgb(1.0, 0.5, 0.15),
+            );
+            if starts_fires && det.position.distance(block_pos) < fire_radius {
+                commands.entity(child).try_insert(
+                    crate::combat::new_projectiles::BlockBurning {
+                        dps: det.blast_damage * 0.1,
+                        remaining: 6.0,
+                        ship: det.ship,
+                    },
+                );
+            }
+        }
+
+        // Explosion visual — reuses HitEffect like the player-side blast
+        commands.spawn((
+            (Sprite {
+                    color: Color::srgba(1.0, 0.55, 0.1, 0.95),
+                    custom_size: Some(Vec2::splat(det.blast_radius_world * 2.0)),
+                    ..default()
+                }, Transform::from_translation(det.position.extend(0.8))),
+            HitEffect {
+                timer: Timer::from_seconds(0.5, TimerMode::Once),
+            },
+        ));
+
+        ai_damage_events.write(AiShipDamaged {
+            target: det.ship,
+            source: DamageSource::Explosion,
+            amount: 0.0, // damage already applied block-by-block above
+            position: Some(det.position),
+            direction: None,
+            attacker: None, // self-inflicted detonation cascade, no external attacker
+        });
+        boom_events.write(crate::events::AiModuleExploded {
+            position: det.position,
+            blast_damage: det.blast_damage,
+        });
+    }
+}
+
+// ============================================================================
+// EXPLOSION SHOCKWAVES
+// Real detonations (cook-offs, death-rattle pops, final booms) give nearby
+// ships a soft radial shove. Deliberately subtle — it should read as feel,
+// never wrestle aim away from the player. Set SHOCKWAVE_SCALE to 0.0 to
+// disable outright.
+// ============================================================================
+
+const SHOCKWAVE_SCALE: f32 = 1.0;
+/// Impulse per point of blast damage (world-units/s of Δv per unit mass).
+/// A 60-damage ammo cook-off vs the 1200-mass starter ship ≈ 40 u/s bump.
+const IMPULSE_PER_DAMAGE: f32 = 800.0;
+/// Δv cap per single blast — chains still stack past this, one blast can't
+/// punt a fighter at projectile speeds on its own.
+const SHOCKWAVE_MAX_KICK: f32 = 300.0;
+/// AI ships have no ShipPhysics — derive mass from block count at the same
+/// ratio as the starter ship (mass 1200 / ~35 blocks).
+const AI_MASS_PER_BLOCK: f32 = 34.0;
+
+/// Impulse ÷ mass shockwaves: every real detonation imparts momentum, so a
+/// 100-block freighter shrugs off a corner cook-off while a 25-block raider
+/// with a chain of HE going off gets properly yeeted. Off-center blasts also
+/// torque the PLAYER ship (AI steering owns its own rotation and would just
+/// fight it) — the lurch reads as "hit where it hurts".
+pub fn explosion_shockwaves(
+    mut ai_booms: MessageReader<crate::events::AiModuleExploded>,
+    mut player_booms: MessageReader<ModuleExploded>,
+    mut player_query: Query<(&GlobalTransform, &mut Velocity, &mut ShipPhysics), With<Ship>>,
+    mut ai_query: Query<
+        (Entity, &GlobalTransform, &mut Velocity),
+        (With<crate::ai_ship::components::AiShip>, Without<Ship>),
+    >,
+    children_query: Query<&Children>,
+) {
+    if SHOCKWAVE_SCALE <= 0.0 {
+        ai_booms.clear();
+        player_booms.clear();
+        return;
+    }
+
+    let mut rng = rand::thread_rng();
+    let mut blasts: Vec<(Vec2, f32)> = Vec::new();
+    for ev in ai_booms.read() {
+        blasts.push((ev.position, ev.blast_damage));
+    }
+    // Player-side ModuleExploded only carries a ship-local grid position —
+    // rotate it into world space through the ship's transform.
+    if let Ok((player_gt, _, _)) = player_query.single() {
+        let player_gt = *player_gt;
+        for ev in player_booms.read() {
+            let local = Vec3::new(
+                ev.grid_position.x as f32 * 66.0,
+                ev.grid_position.y as f32 * 66.0 - 33.0,
+                0.0,
+            );
+            blasts.push((player_gt.transform_point(local).truncate(), ev.blast_damage));
+        }
+    }
+    if blasts.is_empty() { return; }
+
+    for (blast_pos, blast_damage) in blasts {
+        let shock_radius = 250.0 + blast_damage * 2.0;
+        let impulse = blast_damage * IMPULSE_PER_DAMAGE * SHOCKWAVE_SCALE;
+
+        // Player: real mass + torque lurch
+        if let Ok((gt, mut velocity, mut physics)) = player_query.single_mut() {
+            let ship_pos = gt.translation().truncate();
+            let offset = ship_pos - blast_pos;
+            let dist = offset.length();
+            if dist <= shock_radius {
+                if let Some(dir) = offset.try_normalize() {
+                    let falloff = 1.0 - dist / shock_radius;
+                    let dv = (impulse / physics.mass.max(1.0) * falloff).min(SHOCKWAVE_MAX_KICK);
+                    velocity.0 += dir * dv;
+                    // Off-center lurch — small, random-signed, damped out by
+                    // the steering blend within a second.
+                    physics.angular_velocity += rng.gen_range(-1.0..1.0) * (dv / 100.0) * 0.35;
+                }
+            }
+        }
+
+        // AI ships: mass from block count, linear impulse only
+        for (entity, gt, mut velocity) in ai_query.iter_mut() {
+            let ship_pos = gt.translation().truncate();
+            let offset = ship_pos - blast_pos;
+            let dist = offset.length();
+            if dist > shock_radius { continue; }
+            let Some(dir) = offset.try_normalize() else { continue };
+            let block_count = children_query.get(entity)
+                .map(|c| c.iter().count())
+                .unwrap_or(20)
+                .max(1);
+            let mass = block_count as f32 * AI_MASS_PER_BLOCK;
+            let falloff = 1.0 - dist / shock_radius;
+            let dv = (impulse / mass * falloff).min(SHOCKWAVE_MAX_KICK);
+            velocity.0 += dir * dv;
+        }
     }
 }

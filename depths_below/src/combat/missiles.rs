@@ -16,22 +16,24 @@ pub fn fire_missiles_system(
     fire_state: Res<FireGroupState>,
     power_state: Res<crate::resources::PowerState>,
     selection: Res<TargetSelection>,
-    ship_query: Query<(Entity, &ShipPhysics), With<Ship>>,
+    ship_query: Query<(Entity, &ShipPhysics, &Transform), With<Ship>>,
     mut weapon_query: Query<(
         Entity, &Module, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
         Option<&crate::building::customization::tuning::WeaponTuning>,
+        Option<&ModuleTemperature>,
     ), Without<DestroyedModule>>,
     target_query: Query<&Transform, Without<Ship>>,
     machine_stats: Query<&crate::building::multiblock::components::MachineStats>,
     mut fuel_state: ResMut<crate::resources::FuelState>,
     windows_query: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::MainCamera>>,
+    input_state: Res<crate::resources::InputState>,
     mut commands: Commands,
     mut notifications: MessageWriter<ShowNotification>,
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
 ) {
-    let Ok((player_ship, ship_physics)) = ship_query.single() else { return };
+    let Ok((player_ship, ship_physics, ship_transform)) = ship_query.single() else { return };
 
     // Weapons need power — grid deficit silences launchers too.
     if power_state.power_balance < 0.0 {
@@ -45,8 +47,13 @@ pub fn fire_missiles_system(
             camera_query.single().ok()
                 .and_then(|(cam, gt)| cam.viewport_to_world_2d(gt, c).ok())
         });
+    // Controller right-stick aim beats the mouse while it owns aim (see
+    // InputState.gamepad_aim).
+    let cursor_world = input_state.gamepad_aim
+        .map(|dir| ship_transform.translation.truncate() + dir * 2000.0)
+        .or(cursor_world);
 
-    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning) in weapon_query.iter_mut() {
+    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning, temp) in weapon_query.iter_mut() {
         // Player ship only — see fire_weapons_system for why this matters:
         // AI ships carry identical missile-bay components and would
         // otherwise launch whenever the player fires, homing on the
@@ -58,8 +65,17 @@ pub fn fire_missiles_system(
         ) { continue; }
 
         if !module.is_active { continue; }
+
+        // Tick before the thermal gate — see fire_weapons_system: gating
+        // first freezes the timer, which generate_heat reads as "recently
+        // fired", locking the launcher hot forever.
         cooldown.timer.tick(time.delta());
         if !cooldown.timer.is_finished() { continue; }
+
+        // Thermal throttle — same gate the laser/kinetics use.
+        if let Some(temp) = temp {
+            if temp.current >= temp.max_temp * 0.95 { continue; }
+        }
 
         let group_firing = fire_state.firing[fire_group.group as usize % 4];
         if !group_firing { continue; }
@@ -78,11 +94,13 @@ pub fn fire_missiles_system(
             continue;
         };
 
-        // Fixed-mount launchers can't swivel outside their arc — skip firing
-        // at a target behind the ship instead of launching through the hull.
-        if !is_in_firing_arc(ship_physics.rotation, &module.rotation, mount, target_pos - weapon_pos) {
-            continue;
-        }
+        // Fixed-mount launchers can't swivel outside their arc, but they
+        // never silently refuse to fire (players read that as "rockets are
+        // broken" — aiming at a far cursor put every pod off-cone). Launch
+        // direction is clamped to the arc edge instead: at worst the salvo
+        // flies visibly off-aim, still never backwards through the hull.
+        let aim_dir = (target_pos - weapon_pos).normalize_or_zero();
+        let launch_dir = clamp_to_firing_arc(ship_physics.rotation, &module.rotation, mount, aim_dir);
 
         // Determine missile properties based on module type and bay chain length
         let bay_count = machine_stats.get(entity)
@@ -132,7 +150,7 @@ pub fn fire_missiles_system(
             from_player: true,
         });
 
-        let direction = (target_pos - weapon_pos).normalize_or_zero();
+        let direction = launch_dir;
         let initial_vel = direction * 100.0; // Slow launch
 
         // Visual size scales with bay count
@@ -344,6 +362,7 @@ pub fn check_missile_hits(
                         amount: 0.0,
                         position: Some(missile_pos),
                         direction: None,
+                        attacker: owner_ship,
                     });
                     commands.entity(missile_entity).despawn();
                     continue 'missiles;

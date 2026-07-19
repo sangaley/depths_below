@@ -3,6 +3,8 @@ pub mod particles;
 pub mod screen_effects;
 pub mod block_visuals;
 pub mod starfield;
+pub mod procedural_textures;
+pub mod debris;
 
 use bevy::prelude::*;
 use crate::states::GameState;
@@ -12,6 +14,7 @@ pub struct VfxPlugin;
 impl Plugin for VfxPlugin {
     fn build(&self, app: &mut App) {
         app
+            .add_systems(Startup, procedural_textures::generate_celestial_textures)
             .add_systems(
                 Update,
                 (
@@ -22,6 +25,8 @@ impl Plugin for VfxPlugin {
                     particles::spawn_engine_particles,
                     particles::spawn_breach_particles,
                     particles::update_particles,
+                    debris::spawn_block_debris,
+                    debris::update_debris,
                     screen_effects::update_screen_effects,
                 ).run_if(in_state(GameState::Exploring)),
             )

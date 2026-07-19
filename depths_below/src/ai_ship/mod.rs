@@ -5,8 +5,11 @@ mod ai_brain;
 mod movement;
 mod combat;
 mod noise;
-mod wreck;
+pub mod wreck;
+mod scavenger;
 pub mod simulation;
+mod crew;
+mod power;
 
 use bevy::prelude::*;
 
@@ -20,6 +23,7 @@ impl Plugin for AiShipPlugin {
     fn build(&self, app: &mut App) {
         app
             .init_resource::<WorldSimulation>()
+            .init_resource::<scavenger::ScavengerWaves>()
             .add_systems(OnEnter(GameState::Exploring), simulation::init_world_simulation)
             .add_systems(
                 Update,
@@ -35,13 +39,19 @@ impl Plugin for AiShipPlugin {
                     movement::ai_ship_movement_system,
                     movement::ai_thruster_system,
                     movement::ai_fuel_system,
-                    combat::ai_weapon_fire_system,
+                    power::update_ai_power,
+                    combat::ai_weapon_fire_system.after(power::update_ai_power),
                     combat::process_ai_ship_damage_system,
                     combat::check_ai_reactor_destruction,
                     noise::ai_ship_noise_system,
                     noise::ai_ship_noise_trail_system,
                     noise::ai_ship_radar_contact_decay,
                     wreck::ai_ship_death_system,
+                    wreck::update_death_rattle,
+                    wreck::wreck_fire_consumes_loot,
+                    scavenger::schedule_scavenger_waves.after(wreck::ai_ship_death_system),
+                    scavenger::spawn_scavenger_waves,
+                    scavenger::scavengers_feed,
                 )
                     .after(SpatialSet::Update)
                     .run_if(in_state(GameState::Exploring)),

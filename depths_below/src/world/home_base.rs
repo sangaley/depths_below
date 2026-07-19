@@ -3,6 +3,7 @@ use crate::components::{Ship, ShipPhysics, Velocity, Weapon};
 use crate::events::{ShowNotification, NotificationType};
 use crate::resources::{OxygenState, FuelState};
 use crate::states::GameState;
+use super::station_types::{station_type, station_type_name};
 
 // ============================================================================
 // HOME STATION — a physical base near the spawn point.
@@ -140,8 +141,9 @@ pub fn spawn_home_station(
         add_part(Vec2::new(44.0, 44.0), Color::srgb(0.85, 0.70, 0.25), Vec3::new(0.0, 0.0, 0.02));
         add_part(Vec2::new(200.0, 24.0), Color::srgb(0.20, 0.22, 0.30), Vec3::new(0.0, -80.0, 0.005));
 
+        let type_name = station_type_name(station_type(i + 1));
         let outpost_label = commands.spawn((
-            Text2d::new(format!("OUTPOST {}", i + 1)),
+            Text2d::new(format!("OUTPOST {} — {}", i + 1, type_name.to_uppercase())),
             TextFont { font_size: FontSize::Px(20.0), ..default() },
             TextColor(Color::srgba(0.7, 0.8, 1.0, 0.7)),
             Transform::from_xyz(0.0, 110.0, 0.03),
@@ -203,48 +205,44 @@ pub fn update_base_arrow(
     arrow_transform.rotation = Quat::from_rotation_z(dir.y.atan2(dir.x));
 }
 
-/// Resupply at remote outposts: fly within range, press F — O2, fuel, and
-/// ammo refill. (Haven handles full docking separately.)
-pub fn outpost_resupply(
+/// Dock at remote outposts: fly within range, press F to open the docking
+/// menu priced for this outpost (title, goods prices, and service discounts
+/// all resolve from nearest_station_index). This used to be a one-keypress
+/// bundle that sold ALL cargo instantly and force-resupplied — fine before
+/// per-item selling existed, but it dumped goods the player was routing to
+/// a better-paying station without asking, and never opened a menu at the
+/// very structures the trade routes run between. The menu covers everything
+/// the bundle did, with choices.
+pub fn outpost_docking(
     keyboard: Res<ButtonInput<KeyCode>>,
-    ship_query: Query<(Entity, &Transform), With<Ship>>,
-    mut weapon_query: Query<(&mut Weapon, &ChildOf)>,
-    mut oxygen_state: ResMut<OxygenState>,
-    mut fuel_state: ResMut<FuelState>,
+    ship_query: Query<&Transform, With<Ship>>,
+    mut next_state: ResMut<NextState<GameState>>,
     mut notifications: MessageWriter<ShowNotification>,
     mut prompted: Local<bool>,
 ) {
-    let Ok((ship_entity, ship_transform)) = ship_query.single() else { return };
+    let Ok(ship_transform) = ship_query.single() else { return };
     let ship_pos = ship_transform.translation.truncate();
 
-    let near_outpost = OUTPOST_POSITIONS.iter().any(|p| ship_pos.distance(*p) < OUTPOST_RANGE);
-    if !near_outpost {
+    let Some(outpost_i) = OUTPOST_POSITIONS.iter().position(|p| ship_pos.distance(*p) < OUTPOST_RANGE) else {
         *prompted = false;
         return;
-    }
+    };
+    let station_idx = outpost_i + 1;
 
     if !*prompted {
         *prompted = true;
         notifications.write(ShowNotification {
-            message: "Outpost in range — press F to resupply (O2, fuel, ammo)".into(),
+            message: format!(
+                "Outpost {} ({}) in range — press F to dock & trade",
+                station_idx, station_type_name(station_type(station_idx))
+            ),
             notification_type: NotificationType::Info,
             duration: 4.0,
         });
     }
 
     if keyboard.just_pressed(KeyCode::KeyF) {
-        oxygen_state.current_oxygen = oxygen_state.max_oxygen;
-        fuel_state.current_fuel = fuel_state.max_fuel;
-        for (mut weapon, parent) in weapon_query.iter_mut() {
-            if parent.parent() == ship_entity {
-                weapon.ammo = weapon.max_ammo;
-            }
-        }
-        notifications.write(ShowNotification {
-            message: "Resupplied — O2, fuel, and ammunition restored.".into(),
-            notification_type: NotificationType::Success,
-            duration: 3.0,
-        });
+        next_state.set(GameState::Docked);
     }
 }
 

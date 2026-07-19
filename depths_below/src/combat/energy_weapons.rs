@@ -230,6 +230,7 @@ pub fn fire_laser_system(
                             amount: 0.0,
                             position: hit_pos,
                             direction: None,
+                            attacker: Some(player_ship),
                         });
                         total_damage_dealt += damage;
                         hit_count += 1;
@@ -245,6 +246,7 @@ pub fn fire_laser_system(
                         amount: 0.0,
                         position: hit_pos,
                         direction: None,
+                        attacker: Some(player_ship),
                     });
                     total_damage_dealt += damage;
                     hit_count += 1;
@@ -377,6 +379,7 @@ pub fn fire_ion_system(
         &Module, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
         Option<&crate::building::customization::tuning::WeaponTuning>,
+        Option<&ModuleTemperature>,
     ), Without<DestroyedModule>>,
     target_query: Query<&Transform, Without<Ship>>,
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
@@ -384,14 +387,20 @@ pub fn fire_ion_system(
 ) {
     let Ok((player_ship, ship_physics)) = ship_query.single() else { return };
 
-    for (module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning) in weapon_query.iter_mut() {
+    for (module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning, temp) in weapon_query.iter_mut() {
         // Player ship only — see fire_weapons_system for why this matters.
         if parent.parent() != player_ship { continue; }
         if module.module_type != ModuleType::IonDisruptor { continue; }
         if !module.is_active { continue; }
-
+        // Tick before the thermal gate — a frozen cooldown reads as
+        // "recently fired" in generate_heat and locks the gun hot forever.
         cooldown.timer.tick(time.delta());
         if !cooldown.timer.is_finished() { continue; }
+
+        // Thermal throttle — same gate the laser/kinetics use.
+        if let Some(temp) = temp {
+            if temp.current >= temp.max_temp * 0.95 { continue; }
+        }
 
         let group_firing = fire_state.firing[fire_group.group as usize % 4];
         if !group_firing { continue; }
@@ -436,7 +445,7 @@ pub fn fire_ion_system(
                 current_energy: 100.0,
                 decay_rate: 15.0, // Loses 15 energy per second in flight
                 disable_duration: 5.0,
-                owner: Entity::PLACEHOLDER,
+                owner: player_ship,
             },
             Velocity(direction * speed),
             GravityAffected { mass: 0.2 },
@@ -538,6 +547,7 @@ pub fn update_ion_pulses(
                             amount: 0.0,
                             position: Some(hit_pos),
                             direction: None,
+                            attacker: Some(pulse.owner),
                         });
                     }
                     commands.entity(entity).despawn();
@@ -616,6 +626,7 @@ pub fn fire_plasma_system(
         Entity, &Module, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
         Option<&crate::building::customization::tuning::WeaponTuning>,
+        Option<&ModuleTemperature>,
     ), Without<DestroyedModule>>,
     target_query: Query<&Transform, Without<Ship>>,
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
@@ -623,14 +634,20 @@ pub fn fire_plasma_system(
 ) {
     let Ok((player_ship, ship_physics)) = ship_query.single() else { return };
 
-    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning) in weapon_query.iter_mut() {
+    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning, temp) in weapon_query.iter_mut() {
         // Player ship only — see fire_weapons_system for why this matters.
         if parent.parent() != player_ship { continue; }
         if module.module_type != ModuleType::PlasmaCaster { continue; }
         if !module.is_active { continue; }
-
+        // Tick before the thermal gate — a frozen cooldown reads as
+        // "recently fired" in generate_heat and locks the gun hot forever.
         cooldown.timer.tick(time.delta());
         if !cooldown.timer.is_finished() { continue; }
+
+        // Thermal throttle — same gate the laser/kinetics use.
+        if let Some(temp) = temp {
+            if temp.current >= temp.max_temp * 0.95 { continue; }
+        }
 
         let group_firing = fire_state.firing[fire_group.group as usize % 4];
         if !group_firing { continue; }
@@ -815,12 +832,16 @@ pub fn emp_detonation(
     mut module_query: Query<(Entity, &Module, &GlobalTransform, &ChildOf), Without<DestroyedModule>>,
     target_position_query: Query<&GlobalTransform>,
     ship_query: Query<Entity, With<Ship>>,
+    // MissileProjectile.owner is the launching WEAPON entity, not a ship —
+    // resolve to the actual ship root the same way check_missile_hits does.
+    owner_parent_query: Query<&ChildOf>,
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     let player_ship = ship_query.single().ok();
 
     for (missile_entity, missile_transform, emp, missile) in missile_query.iter() {
+        let owner_ship = owner_parent_query.get(missile.owner).ok().map(|p| p.parent());
         if !missile.armed { continue; }
 
         let missile_pos = missile_transform.translation.truncate();
@@ -854,6 +875,7 @@ pub fn emp_detonation(
                     amount: 0.0,
                     position: Some(module_pos),
                     direction: None,
+                    attacker: owner_ship,
                 });
                 emp.disable_duration
             };

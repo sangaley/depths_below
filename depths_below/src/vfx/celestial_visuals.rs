@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use crate::celestial::components::*;
+use super::procedural_textures::CelestialTextures;
 
 // ============================================================================
 // CELESTIAL BODY VISUAL LAYERS
@@ -57,6 +58,7 @@ pub struct EventHorizonVisual;
 pub fn attach_star_visuals(
     mut commands: Commands,
     star_query: Query<(Entity, &CelestialBody, &Star), Without<HasVisualLayers>>,
+    textures: Res<CelestialTextures>,
 ) {
     for (entity, body, star) in star_query.iter() {
         let radius = body.radius;
@@ -64,6 +66,7 @@ pub fn attach_star_visuals(
         // Inner glow — bright, tight around the star
         let inner_glow = commands.spawn((
             (Sprite {
+                    image: textures.glow.clone(),
                     color: star_glow_color(star.size_class, 0.35),
                     custom_size: Some(Vec2::splat(radius * 2.8)),
                     ..default()
@@ -78,6 +81,7 @@ pub fn attach_star_visuals(
         // Outer corona — wide, dim, atmospheric
         let corona = commands.spawn((
             (Sprite {
+                    image: textures.glow.clone(),
                     color: star_corona_color(star.size_class, 0.12),
                     custom_size: Some(Vec2::splat(radius * 4.5)),
                     ..default()
@@ -88,6 +92,7 @@ pub fn attach_star_visuals(
         // Flare glow — invisible until flare builds up
         let flare_glow = commands.spawn((
             (Sprite {
+                    image: textures.glow.clone(),
                     color: Color::srgba(1.0, 0.9, 0.7, 0.0),
                     custom_size: Some(Vec2::splat(radius * 6.0)),
                     ..default()
@@ -107,6 +112,7 @@ pub fn attach_star_visuals(
 pub fn attach_planet_visuals(
     mut commands: Commands,
     planet_query: Query<(Entity, &CelestialBody, &Planet), Without<HasVisualLayers>>,
+    textures: Res<CelestialTextures>,
 ) {
     for (entity, body, planet) in planet_query.iter() {
         let radius = body.radius;
@@ -121,6 +127,7 @@ pub fn attach_planet_visuals(
 
             let atmosphere = commands.spawn((
                 (Sprite {
+                        image: textures.glow.clone(),
                         color: atmo_color,
                         custom_size: Some(Vec2::splat(radius * 2.3)),
                         ..default()
@@ -136,6 +143,7 @@ pub fn attach_planet_visuals(
         // Shadow overlay — simulates dark side (offset from center)
         let shadow = commands.spawn((
             (Sprite {
+                    image: textures.solid.clone(),
                     color: Color::srgba(0.0, 0.0, 0.02, 0.5),
                     custom_size: Some(Vec2::splat(radius * 2.0)),
                     ..default()
@@ -153,11 +161,13 @@ pub fn attach_planet_visuals(
 pub fn attach_black_hole_visuals(
     mut commands: Commands,
     bh_query: Query<(Entity, &CelestialBody, &BlackHole), Without<HasVisualLayers>>,
+    textures: Res<CelestialTextures>,
 ) {
     for (entity, _body, bh) in bh_query.iter() {
         // Event horizon — pitch black center
         let horizon = commands.spawn((
             (Sprite {
+                    image: textures.solid.clone(),
                     color: Color::srgba(0.0, 0.0, 0.0, 1.0),
                     custom_size: Some(Vec2::splat(bh.event_horizon_radius * 2.0)),
                     ..default()
@@ -168,6 +178,7 @@ pub fn attach_black_hole_visuals(
         // Accretion disk — spinning orange/red ring
         let disk_inner = commands.spawn((
             (Sprite {
+                    image: textures.glow.clone(),
                     color: Color::srgba(0.9, 0.4, 0.1, 0.6),
                     custom_size: Some(Vec2::new(bh.accretion_disk_radius * 2.5, bh.accretion_disk_radius * 0.4)),
                     ..default()
@@ -178,6 +189,7 @@ pub fn attach_black_hole_visuals(
         // Outer accretion glow
         let disk_outer = commands.spawn((
             (Sprite {
+                    image: textures.glow.clone(),
                     color: Color::srgba(0.6, 0.15, 0.05, 0.25),
                     custom_size: Some(Vec2::new(bh.accretion_disk_radius * 4.0, bh.accretion_disk_radius * 0.8)),
                     ..default()
@@ -188,6 +200,7 @@ pub fn attach_black_hole_visuals(
         // Gravitational distortion ring — faint purple/blue outer halo
         let distortion = commands.spawn(
             (Sprite {
+                    image: textures.glow.clone(),
                     color: Color::srgba(0.2, 0.1, 0.3, 0.08),
                     custom_size: Some(Vec2::splat(bh.accretion_disk_radius * 6.0)),
                     ..default()

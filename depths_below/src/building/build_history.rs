@@ -2,44 +2,38 @@ use bevy::prelude::*;
 use crate::components::*;
 use crate::events::*;
 use crate::resources::*;
-use crate::states::BuildState;
 
 // ============================================================================
-// UNDO/REDO SYSTEM
-// Tracks all build actions in a history stack.
-// Ctrl+Z undoes, Ctrl+Y or Ctrl+Shift+Z redoes.
+// UNDO SYSTEM
+// Placements (modules + hull) are recorded by the placement processors in
+// building/mod.rs. Ctrl+Z removes the most recent placement and refunds its
+// full cost.
+//
+// There is deliberately no redo, and removals are not undoable: respawning a
+// removed module faithfully would need a snapshot of all its component state
+// (ammo, heat, tuning, machine connections...). The old redo only moved
+// credits around without spawning anything — worse than nothing.
 // ============================================================================
 
-/// A single build action that can be undone/redone
+/// A single recorded placement that can be undone
 #[derive(Clone, Debug)]
 pub enum BuildAction {
     PlaceModule {
         entity: Entity,
         module_type: ModuleType,
-        grid_position: IVec2,
-        rotation: Rotation,
         cost: u32,
     },
     PlaceHull {
         entity: Entity,
-        layer: HullLayer,
         material: HullMaterial,
-        grid_position: IVec2,
         cost: u32,
-    },
-    RemoveModule {
-        module_type: ModuleType,
-        grid_position: IVec2,
-        rotation: Rotation,
-        refund: u32,
     },
 }
 
-/// Resource tracking build history
+/// Resource tracking recent placements
 #[derive(Resource)]
 pub struct BuildHistory {
     pub undo_stack: Vec<BuildAction>,
-    pub redo_stack: Vec<BuildAction>,
     pub max_history: usize,
 }
 
@@ -47,104 +41,95 @@ impl Default for BuildHistory {
     fn default() -> Self {
         Self {
             undo_stack: Vec::new(),
-            redo_stack: Vec::new(),
             max_history: 50,
         }
     }
 }
 
 impl BuildHistory {
-    /// Record a new action (clears redo stack)
     pub fn record(&mut self, action: BuildAction) {
         self.undo_stack.push(action);
-        self.redo_stack.clear();
         if self.undo_stack.len() > self.max_history {
             self.undo_stack.remove(0);
         }
     }
-
-    pub fn can_undo(&self) -> bool {
-        !self.undo_stack.is_empty()
-    }
-
-    pub fn can_redo(&self) -> bool {
-        !self.redo_stack.is_empty()
-    }
 }
 
-/// System: listen for Ctrl+Z / Ctrl+Y and execute undo/redo
-pub fn undo_redo_input(
+/// System: Ctrl+Z removes the last placed block and refunds its cost
+pub fn undo_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut history: ResMut<BuildHistory>,
     mut commands: Commands,
     mut currency: ResMut<Currency>,
-    _module_query: Query<(Entity, &Module)>,
-    _hull_query: Query<(Entity, &HullSegment)>,
+    module_query: Query<&Module>,
+    all_entities: Query<Entity>,
     mut notifications: MessageWriter<ShowNotification>,
-    _current_state: Res<State<BuildState>>,
 ) {
     let ctrl = keyboard.pressed(KeyCode::ControlLeft) || keyboard.pressed(KeyCode::ControlRight);
-    if !ctrl { return; }
-
-    let shift = keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
-
-    // Ctrl+Z = Undo
-    if keyboard.just_pressed(KeyCode::KeyZ) && !shift {
-        if let Some(action) = history.undo_stack.pop() {
-            match &action {
-                BuildAction::PlaceModule { entity, cost, module_type, .. } => {
-                    // Undo a placement = remove the module, refund cost
-                    commands.entity(*entity).despawn();
-                    currency.credits += cost;
-                    notifications.write(ShowNotification {
-                        message: format!("Undo: removed {} (+{}c)", module_type.name(), cost),
-                        notification_type: NotificationType::Info,
-                        duration: 2.0,
-                    });
-                }
-                BuildAction::PlaceHull { entity, cost, .. } => {
-                    commands.entity(*entity).despawn();
-                    currency.credits += cost;
-                    notifications.write(ShowNotification {
-                        message: format!("Undo: removed hull (+{}c)", cost),
-                        notification_type: NotificationType::Info,
-                        duration: 2.0,
-                    });
-                }
-                BuildAction::RemoveModule { refund, module_type, .. } => {
-                    // Undo a removal = we can't respawn it perfectly, just refund
-                    // Full undo of removal would require storing all component data
-                    currency.credits -= refund; // Take back the refund
-                    notifications.write(ShowNotification {
-                        message: format!("Undo: {} removal reversed (-{}c)", module_type.name(), refund),
-                        notification_type: NotificationType::Info,
-                        duration: 2.0,
-                    });
-                }
-            }
-            history.redo_stack.push(action);
-        }
+    if !ctrl || !keyboard.just_pressed(KeyCode::KeyZ) {
+        return;
     }
 
-    // Ctrl+Y or Ctrl+Shift+Z = Redo
-    if keyboard.just_pressed(KeyCode::KeyY) || (keyboard.just_pressed(KeyCode::KeyZ) && shift) {
-        if let Some(action) = history.redo_stack.pop() {
-            match &action {
-                BuildAction::PlaceModule { cost, module_type, .. } => {
-                    // Redo a placement — deduct cost (module was already despawned by undo)
-                    // Full redo would require respawning — for now just track credits
-                    if currency.credits >= *cost {
-                        currency.credits -= cost;
-                        notifications.write(ShowNotification {
-                            message: format!("Redo: {} (-{}c)", module_type.name(), cost),
-                            notification_type: NotificationType::Info,
-                            duration: 2.0,
-                        });
-                    }
+    // Entries whose entity is already gone (deleted in delete mode, blown up,
+    // wiped by a blueprint load) are meaningless — skip past them to the most
+    // recent placement that still exists.
+    let action = loop {
+        match history.undo_stack.pop() {
+            Some(action) => {
+                let entity = match &action {
+                    BuildAction::PlaceModule { entity, .. } => *entity,
+                    BuildAction::PlaceHull { entity, .. } => *entity,
+                };
+                if all_entities.contains(entity) {
+                    break Some(action);
                 }
-                _ => {}
             }
-            history.undo_stack.push(action);
+            None => break None,
+        }
+    };
+
+    let Some(action) = action else {
+        notifications.write(ShowNotification {
+            message: "Nothing to undo".into(),
+            notification_type: NotificationType::Info,
+            duration: 1.5,
+        });
+        return;
+    };
+
+    match action {
+        BuildAction::PlaceModule { entity, module_type, cost } => {
+            // Same guard as delete mode: never undo away the last power source
+            if module_type.category() == ModuleCategory::Power {
+                let power_count = module_query.iter()
+                    .filter(|m| m.module_type.category() == ModuleCategory::Power)
+                    .count();
+                if power_count <= 1 {
+                    history.undo_stack.push(action);
+                    notifications.write(ShowNotification {
+                        message: "Cannot undo — last power source".into(),
+                        notification_type: NotificationType::Warning,
+                        duration: 2.0,
+                    });
+                    return;
+                }
+            }
+            commands.entity(entity).despawn();
+            currency.credits += cost;
+            notifications.write(ShowNotification {
+                message: format!("Undo: removed {} (+{}c)", module_type.name(), cost),
+                notification_type: NotificationType::Info,
+                duration: 2.0,
+            });
+        }
+        BuildAction::PlaceHull { entity, material, cost } => {
+            commands.entity(entity).despawn();
+            currency.credits += cost;
+            notifications.write(ShowNotification {
+                message: format!("Undo: removed {} hull (+{}c)", material.name(), cost),
+                notification_type: NotificationType::Info,
+                duration: 2.0,
+            });
         }
     }
 }

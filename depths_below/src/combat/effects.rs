@@ -51,7 +51,7 @@ pub(super) fn creature_ranged_attack(
             shoot_damage,
             PROJECTILE_SPEED * 0.6,
             shoot_range,
-            false,
+            ProjectileOwner::Creature,
             AmmoType::Charge,
         );
     }

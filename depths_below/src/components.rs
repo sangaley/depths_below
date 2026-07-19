@@ -65,10 +65,10 @@ impl HullMaterial {
 
     pub fn cost(&self) -> u32 {
         match self {
-            HullMaterial::Steel => 10,
-            HullMaterial::Titanium => 30,
-            HullMaterial::Composite => 80,
-            HullMaterial::AbyssalAlloy => 200,
+            HullMaterial::Steel => 8,
+            HullMaterial::Titanium => 23,
+            HullMaterial::Composite => 60,
+            HullMaterial::AbyssalAlloy => 150,
         }
     }
 
@@ -908,7 +908,7 @@ impl ModuleType {
             ModuleType::Searchlight => "Searchlight",
             ModuleType::AirlockChamber => "Airlock Chamber",
             ModuleType::DockingPort => "Docking Port",
-            ModuleType::SalvageArm => "Salvage Arm",
+            ModuleType::SalvageArm => "Breaker Drill",
             ModuleType::AdvancedRepairBay => "Advanced Repair Bay",
             ModuleType::DroneBay => "Drone Bay",
             ModuleType::DeepFloodlight => "High-Power Spotlight",
@@ -1059,6 +1059,27 @@ pub struct Weapon {
     pub max_ammo: u32,
 }
 
+/// Who fired a shot. Replaces the old `from_player: bool` — carries the
+/// actual shooter so collision resolution can eventually go any-vs-any
+/// (AI ships fighting each other), not just player-vs-AI. This is the
+/// legacy projectile's owner; the block-resolving path
+/// (combat::new_projectiles::Projectile) tracks the firing WEAPON entity
+/// instead and derives its ship via ChildOf.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum ProjectileOwner {
+    Player,
+    /// The AI ship ROOT entity that fired.
+    AiShip(Entity),
+    /// Creature ranged attacks (see combat::effects).
+    Creature,
+}
+
+impl ProjectileOwner {
+    pub fn is_player(self) -> bool {
+        matches!(self, ProjectileOwner::Player)
+    }
+}
+
 /// Projectile entity - travels through the world and damages on contact
 #[derive(Component)]
 pub struct Projectile {
@@ -1066,7 +1087,7 @@ pub struct Projectile {
     pub speed: f32,
     pub direction: Vec2,
     pub lifetime: Timer,
-    pub from_player: bool,
+    pub owner: ProjectileOwner,
     pub ammo_type: AmmoType,
 }
 
@@ -1393,6 +1414,8 @@ pub enum CrewState {
     Repairing,
     Panicking,
     Unconscious,
+    /// On EVA ferrying loot from a wreck (see crew::eva_salvage)
+    Salvaging,
 }
 
 /// A module that can be staffed by one crew member.
@@ -1402,6 +1425,13 @@ pub struct CrewStation {
     pub assigned_crew: Option<Entity>,
     pub manually_assigned: bool,   // player locked this assignment
 }
+
+/// Right-click pin on a crew station: this post keeps its operator —
+/// salvage details and other crew drafts never pull them. Unpinned
+/// stations lose their crew to salvage duty (and stop working while
+/// unmanned). Defaults when nothing is pinned: helm + one gun.
+#[derive(Component)]
+pub struct KeepManned;
 
 /// Marks a module as providing crew berths.
 #[derive(Component)]
@@ -2023,7 +2053,9 @@ pub struct DockingOverlay;
 
 /// Currently selected service in the docking menu
 #[derive(Component)]
-pub struct DockingMenuSelection(pub usize);
+/// (selected service row, sell-cargo choice index — 0 = ALL, then one
+/// per held item stack; see ui sell_choices)
+pub struct DockingMenuSelection(pub usize, pub usize);
 
 /// Individual service row in the docking menu
 #[derive(Component)]

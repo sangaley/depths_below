@@ -8,6 +8,7 @@ mod generation;
 mod chunks;
 mod biomes;
 pub mod home_base;
+pub mod station_types;
 
 #[allow(unused_imports)]
 pub use generation::*;
@@ -22,6 +23,7 @@ impl Plugin for WorldPlugin {
             .init_resource::<WorldState>()
             .init_resource::<ChunkManager>()
             .init_resource::<DiscoveredLocations>()
+            .init_resource::<MarketEvents>()
             // Home station structure exists from the very first (docked) state
             .add_systems(OnEnter(GameState::StationDocked), home_base::spawn_home_station)
             .add_systems(
@@ -31,10 +33,10 @@ impl Plugin for WorldPlugin {
                     check_depth_zone_change,
                     update_biome,
                     check_poi_discovery,
-                    salvage_wreck_system,
+                    tick_market_events,
                     check_docking_proximity,
                     home_base::home_station_docking,
-                    home_base::outpost_resupply,
+                    home_base::outpost_docking,
                     home_base::update_base_arrow,
                     discover_log_entries,
                     apply_hazard_damage,
@@ -213,94 +215,64 @@ fn check_docking_proximity(
     }
 }
 
-/// Salvage loot from nearby wrecks with F key
-fn salvage_wreck_system(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    ship_query: Query<&GlobalTransform, With<Ship>>,
-    mut wreck_query: Query<(&GlobalTransform, &mut Wreck, &mut PointOfInterest)>,
-    salvage_query: Query<&SalvageSystem, With<Module>>,
-    mut inventory: ResMut<Inventory>,
-    mut currency: ResMut<Currency>,
-    mut statistics: ResMut<Statistics>,
+// NOTE: wreck looting moved to crew::eva_salvage — F now dispatches a
+// crew salvage detail instead of teleporting loot into the hold.
+
+/// MARKET EVENTS — every few minutes an outpost may develop a shortage
+/// and pay well over the odds for one good for a while. Prices resolve
+/// through resources::live_item_price, so the docking menu reflects the
+/// premium automatically; expiry is silent (the notification names the
+/// duration up front).
+fn tick_market_events(
+    time: Res<Time>,
+    mut events: ResMut<MarketEvents>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    if !keyboard.just_pressed(KeyCode::KeyF) {
+    use rand::Rng;
+    let dt = time.delta_secs();
+    events.active.retain_mut(|e| {
+        e.remaining -= dt;
+        e.remaining > 0.0
+    });
+
+    events.next_roll -= dt;
+    if events.next_roll > 0.0 {
+        return;
+    }
+    let mut rng = rand::thread_rng();
+    events.next_roll = rng.gen_range(180.0..300.0);
+    if events.active.len() >= 2 {
         return;
     }
 
-    let Ok(ship_gt) = ship_query.single() else { return };
-    let ship_pos = ship_gt.translation().truncate();
+    let station_idx = rng.gen_range(1..=12usize);
+    let goods = [
+        ItemType::ScrapMetal,
+        ItemType::Crystal,
+        ItemType::BioSample,
+        ItemType::FuelCell,
+        ItemType::RareAlloy,
+        ItemType::AncientArtifact,
+        ItemType::AmmoCrate,
+    ];
+    let item = goods[rng.gen_range(0..goods.len())];
+    let sell_mult = rng.gen_range(1.6..2.0_f32);
+    let remaining = rng.gen_range(300.0..480.0_f32);
 
-    // Check if we have a salvage module (better range and yield)
-    let has_salvage = salvage_query.iter().next().is_some();
-    let salvage_range = if has_salvage { 150.0 } else { 80.0 };
-    let items_per_salvage = if has_salvage { 2u32 } else { 1u32 };
-
-    for (wreck_gt, mut wreck, mut poi) in wreck_query.iter_mut() {
-        if poi.poi_type != PoiType::Wreck {
-            continue;
-        }
-
-        let dist = ship_pos.distance(wreck_gt.translation().truncate());
-        if dist > salvage_range {
-            continue;
-        }
-
-        if wreck.loot_remaining == 0 {
-            notifications.write(ShowNotification {
-                message: "This wreck has been fully salvaged.".into(),
-                notification_type: NotificationType::Info,
-                duration: 2.0,
-            });
-            return;
-        }
-
-        let loot_types = [
-            ItemType::ScrapMetal,
-            ItemType::Crystal,
-            ItemType::FuelCell,
-            ItemType::RareAlloy,
-            ItemType::AmmoCrate,
-        ];
-
-        for _ in 0..items_per_salvage {
-            if wreck.loot_remaining == 0 {
-                break;
-            }
-
-            let item = loot_types[rand::random::<usize>() % loot_types.len()];
-            if inventory.add_item(item, 1) {
-                wreck.loot_remaining -= 1;
-                currency.credits += 15;
-
-                notifications.write(ShowNotification {
-                    message: format!("Salvaged {} (+15c)", item.name()),
-                    notification_type: NotificationType::Success,
-                    duration: 2.5,
-                });
-            } else {
-                notifications.write(ShowNotification {
-                    message: "Inventory full! Sell cargo at a settlement.".into(),
-                    notification_type: NotificationType::Warning,
-                    duration: 3.0,
-                });
-                break;
-            }
-        }
-
-        if wreck.loot_remaining == 0 {
-            poi.discovered = true;
-            wreck.is_explored = true;
-            statistics.wrecks_salvaged += 1;
-            notifications.write(ShowNotification {
-                message: "Wreck fully salvaged!".into(),
-                notification_type: NotificationType::Info,
-                duration: 3.0,
-            });
-        }
-
-        return; // Only salvage one wreck per keypress
-    }
+    let type_name = station_types::station_type_name(station_types::station_type(station_idx));
+    notifications.write(ShowNotification {
+        message: format!(
+            "MARKET: Outpost {} ({}) short on {} — paying {:.0}% for ~{:.0} min!",
+            station_idx,
+            type_name,
+            item.name(),
+            sell_mult * 100.0,
+            remaining / 60.0
+        ),
+        notification_type: NotificationType::Info,
+        duration: 6.0,
+    });
+    events.active.push(MarketEvent { station_idx, item, sell_mult, remaining });
 }
 
 /// Discover log entries when near POIs that have them

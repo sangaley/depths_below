@@ -16,12 +16,17 @@ pub fn spawn_starter_ship(
     registry: Res<ModuleRegistry>,
     mut notifications: MessageWriter<ShowNotification>,
     existing_ship: Query<Entity, With<Ship>>,
+    mut rebuild_queue: ResMut<crate::ship::rebuild::RebuildQueue>,
 ) {
     // Guard: don't spawn a second ship
     if !existing_ship.is_empty() {
         return;
     }
     info!("Spawning starter vessel...");
+
+    // Fresh run — stale ghosts belonged to the previous ship (their
+    // sprites died with it as children of the old root).
+    rebuild_queue.ghosts.clear();
 
     // Initialize oxygen
     oxygen_state.max_oxygen = 1800.0;
@@ -47,33 +52,56 @@ pub fn spawn_starter_ship(
         crate::celestial::components::GravityForce::default(),
     )).id();
 
-    // ========================================================================
-    // Ship-shaped hull layout (tapered bow & stern)
-    // Uses x as forward axis (positive = bow/front)
-    //
-    // Hull shape (top-down, y is vertical):
-    //                                     [O][O]
-    //                            [O][O][O][O][O][O]
-    //                      [O][O][O][O][O][O][O][O][O]
-    //          [O][O][O][O][O][O][O][O][O][O][O][O][O][O]
-    //    [O][O][O][O][O][O][O][O][O][O][O][O][O][O][O][O]
-    //    [O][O][O][O][O][O][O][O][O][O][O][O][O][O][O][O]
-    //          [O][O][O][O][O][O][O][O][O][O][O][O][O][O]
-    //                      [O][O][O][O][O][O][O][O][O]
-    //                            [O][O][O][O][O][O]
-    //                                     [O][O]
-    //
-    // Stern (x=-7..-5): Engines + propulsion (exposed at back)
-    // Aft  (x=-4..-2):  Fuel, thruster, O2, cooling
-    // Mid  (x=-1..2):   Reactors, crew quarters, mess hall
-    // Fore (x=3..5):    Bridge, radar, repair, cargo
-    // Bow  (x=6..8):    Weapons on hull edges, sensors at tip
-    // ========================================================================
+    // The starter destroyer is design data, not spawn calls — see
+    // builtin_starter_design(). designs/starter.json overrides the built-in
+    // (exported there on first run so it can be edited as JSON).
+    let design = crate::building::blueprint::load_design_file("designs/starter.json")
+        .unwrap_or_else(|| {
+            let design = builtin_starter_design();
+            if let Err(e) = crate::building::blueprint::write_design_file("designs/starter.json", &design) {
+                warn!("Could not export starter design: {}", e);
+            }
+            design
+        });
 
-    let hull_texture = asset_server.load(sprite_map::hull_sprite_path(HullMaterial::Steel));
+    crate::building::blueprint::spawn_ship_from_design(
+        &mut commands,
+        &asset_server,
+        &registry,
+        ship,
+        &design,
+    );
 
-    // Destroyer profile: long, narrow, pointed bow — a warship silhouette.
-    // Each row is (y, x_min, x_max).
+    info!(
+        "Starter vessel '{}' spawned ({} hull, {} modules)",
+        design.name,
+        design.hull_cells.len(),
+        design.modules.len()
+    );
+
+    notifications.write(ShowNotification {
+        message: "Mouse: Aim | W/S: Thrust | A/D: Strafe | Shift: Brake | Space/Click: Fire | R: Shield | F: Dock".into(),
+        notification_type: NotificationType::Info,
+        duration: 8.0,
+    });
+}
+
+/// The starter destroyer expressed as design data (Blueprint v2). This is
+/// the built-in fallback; on first run it's exported to designs/starter.json
+/// and the file wins from then on.
+///
+/// Hull shape (top-down, x is forward, bow at +x):
+///                                     [O][O]
+///                            [O][O][O][O][O][O]
+///                      [O][O][O][O][O][O][O][O][O]
+///          [O][O][O][O][O][O][O][O][O][O][O][O][O][O]
+///    [O][O][O][O][O][O][O][O][O][O][O][O][O][O][O][O]
+///
+/// Stern: engines/reactors/fuel · Mid: crew + gun deck · Bow: missiles/armor
+fn builtin_starter_design() -> crate::building::blueprint::Blueprint {
+    use crate::building::blueprint::{Blueprint, BlueprintHullCell, BlueprintModule, BLUEPRINT_VERSION};
+
+    // Destroyer profile: long, narrow, pointed bow. Each row is (y, x_min, x_max).
     let hull_rows: &[(i32, i32, i32)] = &[
         ( 3,  -2,  4),   // upper superstructure
         ( 2,  -4,  7),   // upper deck
@@ -84,139 +112,120 @@ pub fn spawn_starter_ship(
         (-3,  -2,  4),   // lower superstructure
     ];
 
-    // Spawn hull segments for the ship shape
-    for &(y, x_min, x_max) in hull_rows {
-        for x in x_min..=x_max {
-            // Determine if this is perimeter or interior
-            let is_top_edge = !hull_rows.iter().any(|&(ry, rxmin, rxmax)| ry == y + 1 && x >= rxmin && x <= rxmax);
-            let is_bot_edge = !hull_rows.iter().any(|&(ry, rxmin, rxmax)| ry == y - 1 && x >= rxmin && x <= rxmax);
-            let is_left_edge = x == x_min;
-            let is_right_edge = x == x_max;
-            let is_perimeter = is_top_edge || is_bot_edge || is_left_edge || is_right_edge;
-
-            let hull_layer = if is_perimeter { HullLayer::Outer } else { HullLayer::Inner };
-            let color = if is_perimeter {
-                Color::srgb(0.7, 0.7, 0.75)
-            } else {
-                Color::srgb(0.52, 0.52, 0.58)
-            };
-
-            commands.spawn((
-                (Sprite {
-                        image: hull_texture.clone(),
-                        color,
-                        custom_size: Some(Vec2::new(64.0, 64.0)),
-                        ..default()
-                    }, Transform::from_xyz(
-                        x as f32 * 66.0,
-                        y as f32 * 66.0 - 33.0,
-                        0.1,
-                    )),
-                BaseSpriteColor(color),
-                BaseHullStats {
-                    max_health: HullSegment::default().max_health,
-                    radiation_shielding: HullSegment::default().radiation_shielding,
-                },
-                HullSegment {
-                    grid_position: IVec2::new(x, y),
-                    hull_layer,
-                    ..HullSegment::default()
-                },
-            )).insert(ChildOf(ship));
-        }
-    }
-
-    // --- Bulkhead doors (compartment separators) ---
-    let bulkhead_positions = [
+    // Compartment separators — these REPLACE the plain cell at their
+    // position (the old spawn code double-stacked a second segment there).
+    let bulkheads = [
         IVec2::new(-1, 0), IVec2::new(-1, -1),  // engineering ↔ gun deck
         IVec2::new(2, -1), IVec2::new(3, -1),   // gun deck ↔ bridge
     ];
-    for pos in &bulkhead_positions {
-        let bulkhead_color = Color::srgb(0.62, 0.66, 0.8);
-        commands.spawn((
-            (Sprite {
-                    image: hull_texture.clone(),
-                    color: bulkhead_color,
-                    custom_size: Some(Vec2::new(64.0, 64.0)),
-                    ..default()
-                }, Transform::from_xyz(
-                    pos.x as f32 * 66.0,
-                    pos.y as f32 * 66.0 - 33.0,
-                    0.1,
-                )),
-            BaseSpriteColor(bulkhead_color),
-            BaseHullStats {
-                max_health: HullSegment::default().max_health,
-                radiation_shielding: HullSegment::default().radiation_shielding,
-            },
-            HullSegment {
-                grid_position: *pos,
-                hull_layer: HullLayer::BulkheadDoor,
-                ..HullSegment::default()
-            },
-        )).insert(ChildOf(ship));
+
+    let mut hull_cells = Vec::new();
+    for &(y, x_min, x_max) in hull_rows {
+        for x in x_min..=x_max {
+            let pos = IVec2::new(x, y);
+            if bulkheads.contains(&pos) {
+                continue;
+            }
+            let is_top = !hull_rows.iter().any(|&(ry, rxmin, rxmax)| ry == y + 1 && x >= rxmin && x <= rxmax);
+            let is_bot = !hull_rows.iter().any(|&(ry, rxmin, rxmax)| ry == y - 1 && x >= rxmin && x <= rxmax);
+            let layer = if is_top || is_bot || x == x_min || x == x_max {
+                HullLayer::Outer
+            } else {
+                HullLayer::Inner
+            };
+            hull_cells.push(BlueprintHullCell {
+                grid_pos: pos,
+                layer,
+                material: HullMaterial::Steel,
+            });
+        }
+    }
+    for pos in bulkheads {
+        hull_cells.push(BlueprintHullCell {
+            grid_pos: pos,
+            layer: HullLayer::BulkheadDoor,
+            material: HullMaterial::Steel,
+        });
     }
 
-    // ========================================================================
-    // MODULES — destroyer loadout. Layout validated for overlap/containment:
-    // 7 weapons (railgun spine, twin cannons, twin gatlings, twin heavy
-    // missiles), 2 shield emitters (600 total shield), twin reactors.
-    // ========================================================================
+    let m = |module_type: ModuleType, x: i32, y: i32, rotation: Rotation| BlueprintModule {
+        module_type,
+        grid_pos: IVec2::new(x, y),
+        rotation,
+        custom_name: None,
+        subcomponents: None,
+        extras: None,
+    };
 
-    // --- STERN: engineering (4 engines, twin reactors, fuel) ---
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::StandardEngine, IVec2::new(-7, 0), Rotation::West, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::StandardEngine, IVec2::new(-6, 1), Rotation::West, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::StandardEngine, IVec2::new(-6, -1), Rotation::West, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::StandardEngine, IVec2::new(-6, 0), Rotation::West, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::FuelTank, IVec2::new(-5, 0), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::FuelTank, IVec2::new(-5, 1), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::ManeuverThruster, IVec2::new(-5, -1), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::OxygenScrubber, IVec2::new(-4, 0), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::OxygenScrubber, IVec2::new(-4, -1), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::CoolingPump, IVec2::new(-4, 1), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::HeatVent, IVec2::new(-3, 1), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::StandardReactor, IVec2::new(-3, 0), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::StandardReactor, IVec2::new(-3, -1), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::CoolingPump, IVec2::new(-2, -1), Rotation::North, &registry);
+    // Weapon variant: fire group + tuning multipliers (0.5-2.0x, see
+    // TUNING_MIN/MAX) + optional kinetic ammo (Bullet-type weapons only —
+    // Cannon/Railgun/Coilgun/Gatling; missiles/energy weapons pass None).
+    let mw = |module_type: ModuleType, x: i32, y: i32, rotation: Rotation,
+              fire_group: u8, velocity: f32, fire_rate: f32, damage: f32,
+              ammo: Option<crate::combat::ammo_types::KineticAmmoType>| BlueprintModule {
+        module_type,
+        grid_pos: IVec2::new(x, y),
+        rotation,
+        custom_name: None,
+        subcomponents: None,
+        extras: Some(crate::building::blueprint::ModuleExtras {
+            tuning: Some(crate::building::customization::tuning::WeaponTuning { velocity, fire_rate, damage }),
+            fire_group: Some(fire_group),
+            ammo: ammo.map(crate::building::customization::tuning::SelectedAmmo),
+        }),
+    };
 
-    // --- CREW ---
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::BasicQuarters, IVec2::new(-2, 0), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::BasicQuarters, IVec2::new(-2, 1), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::GalleyMess, IVec2::new(-1, 2), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::SurgicalBay, IVec2::new(-2, -3), Rotation::North, &registry);
+    let modules = vec![
+        // Stern: engineering (4 engines, twin reactors, fuel)
+        m(ModuleType::StandardEngine, -7, 0, Rotation::West),
+        m(ModuleType::StandardEngine, -6, 1, Rotation::West),
+        m(ModuleType::StandardEngine, -6, -1, Rotation::West),
+        m(ModuleType::StandardEngine, -6, 0, Rotation::West),
+        m(ModuleType::FuelTank, -5, 0, Rotation::North),
+        m(ModuleType::FuelTank, -5, 1, Rotation::North),
+        m(ModuleType::ManeuverThruster, -5, -1, Rotation::North),
+        m(ModuleType::OxygenScrubber, -4, 0, Rotation::North),
+        m(ModuleType::OxygenScrubber, -4, -1, Rotation::North),
+        m(ModuleType::CoolingPump, -4, 1, Rotation::North),
+        m(ModuleType::HeatVent, -3, 1, Rotation::North),
+        m(ModuleType::StandardReactor, -3, 0, Rotation::North),
+        m(ModuleType::StandardReactor, -3, -1, Rotation::North),
+        m(ModuleType::CoolingPump, -2, -1, Rotation::North),
+        // Crew
+        m(ModuleType::BasicQuarters, -2, 0, Rotation::North),
+        m(ModuleType::BasicQuarters, -2, 1, Rotation::North),
+        m(ModuleType::GalleyMess, -1, 2, Rotation::North),
+        m(ModuleType::SurgicalBay, -2, -3, Rotation::North),
+        // Gun deck: railgun spine + twin cannons + twin gatlings
+        mw(ModuleType::Railgun, 0, 0, Rotation::East, 2, 1.15, 0.85, 1.2, Some(crate::combat::ammo_types::KineticAmmoType::APFSDS)),
+        mw(ModuleType::Cannon, 0, 1, Rotation::East, 0, 1.0, 1.0, 1.15, Some(crate::combat::ammo_types::KineticAmmoType::APHE)),
+        mw(ModuleType::Cannon, 0, -1, Rotation::East, 0, 1.0, 1.0, 1.15, Some(crate::combat::ammo_types::KineticAmmoType::APHE)),
+        mw(ModuleType::Gatling, 2, 2, Rotation::East, 1, 1.0, 1.2, 1.0, Some(crate::combat::ammo_types::KineticAmmoType::Flak)),
+        mw(ModuleType::Gatling, 0, -2, Rotation::East, 1, 1.0, 1.2, 1.0, Some(crate::combat::ammo_types::KineticAmmoType::Flak)),
+        // Shields + logistics
+        m(ModuleType::ShieldEmitter, 4, 2, Rotation::North),
+        m(ModuleType::ShieldEmitter, 6, -1, Rotation::North),
+        m(ModuleType::BulkCargoHold, 2, 0, Rotation::North),
+        m(ModuleType::RepairBay, 4, 0, Rotation::North),
+        m(ModuleType::Floodlight, 5, 0, Rotation::East),
+        m(ModuleType::RadarArray, 6, 0, Rotation::East),
+        // Bridge
+        m(ModuleType::BridgeWing, 4, -2, Rotation::North),
+        // Bow: missile battery + armor prow
+        mw(ModuleType::HeavyMissile, 7, 1, Rotation::East, 3, 1.0, 1.0, 1.1, None),
+        mw(ModuleType::HeavyMissile, 7, -1, Rotation::East, 3, 1.0, 1.0, 1.1, None),
+        m(ModuleType::CornerArmorPlate, 8, 0, Rotation::North),
+        m(ModuleType::AngledArmorPlate, 10, 0, Rotation::North),
+        m(ModuleType::StaggeredArmorPlate, 1, -3, Rotation::North),
+    ];
 
-    // --- GUN DECK: railgun spine + twin cannons + twin gatlings ---
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::Railgun, IVec2::new(0, 0), Rotation::East, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::Cannon, IVec2::new(0, 1), Rotation::East, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::Cannon, IVec2::new(0, -1), Rotation::East, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::Gatling, IVec2::new(2, 2), Rotation::East, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::Gatling, IVec2::new(0, -2), Rotation::East, &registry);
-
-    // --- SHIELDS + LOGISTICS ---
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::ShieldEmitter, IVec2::new(4, 2), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::ShieldEmitter, IVec2::new(6, -1), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::BulkCargoHold, IVec2::new(2, 0), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::RepairBay, IVec2::new(4, 0), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::Floodlight, IVec2::new(5, 0), Rotation::East, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::RadarArray, IVec2::new(6, 0), Rotation::East, &registry);
-
-    // --- BRIDGE ---
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::BridgeWing, IVec2::new(4, -2), Rotation::North, &registry);
-
-    // --- BOW: missile battery + armor prow ---
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::HeavyMissile, IVec2::new(7, 1), Rotation::East, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::HeavyMissile, IVec2::new(7, -1), Rotation::East, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::CornerArmorPlate, IVec2::new(8, 0), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::AngledArmorPlate, IVec2::new(10, 0), Rotation::North, &registry);
-    spawn_module(&mut commands, &asset_server, ship, ModuleType::StaggeredArmorPlate, IVec2::new(1, -3), Rotation::North, &registry);
-
-    info!("Starter vessel spawned! (35 modules — destroyer class)");
-
-    notifications.write(ShowNotification {
-        message: "Mouse: Aim | W/S: Thrust | A/D: Strafe | Shift: Brake | Space/Click: Fire | R: Shield | F: Dock".into(),
-        notification_type: NotificationType::Info,
-        duration: 8.0,
-    });
+    Blueprint {
+        name: "starter_destroyer".into(),
+        hull_cells,
+        modules,
+        created_at: "builtin".into(),
+        version: BLUEPRINT_VERSION,
+    }
 }
 
 /// Spawns a module entity using the registry for stats and companion components
@@ -240,14 +249,30 @@ pub fn spawn_module(
     );
     let center_x = (min_x as f32 + max_x as f32) / 2.0 * 66.0;
     let center_y = (min_y as f32 + max_y as f32) / 2.0 * 66.0 - 33.0;
-    let sprite_w = 60.0 + (max_x - min_x) as f32 * 66.0;
-    let sprite_h = 60.0 + (max_y - min_y) as f32 * 66.0;
 
     let sprite_path = sprite_map::module_sprite_path(module_type)
         .unwrap_or("sprites/modules/small_reactor.png");
     let texture = asset_server.load(sprite_path);
 
     let visual_angle = rotation.to_radians() + sprite_map::sprite_base_rotation(module_type);
+
+    // Sprite dimensions must cover the ROTATED cell bounds after the
+    // sprite itself is rotated by visual_angle — which is NOT the cell
+    // rotation (it includes each texture's base-art offset, e.g. engine
+    // art drawn 90° off). So take the rotated cell bounds and un-rotate
+    // them by the final visual angle: if it's an odd quarter-turn the
+    // width/height swap. Anything else leaves multi-cell modules lying
+    // 90° across their claimed cells ("between the grid").
+    let bounds_w = (max_x - min_x) as f32;
+    let bounds_h = (max_y - min_y) as f32;
+    let quarter = ((visual_angle / std::f32::consts::FRAC_PI_2).round() as i32).rem_euclid(4);
+    let (cells_w, cells_h) = if quarter % 2 == 1 {
+        (bounds_h, bounds_w)
+    } else {
+        (bounds_w, bounds_h)
+    };
+    let sprite_w = 60.0 + cells_w * 66.0;
+    let sprite_h = 60.0 + cells_h * 66.0;
 
     let module_base_color = {
         let srgba = def.color.to_srgba();
@@ -301,10 +326,24 @@ pub fn spawn_module(
         commands.entity(module_entity).insert(FirebreakMarker);
     }
 
-    // Insert CrewStation if this module type requires one
+    // Insert CrewStation if this module type requires one. Priority
+    // orders auto-assignment — vital systems staff first, because an
+    // UNMANNED station doesn't run at all (see compute_module_efficiency),
+    // and 8 crew never cover every station on a real ship.
     if def.crew_station {
+        let priority = match module_type {
+            ModuleType::HelmStation => 9,
+            _ => match module_type.category() {
+                ModuleCategory::Power => 10,
+                ModuleCategory::Propulsion => 9,
+                ModuleCategory::LifeSupport => 8,
+                ModuleCategory::Weapons => 6,
+                ModuleCategory::Control | ModuleCategory::Detection => 4,
+                _ => 3,
+            },
+        };
         commands.entity(module_entity).insert(CrewStation {
-            priority: 5,
+            priority,
             assigned_crew: None,
             manually_assigned: false,
         });

@@ -6,6 +6,7 @@ use crate::building::GridOccupancy;
 use crate::combat::ammo_types::KineticAmmoType;
 use crate::components::{Module, ModuleType, Weapon};
 use crate::resources::PowerState;
+use crate::ui::theme::ThemeColors;
 use super::framework::*;
 use super::tooltip::Tooltip;
 
@@ -16,12 +17,14 @@ use super::tooltip::Tooltip;
 // Editing is docked-only; windows are despawned on undock.
 // ============================================================================
 
-const ACCENT: Color = Color::srgb(0.95, 0.65, 0.25);
-const SLIDER_BG: Color = Color::srgba(0.05, 0.06, 0.10, 1.0);
-const SLIDER_FILL: Color = Color::srgba(0.35, 0.45, 0.65, 0.9);
+// Derived from theme.rs rather than hand-picked, so this window shares a
+// palette with the rest of the game instead of drifting on its own.
+const ACCENT: Color = ThemeColors::ACCENT_ORANGE;
+const SLIDER_BG: Color = ThemeColors::BG_INPUT;
+const SLIDER_FILL: Color = ThemeColors::ACCENT_BLUE;
 const BASELINE_TICK: Color = Color::srgba(0.9, 0.9, 0.9, 0.35);
-const AMMO_SELECTED_BG: Color = Color::srgba(0.30, 0.24, 0.12, 1.0);
-const AMMO_BG: Color = Color::srgba(0.10, 0.12, 0.18, 1.0);
+const AMMO_SELECTED_BG: Color = ThemeColors::BG_PRESSED;
+const AMMO_BG: Color = ThemeColors::BG_INPUT;
 
 const ALL_AMMO: [KineticAmmoType; 9] = [
     KineticAmmoType::AP,
@@ -586,6 +589,14 @@ pub fn tuning_window_refresh(
             let ammo_vel = ammo.map(|a| a.0.velocity_mult()).unwrap_or(1.0);
             let vel = base_projectile_speed(tw.module_type) * tuning.velocity * ammo_vel;
             line.push_str(&format!("   VEL {:.0}", vel));
+        }
+        // Heat: the real cost of hot tuning. Above ambient cooling the gun
+        // can't sustain fire — it will thermally throttle mid-fight.
+        let heat = weapon_heat_per_second(tuning.power_factor());
+        if heat > AMBIENT_COOLING_RATE {
+            line.push_str(&format!("\nHEAT {:.1}/s — OVERHEATS UNDER SUSTAINED FIRE", heat));
+        } else {
+            line.push_str(&format!("\nHEAT {:.1}/s (sustainable)", heat));
         }
         text.0 = line;
     }

@@ -120,6 +120,20 @@ pub fn velocity_label(module_type: ModuleType) -> &'static str {
     }
 }
 
+/// Heat a weapon dumps into its tile per second of sustained fire, as a
+/// function of tuning. Calibrated against the 5.0/s ambient cooling in
+/// ship/heat.rs: stock (factor 1.0) = 3.0/s, sustainable forever; maxed
+/// (factor 4.0) = 12.0/s, overheats in ~10s of sustained fire, then the
+/// gun thermally throttles (fire gate at 95% max temp) and cooks itself
+/// if pushed past max. THIS is the real cost of maxed sliders — power
+/// draw alone barely registers against a mid-game reactor.
+pub fn weapon_heat_per_second(power_factor: f32) -> f32 {
+    3.0 * power_factor
+}
+
+/// Sustained fire is heat-sustainable below this (ambient cooling rate).
+pub const AMBIENT_COOLING_RATE: f32 = 5.0;
+
 /// Weapons with zero registry draw still need tuning to cost something.
 const MIN_TUNING_BASE_POWER: f32 = 5.0;
 

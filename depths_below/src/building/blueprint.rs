@@ -1,15 +1,25 @@
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
+use crate::building::customization::tuning::{SelectedAmmo, WeaponTuning};
+use crate::combat::targeting::fire_groups::FireGroup;
 use crate::components::*;
 use crate::events::*;
 use crate::states::BuildState;
 
 // ============================================================================
 // DATA MODEL
+//
+// The Blueprint is THE canonical ship design format — player saves, the
+// starter vessel, and (in progress) AI faction ships all speak it. v1 files
+// (hull + module types only) still load; v2 adds per-module state: weapon
+// tuning, fire groups, ammo selection, custom modules.
 // ============================================================================
+
+/// Highest design version this build reads/writes.
+pub const BLUEPRINT_VERSION: u32 = 2;
 
 /// A saved ship blueprint
 #[derive(Serialize, Deserialize, Clone)]
@@ -18,7 +28,7 @@ pub struct Blueprint {
     pub hull_cells: Vec<BlueprintHullCell>,
     pub modules: Vec<BlueprintModule>,
     pub created_at: String,
-    /// Version tag for forward-compat; current version = 1
+    /// Version tag for forward-compat; see BLUEPRINT_VERSION
     pub version: u32,
 }
 
@@ -52,6 +62,47 @@ pub struct BlueprintModule {
     pub module_type: ModuleType,
     pub grid_pos: IVec2,
     pub rotation: Rotation,
+    /// Custom-built module name (None = stock module)
+    #[serde(default)]
+    pub custom_name: Option<String>,
+    /// Sub-components of a custom-built module
+    #[serde(default)]
+    pub subcomponents: Option<Vec<SubComponentType>>,
+    /// Non-default per-module state (tuning, fire group, ammo)
+    #[serde(default)]
+    pub extras: Option<ModuleExtras>,
+}
+
+/// Per-module state a design carries beyond type + position. Only
+/// non-default values are recorded, so v1-era files and untouched modules
+/// serialize compactly.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default)]
+pub struct ModuleExtras {
+    #[serde(default)]
+    pub tuning: Option<WeaponTuning>,
+    #[serde(default)]
+    pub fire_group: Option<u8>,
+    #[serde(default)]
+    pub ammo: Option<SelectedAmmo>,
+}
+
+impl ModuleExtras {
+    pub fn is_empty(&self) -> bool {
+        self.tuning.is_none() && self.fire_group.is_none() && self.ammo.is_none()
+    }
+}
+
+/// Inserts a design's per-module state onto a freshly spawned module.
+pub fn apply_module_extras(commands: &mut Commands, entity: Entity, extras: &ModuleExtras) {
+    if let Some(tuning) = extras.tuning {
+        commands.entity(entity).try_insert(tuning);
+    }
+    if let Some(group) = extras.fire_group {
+        commands.entity(entity).try_insert(FireGroup { group });
+    }
+    if let Some(ammo) = extras.ammo {
+        commands.entity(entity).try_insert(ammo);
+    }
 }
 
 /// Resource holding available blueprints (scanned from disk)
@@ -99,7 +150,7 @@ pub fn scan_blueprints(resource: &mut BlueprintResource) {
                 match fs::read_to_string(&path) {
                     Ok(data) => match serde_json::from_str::<Blueprint>(&data) {
                         Ok(bp) => {
-                            if bp.version != 1 {
+                            if bp.version > BLUEPRINT_VERSION {
                                 warn!("Skipping blueprint {:?}: unsupported version {}", path, bp.version);
                                 continue;
                             }
@@ -146,7 +197,12 @@ pub fn save_blueprint_system(
     time: Res<Time>,
     ship_query: Query<&Children, With<Ship>>,
     hull_query: Query<&HullSegment>,
-    module_query: Query<&Module>,
+    module_query: Query<(Entity, &Module)>,
+    tuning_query: Query<&WeaponTuning>,
+    fire_group_query: Query<&FireGroup>,
+    ammo_query: Query<&SelectedAmmo>,
+    custom_query: Query<(&CustomModule, &Children)>,
+    subcomp_query: Query<&SubComponent>,
     mut resource: ResMut<BlueprintResource>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
@@ -184,10 +240,40 @@ pub fn save_blueprint_system(
 
     let modules: Vec<BlueprintModule> = children.iter()
         .filter_map(|child| module_query.get(child).ok())
-        .map(|m| BlueprintModule {
-            module_type: m.module_type,
-            grid_pos: m.grid_position,
-            rotation: m.rotation,
+        .map(|(entity, m)| {
+            // Record only non-default per-module state — untouched modules
+            // stay as compact as a v1 entry
+            let tuning = tuning_query.get(entity).ok().copied().filter(|t| {
+                t.velocity != 1.0 || t.fire_rate != 1.0 || t.damage != 1.0
+            });
+            let fire_group = fire_group_query.get(entity).ok()
+                .map(|g| g.group)
+                .filter(|&g| g != 0);
+            let ammo = ammo_query.get(entity).ok().copied()
+                .filter(|a| a.0 != crate::combat::ammo_types::KineticAmmoType::AP);
+            let extras = ModuleExtras { tuning, fire_group, ammo };
+
+            let (custom_name, subcomponents) = match custom_query.get(entity) {
+                Ok((custom, module_children)) => (
+                    Some(custom.custom_name.clone()),
+                    Some(
+                        module_children.iter()
+                            .filter_map(|c| subcomp_query.get(c).ok())
+                            .map(|sc| sc.subcomponent_type.clone())
+                            .collect(),
+                    ),
+                ),
+                Err(_) => (None, None),
+            };
+
+            BlueprintModule {
+                module_type: m.module_type,
+                grid_pos: m.grid_position,
+                rotation: m.rotation,
+                custom_name,
+                subcomponents,
+                extras: if extras.is_empty() { None } else { Some(extras) },
+            }
         })
         .collect();
 
@@ -208,7 +294,7 @@ pub fn save_blueprint_system(
         hull_cells,
         modules,
         created_at: timestamp,
-        version: 1,
+        version: BLUEPRINT_VERSION,
     };
 
     let summary = blueprint.summary();
@@ -298,8 +384,9 @@ pub fn load_blueprint_system(
             module_type: module.module_type,
             grid_position: module.grid_pos,
             rotation: module.rotation,
-            custom_name: None,
-            subcomponents: None,
+            custom_name: module.custom_name.clone(),
+            subcomponents: module.subcomponents.clone(),
+            extras: module.extras,
             free: true,
         });
     }
@@ -369,6 +456,109 @@ pub fn delete_blueprint_system(
     // Refresh list
     scan_blueprints(&mut resource);
     resource.selected_index = 0;
+}
+
+// ============================================================================
+// DESIGN FILES & DIRECT SPAWNING
+// Shared by the starter vessel (ship::spawner) and — next slice — AI ships.
+// Unlike blueprint loading (event-driven, replaces the player ship), this
+// path spawns a design's blocks directly under an existing root entity.
+// ============================================================================
+
+/// Loads a single design file. None if missing, unreadable, or from a
+/// newer format version.
+pub fn load_design_file(path: impl AsRef<Path>) -> Option<Blueprint> {
+    let path = path.as_ref();
+    let data = fs::read_to_string(path).ok()?;
+    match serde_json::from_str::<Blueprint>(&data) {
+        Ok(bp) if bp.version <= BLUEPRINT_VERSION => Some(bp),
+        Ok(bp) => {
+            warn!("Design {:?} has unsupported version {}", path, bp.version);
+            None
+        }
+        Err(e) => {
+            warn!("Design {:?} failed to parse: {}", path, e);
+            None
+        }
+    }
+}
+
+/// Writes a design as pretty JSON, creating parent directories.
+pub fn write_design_file(path: impl AsRef<Path>, bp: &Blueprint) -> Result<(), String> {
+    let path = path.as_ref();
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir).map_err(|e| format!("Cannot create {:?}: {}", dir, e))?;
+    }
+    let json = serde_json::to_string_pretty(bp).map_err(|e| format!("Serialize failed: {}", e))?;
+    fs::write(path, json).map_err(|e| format!("Write failed: {}", e))
+}
+
+/// Spawns every block of a design as children of `ship`, applying each
+/// module's extras. Hull spawning mirrors building::process_hull_placement
+/// (same tints, same stats) so designed ships and hand-built ships are
+/// indistinguishable.
+pub fn spawn_ship_from_design(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    registry: &crate::building::ModuleRegistry,
+    ship: Entity,
+    design: &Blueprint,
+) {
+    for cell in &design.hull_cells {
+        let color = match cell.layer {
+            HullLayer::Outer => Color::WHITE,
+            HullLayer::Inner => Color::srgb(0.9, 0.9, 0.9),
+            HullLayer::Void => Color::srgb(0.5, 0.5, 0.6),
+            HullLayer::BulkheadDoor => Color::srgb(0.9, 0.8, 0.7),
+        };
+        let texture = asset_server.load(crate::sprite_map::hull_sprite_path(cell.material));
+        let health = 100.0 * cell.material.health_multiplier();
+
+        commands.spawn((
+            (Sprite {
+                    image: texture,
+                    color,
+                    custom_size: Some(Vec2::new(64.0, 64.0)),
+                    ..default()
+                }, Transform::from_xyz(
+                    cell.grid_pos.x as f32 * 66.0,
+                    cell.grid_pos.y as f32 * 66.0 - 33.0,
+                    0.1,
+                )),
+            BaseSpriteColor(color),
+            BaseHullStats {
+                max_health: health,
+                radiation_shielding: cell.material.radiation_shielding(),
+            },
+            HullSegment {
+                hull_layer: cell.layer,
+                material: cell.material,
+                radiation_shielding: cell.material.radiation_shielding(),
+                health,
+                max_health: health,
+                grid_position: cell.grid_pos,
+                ..default()
+            },
+            ChildOf(ship),
+        ));
+    }
+
+    for m in &design.modules {
+        let entity = if let (Some(name), Some(subs)) = (&m.custom_name, &m.subcomponents) {
+            crate::ship::spawn_custom_module(
+                commands, asset_server, ship, m.module_type,
+                name.clone(), m.grid_pos, m.rotation, subs.clone(), registry,
+            )
+        } else {
+            crate::ship::spawn_module(
+                commands, asset_server, ship, m.module_type,
+                m.grid_pos, m.rotation, registry,
+            )
+        };
+        if let Some(extras) = &m.extras {
+            apply_module_extras(commands, entity, extras);
+        }
+    }
 }
 
 // ============================================================================

@@ -66,6 +66,7 @@ impl Plugin for CreaturePlugin {
 }
 
 /// Spawns creatures based on distance from station and biome.
+#[allow(unreachable_code, unused_variables)]
 fn spawn_creatures(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -81,6 +82,12 @@ fn spawn_creatures(
     mut spawn_timer: Local<f32>,
     session_timer: Res<ExploringSessionTimer>,
 ) {
+    // Creatures disabled per playtest feedback — "more annoying than scary."
+    // Leaving the rest of the module (movement/attack/ecosystem systems)
+    // wired up: with nothing ever spawning they just run over empty queries.
+    // Remove this line to bring creatures back.
+    return;
+
     // Don't spawn any hostile creatures in the first 30 seconds
     let hostile_warmup = 30.0;
 
@@ -538,6 +545,7 @@ fn creature_attack_system(
                     amount: rage_damage,
                     position: Some(creature_pos),
                     direction: Some((creature_pos - ai_pos).normalize_or_zero()),
+                    attacker: None, // creatures aren't part of the ship-target system
                 });
             }
         }

@@ -71,16 +71,56 @@ pub fn init_world_simulation(
             });
             info!("MOVETEST: single non-shooting {:?} dummy spawned at (500, 0) for damage-model testing", faction);
         }
+
+        // TEMP [AI_VS_AI_DIAGNOSTIC]: spawns a tight cluster of guaranteed
+        // combat-capable ships (alternating Iron Tide / Rust Swarm / Drowned
+        // / Blackwater, all "attack anything in range" factions per
+        // ai_brain.rs) close enough together to be within engage range from
+        // the start, for headlessly verifying AI-vs-AI combat actually
+        // lands hits. Remove once the diagnosis is confirmed.
+        if let Ok(count) = std::env::var("DEPTHS_AI_VS_AI_TEST").unwrap_or_default().parse::<usize>() {
+            let factions = [AiShipType::IronTide, AiShipType::RustSwarm, AiShipType::Drowned, AiShipType::Blackwater];
+            for i in 0..count {
+                let angle = (i as f32 / count as f32) * std::f32::consts::TAU;
+                let pos = Vec2::new(angle.cos(), angle.sin()) * 400.0;
+                sim.ships.push(SimulatedShip {
+                    faction: factions[i % factions.len()],
+                    position: pos,
+                    velocity: Vec2::ZERO,
+                    health: 1.0,
+                    fuel: 1.0,
+                    behavior: SimBehavior::Patrolling,
+                    home_zone: pos,
+                    patrol_radius: 2000.0,
+                    spawned: false,
+                    bounty_id: None,
+                });
+            }
+            info!("AI_VS_AI_TEST: spawned {} combat-capable ships in a 400u cluster", count);
+        }
         return;
     }
 
     let mut rng = rand::thread_rng();
 
     for territory in faction_territories() {
+        // faction_territories() gives fixed centers — same every single game,
+        // so e.g. Rust Swarm (closest faction) was always waiting in the
+        // exact same spot/direction from spawn, run after run. Re-roll each
+        // territory's direction (and jitter its distance ±20%) once per game
+        // instead of using that fixed center directly — distance from origin
+        // stays in the same ballpark, so the existing near-spawn=easier,
+        // far-out=harder progression (see distance_difficulty in spawner.rs)
+        // is preserved; only *where* that distance band points changes.
+        let base_dist = territory.center.length();
+        let rolled_angle = rng.gen_range(0.0..std::f32::consts::TAU);
+        let rolled_dist = base_dist * rng.gen_range(0.85..1.15);
+        let center = Vec2::new(rolled_angle.cos(), rolled_angle.sin()) * rolled_dist;
+
         for _ in 0..territory.ship_count {
             let angle = rng.gen_range(0.0..std::f32::consts::TAU);
             let dist = rng.gen_range(0.0..territory.radius * 0.8);
-            let pos = territory.center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
+            let pos = center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
 
             let patrol_angle = rng.gen_range(0.0..std::f32::consts::TAU);
             let vel = Vec2::new(patrol_angle.cos(), patrol_angle.sin()) * 30.0;
@@ -92,7 +132,7 @@ pub fn init_world_simulation(
                 health: 1.0,
                 fuel: 1.0,
                 behavior: SimBehavior::Patrolling,
-                home_zone: territory.center,
+                home_zone: center,
                 patrol_radius: territory.radius,
                 spawned: false,
                 bounty_id: None,
@@ -100,16 +140,22 @@ pub fn init_world_simulation(
         }
     }
 
-    // Distant patrols around the starting area — beyond RENDER_DISTANCE so
-    // the immediate spawn area stays calm; they materialize as the player
-    // flies out. Factions chosen to be non-committal: Drowned wander
-    // erratically, GlassEye never attacks.
-    let ambient_patrols = [
-        (AiShipType::Drowned,  Vec2::new(2600.0, -1800.0),  Vec2::new(-12.0, -8.0)),
-        (AiShipType::GlassEye, Vec2::new(-3100.0, -1200.0), Vec2::new(10.0, -14.0)),
-        (AiShipType::Drowned,  Vec2::new(700.0, -3300.0),   Vec2::new(-16.0, 6.0)),
-    ];
-    for (faction, pos, vel) in ambient_patrols {
+    // Distant patrols around the starting area — meant to be beyond
+    // RENDER_DISTANCE (10,000) so the immediate spawn area stays calm and
+    // they only materialize as the player flies out. Factions chosen to be
+    // non-committal: Drowned wander erratically, GlassEye never attacks.
+    // Was 3 fixed points ~3,000 units out — despite the comment above, that's
+    // well *inside* RENDER_DISTANCE, so all 3 were visible immediately at
+    // spawn, in the exact same spots, every single game (the literal "3
+    // enemies right out of spawn" complaint). Now randomized per game and
+    // actually pushed past render distance to match the stated intent.
+    let ambient_factions = [AiShipType::Drowned, AiShipType::GlassEye, AiShipType::Drowned];
+    for faction in ambient_factions {
+        let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+        let dist = rng.gen_range(11_000.0..15_000.0);
+        let pos = Vec2::new(angle.cos() * dist, angle.sin() * dist);
+        let heading = rng.gen_range(0.0..std::f32::consts::TAU);
+        let vel = Vec2::new(heading.cos(), heading.sin()) * rng.gen_range(10.0..16.0);
         sim.ships.push(SimulatedShip {
             faction,
             position: pos,

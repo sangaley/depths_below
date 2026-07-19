@@ -40,7 +40,10 @@ pub fn generate_heat(
     mut heat_state: ResMut<HeatNetworkState>,
     reactor_query: Query<(&Reactor, &Module, &ChildOf), Without<DestroyedModule>>,
     engine_query: Query<(&Engine, &Module, &ChildOf), Without<DestroyedModule>>,
-    weapon_query: Query<(&WeaponCooldown, &Module, &ChildOf), Without<DestroyedModule>>,
+    weapon_query: Query<(
+        &WeaponCooldown, &Module, &ChildOf,
+        Option<&crate::building::customization::tuning::WeaponTuning>,
+    ), Without<DestroyedModule>>,
     ship_query: Query<Entity, With<Ship>>,
 ) {
     let Ok(player_ship) = ship_query.single() else { return };
@@ -48,32 +51,44 @@ pub fn generate_heat(
 
     // Reactors generate heat proportional to output. Tuned against a
     // reactor's own ModuleTemperature.max_temp (100, set in spawner.rs) and
-    // the 5.0/s flat ambient cooling in apply_cooling: at the old 8.0
-    // multiplier a Standard Reactor (output 500) generated ~40 heat/s against
-    // only 5/s of passive removal, blowing through max_temp in a few
-    // seconds — reactors cooked themselves on startup, combat or not.
+    // the 5.0/s flat ambient cooling in apply_cooling. Was 1.5 (itself
+    // already lowered once from 8.0) — but at 1.5 a Standard Reactor (output
+    // 500, the common case) still generated 7.5 heat/s against only 5/s of
+    // passive removal, a steady +2.5/s climb with zero cooling infrastructure
+    // and zero combat activity, maxing out and auto-shutting the reactor down
+    // in well under a minute just for being turned on. 0.8 keeps every
+    // current reactor (output ≤ 500) net-negative when idle — heat now only
+    // becomes a real risk once weapon fire or engine thrust piles more on.
     for (reactor, module, parent) in reactor_query.iter() {
         if parent.parent() != player_ship { continue; }
         if !module.is_active { continue; }
-        let heat_gain = (reactor.output / 100.0) * 1.5 * dt;
+        let heat_gain = (reactor.output / 100.0) * 0.8 * dt;
         *heat_state.temperatures.entry(module.grid_position).or_insert(0.0) += heat_gain;
     }
 
-    // Active engines generate some heat
+    // Active engines generate some heat. Was 2.0 — a 400-thrust engine
+    // (the current max) generated 8.0/s against 5.0/s ambient, another
+    // source of passive-idle heat creep independent of the reactor. 1.0
+    // keeps every current engine (thrust ≤ 400) net-negative when idle too.
     for (engine, module, parent) in engine_query.iter() {
         if parent.parent() != player_ship { continue; }
         if !module.is_active { continue; }
-        let heat_gain = (engine.thrust / 100.0) * 2.0 * dt;
+        let heat_gain = (engine.thrust / 100.0) * 1.0 * dt;
         *heat_state.temperatures.entry(module.grid_position).or_insert(0.0) += heat_gain;
     }
 
-    // Weapons generate heat spike when cooling down (just fired)
-    for (cooldown, module, parent) in weapon_query.iter() {
+    // Weapons generate heat while recently fired (cooldown running), scaled
+    // by tuning — an overtuned gun outpaces ambient cooling, thermally
+    // throttles at 95% max temp, and cooks itself past max. This is the
+    // counterweight that keeps "max every slider" from being free; the
+    // constant power draw alone barely registers against a mid-game reactor.
+    for (cooldown, module, parent, tuning) in weapon_query.iter() {
         if parent.parent() != player_ship { continue; }
         if !module.is_active { continue; }
         if !cooldown.timer.is_finished() {
             // Currently cooling = recently fired
-            let heat_gain = 3.0 * dt;
+            let factor = tuning.map(|t| t.power_factor()).unwrap_or(1.0);
+            let heat_gain = crate::building::customization::tuning::weapon_heat_per_second(factor) * dt;
             *heat_state.temperatures.entry(module.grid_position).or_insert(0.0) += heat_gain;
         }
     }

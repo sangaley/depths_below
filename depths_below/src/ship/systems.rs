@@ -12,6 +12,7 @@ use crate::events::*;
 pub fn update_ship_state(
     ship_query: Query<(Entity, &Depth), With<Ship>>,
     engine_query: Query<(&Engine, &Module, &ChildOf)>,
+    drill_query: Query<&super::drill::DrillRig>,
     mut depth_state: ResMut<DepthState>,
     mut noise_state: ResMut<NoiseState>,
 ) {
@@ -27,18 +28,24 @@ pub fn update_ship_state(
         .map(|(engine, _, _)| engine.noise_level)
         .sum();
 
-    noise_state.noise_level = noise;
+    // A grinding Breaker Drill is louder than cruising engines — the
+    // racket is the drill's price tag (creatures and AI hear it).
+    let drill_noise: f32 = drill_query
+        .iter()
+        .filter(|rig| rig.target.is_some())
+        .count() as f32
+        * super::drill::DRILL_NOISE;
+
+    noise_state.noise_level = noise + drill_noise;
 }
 
 /// Checks game over conditions
 pub fn check_game_over(
     hull_state: Res<HullState>,
-    oxygen_state: Res<OxygenState>,
     crew_query: Query<&CrewMember>,
     mut death_cause: ResMut<DeathCause>,
     mut next_state: ResMut<NextState<GameState>>,
     mut notifications: MessageWriter<ShowNotification>,
-    mut o2_depleted_timer: Local<f32>,
     session_timer: Res<ExploringSessionTimer>,
     time: Res<Time>,
 ) {
@@ -51,14 +58,6 @@ pub fn check_game_over(
     let crew_count = crew_query.iter().count();
     let all_crew_dead = crew_count == 0 || crew_query.iter().all(|c| c.health <= 0.0);
     let hull_destroyed = hull_state.hull_integrity <= 0.0;
-
-    // Phase 3.5: Oxygen depletion game over after 30 seconds at zero
-    if oxygen_state.current_oxygen <= 0.0 {
-        *o2_depleted_timer += time.delta_secs();
-    } else {
-        *o2_depleted_timer = 0.0;
-    }
-    let o2_game_over = *o2_depleted_timer > 30.0;
 
     // Attribute the death to the most recent damage source if it was fresh
     // (within 20s) — "hull destroyed" alone doesn't tell the player anything.
@@ -85,20 +84,15 @@ pub fn check_game_over(
             duration: 5.0,
         });
         next_state.set(GameState::GameOver);
-    } else if o2_game_over {
-        death_cause.cause = Some("Crew suffocated — oxygen held at zero for 30 seconds. Check scrubber count, staffing, and power.".to_string());
-        notifications.write(ShowNotification {
-            message: "Life support failure! No oxygen remaining!".into(),
-            notification_type: NotificationType::Danger,
-            duration: 5.0,
-        });
-        next_state.set(GameState::GameOver);
     }
 }
 
 /// Updates inventory max_capacity based on cargo hold modules
 pub fn update_inventory_capacity(
-    cargo_query: Query<(&CargoHold, &Module)>,
+    // Player holds only — unscoped, every wreck/AI cargo module in the
+    // world inflated the player's max capacity (and made it jump around
+    // as wrecks spawned/got dismantled).
+    cargo_query: Query<(&CargoHold, &Module), Without<crate::ai_ship::components::OwnedByAiShip>>,
     mut inventory: ResMut<Inventory>,
 ) {
     let base_capacity = 50.0f32;

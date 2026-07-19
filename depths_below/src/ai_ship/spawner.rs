@@ -1,12 +1,57 @@
 use bevy::prelude::*;
 use rand::Rng;
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
+use crate::building::blueprint::{self, apply_module_extras, Blueprint, BlueprintHullCell};
 use crate::building::registry::{CompanionData, ModuleRegistry};
 use crate::components::*;
 use crate::ship::spawn_module;
 
 use super::components::*;
-use super::layouts::{self, HullCellDef};
+use super::layouts;
+
+/// Faction designs, loaded once per run. designs/factions/<slug>.json wins;
+/// missing files are converted from the built-in layouts and self-exported
+/// so every faction ship exists as editable JSON after the first encounter.
+static DESIGN_CACHE: OnceLock<Mutex<HashMap<AiShipType, Blueprint>>> = OnceLock::new();
+
+fn faction_design(ship_type: AiShipType) -> Blueprint {
+    let cache = DESIGN_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut cache = cache.lock().unwrap();
+    cache
+        .entry(ship_type)
+        .or_insert_with(|| {
+            let slug = layouts::design_slug(ship_type);
+            let path = format!("designs/factions/{}.json", slug);
+            blueprint::load_design_file(&path).unwrap_or_else(|| {
+                let design = layouts::get_layout(ship_type).to_design(slug);
+                if let Err(e) = blueprint::write_design_file(&path, &design) {
+                    warn!("Could not export faction design {}: {}", slug, e);
+                }
+                design
+            })
+        })
+        .clone()
+}
+
+/// Root sprite bounds from the design's hull extent.
+fn design_body_size(design: &Blueprint) -> Vec2 {
+    let (mut min_x, mut max_x, mut min_y, mut max_y) = (i32::MAX, i32::MIN, i32::MAX, i32::MIN);
+    for cell in &design.hull_cells {
+        min_x = min_x.min(cell.grid_pos.x);
+        max_x = max_x.max(cell.grid_pos.x);
+        min_y = min_y.min(cell.grid_pos.y);
+        max_y = max_y.max(cell.grid_pos.y);
+    }
+    if design.hull_cells.is_empty() {
+        return Vec2::splat(66.0);
+    }
+    Vec2::new(
+        (max_x - min_x + 1) as f32 * 66.0,
+        (max_y - min_y + 1) as f32 * 66.0,
+    )
+}
 
 /// How much tougher and harder-hitting a ship gets the farther its spawn
 /// position sits from Haven Station (world origin). Distance is normalized
@@ -46,7 +91,8 @@ pub fn spawn_ai_ship(
     registry: &ModuleRegistry,
     asset_server: &AssetServer,
 ) -> Entity {
-    let layout = layouts::get_layout(ship_type);
+    let design = faction_design(ship_type);
+    let body_size = design_body_size(&design);
 
     let mut rng = rand::thread_rng();
 
@@ -104,7 +150,7 @@ pub fn spawn_ai_ship(
         (Sprite {
                 image: asset_server.load(crate::sprite_map::effect_sprite_path("ship_body")),
                 color: Color::NONE,
-                custom_size: Some(layout.body_size),
+                custom_size: Some(body_size),
                 ..default()
             }, Transform {
                 translation: Vec3::new(position.x, position.y, 0.05),
@@ -125,6 +171,7 @@ pub fn spawn_ai_ship(
             ..default()
         },
         AiShipDecisionTimer::default(),
+        AiShipTarget::default(),
         Velocity(Vec2::ZERO),
         Depth(position.y.abs() / 10.0),
     )).id();
@@ -132,10 +179,10 @@ pub fn spawn_ai_ship(
     let (health_mult, damage_mult) = distance_difficulty(position);
 
     // Spawn hull segments as children
-    spawn_ai_hull(commands, asset_server, root, &layout.hull_cells, health_mult);
+    spawn_ai_hull(commands, asset_server, root, &design.hull_cells, health_mult);
 
     // Spawn modules as children, reusing existing spawn_module
-    for mp in &layout.modules {
+    for mp in &design.modules {
         let module_entity = spawn_module(
             commands,
             asset_server,
@@ -146,6 +193,12 @@ pub fn spawn_ai_ship(
             registry,
         );
         commands.entity(module_entity).insert(OwnedByAiShip { root });
+
+        // Faction design state — a design file can ship tuned guns, fire
+        // groups, ammo choices, and they apply here like on the player ship
+        if let Some(extras) = &mp.extras {
+            apply_module_extras(commands, module_entity, extras);
+        }
 
         // Distant ships hit harder too — scale weapon damage by the same
         // distance factor (see distance_difficulty doc comment).
@@ -162,6 +215,33 @@ pub fn spawn_ai_ship(
         }
     }
 
+    // Crew: count this design's crew-eligible stations (Reactor/Engine/
+    // Weapon/etc — whatever the registry marks crew_station:true) and staff
+    // a per-faction fraction of them. auto_assign_crew (crew::mod.rs) does
+    // the actual station assignment on its own timer, same as the player,
+    // by priority: Power(10) > Propulsion(9) > LifeSupport(8) > Weapons(6).
+    //
+    // Floor: a small ship's non-weapon stations alone can eat its entire
+    // complement before priority ever reaches a gun — RustSwarm (2 crew for
+    // Reactor+Engine+2 Gatlings) staffed Reactor+Engine and left BOTH guns
+    // permanently dark, not "half dark" as crew_fill_fraction intended.
+    // Guarantee at least one weapon slot for any faction that has weapons,
+    // so "understaffed" always means fewer guns firing, never zero.
+    let non_weapon_stations = design.modules.iter()
+        .filter(|m| {
+            let def = registry.get(m.module_type);
+            def.crew_station && def.category != crate::components::ModuleCategory::Weapons
+        })
+        .count();
+    let total_stations = design.modules.iter()
+        .filter(|m| registry.get(m.module_type).crew_station)
+        .count();
+    let has_weapons = total_stations > non_weapon_stations;
+    let fraction_complement = ((total_stations as f32) * super::components::crew_fill_fraction(ship_type)).round() as u32;
+    let min_floor = if has_weapons { (non_weapon_stations as u32 + 1).min(total_stations as u32) } else { 1 };
+    let crew_complement = fraction_complement.max(min_floor);
+    super::crew::spawn_ai_crew(commands, root, crew_complement);
+
     root
 }
 
@@ -170,7 +250,7 @@ fn spawn_ai_hull(
     commands: &mut Commands,
     asset_server: &AssetServer,
     parent: Entity,
-    hull_cells: &[HullCellDef],
+    hull_cells: &[BlueprintHullCell],
     health_mult: f32,
 ) {
     for cell in hull_cells {

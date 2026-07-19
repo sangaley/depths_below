@@ -230,6 +230,7 @@ fn weapon_fired_audio(
 
 fn explosion_audio(
     mut module_exploded: MessageReader<ModuleExploded>,
+    mut ai_module_exploded: MessageReader<AiModuleExploded>,
     mut ai_destroyed: MessageReader<AiShipDestroyed>,
     mut hull_destroyed: MessageReader<HullSegmentDestroyed>,
     audio: Option<Res<GameAudio>>,
@@ -246,6 +247,16 @@ fn explosion_audio(
     for _ in module_exploded.read() {
         play_oneshot(&mut commands, pick(&mut rng, &audio.explosions).clone(), 0.8 * SFX_VOL);
         play_oneshot(&mut commands, audio.explosion_deep.clone(), 0.7 * SFX_VOL);
+    }
+
+    // Module cook-offs on AI ships — crunch attenuated by distance, with the
+    // deep layer reserved for bigger blasts (reactors, full ammo bays).
+    for ev in ai_module_exploded.read() {
+        let dist = ev.position.distance(ppos);
+        play_oneshot(&mut commands, pick(&mut rng, &audio.explosions).clone(), attenuate(0.7 * SFX_VOL, dist));
+        if ev.blast_damage >= 50.0 {
+            play_oneshot(&mut commands, audio.explosion_deep.clone(), attenuate(0.5 * SFX_VOL, dist));
+        }
     }
 
     // A ship dying is the big payoff — layered boom + low rumble, attenuated.

@@ -76,4 +76,6 @@ Bevy 0.11 ECS **space survival game**. 2D, sprite-based, grid-based building sys
 
 - WASD: ship movement, Q/E: vertical thrusters, Space: fire weapons, Z: radar ping
 - B: toggle build mode, Tab: cycle build categories, [/]: cycle items, R: rotate, M: cycle hull material, X: delete mode
+- Build QoL: hull placement supports click-drag painting; delete mode supports drag; hull segments are deletable (75% refund); Ctrl+Z undoes the last paid placement; Ctrl+Click select → Ctrl+C/V copy/paste (R rotates pending paste); Escape backs out paste → selection → build mode → pause
 - C: crew menu, M: map/inventory overlay, P: module panel (while paused), ESC: pause, Enter: start/launch
+- Controller (`gamepad.rs`, `ControllerLayout` resource): left stick throttle/strafe, right stick aim (persists until mouse moves), RT fire, LT brake, A confirm, B cancel/pause, X interact/dock, Y radar ping, LB cycle target, RB build mode, dpad menu nav, select map. Digital buttons bridge to KeyCodes in PreUpdate; analog goes through `InputState` (`gamepad_aim`). Build mode is still mouse-only.

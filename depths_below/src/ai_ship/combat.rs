@@ -5,20 +5,35 @@ use crate::events::*;
 use crate::combat::{spawn_floating_damage, spawn_hit_effect};
 use super::components::*;
 
-/// AI ships in Engaging state fire weapons at the player
+/// AI ships in Engaging state fire weapons at their current AiShipTarget —
+/// the player OR another AI ship, whichever ai_brain picked this tick (see
+/// AiShipTarget's doc comment). WHO to target is only re-decided every
+/// 0.25s (the brain tick); WHERE to aim is re-read from that target's live
+/// Transform every single frame this system runs — AiShipTarget.position is
+/// a snapshot from the moment it was picked, stale by up to 0.25s, which
+/// was enough for an orbiting/strafing ship (standard combat maneuver, see
+/// movement.rs's standoff-orbit) to be gone from that point by the time a
+/// shot arrived. Live lookup fixes shots consistently whiffing at range.
 pub fn ai_weapon_fire_system(
     time: Res<Time>,
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    ai_ships: Query<(Entity, &Transform, &AiShipBehavior, &Children), With<AiShip>>,
+    ai_ships: Query<(Entity, &Transform, &AiShipBehavior, &AiShipTarget, &Children, Option<&super::power::AiPowerState>), With<AiShip>>,
     mut weapon_query: Query<(
         &mut Weapon,
         &mut WeaponCooldown,
         &Module,
         &AmmoStorage,
         &OwnedByAiShip,
+        Option<&ModuleEfficiency>,
     )>,
     player_query: Query<&Transform, With<Ship>>,
+    target_transform_query: Query<&Transform>,
+    // Ship hit detection (combat/projectiles.rs) centers on the shield's
+    // world_center — the blocks' centroid, not the root, since the root is
+    // often at one end of the layout. Aiming at the raw root position was
+    // consistent geometry mismatch on any ship with an off-center layout.
+    target_shield_query: Query<&crate::combat::shields::ShipShield>,
     mut fired_events: MessageWriter<WeaponFired>,
 ) {
     // DEPTHS_MOVETEST_ENEMY spawns a target dummy that's shot-free by
@@ -30,19 +45,41 @@ pub fn ai_weapon_fire_system(
         return;
     }
 
-    let Ok(player_transform) = player_query.single() else { return };
-    let player_pos = player_transform.translation.truncate();
+    let player_pos = player_query.single().ok().map(|t| t.translation.truncate());
 
-    for (_ai_entity, ai_transform, behavior, children) in ai_ships.iter() {
+    for (ai_entity, ai_transform, behavior, ai_target, children, ai_power) in ai_ships.iter() {
         if *behavior != AiShipBehavior::Engaging {
             continue;
         }
 
+        // Power-starved ships hold fire — same hard cutoff the player's own
+        // kinetic/missile weapons already use (combat/new_projectiles.rs,
+        // combat/missiles.rs). None (graph not computed yet this tick, e.g.
+        // the ship just spawned) defaults to permissive so a fresh ship
+        // isn't blocked before its first power tick ever runs.
+        if ai_power.is_some_and(|p| p.power_balance < 0.0) {
+            continue;
+        }
+
+        // Live position of whoever the brain picked, re-read fresh every
+        // frame. Falls back to the last-known snapshot (target despawned
+        // mid-frame, say), then to the player, only if the live lookup
+        // fails — see the fn doc comment for why this shouldn't happen.
+        let Some(target_pos) = ai_target.entity
+            .and_then(|e| target_transform_query.get(e).ok().map(|t| {
+                target_shield_query.get(e).ok()
+                    .map(|s| s.world_center(t))
+                    .unwrap_or_else(|| t.translation.truncate())
+            }))
+            .or_else(|| Some(ai_target.position).filter(|_| ai_target.entity.is_some()))
+            .or(player_pos)
+        else { continue };
+
         let ai_pos = ai_transform.translation.truncate();
-        let dist_to_player = ai_pos.distance(player_pos);
+        let dist_to_target = ai_pos.distance(target_pos);
 
         for child in children.iter() {
-            let Ok((mut weapon, mut cooldown, module, ammo_storage, _owned)) =
+            let Ok((mut weapon, mut cooldown, module, ammo_storage, _owned, eff)) =
                 weapon_query.get_mut(child)
             else {
                 continue;
@@ -53,8 +90,18 @@ pub fn ai_weapon_fire_system(
                 continue;
             }
 
-            // Only fire if player is within weapon range
-            if dist_to_player > weapon.range {
+            // Unstaffed weapon stations produce nothing — same rule the
+            // player's own ship runs under (compute_module_efficiency,
+            // crew/mod.rs). Every weapon module is crew_station:true in the
+            // registry, so this is a real gate for every AI faction, scaled
+            // by crew_fill_fraction per faction (ai_ship::components).
+            let efficiency = effective_efficiency(module, eff);
+            if efficiency <= 0.0 {
+                continue;
+            }
+
+            // Only fire if the target is within weapon range
+            if dist_to_target > weapon.range {
                 continue;
             }
 
@@ -74,16 +121,15 @@ pub fn ai_weapon_fire_system(
                 from_player: false,
             });
 
-            // Spawn projectile toward player
             crate::combat::projectiles::spawn_projectile(
                 &mut commands,
                 &asset_server,
                 ai_pos,
-                player_pos,
-                weapon.damage,
+                target_pos,
+                weapon.damage * efficiency,
                 crate::combat::PROJECTILE_SPEED,
                 weapon.range,
-                false, // not from player
+                crate::components::ProjectileOwner::AiShip(ai_entity),
                 ammo_storage.ammo_type,
             );
         }
@@ -106,6 +152,13 @@ pub fn process_ai_ship_damage_system(
         };
 
         state.last_hit_timer = 0.0;
+        // Preserve the last known attributable attacker across non-
+        // attributable damage ticks (fire DoT, self-detonation) rather
+        // than clearing it — a ship mid-burn from an earlier shot should
+        // still remember who fired it.
+        if event.attacker.is_some() {
+            state.last_attacker = event.attacker;
+        }
 
         let impact_pos = event.position.unwrap_or(Vec2::ZERO);
         let mut remaining_damage = event.amount;

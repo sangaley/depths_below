@@ -79,51 +79,11 @@ pub fn spawn_system_pois(
         ));
     }
 
-    // Asteroid resource nodes (2-5 per system, near planets)
-    for (pi, planet_pos) in planet_positions.iter().enumerate() {
-        let node_count = rng.gen_range(1..=2);
-        for j in 0..node_count {
-            let offset = Vec2::new(
-                rng.gen_range(-15_000.0..15_000.0),
-                rng.gen_range(-15_000.0..15_000.0),
-            );
-            let pos = *planet_pos + offset;
-
-            let resource = match rng.gen_range(0..4) {
-                0 => ResourceNodeType::MetalOre,
-                1 => ResourceNodeType::RareCrystal,
-                2 => ResourceNodeType::FuelDeposit,
-                _ => ResourceNodeType::ExoticMatter,
-            };
-
-            let color = match resource {
-                ResourceNodeType::MetalOre => Color::srgb(0.45, 0.40, 0.35),
-                ResourceNodeType::RareCrystal => Color::srgb(0.40, 0.50, 0.70),
-                ResourceNodeType::FuelDeposit => Color::srgb(0.50, 0.40, 0.20),
-                ResourceNodeType::ExoticMatter => Color::srgb(0.50, 0.35, 0.60),
-            };
-
-            commands.spawn((
-                (Sprite {
-                        color,
-                        custom_size: Some(Vec2::splat(rng.gen_range(400.0..1000.0))),
-                        ..default()
-                    }, Transform::from_xyz(pos.x, pos.y, -0.4)),
-                SpacePoi {
-                    poi_type: SpacePoiType::AsteroidNode,
-                    looted: false,
-                    name: format!("Asteroid-{}-{}-{}", system_id, pi, j),
-                    loot_value: 0,
-                },
-                MineableResource {
-                    resource_remaining: rng.gen_range(100.0..500.0),
-                    resource_type: resource,
-                    extraction_rate: 5.0,
-                },
-                StarSystemMember { system_id },
-            ));
-        }
-    }
+    // Asteroid resource nodes used to be spawned separately here, clustered
+    // near planets — now every decorative asteroid (spawning::spawn_asteroid_field,
+    // called for every system including warp jumps) carries its own
+    // MineableResource directly, so this duplicate/invisible-to-the-player
+    // node type is gone. planet_positions is still used below (space station).
 
     // Anomaly (0-1 per system, rare)
     if rng.gen::<f32>() < 0.4 {

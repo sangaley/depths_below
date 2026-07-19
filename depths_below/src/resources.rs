@@ -349,6 +349,101 @@ impl ItemType {
             ItemType::AmmoCrate => 4.0,
         }
     }
+
+    /// Baseline credit value per unit, before any station price variation
+    /// (see `station_item_price`). This used to be the actual sell price,
+    /// identical at every station.
+    fn base_value(&self) -> u32 {
+        match self {
+            ItemType::ScrapMetal => 10,
+            ItemType::Crystal => 25,
+            ItemType::BioSample => 15,
+            ItemType::FuelCell => 20,
+            ItemType::RareAlloy => 50,
+            ItemType::AncientArtifact => 100,
+            ItemType::AmmoCrate => 30,
+        }
+    }
+}
+
+/// Per-station price multiplier for a given item. Was a pure hash of
+/// (station_idx, item) with no meaning behind it — every station had a
+/// "personality" but there was no way to learn or predict it beyond trial
+/// and error. Now driven by the station's type (see world::station_types —
+/// a Mining Colony pays badly for ore because it's mining its own, a
+/// Research Outpost pays well for crystal/artifacts because it wants to
+/// study them, etc.) with a small +/-15% per-station jitter on top so two
+/// stations of the same type aren't identical twins.
+fn station_price_multiplier(station_idx: usize, item: ItemType) -> f32 {
+    let base = crate::world::station_types::type_price_multiplier(
+        crate::world::station_types::station_type(station_idx),
+        item,
+    );
+    let hash = (station_idx as u32).wrapping_mul(2654435761)
+        .wrapping_add((item as u32).wrapping_mul(40503))
+        .wrapping_add(0x9E3779B9);
+    let normalized = (hash % 1000) as f32 / 1000.0; // 0.0..1.0
+    let jitter = 0.85 + normalized * 0.30; // 0.85..1.15
+    base * jitter
+}
+
+/// Final per-unit sell price for `item` at station `station_idx`
+/// (0 = Haven, 1..=12 = outposts — see world::home_base).
+pub fn station_item_price(station_idx: usize, item: ItemType) -> u32 {
+    ((item.base_value() as f32) * station_price_multiplier(station_idx, item))
+        .round()
+        .max(1.0) as u32
+}
+
+/// A temporary shortage: one station pays over the odds for one item
+/// for a few minutes. Keeps trade routes from being solved once and
+/// forever — the best route this run isn't the best route right now.
+pub struct MarketEvent {
+    pub station_idx: usize,
+    pub item: ItemType,
+    pub sell_mult: f32,
+    pub remaining: f32,
+}
+
+#[derive(Resource)]
+pub struct MarketEvents {
+    pub active: Vec<MarketEvent>,
+    /// Seconds until the next shortage roll.
+    pub next_roll: f32,
+}
+
+impl Default for MarketEvents {
+    fn default() -> Self {
+        Self { active: Vec::new(), next_roll: 120.0 }
+    }
+}
+
+impl MarketEvents {
+    pub fn multiplier(&self, station_idx: usize, item: ItemType) -> f32 {
+        self.active
+            .iter()
+            .filter(|e| e.station_idx == station_idx && e.item == item)
+            .map(|e| e.sell_mult)
+            .fold(1.0, f32::max)
+    }
+}
+
+/// Sell price including any active shortage at this station.
+pub fn live_item_price(events: &MarketEvents, station_idx: usize, item: ItemType) -> u32 {
+    ((station_item_price(station_idx, item) as f32) * events.multiplier(station_idx, item))
+        .round()
+        .max(1.0) as u32
+}
+
+/// Per-unit BUY price at a station: 1.5x its (live) sell price. The
+/// spread kills same-station arbitrage, while station identity keeps
+/// cross-station routes alive — a Mining Colony's cheap scrap (0.55x
+/// sell → ~0.83x buy) resells at a Trade Hub (1.2x) at a real margin.
+/// Shortages raise the local buy price too: scarce goods cost more
+/// everywhere they're scarce.
+pub fn live_item_buy_price(events: &MarketEvents, station_idx: usize, item: ItemType) -> u32 {
+    let sell = live_item_price(events, station_idx, item);
+    (sell * 3 / 2).max(sell + 2)
 }
 
 #[derive(Resource, Serialize, Deserialize, Clone)]
@@ -523,6 +618,10 @@ pub struct InputState {
     pub mouse_grid_pos: IVec2,
     pub thruster_input: f32,    // Q/E for vertical thruster control
     pub brake: bool,            // Shift — retro-thrust against current velocity
+    /// Right-stick aim direction (ship-facing + dumb-fire weapons). Persists
+    /// after the stick releases so the nose holds heading; cleared when the
+    /// mouse moves and takes aim back. See gamepad::gamepad_flight.
+    pub gamepad_aim: Option<Vec2>,
 }
 
 // ============================================================================

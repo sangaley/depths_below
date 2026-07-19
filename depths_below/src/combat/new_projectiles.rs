@@ -93,16 +93,18 @@ pub fn fire_weapons_system(
         Option<&crate::building::customization::parameters::ModuleCustomization>,
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&crate::building::customization::tuning::SelectedAmmo>,
+        Option<&ModuleTemperature>,
     ), Without<DestroyedModule>>,
     target_transform_query: Query<&Transform, Without<Ship>>,
     target_velocity_query: Query<&Velocity, Without<Ship>>,
     targeting_computer_query: Query<&Module, Without<DestroyedModule>>,
     windows_query: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::MainCamera>>,
+    input_state: Res<crate::resources::InputState>,
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
     mut commands: Commands,
 ) {
-    let Ok((player_ship, _ship_transform, ship_physics, ship_velocity)) = ship_query.single() else { return };
+    let Ok((player_ship, ship_transform, ship_physics, ship_velocity)) = ship_query.single() else { return };
     let _dt = time.delta_secs();
 
     // Weapons need power: a grid in deficit (e.g. shield surging under fire)
@@ -118,13 +120,19 @@ pub fn fire_weapons_system(
             camera_query.single().ok()
                 .and_then(|(cam, gt)| cam.viewport_to_world_2d(gt, c).ok())
         });
+    // Controller right-stick aim beats the mouse while it owns aim (see
+    // InputState.gamepad_aim): dumb-fire at a point projected out along
+    // the stick direction.
+    let cursor_world = input_state.gamepad_aim
+        .map(|dir| ship_transform.translation.truncate() + dir * 2000.0)
+        .or(cursor_world);
 
     // Build module position list for adjacency checks
     let all_modules: Vec<(IVec2, ModuleType, bool)> = targeting_computer_query.iter()
         .map(|m| (m.grid_position, m.module_type, m.is_active))
         .collect();
 
-    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, customization, tuning, selected_ammo) in weapon_query.iter_mut() {
+    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, customization, tuning, selected_ammo, temp) in weapon_query.iter_mut() {
         // Player ship only: this query has no ownership filter on its own, and
         // AI ships carry the exact same Weapon/FireGroup/WeaponMount
         // components (shared spawn_module path). Unscoped, holding Space
@@ -149,9 +157,18 @@ pub fn fire_weapons_system(
         }
         if !module.is_active { continue; }
 
-        // Tick cooldown
+        // Tick cooldown BEFORE the thermal gate. Gating first froze the
+        // timer while hot — and generate_heat treats a running cooldown as
+        // "recently fired", so a hot gun kept generating heat forever and
+        // never came back (one burst → permanently stuck red).
         cooldown.timer.tick(time.delta());
         if !cooldown.timer.is_finished() { continue; }
+
+        // Thermal throttle — same gate the laser uses. Overtuned guns heat
+        // past this under sustained fire and stutter until they cool.
+        if let Some(temp) = temp {
+            if temp.current >= temp.max_temp * 0.95 { continue; }
+        }
 
         // Check if this weapon's fire group is active
         let group_firing = fire_state.firing[fire_group.group as usize % 4];
@@ -604,6 +621,7 @@ pub fn check_projectile_hits(
                     amount: 0.0, // damage already applied directly above — this is bookkeeping only
                     position: Some(hit_pos),
                     direction: None,
+                    attacker: owner_ship,
                 });
                 if !penetrates {
                     commands.entity(proj_entity).despawn();
@@ -739,6 +757,7 @@ pub fn tick_burning_blocks(
             amount: 0.0,
             position: None,
             direction: None,
+            attacker: None,
         });
         if burning.remaining <= 0.0 {
             commands.entity(entity).remove::<BlockBurning>();

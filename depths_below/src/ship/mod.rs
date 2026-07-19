@@ -14,6 +14,8 @@ mod atmosphere;
 mod subsystems;
 mod heat;
 mod logistics;
+pub mod drill;
+pub mod rebuild;
 
 pub use movement::*;
 pub use systems::*;
@@ -38,6 +40,8 @@ pub struct ShipPlugin;
 impl Plugin for ShipPlugin {
     fn build(&self, app: &mut App) {
         app
+            // Breaker Drill: contact wreck salvage (see drill.rs)
+            .add_systems(Update, drill::wreck_drill_system.run_if(in_state(GameState::Exploring)))
             // Resources
             .init_resource::<DepthState>()
             .init_resource::<PowerState>()
@@ -65,6 +69,16 @@ impl Plugin for ShipPlugin {
             .configure_sets(Update, ShipSet::Oxygen.after(ShipSet::Heat).run_if(in_state(GameState::Exploring)))
             .configure_sets(Update, ShipSet::Hull.after(ShipSet::Oxygen).run_if(in_state(GameState::Exploring)))
             .configure_sets(Update, ShipSet::State.after(ShipSet::Hull).run_if(in_state(GameState::Exploring)))
+
+            // Cargo capacity must also track while docked/building — the
+            // State set only runs Exploring, so placing a Cargo Hold showed
+            // no capacity change until you undocked.
+            .add_systems(
+                Update,
+                update_inventory_capacity.run_if(
+                    in_state(GameState::StationDocked).or_else(in_state(GameState::Docked)),
+                ),
+            )
 
             // Startup - spawn ship, flush commands, then spawn crew (crew needs ship entity)
             .add_systems(OnEnter(GameState::StationDocked), (
@@ -106,6 +120,11 @@ impl Plugin for ShipPlugin {
                     damage::process_module_destruction.after(damage::tint_damaged_modules),
                     damage::queue_detonation.after(damage::process_module_destruction),
                     damage::process_detonations.after(damage::queue_detonation),
+                    // AI-ship blasts resolve in world space against the ship's
+                    // own blocks (GridOccupancy only knows the player's grid)
+                    damage::queue_ai_detonation.after(damage::process_module_destruction),
+                    damage::process_ai_detonations.after(damage::queue_ai_detonation),
+                    damage::explosion_shockwaves.after(damage::process_ai_detonations),
                     fire::apply_fire_ignition.after(damage::process_detonations),
                     fire::update_fire.after(fire::apply_fire_ignition),
                     hull::process_hull_cascade.after(damage::process_detonations),
@@ -128,8 +147,24 @@ impl Plugin for ShipPlugin {
                 (
                     hull::queue_hull_removal.after(hull::tint_destroyed_hull),
                     damage::queue_module_removal.after(damage::process_module_destruction),
-                    damage::tick_pending_removal,
+                    // Ghost recording must see the block's Module/HullSegment
+                    // data before tick_pending_removal despawns it.
+                    rebuild::record_rebuild_ghosts
+                        .after(hull::queue_hull_removal)
+                        .after(damage::queue_module_removal),
+                    damage::tick_pending_removal.after(rebuild::record_rebuild_ghosts),
                 ).in_set(ShipSet::Hull),
+            )
+            // Ghost rebuild: crew reconstruct destroyed blocks in flight;
+            // manual dock rebuilding clears built-over ghosts.
+            .init_resource::<rebuild::RebuildQueue>()
+            .add_systems(
+                Update,
+                rebuild::crew_rebuild_system.run_if(in_state(GameState::Exploring)),
+            )
+            .add_systems(
+                Update,
+                rebuild::cleanup_built_over_ghosts.run_if(in_state(GameState::StationDocked)),
             )
 
             // Heat network (7 systems, chained)

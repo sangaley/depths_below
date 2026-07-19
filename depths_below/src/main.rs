@@ -23,6 +23,8 @@ mod vfx;
 mod spatial;
 mod demo;
 mod audio;
+mod debug;
+mod gamepad;
 
 use states::GameState;
 use events::EventsPlugin;
@@ -37,6 +39,7 @@ use meta::MetaPlugin;
 use combat::CombatPlugin;
 use radar::RadarPlugin;
 use camera::CameraPlugin;
+#[allow(unused_imports)]
 use abyss_horror::AbyssHorrorPlugin;
 use ai_ship::AiShipPlugin;
 use contracts::ContractsPlugin;
@@ -45,6 +48,8 @@ use vfx::VfxPlugin;
 use spatial::SpatialPlugin;
 use demo::DemoPlugin;
 use audio::GameAudioPlugin;
+use debug::DebugPlugin;
+use gamepad::GamepadPlugin;
 
 fn main() {
     App::new()
@@ -80,7 +85,12 @@ fn main() {
             CombatPlugin,
             RadarPlugin,
             CameraPlugin,
-            AbyssHorrorPlugin,
+            // AbyssHorrorPlugin disabled — it's built around real creatures
+            // "watching"/fleeing you (see abyss_horror.rs); with creature
+            // spawning off (see creatures::spawn_creatures) it would just be
+            // false scares (phantom blips, glitches) with nothing behind
+            // them. Re-add here when creatures come back.
+            // AbyssHorrorPlugin,
             AiShipPlugin,
             ContractsPlugin,
             CelestialPlugin,
@@ -88,7 +98,9 @@ fn main() {
         ))
         .add_plugins(SpatialPlugin)
         .add_plugins(DemoPlugin)
+        .add_plugins(DebugPlugin)
         .add_plugins(GameAudioPlugin)
+        .add_plugins(GamepadPlugin)
 
         .run();
 }

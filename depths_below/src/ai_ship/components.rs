@@ -36,6 +36,12 @@ pub struct AiShipState {
     pub depth: f32,
     pub is_destroyed: bool,
     pub last_hit_timer: f32,     // Seconds since last damage (for "under fire" AI)
+    /// Ship (player Ship entity or AI ship root) that last hit this ship,
+    /// if attributable — see events::AiShipDamaged.attacker. "Under fire"
+    /// retaliation targets this instead of guessing, so a ship caught in
+    /// another AI ship's crossfire fights back against THAT ship, not
+    /// reflexively the player.
+    pub last_attacker: Option<Entity>,
 }
 
 impl Default for AiShipState {
@@ -48,6 +54,7 @@ impl Default for AiShipState {
             depth: 0.0,
             is_destroyed: false,
             last_hit_timer: 999.0,
+            last_attacker: None,
         }
     }
 }
@@ -93,6 +100,20 @@ impl Default for AiShipNav {
     }
 }
 
+/// The ship's current combat target — separate from AiShipNav.destination
+/// because destination is often an OFFSET from the target (Blackwater's
+/// flank position, PressureKing's ram-from-above point), not the target's
+/// actual position. Weapons fire at `position`; movement still uses
+/// AiShipNav.destination. Recomputed every brain tick (0.25s) in
+/// ai_brain::ai_brain_system via a faction-agnostic distance/value scoring
+/// pass over the player + every other living AI ship — see that file's
+/// doc comment for which factions actually use it vs. staying player-only.
+#[derive(Component, Default)]
+pub struct AiShipTarget {
+    pub entity: Option<Entity>,
+    pub position: Vec2,
+}
+
 /// Timer for AI decision ticks (0.25s)
 #[derive(Component)]
 pub struct AiShipDecisionTimer {
@@ -125,6 +146,10 @@ pub struct AiShipRadarContact {
 pub struct AiShipWreck {
     pub ship_type: AiShipType,
     pub loot_remaining: u32,
+    /// Fraction of blocks still intact at the moment of death (0..1).
+    /// Forensic record of how gently the kill was done — biases loot
+    /// composition when salvaging, not just quantity.
+    pub intact_frac: f32,
 }
 
 // ============================================================================
@@ -363,6 +388,32 @@ pub fn faction_power(faction: AiShipType) -> f32 {
         AiShipType::Drowned => 1.0,        // Already damaged
         AiShipType::RustSwarm => 0.5,      // Weak individually
         AiShipType::GlassEye => 0.1,       // No weapons
+    }
+}
+
+/// Fraction of a faction's crew-eligible stations (Reactor/Engine/Weapon/
+/// etc — anything the module registry marks crew_station:true) that
+/// actually get a warm body. The AI-side equivalent of the player's own
+/// chronic short-staffing ("8 crew never cover every station on a real
+/// ship" — ship/spawner.rs): auto_assign_crew fills stations by priority
+/// (Power, then Propulsion, then Weapons last), so below 1.0 means guns go
+/// dark first while reactors/engines keep running; above 1.0 means spare
+/// hands ready to backfill when someone dies. This is deliberately separate
+/// from faction_power (a combat-strength RATING) — it's the mechanism that
+/// makes weak factions mechanically weak (RustSwarm ships that only half-
+/// fire) rather than just numerically weak.
+pub fn crew_fill_fraction(faction: AiShipType) -> f32 {
+    match faction {
+        AiShipType::VoidTitan => 1.3,      // apex predator, crew to spare
+        AiShipType::Dreadnought => 1.2,
+        AiShipType::IronTide => 1.1,       // disciplined battleship, fully crewed
+        AiShipType::Blackwater => 1.0,     // tight professional crew, no slack
+        AiShipType::PressureKing => 0.95,
+        AiShipType::AbyssalCult => 0.9,    // reckless zealots, not undercrewed by design
+        AiShipType::Leviathan => 0.8,
+        AiShipType::GlassEye => 0.7,       // silent skeleton crew (no weapons anyway)
+        AiShipType::RustSwarm => 0.6,      // scrappy, individually weak — half their guns dark
+        AiShipType::Drowned => 0.55,       // ghost ship, half-crewed by nature
     }
 }
 

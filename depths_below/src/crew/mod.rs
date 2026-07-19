@@ -6,6 +6,10 @@ use crate::events::*;
 use crate::building::rooms::RoomMap;
 use crate::building::GridOccupancy;
 
+pub mod eva_salvage;
+pub mod hiring;
+use eva_salvage::EvaSalvaging;
+
 pub struct CrewPlugin;
 
 impl Plugin for CrewPlugin {
@@ -14,6 +18,7 @@ impl Plugin for CrewPlugin {
             .init_resource::<CrewRoster>()
             .init_resource::<StaffingState>()
             .init_resource::<AutoAssignTimer>()
+            .init_resource::<RepairScrapPool>()
             // Staffing / efficiency systems run at both StationDocked and Exploring
             // so the HUD shows correct crew/station counts at the surface.
             .add_systems(
@@ -23,6 +28,7 @@ impl Plugin for CrewPlugin {
                     update_staffing_state,
                     auto_assign_crew,
                     reconcile_hired_crew,
+                    crew_arrive_with_quarters,
                 )
                     .run_if(in_state(GameState::Exploring)
                         .or_else(in_state(GameState::StationDocked))
@@ -38,7 +44,6 @@ impl Plugin for CrewPlugin {
                     update_crew_ai.after(crew_emergency_dispatch),
                     crew_fire_suppression.after(update_crew_ai),
                     crew_repair_system.after(update_crew_ai),
-                    check_crew_suffocation,
                     handle_crew_death,
                     medbay_healing,
                     messhall_morale,
@@ -47,6 +52,33 @@ impl Plugin for CrewPlugin {
                     engineering_station_boost,
                 )
                     .run_if(in_state(GameState::Exploring)),
+            )
+            // EVA salvage: crew ferry loot from wrecks (see eva_salvage.rs)
+            .add_systems(
+                Update,
+                (
+                    eva_salvage::order_salvage_detail,
+                    eva_salvage::run_salvage_detail,
+                    eva_salvage::eva_blast_damage,
+                )
+                    .chain()
+                    .run_if(in_state(GameState::Exploring)),
+            )
+            .add_systems(OnExit(GameState::Exploring), eva_salvage::abort_eva_on_exit)
+            // Hiring board (H near/at a station) — see hiring.rs
+            .init_resource::<hiring::HiringBoardOpen>()
+            .init_resource::<hiring::HiringPool>()
+            .init_resource::<hiring::HiringSelection>()
+            .add_systems(
+                Update,
+                (
+                    hiring::toggle_hiring_board,
+                    hiring::hiring_board_input,
+                    hiring::update_hiring_display,
+                )
+                    .chain()
+                    .run_if(in_state(GameState::Exploring)
+                        .or_else(in_state(GameState::StationDocked))),
             );
     }
 }
@@ -62,6 +94,91 @@ impl Default for AutoAssignTimer {
         Self {
             timer: Timer::from_seconds(2.0, TimerMode::Repeating),
         }
+    }
+}
+
+/// INTERIM CREW SUPPLY — until station hiring exists, crew come WITH
+/// the bunks: placing a quarters module (Barracks etc.) during a refit
+/// spawns its berths' worth of new hands, as if they signed on with the
+/// accommodation. Starter crew are unaffected (the initial ship spawn
+/// doesn't emit ModulePlaced). Berths come from the registry def, not
+/// the entity — the companion component may not be flushed yet in the
+/// frame the placement event fires.
+fn crew_arrive_with_quarters(
+    mut commands: Commands,
+    mut placed_events: MessageReader<ModulePlaced>,
+    registry: Res<crate::building::ModuleRegistry>,
+    ship_query: Query<Entity, With<Ship>>,
+    quarters_query: Query<(&Quarters, &Module)>,
+    crew_query: Query<&CrewMember>,
+    mut roster: ResMut<CrewRoster>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    use rand::Rng;
+    const NAMES: [&str; 12] = [
+        "Reyes", "Okonkwo", "Falk", "Ito", "Marsh", "Deng",
+        "Ferrara", "Boone", "Ades", "Kowal", "Nyx", "Sorren",
+    ];
+
+    let Ok(ship) = ship_query.single() else { return };
+    for event in placed_events.read() {
+        let crate::building::registry::CompanionData::Quarters { berths: new_berths } =
+            registry.get(event.module_type).companion
+        else {
+            continue;
+        };
+
+        // Fill EVERY empty bunk, not just the new module's — otherwise
+        // adding a barracks moves crew and capacity in lockstep and the
+        // staffing gap never closes (22/30 became 30/38 instead of 38/38).
+        // The just-placed module's Quarters companion isn't flushed yet
+        // this frame, so its berths come from the registry def.
+        let existing_berths: u32 = quarters_query
+            .iter()
+            .filter(|(_, module)| module.is_active && module.health > 0.0)
+            .map(|(quarters, _)| quarters.berths)
+            .sum();
+        let capacity = existing_berths + new_berths;
+        let alive = crew_query.iter().filter(|c| c.health > 0.0).count() as u32;
+        let to_spawn = capacity.saturating_sub(alive);
+
+        let mut rng = rand::thread_rng();
+        for i in 0..to_spawn {
+            let name = NAMES[rng.gen_range(0..NAMES.len())];
+            let crew = commands
+                .spawn((
+                    (
+                        Sprite {
+                            color: Color::srgb(0.8, 0.6, 0.5),
+                            custom_size: Some(Vec2::new(16.0, 16.0)),
+                            ..default()
+                        },
+                        Transform::from_xyz(i as f32 * 14.0 - 20.0, -20.0, 0.5),
+                    ),
+                    CrewMember {
+                        name: name.to_string(),
+                        health: 100.0,
+                        max_health: 100.0,
+                        oxygen: 100.0,
+                        morale: 100.0,
+                        state: CrewState::Idle,
+                    },
+                ))
+                .insert(ChildOf(ship))
+                .id();
+            roster.members.push(crew);
+        }
+
+        notifications.write(ShowNotification {
+            message: format!(
+                "{} crew signed on — bunks full ({}/{}).",
+                to_spawn,
+                alive + to_spawn,
+                capacity
+            ),
+            notification_type: NotificationType::Success,
+            duration: 3.0,
+        });
     }
 }
 
@@ -110,7 +227,10 @@ pub fn spawn_starter_crew(
 }
 
 /// Computes ModuleEfficiency for all modules with a CrewStation.
-/// staffing_factor: 0.5 unstaffed, 1.0 staffed (crew alive & not panicking/unconscious).
+/// staffing_factor: 0.0 unstaffed, 1.0 staffed (crew alive, aboard, and
+/// not panicking/unconscious) — a station nobody operates DOES NOT RUN.
+/// That's the teeth behind crew scarcity: send everyone out on salvage
+/// and the unmanned reactors/engines/guns go dark until they're back.
 /// value = damage_efficiency * staffing_factor
 fn compute_module_efficiency(
     mut commands: Commands,
@@ -126,23 +246,26 @@ fn compute_module_efficiency(
                 if crew.health > 0.0
                     && crew.state != CrewState::Panicking
                     && crew.state != CrewState::Unconscious
+                    && crew.state != CrewState::Salvaging
                 {
                     1.0
                 } else {
-                    // Dead/panicking/unconscious crew — clear assignment
+                    // Dead/panicking/unconscious/EVA crew — clear assignment
                     station.assigned_crew = None;
-                    0.5
+                    0.0
                 }
             } else {
                 // Crew entity no longer exists — clear assignment
                 station.assigned_crew = None;
-                0.5
+                0.0
             }
         } else {
-            0.5
+            0.0
         };
 
-        commands.entity(entity).insert(ModuleEfficiency {
+        // try_insert: wreck modules carry CrewStation too, and a drill or
+        // EVA detail may have dismantled (despawned) this block this frame
+        commands.entity(entity).try_insert(ModuleEfficiency {
             value: damage_eff * staffing_factor,
             staffing_factor,
         });
@@ -150,14 +273,21 @@ fn compute_module_efficiency(
 }
 
 /// Counts total berths, crew, staffed/total stations. Writes to StaffingState.
+/// Player-scoped: this feeds the player's own crew HUD, and both Quarters/
+/// CrewStation/CrewMember exist on AI ships too now — an unscoped count
+/// here would blend every AI ship in render range into the player's own
+/// crew numbers (see OwnedByAiShip usage below, same marker the AI-vs-AI
+/// projectile-ownership work already established for this exact class of
+/// "unscoped query silently picks up AI ship data" bug).
 fn update_staffing_state(
-    quarters_query: Query<(&Quarters, &Module)>,
-    station_query: Query<&CrewStation>,
-    crew_query: Query<&CrewMember>,
+    quarters_query: Query<(&Quarters, &Module, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
+    station_query: Query<(&CrewStation, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
+    crew_query: Query<(&CrewMember, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
     mut staffing: ResMut<StaffingState>,
 ) {
     let mut total_berths = 0u32;
-    for (quarters, module) in quarters_query.iter() {
+    for (quarters, module, owned) in quarters_query.iter() {
+        if owned.is_some() { continue; }
         if module.is_active && module.health > 0.0 {
             total_berths += quarters.berths;
         }
@@ -165,11 +295,12 @@ fn update_staffing_state(
 
     let mut staffed = 0u32;
     let mut total = 0u32;
-    for station in station_query.iter() {
+    for (station, owned) in station_query.iter() {
+        if owned.is_some() { continue; }
         total += 1;
         if let Some(crew_entity) = station.assigned_crew {
             // Only count as staffed if the crew is alive and still exists
-            if let Ok(crew) = crew_query.get(crew_entity) {
+            if let Ok((crew, _)) = crew_query.get(crew_entity) {
                 if crew.health > 0.0 {
                     staffed += 1;
                 }
@@ -177,8 +308,10 @@ fn update_staffing_state(
         }
     }
 
-    // Count living crew
-    let alive_crew = crew_query.iter().filter(|c| c.health > 0.0).count() as u32;
+    // Count living player crew
+    let alive_crew = crew_query.iter()
+        .filter(|(c, owned)| c.health > 0.0 && owned.is_none())
+        .count() as u32;
 
     staffing.total_berths = total_berths;
     staffing.total_crew = alive_crew;
@@ -186,30 +319,42 @@ fn update_staffing_state(
     staffing.total_stations = total;
 }
 
-/// Priority-based auto-assignment of crew to stations.
+/// Priority-based auto-assignment of crew to stations. Grouped per owning
+/// ship (player ship or a specific AI ship root) via OwnedByAiShip — AI
+/// ships now carry real CrewStation/CrewMember data too (see ai_ship::crew),
+/// and without this grouping a single global pool would happily staff one
+/// ship's idle crew onto a completely different ship's open stations the
+/// next tick this system runs.
 fn auto_assign_crew(
     time: Res<Time>,
     mut timer: ResMut<AutoAssignTimer>,
-    mut station_query: Query<(Entity, &mut CrewStation)>,
-    crew_query: Query<(Entity, &CrewMember)>,
+    mut station_query: Query<(Entity, &mut CrewStation, Has<KeepManned>, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
+    crew_query: Query<(Entity, &CrewMember, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
+    ship_query: Query<Entity, With<Ship>>,
 ) {
     timer.timer.tick(time.delta());
     if !timer.timer.just_finished() {
         return;
     }
 
+    let player_ship = ship_query.single().ok();
+    // Absent OwnedByAiShip => player-owned (the only other kind of ship).
+    let owner_of = |owned: Option<&crate::ai_ship::components::OwnedByAiShip>| -> Option<Entity> {
+        owned.map(|o| o.root).or(player_ship)
+    };
+
     // Collect all crew currently assigned to any station
     let mut assigned_crew: std::collections::HashSet<Entity> = std::collections::HashSet::new();
-    for (_, station) in station_query.iter() {
+    for (_, station, _, _) in station_query.iter() {
         if let Some(crew_entity) = station.assigned_crew {
             assigned_crew.insert(crew_entity);
         }
     }
 
     // Clean up dead/despawned crew from stations
-    for (_, mut station) in station_query.iter_mut() {
+    for (_, mut station, _, _) in station_query.iter_mut() {
         if let Some(crew_entity) = station.assigned_crew {
-            if let Ok((_, crew)) = crew_query.get(crew_entity) {
+            if let Ok((_, crew, _)) = crew_query.get(crew_entity) {
                 if crew.health <= 0.0 {
                     station.assigned_crew = None;
                     assigned_crew.remove(&crew_entity);
@@ -222,66 +367,75 @@ fn auto_assign_crew(
         }
     }
 
-    // Collect unfilled stations (priority > 0, not manually assigned)
-    let mut unfilled: Vec<(Entity, u8)> = Vec::new();
-    for (entity, station) in station_query.iter() {
+    // Collect unfilled stations (priority > 0, not manually assigned), bucketed by owning ship
+    let mut unfilled_by_ship: std::collections::HashMap<Entity, Vec<(Entity, u8, bool)>> = std::collections::HashMap::new();
+    for (entity, station, pinned, owned) in station_query.iter() {
         if station.priority > 0 && !station.manually_assigned && station.assigned_crew.is_none() {
-            unfilled.push((entity, station.priority));
+            if let Some(ship) = owner_of(owned) {
+                unfilled_by_ship.entry(ship).or_default().push((entity, station.priority, pinned));
+            }
         }
     }
 
-    // Sort by priority descending
-    unfilled.sort_by(|a, b| b.1.cmp(&a.1));
-
-    // Collect available crew (alive, not panicking/unconscious, not assigned)
-    let mut available_crew: Vec<Entity> = Vec::new();
-    for (entity, crew) in crew_query.iter() {
+    // Collect available crew (alive, not panicking/unconscious, not assigned), bucketed by owning ship
+    let mut available_by_ship: std::collections::HashMap<Entity, Vec<Entity>> = std::collections::HashMap::new();
+    for (entity, crew, owned) in crew_query.iter() {
         if crew.health > 0.0
             && crew.state != CrewState::Panicking
             && crew.state != CrewState::Unconscious
+            && crew.state != CrewState::Salvaging
             && !assigned_crew.contains(&entity)
         {
-            available_crew.push(entity);
+            if let Some(ship) = owner_of(owned) {
+                available_by_ship.entry(ship).or_default().push(entity);
+            }
         }
     }
 
-    // Assign in order
-    let mut crew_idx = 0;
-    for (station_entity, _priority) in unfilled {
-        if crew_idx >= available_crew.len() {
-            break;
-        }
-        let crew_entity = available_crew[crew_idx];
-        crew_idx += 1;
+    // Assign in order, independently per ship
+    for (ship, mut unfilled) in unfilled_by_ship {
+        let Some(available_crew) = available_by_ship.get(&ship) else { continue };
 
-        if let Ok((_, mut station)) = station_query.get_mut(station_entity) {
-            station.assigned_crew = Some(crew_entity);
+        // Pinned (keep-manned) posts staff first, then by priority descending
+        unfilled.sort_by(|a, b| b.2.cmp(&a.2).then(b.1.cmp(&a.1)));
+
+        let mut crew_idx = 0;
+        for (station_entity, _priority, _pinned) in unfilled {
+            if crew_idx >= available_crew.len() {
+                break;
+            }
+            let crew_entity = available_crew[crew_idx];
+            crew_idx += 1;
+
+            if let Ok((_, mut station, _, _)) = station_query.get_mut(station_entity) {
+                station.assigned_crew = Some(crew_entity);
+            }
         }
     }
 }
 
-/// Updates crew needs (oxygen, morale)
+/// Updates crew needs (morale). Personal oxygen was removed by design
+/// call 2026-07-15 — crew no longer consume O2 or suffocate; room air
+/// and decompression stay as pure physics (vent thrust, breach sealing).
 fn update_crew_needs(
     time: Res<Time>,
-    oxygen_state: Res<OxygenState>,
     depth_state: Res<DepthState>,
-    mut crew_query: Query<&mut CrewMember>,
+    // EVA crew are on suit systems — needs frozen while outside
+    mut crew_query: Query<&mut CrewMember, Without<EvaSalvaging>>,
 ) {
-    let oxygen_available = oxygen_state.oxygen_balance >= 0.0;
-
     for mut crew in crew_query.iter_mut() {
         if crew.health <= 0.0 {
             continue;
         }
 
-        if !oxygen_available {
-            crew.oxygen = (crew.oxygen - 10.0 * time.delta_secs()).max(0.0);
-        } else {
-            crew.oxygen = (crew.oxygen + 20.0 * time.delta_secs()).min(100.0);
-        }
-
-        if crew.oxygen < 50.0 || depth_state.current_depth > 500.0 {
-            crew.morale = (crew.morale - 5.0 * time.delta_secs()).max(0.0);
+        if depth_state.current_depth > 500.0 {
+            // Deep-space dread erodes morale but bottoms out ABOVE both
+            // the panic threshold (20) and the recovery threshold (30):
+            // depth alone makes crew jumpy, never permanently catatonic.
+            // Draining to 0 locked every deep-zone crew into panic forever
+            // — nobody could man a station or crew a salvage detail out
+            // where the wrecks actually are.
+            crew.morale = (crew.morale - 5.0 * time.delta_secs()).max(35.0);
         } else {
             crew.morale = (crew.morale + 1.0 * time.delta_secs()).min(100.0);
         }
@@ -291,7 +445,7 @@ fn update_crew_needs(
 /// Maps each crew member's world position to a grid position and room via RoomMap.
 fn update_crew_room_location(
     mut commands: Commands,
-    mut crew_query: Query<(Entity, &GlobalTransform, Option<&mut CrewRoomLocation>), With<CrewMember>>,
+    mut crew_query: Query<(Entity, &GlobalTransform, Option<&mut CrewRoomLocation>), (With<CrewMember>, Without<EvaSalvaging>)>,
     room_map: Res<RoomMap>,
 ) {
     for (entity, global_transform, location) in crew_query.iter_mut() {
@@ -306,7 +460,8 @@ fn update_crew_room_location(
             loc.room_id = room_id;
             loc.grid_position = grid;
         } else {
-            commands.entity(entity).insert(CrewRoomLocation {
+            // try_insert: the crew member may die and despawn this frame
+            commands.entity(entity).try_insert(CrewRoomLocation {
                 room_id,
                 grid_position: grid,
             });
@@ -316,9 +471,16 @@ fn update_crew_room_location(
 
 /// Scans for rooms with decompression or fire and dispatches idle crew to handle emergencies.
 /// Temporarily clears non-manual CrewStation assignments for dispatched crew.
+/// Room-scoped both ways: only crew IN an emergency room get flagged
+/// (repair/suppression power is room-local and crew can't walk between
+/// rooms, so flagging distant crew just locked them in Repairing doing
+/// nothing — which starved every other job, e.g. salvage details), and
+/// Repairing crew whose room is calm get released back to Idle.
 fn crew_emergency_dispatch(
-    mut crew_query: Query<(Entity, &mut CrewMember)>,
-    fire_query: Query<&Module, With<OnFire>>,
+    ship_query: Query<Entity, With<Ship>>,
+    child_query: Query<&ChildOf>,
+    mut crew_query: Query<(Entity, &mut CrewMember, Option<&CrewRoomLocation>)>,
+    fire_query: Query<(Entity, &Module), With<OnFire>>,
     room_map: Res<RoomMap>,
     mut station_query: Query<(Entity, &mut CrewStation)>,
     mut dispatch_events: MessageWriter<CrewDispatched>,
@@ -332,17 +494,18 @@ fn crew_emergency_dispatch(
         }
     }
 
-    // Check for rooms with fire
-    for module in fire_query.iter() {
+    // Check for rooms with fire — our modules only; a burning wreck's
+    // grid positions can phantom-match our room map's tiles.
+    let ship = ship_query.single().ok();
+    for (entity, module) in fire_query.iter() {
+        if child_query.get(entity).ok().map(|p| p.0) != ship {
+            continue;
+        }
         if let Some(&room_id) = room_map.tile_to_room.get(&module.grid_position) {
             if !emergency_rooms.iter().any(|(id, _)| *id == room_id) {
                 emergency_rooms.push((room_id, DispatchReason::Fire));
             }
         }
-    }
-
-    if emergency_rooms.is_empty() {
-        return;
     }
 
     // Collect crew assigned to stations (to know who to pull)
@@ -355,38 +518,58 @@ fn crew_emergency_dispatch(
         }
     }
 
-    // Dispatch idle crew to emergencies
-    for (entity, mut crew) in crew_query.iter_mut() {
-        if crew.health <= 0.0 || crew.state != CrewState::Idle {
+    for (entity, mut crew, location) in crew_query.iter_mut() {
+        if crew.health <= 0.0 {
             continue;
         }
-        if let Some(&(room_id, reason)) = emergency_rooms.first() {
-            crew.state = CrewState::Repairing;
+        let room = location.and_then(|l| l.room_id);
+        let emergency_here = room.and_then(|r| {
+            emergency_rooms.iter().find(|(id, _)| *id == r).copied()
+        });
 
-            // Clear station assignment if not manually assigned
-            if let Some(station_entity) = station_assignments.get(&entity) {
-                if let Ok((_, mut station)) = station_query.get_mut(*station_entity) {
-                    station.assigned_crew = None;
+        match (crew.state, emergency_here) {
+            (CrewState::Idle, Some((room_id, reason))) => {
+                crew.state = CrewState::Repairing;
+
+                // Clear station assignment if not manually assigned
+                if let Some(station_entity) = station_assignments.get(&entity) {
+                    if let Ok((_, mut station)) = station_query.get_mut(*station_entity) {
+                        station.assigned_crew = None;
+                    }
                 }
-            }
 
-            dispatch_events.write(CrewDispatched {
-                crew: entity,
-                room_id,
-                reason,
-            });
+                dispatch_events.write(CrewDispatched {
+                    crew: entity,
+                    room_id,
+                    reason,
+                });
+            }
+            (CrewState::Repairing, None) => {
+                crew.state = CrewState::Idle;
+            }
+            _ => {}
         }
     }
 }
 
 /// Updates crew AI behavior — now aware of both decompression and fires.
 fn update_crew_ai(
+    ship_query: Query<Entity, With<Ship>>,
+    child_query: Query<&ChildOf>,
     hull_query: Query<(Entity, &HullSegment, &Transform)>,
     fire_query: Query<Entity, With<OnFire>>,
-    mut crew_query: Query<&mut CrewMember>,
+    // EVA crew's state machine is owned by eva_salvage while they're out
+    mut crew_query: Query<&mut CrewMember, Without<EvaSalvaging>>,
 ) {
-    let has_depressurized = hull_query.iter().any(|(_, hull, _)| hull.is_depressurized);
-    let has_fires = !fire_query.is_empty();
+    let Ok(ship) = ship_query.single() else { return };
+    // Danger must be OUR danger — unscoped, any holed/burning wreck
+    // drifting nearby kept the crew stuck in Repairing forever.
+    let has_depressurized = hull_query.iter().any(|(entity, hull, _)| {
+        hull.is_depressurized && child_query.get(entity).is_ok_and(|p| p.0 == ship)
+    });
+    let has_fires = fire_query
+        .iter()
+        .any(|entity| child_query.get(entity).is_ok_and(|p| p.0 == ship));
     let has_danger = has_depressurized || has_fires;
 
     for mut crew in crew_query.iter_mut() {
@@ -409,7 +592,7 @@ fn update_crew_ai(
             _ => {}
         }
 
-        if crew.oxygen < 20.0 || crew.morale < 20.0 {
+        if crew.morale < 20.0 {
             crew.state = CrewState::Panicking;
         }
     }
@@ -420,6 +603,8 @@ fn update_crew_ai(
 fn crew_fire_suppression(
     time: Res<Time>,
     mut commands: Commands,
+    ship_query: Query<Entity, With<Ship>>,
+    child_query: Query<&ChildOf>,
     crew_query: Query<(&CrewMember, &CrewRoomLocation)>,
     mut fire_query: Query<(Entity, &mut OnFire, &Module, &mut Sprite), Without<DestroyedModule>>,
     room_map: Res<RoomMap>,
@@ -442,8 +627,12 @@ fn crew_fire_suppression(
         return;
     }
 
-    // Apply suppression to fires
+    // Apply suppression to fires — our modules only (see dispatch note)
+    let ship = ship_query.single().ok();
     for (entity, mut fire, module, mut sprite) in fire_query.iter_mut() {
+        if child_query.get(entity).ok().map(|p| p.0) != ship {
+            continue;
+        }
         let Some(&room_id) = room_map.tile_to_room.get(&module.grid_position) else {
             continue;
         };
@@ -465,42 +654,48 @@ fn crew_fire_suppression(
     }
 }
 
-/// Checks for crew suffocation
-fn check_crew_suffocation(
-    time: Res<Time>,
-    config: Res<GameConfig>,
-    mut crew_query: Query<(Entity, &mut CrewMember)>,
-    mut damage_events: MessageWriter<CrewDamaged>,
-    mut death_events: MessageWriter<CrewDied>,
-) {
-    for (entity, mut crew) in crew_query.iter_mut() {
-        if crew.health <= 0.0 {
-            continue;
-        }
+/// HP restored per ScrapMetal consumed by field repair.
+const HP_PER_SCRAP: f32 = 25.0;
+/// Idle crew patch at half the rate of crew actively dispatched to an
+/// emergency.
+const IDLE_REPAIR_POWER: f32 = 0.5;
 
-        if crew.oxygen <= 0.0 {
-            let damage = config.suffocation_damage_rate * time.delta_secs();
-            crew.health -= damage;
+/// Field-repair material budget. Hull/module HP healing draws from this;
+/// when the credit runs dry it converts ScrapMetal from the hold, and when
+/// there's no scrap left, patching stalls (breach sealing and fire
+/// suppression stay free — damage control needs hands, not plates).
+#[derive(Resource, Default)]
+pub struct RepairScrapPool {
+    hp_credit: f32,
+}
 
-            damage_events.write(CrewDamaged {
-                crew: entity,
-                amount: damage,
-                source: CrewDamageSource::Suffocation,
-            });
-
-            if crew.health <= 0.0 {
-                death_events.write(CrewDied {
-                    crew: entity,
-                    name: crew.name.clone(),
-                    cause: CrewDamageSource::Suffocation,
-                });
+impl RepairScrapPool {
+    /// Grant up to `want` HP of repair, converting scrap as needed.
+    /// Returns how much was actually granted.
+    fn draw(&mut self, want: f32, inventory: &mut Inventory) -> f32 {
+        let mut granted = 0.0;
+        let mut remaining = want;
+        while remaining > 0.0 {
+            if self.hp_credit <= 0.0 {
+                if !inventory.remove_item(ItemType::ScrapMetal, 1) {
+                    break;
+                }
+                self.hp_credit += HP_PER_SCRAP;
             }
+            let take = remaining.min(self.hp_credit);
+            self.hp_credit -= take;
+            granted += take;
+            remaining -= take;
         }
+        granted
     }
 }
 
 /// Room-local crew repair system with RepairBay boost.
-/// Crew contribute flat repair power (no skills).
+/// Crew contribute flat repair power (no skills). Emergency-dispatched
+/// (Repairing) crew work at full power; IDLE crew in a damaged room pitch
+/// in at half power — the ship self-heals in the field as long as there's
+/// ScrapMetal aboard to feed the patches.
 fn crew_repair_system(
     time: Res<Time>,
     crew_query: Query<(&CrewMember, &CrewRoomLocation)>,
@@ -509,19 +704,27 @@ fn crew_repair_system(
     mut module_query: Query<&mut Module, (Without<DestroyedModule>, Without<RepairSystem>)>,
     room_map: Res<RoomMap>,
     occupancy: Res<GridOccupancy>,
+    mut inventory: ResMut<Inventory>,
+    mut pool: ResMut<RepairScrapPool>,
     mut notifications: MessageWriter<ShowNotification>,
     mut repaired_notified: Local<bool>,
+    mut stall_notified: Local<bool>,
 ) {
     let dt = time.delta_secs();
 
-    // Build per-room repair power from repairing crew (flat 1.0 per crew)
+    // Build per-room repair power: emergency crew at 1.0, idle hands at half
     let mut room_repair_power: std::collections::HashMap<usize, f32> = std::collections::HashMap::new();
     for (crew, location) in crew_query.iter() {
-        if crew.state != CrewState::Repairing || crew.health <= 0.0 {
+        if crew.health <= 0.0 {
             continue;
         }
+        let power = match crew.state {
+            CrewState::Repairing => 1.0,
+            CrewState::Idle => IDLE_REPAIR_POWER,
+            _ => continue,
+        };
         if let Some(room_id) = location.room_id {
-            *room_repair_power.entry(room_id).or_insert(0.0) += 1.0;
+            *room_repair_power.entry(room_id).or_insert(0.0) += power;
         }
     }
 
@@ -535,29 +738,45 @@ fn crew_repair_system(
     }
 
     let mut any_repaired = false;
+    let mut repair_stalled = false;
 
-    // Repair hull segments room-by-room
+    // Repair hull segments and modules room-by-room
     for (room_id, crew_power) in room_repair_power.iter() {
         let boost = room_repair_boost.get(room_id).copied().unwrap_or(0.0);
         let total_power = crew_power + boost;
 
         if let Some(room) = room_map.rooms.get(*room_id) {
             for &tile in &room.tiles {
-                // Find hull segments at this tile via occupancy
-                if let Some(&entity) = occupancy.cells.get(&tile) {
-                    if let Ok(mut hull) = hull_query.get_mut(entity) {
-                        if hull.is_depressurized && hull.depressurization_level > 0.0 {
-                            let repair_rate = total_power * 0.05 * dt;
-                            hull.depressurization_level = (hull.depressurization_level - repair_rate).max(0.0);
-                            if hull.depressurization_level <= 0.0 {
-                                hull.is_depressurized = false;
-                                any_repaired = true;
-                            }
+                let Some(&entity) = occupancy.cells.get(&tile) else { continue };
+                if let Ok(mut hull) = hull_query.get_mut(entity) {
+                    // Breach sealing is free — damage control, not materials
+                    if hull.is_depressurized && hull.depressurization_level > 0.0 {
+                        let repair_rate = total_power * 0.05 * dt;
+                        hull.depressurization_level = (hull.depressurization_level - repair_rate).max(0.0);
+                        if hull.depressurization_level <= 0.0 {
+                            hull.is_depressurized = false;
+                            any_repaired = true;
                         }
-                        // Repair hull health if damaged and not depressurized
-                        if hull.health < hull.max_health && !hull.is_depressurized {
-                            let heal_rate = total_power * 2.0 * dt;
-                            hull.health = (hull.health + heal_rate).min(hull.max_health);
+                    }
+                    // Patch hull health if damaged and not depressurized —
+                    // costs ScrapMetal via the pool
+                    if hull.health < hull.max_health && !hull.is_depressurized {
+                        let want = (total_power * 2.0 * dt).min(hull.max_health - hull.health);
+                        let granted = pool.draw(want, &mut inventory);
+                        hull.health += granted;
+                        if granted < want {
+                            repair_stalled = true;
+                        }
+                    }
+                } else if let Ok(mut module) = module_query.get_mut(entity) {
+                    // Crew also patch damaged modules in their room (new —
+                    // previously only the RepairBay touched module health)
+                    if module.health < module.max_health && module.health > 0.0 {
+                        let want = (total_power * 2.0 * dt).min(module.max_health - module.health);
+                        let granted = pool.draw(want, &mut inventory);
+                        module.health += granted;
+                        if granted < want {
+                            repair_stalled = true;
                         }
                     }
                 }
@@ -592,6 +811,20 @@ fn crew_repair_system(
     }
     if !any_repaired {
         *repaired_notified = false;
+    }
+
+    // Out of scrap with damage still waiting — tell the player once, and
+    // again if it happens again after resupplying.
+    if repair_stalled && !*stall_notified {
+        *stall_notified = true;
+        notifications.write(ShowNotification {
+            message: "Field repairs stalled — no ScrapMetal aboard".into(),
+            notification_type: NotificationType::Warning,
+            duration: 4.0,
+        });
+    }
+    if !repair_stalled {
+        *stall_notified = false;
     }
 }
 
@@ -729,7 +962,7 @@ fn training_room_boost(
             // Morale boost (half of MessHall rate)
             crew.morale = (crew.morale + 1.0 * dt).min(100.0);
             // Trained crew resist panic better: recover from panicking at lower morale
-            if crew.state == CrewState::Panicking && crew.morale > 15.0 && crew.oxygen > 10.0 {
+            if crew.state == CrewState::Panicking && crew.morale > 15.0 {
                 crew.state = CrewState::Idle;
             }
         }
@@ -782,7 +1015,8 @@ fn engineering_station_boost(
 /// and fixes them. This handles crew hired at docking stations.
 fn reconcile_hired_crew(
     mut commands: Commands,
-    crew_query: Query<(Entity, Option<&ChildOf>), With<CrewMember>>,
+    // EVA crew are deliberately un-parented — don't "fix" them mid-flight
+    crew_query: Query<(Entity, Option<&ChildOf>), (With<CrewMember>, Without<EvaSalvaging>)>,
     ship_query: Query<Entity, With<Ship>>,
     mut roster: ResMut<CrewRoster>,
 ) {

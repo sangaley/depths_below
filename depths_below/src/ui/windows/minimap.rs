@@ -4,6 +4,7 @@ use crate::components::Ship;
 use crate::celestial::components::*;
 use crate::contracts::{ContractObjective, ContractState};
 use crate::world::home_base::{OUTPOST_POSITIONS, STATION_POS};
+use crate::ui::theme::ThemeColors;
 use super::framework::*;
 
 // ============================================================================
@@ -81,7 +82,7 @@ pub fn toggle_minimap(
                 height: Val::Px(MINIMAP_SIZE),
                 position_type: PositionType::Relative,
                 ..default()
-            }, BackgroundColor(Color::srgba(0.02, 0.03, 0.06, 1.0)), MinimapCanvas),
+            }, BackgroundColor(ThemeColors::HUD_BG), MinimapCanvas),
     ).id();
 
     // Ship dot (center initially, updates each frame)

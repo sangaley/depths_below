@@ -137,7 +137,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.8, 0.4, 0.1),
         companion: CompanionData::Reactor { output: 300.0, max_heat: 100.0, explosion_risk: true },
         customizable: true,
-        cost: 100,
+        cost: 75,
         base_stats: CalculatedStats {
             reactor: Some(ReactorStats {
                 power_output: 60.0,
@@ -160,7 +160,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.9, 0.5, 0.1),
         companion: CompanionData::Reactor { output: 500.0, max_heat: 100.0, explosion_risk: true },
         customizable: false,
-        cost: 180,
+        cost: 135,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -176,7 +176,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(1.0, 0.5, 0.0),
         companion: CompanionData::Reactor { output: 200.0, max_heat: 100.0, explosion_risk: true },
         customizable: false,
-        cost: 500,
+        cost: 375,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -192,7 +192,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.7, 0.6, 0.1),
         companion: CompanionData::None,
         customizable: false,
-        cost: 60,
+        cost: 45,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -208,7 +208,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.6, 0.8, 0.2),
         companion: CompanionData::None,
         customizable: false,
-        cost: 250,
+        cost: 188,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -228,7 +228,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.5, 0.5),
         companion: CompanionData::Engine { thrust: 250.0, noise_level: 20.0 },
         customizable: true,
-        cost: 50,
+        cost: 38,
         base_stats: CalculatedStats {
             engine: Some(EngineStats {
                 thrust: 50.0,
@@ -251,7 +251,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.6, 0.6, 0.6),
         companion: CompanionData::Engine { thrust: 400.0, noise_level: 30.0 },
         customizable: false,
-        cost: 100,
+        cost: 75,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -267,7 +267,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.7, 0.7, 0.7),
         companion: CompanionData::Engine { thrust: 180.0, noise_level: 50.0 },
         customizable: false,
-        cost: 300,
+        cost: 225,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -283,7 +283,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.3, 0.3, 0.4),
         companion: CompanionData::Engine { thrust: 80.0, noise_level: 5.0 },
         customizable: false,
-        cost: 200,
+        cost: 150,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -299,7 +299,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.4, 0.4, 0.5),
         companion: CompanionData::Engine { thrust: 40.0, noise_level: 10.0 },
         customizable: false,
-        cost: 40,
+        cost: 30,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -319,7 +319,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.2, 0.6, 0.8),
         companion: CompanionData::OxygenScrubber { output: 30.0 },
         customizable: true,
-        cost: 60,
+        cost: 45,
         base_stats: CalculatedStats {
             life_support: Some(LifeSupportStats {
                 // Must match the companion output above — CalculatedStats
@@ -345,7 +345,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.3, 0.5, 0.7),
         companion: CompanionData::LifeSupport { o2_gen: 0.0, co2_filter: 30.0 },
         customizable: false,
-        cost: 50,
+        cost: 38,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -361,7 +361,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.2, 0.4, 0.7),
         companion: CompanionData::LifeSupport { o2_gen: 0.0, co2_filter: 0.0 },
         customizable: false,
-        cost: 50,
+        cost: 38,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -381,7 +381,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.3, 0.6),
         companion: CompanionData::Navigation { map_range: 500.0 },
         customizable: false,
-        cost: 80,
+        cost: 60,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -397,7 +397,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.4, 0.3, 0.5),
         companion: CompanionData::None,
         customizable: false,
-        cost: 60,
+        cost: 45,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -421,7 +421,7 @@ pub fn build_registry() -> ModuleRegistry {
             mount_type: MountType::Turret, ammo_type: AmmoType::Bullet,
         },
         customizable: true,
-        cost: 150,
+        cost: 113,
         base_stats: CalculatedStats {
             weapon: Some(WeaponStats {
                 damage: 50.0, range: 5400.0, fire_rate: 0.6, max_ammo: 30, power_cost: 20.0,
@@ -445,7 +445,7 @@ pub fn build_registry() -> ModuleRegistry {
             mount_type: MountType::Fixed, ammo_type: AmmoType::Bullet,
         },
         customizable: true,
-        cost: 400,
+        cost: 300,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -464,7 +464,7 @@ pub fn build_registry() -> ModuleRegistry {
             mount_type: MountType::Turret, ammo_type: AmmoType::Bullet,
         },
         customizable: true,
-        cost: 180,
+        cost: 135,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -487,7 +487,7 @@ pub fn build_registry() -> ModuleRegistry {
             mount_type: MountType::Turret, ammo_type: AmmoType::Bullet,
         },
         customizable: true,
-        cost: 100,
+        cost: 75,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -507,7 +507,7 @@ pub fn build_registry() -> ModuleRegistry {
             mount_type: MountType::Turret, ammo_type: AmmoType::Charge,
         },
         customizable: true,
-        cost: 200,
+        cost: 150,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -526,7 +526,7 @@ pub fn build_registry() -> ModuleRegistry {
             mount_type: MountType::Broadside, ammo_type: AmmoType::Charge,
         },
         customizable: true,
-        cost: 250,
+        cost: 188,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -548,7 +548,7 @@ pub fn build_registry() -> ModuleRegistry {
             mount_type: MountType::Turret, ammo_type: AmmoType::Charge,
         },
         customizable: true,
-        cost: 180,
+        cost: 135,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -568,7 +568,7 @@ pub fn build_registry() -> ModuleRegistry {
             mount_type: MountType::Fixed, ammo_type: AmmoType::Missile,
         },
         customizable: true,
-        cost: 200,
+        cost: 150,
         base_stats: CalculatedStats {
             weapon: Some(WeaponStats {
                 damage: 75.0, range: 9600.0, fire_rate: 0.3, max_ammo: 12, power_cost: 25.0,
@@ -592,7 +592,7 @@ pub fn build_registry() -> ModuleRegistry {
             mount_type: MountType::Turret, ammo_type: AmmoType::Missile,
         },
         customizable: true,
-        cost: 250,
+        cost: 188,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -611,7 +611,7 @@ pub fn build_registry() -> ModuleRegistry {
             mount_type: MountType::Fixed, ammo_type: AmmoType::Missile,
         },
         customizable: true,
-        cost: 130,
+        cost: 98,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -631,7 +631,7 @@ pub fn build_registry() -> ModuleRegistry {
             mount_type: MountType::Fixed, ammo_type: AmmoType::Charge,
         },
         customizable: true,
-        cost: 100,
+        cost: 75,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -650,7 +650,7 @@ pub fn build_registry() -> ModuleRegistry {
             mount_type: MountType::Turret, ammo_type: AmmoType::Charge,
         },
         customizable: true,
-        cost: 150,
+        cost: 113,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -669,7 +669,7 @@ pub fn build_registry() -> ModuleRegistry {
             mount_type: MountType::Broadside, ammo_type: AmmoType::Charge,
         },
         customizable: true,
-        cost: 200,
+        cost: 150,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -689,7 +689,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.2, 0.5, 0.5),
         companion: CompanionData::Radar { range: 500.0, noise_on_ping: 80.0 },
         customizable: false,
-        cost: 80,
+        cost: 60,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -705,7 +705,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.1, 0.6, 0.6),
         companion: CompanionData::Radar { range: 800.0, noise_on_ping: 60.0 },
         customizable: false,
-        cost: 200,
+        cost: 150,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -721,7 +721,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.2, 0.4, 0.4),
         companion: CompanionData::PassiveRadar { range: 600.0 },
         customizable: false,
-        cost: 100,
+        cost: 75,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -737,7 +737,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.3, 0.5, 0.4),
         companion: CompanionData::Detection { range: 400.0 },
         customizable: false,
-        cost: 90,
+        cost: 68,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -755,9 +755,9 @@ pub fn build_registry() -> ModuleRegistry {
         power_generation: 0.0,
         power_consumption: 0.0,
         color: Color::srgb(0.5, 0.4, 0.2),
-        companion: CompanionData::Cargo { capacity: 50.0 },
+        companion: CompanionData::Cargo { capacity: 100.0 },
         customizable: false,
-        cost: 30,
+        cost: 23,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -771,9 +771,9 @@ pub fn build_registry() -> ModuleRegistry {
         power_generation: 0.0,
         power_consumption: 0.0,
         color: Color::srgb(0.6, 0.5, 0.2),
-        companion: CompanionData::Cargo { capacity: 150.0 },
+        companion: CompanionData::Cargo { capacity: 300.0 },
         customizable: false,
-        cost: 80,
+        cost: 60,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -787,9 +787,9 @@ pub fn build_registry() -> ModuleRegistry {
         power_generation: 0.0,
         power_consumption: 0.0,
         color: Color::srgb(0.6, 0.3, 0.2),
-        companion: CompanionData::Cargo { capacity: 100.0 },
+        companion: CompanionData::Cargo { capacity: 200.0 },
         customizable: false,
-        cost: 50,
+        cost: 38,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -803,9 +803,9 @@ pub fn build_registry() -> ModuleRegistry {
         power_generation: 0.0,
         power_consumption: 0.0,
         color: Color::srgb(0.5, 0.4, 0.3),
-        companion: CompanionData::Cargo { capacity: 80.0 },
+        companion: CompanionData::Cargo { capacity: 160.0 },
         customizable: false,
-        cost: 40,
+        cost: 30,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -819,9 +819,9 @@ pub fn build_registry() -> ModuleRegistry {
         power_generation: 0.0,
         power_consumption: 5.0,
         color: Color::srgb(0.4, 0.5, 0.5),
-        companion: CompanionData::Cargo { capacity: 30.0 },
+        companion: CompanionData::Cargo { capacity: 60.0 },
         customizable: false,
-        cost: 70,
+        cost: 53,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -841,7 +841,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.3, 0.6, 0.3),
         companion: CompanionData::Quarters { berths: 4 },
         customizable: false,
-        cost: 40,
+        cost: 30,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -857,7 +857,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.35, 0.65, 0.35),
         companion: CompanionData::Quarters { berths: 8 },
         customizable: false,
-        cost: 120,
+        cost: 90,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -873,7 +873,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.8, 0.8, 0.9),
         companion: CompanionData::CrewFacility { facility_type: crate::components::FacilityType::MedBay },
         customizable: false,
-        cost: 100,
+        cost: 75,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -889,7 +889,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.4, 0.7, 0.4),
         companion: CompanionData::CrewFacility { facility_type: crate::components::FacilityType::MessHall },
         customizable: false,
-        cost: 60,
+        cost: 45,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -905,7 +905,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.7, 0.3),
         companion: CompanionData::CrewFacility { facility_type: crate::components::FacilityType::RecRoom },
         customizable: false,
-        cost: 50,
+        cost: 38,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -925,7 +925,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.4, 0.6, 0.4),
         companion: CompanionData::Repair { rate: 5.0 },
         customizable: false,
-        cost: 100,
+        cost: 75,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -941,7 +941,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.2, 0.3, 0.5),
         companion: CompanionData::Thruster { thrust_power: 100.0 },
         customizable: false,
-        cost: 20,
+        cost: 15,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -957,7 +957,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.9, 0.9, 0.5),
         companion: CompanionData::Light { range: 200.0, intensity: 1.0, attracts_creatures: true },
         customizable: false,
-        cost: 30,
+        cost: 23,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -973,7 +973,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.9, 0.8, 0.4),
         companion: CompanionData::Light { range: 400.0, intensity: 0.8, attracts_creatures: false },
         customizable: false,
-        cost: 50,
+        cost: 38,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -989,7 +989,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.5, 0.6),
         companion: CompanionData::None,
         customizable: false,
-        cost: 60,
+        cost: 45,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1005,14 +1005,14 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.4, 0.4, 0.5),
         companion: CompanionData::Docking,
         customizable: false,
-        cost: 80,
+        cost: 60,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
 
     defs.insert(ModuleType::SalvageArm, ModuleDef {
-        name: "Salvage Arm",
-        description: "Articulated claw on a hydraulic boom. Snatches wreckage, samples, and the occasional drifting debris.",
+        name: "Breaker Drill",
+        description: "Industrial grinder that chews wreck blocks straight into the hold. Faster than an EVA detail and nobody's at risk — but it needs power, an operator, and the racket carries to everything with ears.",
         category: ModuleCategory::Utility,
         size: IVec2::new(1, 1),
         health: 60.0,
@@ -1021,7 +1021,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.6, 0.5, 0.3),
         companion: CompanionData::Salvage { range: 100.0, efficiency: 1.0 },
         customizable: false,
-        cost: 90,
+        cost: 68,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -1041,7 +1041,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(1.0, 0.6, 0.0),
         companion: CompanionData::Reactor { output: 400.0, max_heat: 100.0, explosion_risk: true },
         customizable: false,
-        cost: 1200,
+        cost: 900,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -1057,7 +1057,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.6, 0.7, 0.2),
         companion: CompanionData::Capacitor { capacity: 300.0, charge_rate: 50.0 },
         customizable: false,
-        cost: 150,
+        cost: 113,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1073,7 +1073,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.5, 0.2),
         companion: CompanionData::PowerConduit { throughput: 100.0 },
         customizable: false,
-        cost: 40,
+        cost: 30,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1089,7 +1089,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.3, 0.5, 0.8),
         companion: CompanionData::Reactor { output: 15.0, max_heat: 0.0, explosion_risk: false },
         customizable: false,
-        cost: 30,
+        cost: 23,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1109,7 +1109,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.7, 0.5, 0.5),
         companion: CompanionData::Engine { thrust: 150.0, noise_level: 60.0 },
         customizable: false,
-        cost: 180,
+        cost: 135,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -1125,7 +1125,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.8, 0.3, 0.3),
         companion: CompanionData::Engine { thrust: 200.0, noise_level: 80.0 },
         customizable: false,
-        cost: 120,
+        cost: 90,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1141,7 +1141,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.4, 0.4, 0.4),
         companion: CompanionData::Engine { thrust: 20.0, noise_level: 2.0 },
         customizable: false,
-        cost: 50,
+        cost: 38,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1161,7 +1161,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.2, 0.7, 0.9),
         companion: CompanionData::OxygenScrubber { output: 80.0 },
         customizable: false,
-        cost: 200,
+        cost: 150,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -1177,7 +1177,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.8, 0.2, 0.2),
         companion: CompanionData::FireSuppression { effectiveness: 2.0 },
         customizable: false,
-        cost: 80,
+        cost: 60,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1193,7 +1193,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.3, 0.6, 0.6),
         companion: CompanionData::LifeSupport { o2_gen: 0.0, co2_filter: 10.0 },
         customizable: false,
-        cost: 40,
+        cost: 30,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1214,7 +1214,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.3, 0.3),
         companion: CompanionData::AmmoAutoloader { reload_bonus: 0.3 },
         customizable: false,
-        cost: 120,
+        cost: 90,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -1236,7 +1236,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.55, 0.30, 0.25),
         companion: CompanionData::None,
         customizable: true,
-        cost: 30,
+        cost: 23,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1252,7 +1252,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.60, 0.40, 0.20),
         companion: CompanionData::None,
         customizable: true,
-        cost: 40,
+        cost: 30,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1268,7 +1268,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.25, 0.45, 0.60),
         companion: CompanionData::None,
         customizable: true,
-        cost: 35,
+        cost: 26,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1284,7 +1284,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.70, 0.65, 0.15),
         companion: CompanionData::None,
         customizable: true,
-        cost: 60,
+        cost: 45,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1300,7 +1300,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.20, 0.50, 0.65),
         companion: CompanionData::None,
         customizable: true,
-        cost: 45,
+        cost: 34,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1316,7 +1316,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.30, 0.50, 0.70),
         companion: CompanionData::None,
         customizable: true,
-        cost: 35,
+        cost: 26,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1332,7 +1332,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.30, 0.55, 0.80),
         companion: CompanionData::None,
         customizable: true,
-        cost: 80,
+        cost: 60,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1345,7 +1345,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Muzzle Brake", description: "Redirects propellant gases to reduce recoil. +15% accuracy, reduces barrel stress.",
         category: ModuleCategory::Weapons, size: IVec2::new(1, 1), health: 35.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.50, 0.35, 0.30),
-        companion: CompanionData::None, customizable: true, cost: 40,
+        companion: CompanionData::None, customizable: true, cost: 30,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1353,7 +1353,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Recoil Absorber", description: "Hydraulic dampener. Protects adjacent blocks from firing vibration. Reduces cascade chance by 30%.",
         category: ModuleCategory::Weapons, size: IVec2::new(1, 1), health: 45.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.40, 0.40, 0.45),
-        companion: CompanionData::None, customizable: false, cost: 50,
+        companion: CompanionData::None, customizable: false, cost: 38,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1361,7 +1361,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Overcharge Capacitor", description: "Stores energy for a single devastating shot. 3x damage, 15s cooldown. Worth the wait.",
         category: ModuleCategory::Weapons, size: IVec2::new(1, 1), health: 50.0,
         power_generation: 0.0, power_consumption: 15.0, color: Color::srgb(0.60, 0.50, 0.15),
-        companion: CompanionData::None, customizable: true, cost: 120,
+        companion: CompanionData::None, customizable: true, cost: 90,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1369,7 +1369,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Bore Evacuator", description: "Clears barrel fumes between shots. +20% fire rate on kinetic weapons.",
         category: ModuleCategory::Weapons, size: IVec2::new(1, 1), health: 30.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.45, 0.40, 0.35),
-        companion: CompanionData::None, customizable: false, cost: 35,
+        companion: CompanionData::None, customizable: false, cost: 26,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1377,7 +1377,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Magnetic Accelerator", description: "Electromagnetic boost stage. +40% projectile velocity for railguns and coilguns. Power hungry.",
         category: ModuleCategory::Weapons, size: IVec2::new(1, 1), health: 60.0,
         power_generation: 0.0, power_consumption: 20.0, color: Color::srgb(0.35, 0.40, 0.65),
-        companion: CompanionData::None, customizable: true, cost: 150,
+        companion: CompanionData::None, customizable: true, cost: 113,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1385,7 +1385,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Focusing Array", description: "Precision optics for energy weapons. Tightens beam 30%, extends effective range.",
         category: ModuleCategory::Weapons, size: IVec2::new(1, 1), health: 40.0,
         power_generation: 0.0, power_consumption: 5.0, color: Color::srgb(0.30, 0.55, 0.40),
-        companion: CompanionData::None, customizable: true, cost: 80,
+        companion: CompanionData::None, customizable: true, cost: 60,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1393,7 +1393,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Warhead Bay", description: "Extra torpedo/missile storage. +8 ammo capacity per bay. Explosive if hit.",
         category: ModuleCategory::Weapons, size: IVec2::new(1, 1), health: 50.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.65, 0.25, 0.20),
-        companion: CompanionData::None, customizable: false, cost: 60,
+        companion: CompanionData::None, customizable: false, cost: 45,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1405,7 +1405,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Fuel Enrichment Unit", description: "Enriches fuel rods for 40% more output. Generates 50% more heat. Risk and reward.",
         category: ModuleCategory::Power, size: IVec2::new(1, 1), health: 60.0,
         power_generation: 0.0, power_consumption: 5.0, color: Color::srgb(0.70, 0.60, 0.10),
-        companion: CompanionData::None, customizable: true, cost: 100,
+        companion: CompanionData::None, customizable: true, cost: 75,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1413,7 +1413,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Containment Field", description: "Magnetic containment around reactor. Reduces explosion radius by 60% if reactor blows. Buys time.",
         category: ModuleCategory::Power, size: IVec2::new(1, 1), health: 80.0,
         power_generation: 0.0, power_consumption: 10.0, color: Color::srgb(0.30, 0.40, 0.60),
-        companion: CompanionData::None, customizable: false, cost: 150,
+        companion: CompanionData::None, customizable: false, cost: 113,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1421,7 +1421,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Emergency Shutdown", description: "Auto-SCRAMs reactor before meltdown. One-time use — saves the ship, kills the power.",
         category: ModuleCategory::Power, size: IVec2::new(1, 1), health: 40.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.80, 0.20, 0.15),
-        companion: CompanionData::None, customizable: false, cost: 80,
+        companion: CompanionData::None, customizable: false, cost: 60,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1429,7 +1429,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Power Regulator", description: "Smooths power fluctuations. Reduces wasted energy by 15%. Quiet, efficient, boring. Essential.",
         category: ModuleCategory::Power, size: IVec2::new(1, 1), health: 50.0,
         power_generation: 0.0, power_consumption: 2.0, color: Color::srgb(0.45, 0.50, 0.55),
-        companion: CompanionData::None, customizable: false, cost: 60,
+        companion: CompanionData::None, customizable: false, cost: 45,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1441,7 +1441,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Afterburner", description: "Injects extra fuel for a 200% thrust boost. Lasts 5 seconds. 30s cooldown. Escape or engage.",
         category: ModuleCategory::Propulsion, size: IVec2::new(1, 1), health: 50.0,
         power_generation: 0.0, power_consumption: 10.0, color: Color::srgb(0.80, 0.40, 0.10),
-        companion: CompanionData::None, customizable: true, cost: 120,
+        companion: CompanionData::None, customizable: true, cost: 90,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1449,7 +1449,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Thrust Vectoring", description: "Articulated nozzle that improves turning at speed. +40% turn rate. Makes the ship agile.",
         category: ModuleCategory::Propulsion, size: IVec2::new(1, 1), health: 40.0,
         power_generation: 0.0, power_consumption: 5.0, color: Color::srgb(0.35, 0.55, 0.70),
-        companion: CompanionData::None, customizable: true, cost: 80,
+        companion: CompanionData::None, customizable: true, cost: 60,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1457,7 +1457,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Fuel Injector", description: "Optimizes fuel-air mix. -20% fuel consumption. Pays for itself after three expeditions.",
         category: ModuleCategory::Propulsion, size: IVec2::new(1, 1), health: 35.0,
         power_generation: 0.0, power_consumption: 2.0, color: Color::srgb(0.40, 0.50, 0.40),
-        companion: CompanionData::None, customizable: false, cost: 70,
+        companion: CompanionData::None, customizable: false, cost: 53,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1465,7 +1465,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Inertial Dampener", description: "Reduces drift and improves handling near gravity wells. -30% gravity effect on ship.",
         category: ModuleCategory::Propulsion, size: IVec2::new(1, 1), health: 45.0,
         power_generation: 0.0, power_consumption: 8.0, color: Color::srgb(0.35, 0.45, 0.55),
-        companion: CompanionData::None, customizable: true, cost: 100,
+        companion: CompanionData::None, customizable: true, cost: 75,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1477,7 +1477,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Decoy Launcher", description: "Launches heat decoys that distract guided missiles and creature attention. 6 charges.",
         category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 40.0,
         power_generation: 0.0, power_consumption: 5.0, color: Color::srgb(0.60, 0.50, 0.20),
-        companion: CompanionData::None, customizable: false, cost: 90,
+        companion: CompanionData::None, customizable: false, cost: 68,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1485,7 +1485,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Chaff Dispenser", description: "Disrupts targeting systems in a radius. -50% enemy accuracy for 8 seconds. 4 uses.",
         category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 35.0,
         power_generation: 0.0, power_consumption: 3.0, color: Color::srgb(0.50, 0.55, 0.60),
-        companion: CompanionData::None, customizable: false, cost: 70,
+        companion: CompanionData::None, customizable: false, cost: 53,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1493,7 +1493,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Ablative Armor", description: "Sacrificial armor layer. Absorbs 200 damage then breaks. Replaceable at station. Cheap insurance.",
         category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 200.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.62, 0.60, 0.56),
-        companion: CompanionData::None, customizable: false, cost: 25,
+        companion: CompanionData::None, customizable: false, cost: 19,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1501,7 +1501,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Point Defense Drone", description: "Autonomous drone that intercepts incoming projectiles. Limited ammo, auto-returns to dock.",
         category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 30.0,
         power_generation: 0.0, power_consumption: 12.0, color: Color::srgb(0.40, 0.55, 0.50),
-        companion: CompanionData::None, customizable: false, cost: 180,
+        companion: CompanionData::None, customizable: false, cost: 135,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1509,7 +1509,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Hull Reinforce Plate", description: "Reinforces adjacent hull and modules. +30% HP to neighbors. Reduces cascade chance by 25%.",
         category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 100.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.60, 0.60, 0.63),
-        companion: CompanionData::None, customizable: false, cost: 50,
+        companion: CompanionData::None, customizable: false, cost: 38,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1521,7 +1521,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Signal Jammer", description: "Scrambles enemy detection. -40% detection range against your ship. Power hungry.",
         category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 40.0,
         power_generation: 0.0, power_consumption: 20.0, color: Color::srgb(0.30, 0.35, 0.50),
-        companion: CompanionData::None, customizable: true, cost: 130,
+        companion: CompanionData::None, customizable: true, cost: 98,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1529,7 +1529,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Gravity Compensator", description: "Partially negates gravitational pull. -30% gravity effect. Essential near black holes.",
         category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 60.0,
         power_generation: 0.0, power_consumption: 25.0, color: Color::srgb(0.40, 0.35, 0.60),
-        companion: CompanionData::None, customizable: true, cost: 200,
+        companion: CompanionData::None, customizable: true, cost: 150,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1537,7 +1537,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Radiation Hardening", description: "Lead-composite shielding for adjacent modules. -50% radiation damage to neighbors.",
         category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 80.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.35, 0.40, 0.30),
-        companion: CompanionData::None, customizable: false, cost: 90,
+        companion: CompanionData::None, customizable: false, cost: 68,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1545,7 +1545,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Emergency O2 Cache", description: "Sealed oxygen reserve. Auto-deploys when life support fails. 60 seconds of air. One use.",
         category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 40.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.25, 0.55, 0.55),
-        companion: CompanionData::None, customizable: false, cost: 40,
+        companion: CompanionData::None, customizable: false, cost: 30,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1553,7 +1553,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Black Box", description: "Indestructible flight recorder. Survives ship destruction. Preserves unlocks and data.",
         category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 999.0,
         power_generation: 0.0, power_consumption: 1.0, color: Color::srgb(0.15, 0.15, 0.20),
-        companion: CompanionData::None, customizable: false, cost: 300,
+        companion: CompanionData::None, customizable: false, cost: 225,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1565,7 +1565,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Reinforced Joint", description: "Structural reinforcement between barrel blocks. -40% cascade explosion chance in the chain.",
         category: ModuleCategory::Structural, size: IVec2::new(1, 1), health: 70.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.62, 0.60, 0.56),
-        companion: CompanionData::None, customizable: false, cost: 45,
+        companion: CompanionData::None, customizable: false, cost: 34,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1573,7 +1573,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Vibration Damper", description: "Absorbs vibrations from adjacent weapons firing. +10% accuracy for nearby weapons.",
         category: ModuleCategory::Structural, size: IVec2::new(1, 1), health: 40.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.40, 0.42, 0.45),
-        companion: CompanionData::None, customizable: false, cost: 35,
+        companion: CompanionData::None, customizable: false, cost: 26,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1581,7 +1581,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Thermal Insulator", description: "Blocks heat transfer between sections. Keeps hot reactors from cooking adjacent rooms.",
         category: ModuleCategory::Structural, size: IVec2::new(1, 1), health: 50.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.55, 0.45, 0.30),
-        companion: CompanionData::None, customizable: false, cost: 30,
+        companion: CompanionData::None, customizable: false, cost: 23,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1589,7 +1589,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Structural Brace", description: "Heavy-duty support strut. +25% HP to all adjacent hull segments and modules.",
         category: ModuleCategory::Structural, size: IVec2::new(1, 1), health: 120.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.62, 0.62, 0.64),
-        companion: CompanionData::None, customizable: false, cost: 40,
+        companion: CompanionData::None, customizable: false, cost: 30,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1598,7 +1598,7 @@ pub fn build_registry() -> ModuleRegistry {
         description: "L-shaped armor block. Wraps a hull corner without blocking the cell behind it — a neighbor can still be built into the notch.",
         category: ModuleCategory::Structural, size: IVec2::new(2, 2), health: 160.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.56, 0.54, 0.50),
-        companion: CompanionData::None, customizable: false, cost: 55,
+        companion: CompanionData::None, customizable: false, cost: 41,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1611,7 +1611,7 @@ pub fn build_registry() -> ModuleRegistry {
         description: "Command bridge with wings that extend past the hull on both sides. Real warships do this so the officer of the watch can actually see down the hull during docking — nobody misjudges a berth with this kind of sightline.",
         category: ModuleCategory::Control, size: IVec2::new(3, 2), health: 150.0,
         power_generation: 0.0, power_consumption: 15.0, color: Color::srgb(0.42, 0.32, 0.52),
-        companion: CompanionData::None, customizable: false, cost: 180,
+        companion: CompanionData::None, customizable: false, cost: 135,
         base_stats: CalculatedStats::default(), crew_station: true,
     });
 
@@ -1621,7 +1621,7 @@ pub fn build_registry() -> ModuleRegistry {
         category: ModuleCategory::Crew, size: IVec2::new(3, 2), health: 170.0,
         power_generation: 0.0, power_consumption: 30.0, color: Color::srgb(0.78, 0.80, 0.92),
         companion: CompanionData::CrewFacility { facility_type: crate::components::FacilityType::MedBay },
-        customizable: false, cost: 240,
+        customizable: false, cost: 180,
         base_stats: CalculatedStats::default(), crew_station: true,
     });
 
@@ -1631,7 +1631,7 @@ pub fn build_registry() -> ModuleRegistry {
         category: ModuleCategory::Crew, size: IVec2::new(2, 2), health: 110.0,
         power_generation: 0.0, power_consumption: 10.0, color: Color::srgb(0.38, 0.68, 0.42),
         companion: CompanionData::CrewFacility { facility_type: crate::components::FacilityType::MessHall },
-        customizable: false, cost: 140,
+        customizable: false, cost: 105,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1640,8 +1640,8 @@ pub fn build_registry() -> ModuleRegistry {
         description: "Cargo bay shaped to eat the dead space a boxy hold would waste — real cargo-ship design obsesses over exactly this. More capacity per cell than Large Cargo.",
         category: ModuleCategory::Storage, size: IVec2::new(2, 2), health: 150.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.62, 0.52, 0.24),
-        companion: CompanionData::Cargo { capacity: 220.0 },
-        customizable: false, cost: 130,
+        companion: CompanionData::Cargo { capacity: 440.0 },
+        customizable: false, cost: 98,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1651,7 +1651,7 @@ pub fn build_registry() -> ModuleRegistry {
         category: ModuleCategory::Utility, size: IVec2::new(3, 3), health: 180.0,
         power_generation: 0.0, power_consumption: 15.0, color: Color::srgb(0.42, 0.42, 0.55),
         companion: CompanionData::Docking,
-        customizable: false, cost: 220,
+        customizable: false, cost: 165,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1661,7 +1661,7 @@ pub fn build_registry() -> ModuleRegistry {
         category: ModuleCategory::Crew, size: IVec2::new(3, 3), health: 140.0,
         power_generation: 0.0, power_consumption: 20.0, color: Color::srgb(0.52, 0.52, 0.72),
         companion: CompanionData::CrewFacility { facility_type: crate::components::FacilityType::TrainingRoom },
-        customizable: false, cost: 230,
+        customizable: false, cost: 173,
         base_stats: CalculatedStats::default(), crew_station: true,
     });
 
@@ -1670,7 +1670,7 @@ pub fn build_registry() -> ModuleRegistry {
         description: "Offset plating, laid the way real armor is — staggered so no single straight seam runs through it. There's no clean line for a hit to travel along.",
         category: ModuleCategory::Structural, size: IVec2::new(3, 2), health: 480.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.54, 0.54, 0.58),
-        companion: CompanionData::None, customizable: false, cost: 300,
+        companion: CompanionData::None, customizable: false, cost: 225,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1679,7 +1679,7 @@ pub fn build_registry() -> ModuleRegistry {
         description: "Structural framing cut to a taper instead of a square face, so a hull doesn't have to read as a stack of boxes. Purely cosmetic for now — rotate it to pick which corner is cut.",
         category: ModuleCategory::Structural, size: IVec2::new(1, 1), health: 90.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.56, 0.54, 0.48),
-        companion: CompanionData::None, customizable: false, cost: 25,
+        companion: CompanionData::None, customizable: false, cost: 19,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1688,7 +1688,7 @@ pub fn build_registry() -> ModuleRegistry {
         description: "Armor cut to a taper instead of a flat face. Purely cosmetic for now — full sloped-deflection customization (pick your own angle, bank shots off it) is planned for later.",
         category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 190.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.52, 0.52, 0.56),
-        companion: CompanionData::None, customizable: false, cost: 85,
+        companion: CompanionData::None, customizable: false, cost: 64,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -1707,7 +1707,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.2, 0.5, 0.6),
         companion: CompanionData::PassiveRadar { range: 900.0 },
         customizable: false,
-        cost: 250,
+        cost: 188,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -1723,7 +1723,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.7, 0.3, 0.2),
         companion: CompanionData::Detection { range: 300.0 },
         customizable: false,
-        cost: 120,
+        cost: 90,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1739,7 +1739,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.8, 0.6, 0.2),
         companion: CompanionData::Detection { range: 150.0 },
         customizable: false,
-        cost: 35,
+        cost: 26,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1757,9 +1757,9 @@ pub fn build_registry() -> ModuleRegistry {
         power_generation: 0.0,
         power_consumption: 5.0,
         color: Color::srgb(0.5, 0.5, 0.4),
-        companion: CompanionData::Cargo { capacity: 40.0 },
+        companion: CompanionData::Cargo { capacity: 80.0 },
         customizable: false,
-        cost: 100,
+        cost: 75,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1773,9 +1773,9 @@ pub fn build_registry() -> ModuleRegistry {
         power_generation: 0.0,
         power_consumption: 15.0,
         color: Color::srgb(0.3, 0.6, 0.8),
-        companion: CompanionData::Cargo { capacity: 25.0 },
+        companion: CompanionData::Cargo { capacity: 50.0 },
         customizable: false,
-        cost: 80,
+        cost: 60,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1795,7 +1795,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.4, 0.6, 0.5),
         companion: CompanionData::Quarters { berths: 2 },
         customizable: false,
-        cost: 90,
+        cost: 68,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1811,7 +1811,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.5, 0.7),
         companion: CompanionData::CrewFacility { facility_type: crate::components::FacilityType::TrainingRoom },
         customizable: false,
-        cost: 110,
+        cost: 83,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -1827,7 +1827,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.4, 0.4, 0.4),
         companion: CompanionData::Quarters { berths: 1 },
         customizable: false,
-        cost: 60,
+        cost: 45,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1847,7 +1847,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.4, 0.7, 0.5),
         companion: CompanionData::Repair { rate: 12.0 },
         customizable: false,
-        cost: 250,
+        cost: 188,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -1863,7 +1863,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.6, 0.7),
         companion: CompanionData::DroneBay { drone_count: 3, drone_range: 200.0 },
         customizable: false,
-        cost: 300,
+        cost: 225,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -1879,7 +1879,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(1.0, 1.0, 0.6),
         companion: CompanionData::Light { range: 350.0, intensity: 1.5, attracts_creatures: true },
         customizable: false,
-        cost: 60,
+        cost: 45,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1895,7 +1895,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.2, 0.2, 0.3),
         companion: CompanionData::None,
         customizable: false,
-        cost: 150,
+        cost: 113,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1911,7 +1911,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.5, 0.3),
         companion: CompanionData::Repair { rate: 1.0 },
         customizable: false,
-        cost: 20,
+        cost: 15,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1927,7 +1927,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.7, 0.7, 0.2),
         companion: CompanionData::None,
         customizable: false,
-        cost: 25,
+        cost: 19,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1947,7 +1947,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.6, 0.6, 0.6),
         companion: CompanionData::None,
         customizable: false,
-        cost: 20,
+        cost: 15,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1963,7 +1963,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.55, 0.55, 0.6),
         companion: CompanionData::None,
         customizable: false,
-        cost: 15,
+        cost: 11,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1979,7 +1979,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.5, 0.55),
         companion: CompanionData::None,
         customizable: false,
-        cost: 30,
+        cost: 23,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -1995,7 +1995,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.4, 0.45, 0.5),
         companion: CompanionData::RadiationShielding { shielding_bonus: 100.0 },
         customizable: false,
-        cost: 200,
+        cost: 150,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2011,7 +2011,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.3, 0.4, 0.6),
         companion: CompanionData::None,
         customizable: false,
-        cost: 50,
+        cost: 38,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2027,7 +2027,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.55, 0.5),
         companion: CompanionData::None,
         customizable: false,
-        cost: 25,
+        cost: 19,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2043,7 +2043,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.7, 0.8),
         companion: CompanionData::None,
         customizable: false,
-        cost: 35,
+        cost: 26,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2059,7 +2059,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.52, 0.52, 0.58),
         companion: CompanionData::None,
         customizable: false,
-        cost: 80,
+        cost: 60,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2079,7 +2079,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.3, 0.6, 0.8),
         companion: CompanionData::CoolingPump { cooling_rate: 80.0 },
         customizable: false,
-        cost: 120,
+        cost: 90,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2095,7 +2095,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.7, 0.4, 0.3),
         companion: CompanionData::HeatVent { dissipation_rate: 40.0 },
         customizable: false,
-        cost: 60,
+        cost: 45,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2111,7 +2111,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.5, 0.2),
         companion: CompanionData::Transformer { efficiency: 0.9 },
         customizable: false,
-        cost: 100,
+        cost: 75,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2127,7 +2127,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.4, 0.6, 0.3),
         companion: CompanionData::Engine { thrust: 80.0, noise_level: 25.0 },
         customizable: false,
-        cost: 180,
+        cost: 135,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2143,7 +2143,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.3, 0.5, 0.6),
         companion: CompanionData::Thruster { thrust_power: 50.0 },
         customizable: false,
-        cost: 80,
+        cost: 60,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2159,7 +2159,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.4, 0.7, 0.9),
         companion: CompanionData::OxygenTank { capacity: 200.0 },
         customizable: false,
-        cost: 90,
+        cost: 68,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2175,7 +2175,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.7, 0.6),
         companion: CompanionData::LifeSupport { o2_gen: 0.0, co2_filter: 15.0 },
         customizable: false,
-        cost: 60,
+        cost: 45,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2191,7 +2191,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.6, 0.3, 0.5),
         companion: CompanionData::Detection { range: 400.0 },
         customizable: false,
-        cost: 200,
+        cost: 150,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2207,7 +2207,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.5, 0.3),
         companion: CompanionData::Detection { range: 300.0 },
         customizable: false,
-        cost: 200,
+        cost: 150,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2225,7 +2225,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.4, 0.3),
         companion: CompanionData::CrewFacility { facility_type: crate::components::FacilityType::EngineeringStation },
         customizable: false,
-        cost: 120,
+        cost: 90,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -2246,7 +2246,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.6, 0.6, 0.5),
         companion: CompanionData::ConveyorTube { speed: 1.0 },
         customizable: false,
-        cost: 40,
+        cost: 30,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2262,7 +2262,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.45, 0.35),
         companion: CompanionData::None,
         customizable: false,
-        cost: 30,
+        cost: 23,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2278,7 +2278,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.4, 0.3),
         companion: CompanionData::FuelProcessor { efficiency: 1.2 },
         customizable: false,
-        cost: 80,
+        cost: 60,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2295,7 +2295,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.3, 0.5, 0.7),
         companion: CompanionData::HullSeal { seal_rate: 0.15 },
         customizable: false,
-        cost: 60,
+        cost: 45,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2311,7 +2311,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.7, 0.3, 0.3),
         companion: CompanionData::None,
         customizable: false,
-        cost: 80,
+        cost: 60,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2327,7 +2327,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.8, 0.4, 0.2),
         companion: CompanionData::None,
         customizable: false,
-        cost: 50,
+        cost: 38,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2343,7 +2343,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.4, 0.6, 0.5),
         companion: CompanionData::Detection { range: 100.0 },
         customizable: false,
-        cost: 35,
+        cost: 26,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2360,7 +2360,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.4, 0.5, 0.6),
         companion: CompanionData::TargetingComputer { accuracy_bonus: 0.15 },
         customizable: false,
-        cost: 100,
+        cost: 75,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2376,7 +2376,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.3, 0.5, 0.6),
         companion: CompanionData::None,
         customizable: false,
-        cost: 90,
+        cost: 68,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2392,7 +2392,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.4, 0.4, 0.6),
         companion: CompanionData::AICombatCore { priority_bonus: 0.2 },
         customizable: false,
-        cost: 150,
+        cost: 113,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2409,7 +2409,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.8, 0.4, 0.2),
         companion: CompanionData::Reactor { output: 10.0, max_heat: 50.0, explosion_risk: false },
         customizable: false,
-        cost: 70,
+        cost: 53,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2425,7 +2425,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.6, 0.5, 0.3),
         companion: CompanionData::Salvage { range: 100.0, efficiency: 1.5 },
         customizable: false,
-        cost: 90,
+        cost: 68,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2439,9 +2439,9 @@ pub fn build_registry() -> ModuleRegistry {
         power_generation: 0.0,
         power_consumption: 10.0,
         color: Color::srgb(0.3, 0.6, 0.5),
-        companion: CompanionData::Cargo { capacity: 50.0 },
+        companion: CompanionData::Cargo { capacity: 100.0 },
         customizable: false,
-        cost: 110,
+        cost: 83,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2457,7 +2457,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.4, 0.5, 0.6),
         companion: CompanionData::ResearchLab { research_speed: 1.0 },
         customizable: false,
-        cost: 130,
+        cost: 98,
         base_stats: CalculatedStats::default(),
         crew_station: true,
     });
@@ -2474,7 +2474,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.55, 0.55, 0.55),
         companion: CompanionData::None,
         customizable: false,
-        cost: 15,
+        cost: 11,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2490,7 +2490,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.5, 0.5, 0.45),
         companion: CompanionData::None,
         customizable: false,
-        cost: 20,
+        cost: 15,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });
@@ -2506,7 +2506,7 @@ pub fn build_registry() -> ModuleRegistry {
         color: Color::srgb(0.45, 0.45, 0.4),
         companion: CompanionData::None,
         customizable: false,
-        cost: 15,
+        cost: 11,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });

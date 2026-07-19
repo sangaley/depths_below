@@ -100,7 +100,7 @@ pub(super) fn crew_weapon_system(
                     damage,
                     PROJECTILE_SPEED,
                     range,
-                    true,
+                    ProjectileOwner::Player,
                     ammo_storage.ammo_type,
                 );
             }
@@ -206,7 +206,7 @@ pub(super) fn manual_weapon_system(
                 damage,
                 PROJECTILE_SPEED * 1.2,
                 range,
-                true,
+                ProjectileOwner::Player,
                 ammo_storage.ammo_type,
             );
             notifications.write(ShowNotification {
@@ -226,7 +226,7 @@ pub(super) fn manual_weapon_system(
                 damage,
                 PROJECTILE_SPEED,
                 range,
-                true,
+                ProjectileOwner::Player,
                 ammo_storage.ammo_type,
             );
             notifications.write(ShowNotification {

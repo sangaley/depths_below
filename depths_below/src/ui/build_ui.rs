@@ -5,30 +5,34 @@ use crate::resources::*;
 use crate::components::*;
 use crate::building::{GridOccupancy, ModuleRegistry};
 use crate::events::*;
+use crate::ui::theme::ThemeColors;
 
 // ============================================================================
-// BUILD UI COLOR PALETTE — references theme where possible, build-specific additions
+// BUILD UI COLOR PALETTE — aliases into theme.rs (several of these were
+// hand-copied near-duplicates of theme constants; now the real thing, so a
+// future palette tweak in theme.rs propagates here instead of silently
+// diverging), plus a few build-specific additions with no theme equivalent.
 // ============================================================================
 
-pub const COLOR_BG_DARK: Color = Color::srgb(0.06, 0.07, 0.12);
-pub const COLOR_BG_PANEL: Color = Color::srgb(0.08, 0.10, 0.16);
-pub const COLOR_BG_PANEL_LIGHT: Color = Color::srgb(0.10, 0.13, 0.20);
-pub const COLOR_BORDER: Color = Color::srgb(0.22, 0.26, 0.35);
-pub const COLOR_BORDER_LIGHT: Color = Color::srgb(0.30, 0.35, 0.45);
-pub const COLOR_TITLE_BAR: Color = Color::srgb(0.08, 0.10, 0.16);
-pub const COLOR_BUTTON: Color = Color::srgb(0.10, 0.13, 0.22);
-pub const COLOR_BUTTON_HOVER: Color = Color::srgb(0.14, 0.17, 0.28);
-pub const COLOR_BUTTON_PRESSED: Color = Color::srgb(0.18, 0.22, 0.35);
-pub const COLOR_BUTTON_ACTIVE: Color = Color::srgb(0.30, 0.55, 1.0);
-pub const COLOR_GRID_EMPTY: Color = Color::srgb(0.06, 0.07, 0.12);
+pub const COLOR_BG_DARK: Color = ThemeColors::BG_PANEL;
+pub const COLOR_BG_PANEL: Color = ThemeColors::BG_INPUT;
+pub const COLOR_BG_PANEL_LIGHT: Color = ThemeColors::BG_ELEVATED;
+pub const COLOR_BORDER: Color = ThemeColors::BORDER_DEFAULT;
+pub const COLOR_BORDER_LIGHT: Color = ThemeColors::BORDER_BRIGHT;
+pub const COLOR_TITLE_BAR: Color = ThemeColors::BG_INPUT;
+pub const COLOR_BUTTON: Color = ThemeColors::BG_ELEVATED;
+pub const COLOR_BUTTON_HOVER: Color = ThemeColors::BG_HOVER;
+pub const COLOR_BUTTON_PRESSED: Color = ThemeColors::BG_PRESSED;
+pub const COLOR_BUTTON_ACTIVE: Color = ThemeColors::ACCENT_BLUE;
+pub const COLOR_GRID_EMPTY: Color = ThemeColors::BG_PANEL;
 pub const _COLOR_GRID_OCCUPIED: Color = Color::srgb(0.15, 0.40, 0.25);
-pub const COLOR_GRID_HOVER: Color = Color::srgb(0.14, 0.17, 0.28);
-pub const COLOR_TEXT_PRIMARY: Color = Color::srgb(0.88, 0.90, 0.95);
-pub const COLOR_TEXT_SECONDARY: Color = Color::srgb(0.60, 0.64, 0.70);
-pub const COLOR_TEXT_ACTIVE: Color = Color::srgb(0.30, 0.55, 1.0);
-pub const _COLOR_WARNING: Color = Color::srgb(0.90, 0.55, 0.20);
-pub const _COLOR_SUCCESS: Color = Color::srgb(0.30, 0.80, 0.45);
-pub const COLOR_DANGER: Color = Color::srgb(0.90, 0.25, 0.25);
+pub const COLOR_GRID_HOVER: Color = ThemeColors::BG_HOVER;
+pub const COLOR_TEXT_PRIMARY: Color = ThemeColors::TEXT_PRIMARY;
+pub const COLOR_TEXT_SECONDARY: Color = ThemeColors::TEXT_SECONDARY;
+pub const COLOR_TEXT_ACTIVE: Color = ThemeColors::ACCENT_BLUE;
+pub const _COLOR_WARNING: Color = ThemeColors::ACCENT_ORANGE;
+pub const _COLOR_SUCCESS: Color = ThemeColors::ACCENT_GREEN;
+pub const COLOR_DANGER: Color = ThemeColors::ACCENT_RED;
 pub const COLOR_COMPONENT_WEAPON: Color = Color::srgb(0.85, 0.35, 0.25);
 pub const COLOR_COMPONENT_ENGINE: Color = Color::srgb(0.35, 0.65, 0.85);
 pub const COLOR_COMPONENT_REACTOR: Color = Color::srgb(0.85, 0.75, 0.25);
@@ -307,14 +311,28 @@ pub fn update_build_ghost(
                 );
                 let center_x = (min_x as f32 + max_x as f32) / 2.0 * 66.0;
                 let center_y = (min_y as f32 + max_y as f32) / 2.0 * 66.0 - 33.0;
-                let sprite_w = 48.0 + (max_x - min_x) as f32 * 66.0;
-                let sprite_h = 48.0 + (max_y - min_y) as f32 * 66.0;
+
+                let visual_angle = rotation.to_radians()
+                    + crate::sprite_map::sprite_base_rotation(mt);
+                // Un-rotate the rotated cell bounds by the FINAL visual
+                // angle (cell rotation + texture base offset) — see
+                // spawn_module for the full story; anything else lays
+                // multi-cell ghosts 90° across their claimed cells.
+                let bounds_w = (max_x - min_x) as f32;
+                let bounds_h = (max_y - min_y) as f32;
+                let quarter = ((visual_angle / std::f32::consts::FRAC_PI_2).round() as i32)
+                    .rem_euclid(4);
+                let (cells_w, cells_h) = if quarter % 2 == 1 {
+                    (bounds_h, bounds_w)
+                } else {
+                    (bounds_w, bounds_h)
+                };
+                let sprite_w = 48.0 + cells_w * 66.0;
+                let sprite_h = 48.0 + cells_h * 66.0;
 
                 transform.translation.x = center_x;
                 transform.translation.y = center_y;
                 transform.translation.z = 0.3;
-                let visual_angle = rotation.to_radians()
-                    + crate::sprite_map::sprite_base_rotation(mt);
                 transform.rotation = Quat::from_rotation_z(visual_angle);
                 sprite.custom_size = Some(Vec2::new(sprite_w, sprite_h));
             }
@@ -951,6 +969,7 @@ pub fn update_build_panel(
     build_state: Res<BuildingState>,
     current_build_state: Res<State<BuildState>>,
     registry: Res<ModuleRegistry>,
+    currency: Res<Currency>,
     // Text queries
     mode_q: Query<Entity, With<BuildModeText>>,
     item_name_q: Query<Entity, With<BuildItemName>>,
@@ -1037,18 +1056,21 @@ pub fn update_build_panel(
         }
     }
 
-    // Stats
+    // Stats — cost is color-coded by affordability against the CURRENT
+    // credits balance, so "can I afford this" is visible here instead of
+    // only surfacing once placement is actually attempted (the world-space
+    // validation message near the ghost, building/mod.rs).
     if let Ok(entity) = stats_q.single() {
-        if let Ok((mut text, _)) = text_query.get_mut(entity) {
-            text.0 = match build_state.current_selection() {
+        if let Ok((mut text, mut text_color)) = text_query.get_mut(entity) {
+            let (line, cost) = match build_state.current_selection() {
                 BuildSelection::Hull(_) => {
                     let mat = build_state.hull_material;
-                    format!(
+                    (format!(
                         "HP: {:.0} | Size: 1x1 | Rad Shield: {:.0} | Cost: {}c",
                         100.0 * mat.health_multiplier(),
                         mat.radiation_shielding(),
                         mat.cost()
-                    )
+                    ), mat.cost())
                 }
                 BuildSelection::Module(mt) => {
                     let def = registry.get(mt);
@@ -1065,9 +1087,11 @@ pub fn update_build_panel(
                     if def.customizable {
                         s.push_str(" | Customizable (G/P)");
                     }
-                    s
+                    (s, def.cost)
                 }
             };
+            text.0 = line;
+            text_color.0 = if currency.credits < cost { ThemeColors::ACCENT_RED } else { ThemeColors::TEXT_SECONDARY };
         }
     }
 
@@ -1194,7 +1218,7 @@ pub fn update_controls_help(
     // the docked hints ("Enter: Launch") for the whole run, so nobody could
     // discover the brake or the shield toggle.
     if *game_state.get() == crate::states::GameState::Exploring {
-        text.0 = "Mouse: Aim | W/S: Thrust | A/D: Strafe | Shift: Brake | Space/Click: Fire | R: Shield | F: Dock | B: Build".to_string();
+        text.0 = "Mouse: Aim | WASD: Move | Shift: Brake | Space: Fire | Z: Radar | R: Shield | T: Look | F: Dock | B: Build | C: Crew | M: Map | N: Minimap | L: Log".to_string();
         return;
     }
 
@@ -1203,10 +1227,10 @@ pub fn update_controls_help(
             "B: Build Mode | U: Shop | J: Contracts | Enter: Launch | ESC: Pause".to_string()
         }
         BuildState::Placing => {
-            "Tab: Category | [/]: Item | R: Rotate | Click: Place | Right-Click: Remove | X: Delete Mode | B: Exit".to_string()
+            "Tab: Category | [/]: Item | R: Rotate | Click/Drag: Place | RMB: Remove | Ctrl+Z: Undo | Ctrl+Click, Ctrl+C/V: Copy/Paste | X: Delete | G: Customize | I: Costs | F2: Power | F3: Heat | Esc/B: Exit".to_string()
         }
         BuildState::Deleting => {
-            "Click: Remove | X: Place Mode | B: Exit".to_string()
+            "Click or Drag: Remove | Ctrl+Z: Undo | X: Place Mode | Esc/B: Exit".to_string()
         }
         BuildState::PlacingComponent => {
             "Click Piece → Click Grid: Place | Right-Click: Remove/Customize | Enter: Finalize | ESC: Cancel".to_string()
@@ -1324,18 +1348,24 @@ fn spawn_slider(
     )).with_children(|slider_parent| {
         // Label with value
         slider_parent.spawn((
-            (Text::new(format!("{}: {:.1}", label, current_value)), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(Color::srgb(0.8, 0.8, 0.8))),
+            (Text::new(format!("{}: {:.1}", label, current_value)), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(COLOR_TEXT_SECONDARY)),
             SliderValueText {
                 property_key: property_key.to_string(),
             },
         ));
 
-        // Slider bar background
+        // Slider bar background — same visual language as the weapon
+        // tuning window's sliders (windows/tuning.rs), just not the same
+        // widget: different field types (arbitrary customization
+        // properties here vs. WeaponTuning there), so unifying would mean
+        // merging two independently-evolved interaction systems rather than
+        // a layout change. Shared theme colors get them looking consistent
+        // without that risk.
         slider_parent.spawn((Node {
                 width: Val::Px(360.0),
                 height: Val::Px(20.0),
                 ..default()
-            }, BackgroundColor(Color::srgb(0.2, 0.2, 0.25)))).with_children(|bar_parent| {
+            }, BackgroundColor(ThemeColors::BG_INPUT))).with_children(|bar_parent| {
             // Slider fill (represents current value)
             let fill_percent = if max > min {
                 ((current_value - min) / (max - min) * 100.0).clamp(0.0, 100.0)
@@ -1347,7 +1377,7 @@ fn spawn_slider(
                         width: Val::Percent(fill_percent),
                         height: Val::Percent(100.0),
                         ..default()
-                    }, BackgroundColor(Color::srgb(0.3, 0.6, 0.9))),
+                    }, BackgroundColor(ThemeColors::ACCENT_BLUE)),
                 CustomizationSlider {
                     property_key: property_key.to_string(),
                 },
@@ -1360,7 +1390,7 @@ fn spawn_stats_preview(
     parent: &mut ChildSpawnerCommands,
     customization_state: &CustomizationState,
 ) {
-    parent.spawn((Text::new("Stats Preview:"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(0.9, 0.9, 0.9))));
+    parent.spawn((Text::new("Stats Preview:"), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(COLOR_TEXT_PRIMARY)));
 
     // Display stats based on module category
     match customization_state.module_type.category() {
@@ -1399,7 +1429,7 @@ fn spawn_stats_preview(
 
 fn spawn_stat_row(parent: &mut ChildSpawnerCommands, name: &str, value: f32) {
     parent.spawn((
-        (Text::new(format!("  {}: {:.1}", name, value)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.7, 0.9, 0.7))),
+        (Text::new(format!("  {}: {:.1}", name, value)), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(ThemeColors::STATUS_OK)),
         CustomizationStatDisplay {
             stat_name: name.to_string(),
         },
@@ -1478,6 +1508,7 @@ fn apply_customization(
         rotation: build_state.rotation,
         custom_name: Some(custom_name),
         subcomponents: Some(subcomponents),
+            extras: None,
         free: false,
     });
 }
@@ -2061,6 +2092,7 @@ pub fn handle_component_placement_keyboard(
             rotation: build_state.rotation,
             custom_name: Some(custom_name),
             subcomponents: Some(subcomponents),
+            extras: None,
             free: false,
         });
 
