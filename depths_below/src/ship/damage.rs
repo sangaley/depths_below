@@ -33,6 +33,7 @@ pub fn process_ship_damage(
     mut room_depressurize_events: MessageWriter<RoomDepressurized>,
     mut notifications: MessageWriter<ShowNotification>,
     mut commands: Commands,
+    debug_tuning: Res<crate::debug::DebugTuning>,
 ) {
     let mut rng = rand::thread_rng();
 
@@ -42,6 +43,13 @@ pub fn process_ship_damage(
     for event in damage_events.read() {
         // Skip radiation damage — it's handled directly in check_radiation_damage
         if matches!(event.source, DamageSource::Radiation) {
+            continue;
+        }
+
+        // Debug god mode: the event is consumed (read()'s iterator already
+        // advanced past it) but entirely ignored — no hull/module damage,
+        // no death-cause bookkeeping, no breach. Ship takes nothing.
+        if debug_tuning.god_mode {
             continue;
         }
 

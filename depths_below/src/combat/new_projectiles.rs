@@ -103,6 +103,7 @@ pub fn fire_weapons_system(
     input_state: Res<crate::resources::InputState>,
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
     mut commands: Commands,
+    debug_tuning: Res<crate::debug::DebugTuning>,
 ) {
     let Ok((player_ship, ship_transform, ship_physics, ship_velocity)) = ship_query.single() else { return };
     let _dt = time.delta_secs();
@@ -161,7 +162,7 @@ pub fn fire_weapons_system(
         // timer while hot — and generate_heat treats a running cooldown as
         // "recently fired", so a hot gun kept generating heat forever and
         // never came back (one burst → permanently stuck red).
-        cooldown.timer.tick(time.delta());
+        cooldown.timer.tick(time.delta().mul_f32(debug_tuning.fire_rate_mult));
         if !cooldown.timer.is_finished() { continue; }
 
         // Thermal throttle — same gate the laser uses. Overtuned guns heat
@@ -347,7 +348,7 @@ pub fn fire_weapons_system(
                         ..default()
                     }),
                 Projectile {
-                    damage: weapon.damage * ammo_damage_mult,
+                    damage: weapon.damage * ammo_damage_mult * debug_tuning.damage_mult,
                     speed: proj_speed,
                     lifetime: 4.0,
                     max_lifetime: 4.0,

@@ -90,6 +90,7 @@ pub fn ship_movement(
     mut ship_query: Query<(&mut Transform, &mut Velocity, &mut ShipPhysics, &mut ThrusterState), With<Ship>>,
     windows_query: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::MainCamera>>,
+    debug_tuning: Res<crate::debug::DebugTuning>,
 ) {
     let Ok((mut transform, mut velocity, mut physics, mut thruster_state)) = ship_query.single_mut() else {
         return;
@@ -105,7 +106,7 @@ pub fn ship_movement(
             let efficiency = effective_efficiency(module, eff);
             get_engine_thrust(calculated_stats, engine) * efficiency
         })
-        .sum();
+        .sum::<f32>() * debug_tuning.speed_mult;
 
     // --- FACING: nose follows the aim source ---
     // Controller right stick when it has aim (see InputState.gamepad_aim),
@@ -275,6 +276,7 @@ pub fn update_fuel_consumption(
     mut notifications: MessageWriter<ShowNotification>,
     mut warned_25: Local<bool>,
     mut warned_10: Local<bool>,
+    debug_tuning: Res<crate::debug::DebugTuning>,
 ) {
     let Ok(player_ship) = ship_query.single() else { return };
     let dt = time.delta_secs();
@@ -288,7 +290,7 @@ pub fn update_fuel_consumption(
         }
     }
 
-    if total_consumption > 0.0 {
+    if total_consumption > 0.0 && !debug_tuning.infinite_fuel {
         fuel_state.current_fuel = (fuel_state.current_fuel - total_consumption).max(0.0);
     }
 
