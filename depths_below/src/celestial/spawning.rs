@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use rand::{Rng, SeedableRng};
+use rand::Rng;
 use super::components::*;
 use super::resources::*;
 use super::poi::{SpacePoi, SpacePoiType, MineableResource, ResourceNodeType};
@@ -29,11 +29,9 @@ pub fn spawn_star_system(
     asset_server: &AssetServer,
     center: Vec2,
     system_id: u32,
-    seed: u64,
+    rng: &mut impl Rng,
     textures: &CelestialTextures,
 ) -> StarSystemInfo {
-    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
-
     // Pick star class based on seed
     let star_class = match rng.gen_range(0..10) {
         0..=3 => StarSizeClass::Dwarf,
@@ -108,7 +106,7 @@ pub fn spawn_star_system(
 
         let planet_entity = commands.spawn((
             (Sprite {
-                    image: asset_server.load(planet_sprite_path(planet_type, &mut rng)),
+                    image: asset_server.load(planet_sprite_path(planet_type, rng)),
                     custom_size: Some(Vec2::splat(planet_radius * 2.0)),
                     ..default()
                 }, Transform::from_xyz(initial_x, initial_y, -0.9)),
@@ -179,9 +177,14 @@ pub fn spawn_asteroid_field(
     count: u32,
     spread: f32,
     system_id: u32,
+    rng: &mut impl Rng,
+    // 1.0 = untouched, scales down toward 0.0 as the system's ambient
+    // depletion (StarSystemDef.resource_fraction_remaining, see
+    // celestial::galaxy::catch_up_system) progresses — applied post-roll so
+    // it doesn't disturb the deterministic RNG sequence (same seed still
+    // rolls the same asteroid count/size/type/position every time).
+    depletion_mult: f32,
 ) {
-    let mut rng = rand::thread_rng();
-
     for i in 0..count {
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
         let dist = rng.gen_range(0.0..spread);
@@ -231,7 +234,7 @@ pub fn spawn_asteroid_field(
             },
             MineableResource {
                 // Bigger rock = more to mine (size ranges 200-800).
-                resource_remaining: size * rng.gen_range(0.5..1.2),
+                resource_remaining: size * rng.gen_range(0.5..1.2) * depletion_mult,
                 resource_type,
                 extraction_rate: 5.0,
             },

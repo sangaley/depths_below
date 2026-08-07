@@ -174,11 +174,11 @@ fn destroy_ship_reward(star: u8, ship_type: AiShipType, distance: f32, rng: &mut
 /// Tries each candidate faction for this star tier (in random order) until
 /// one still has an untagged living ship to mark as the bounty target.
 /// Returns None if every candidate faction is fully claimed/dead right now.
-fn tag_destroy_ship_target(star: u8, sim: &mut WorldSimulation, rng: &mut impl Rng) -> Option<(AiShipType, u32, f32)> {
+fn tag_destroy_ship_target(star: u8, sim: &mut WorldSimulation, active_systems: &[u32], rng: &mut impl Rng) -> Option<(AiShipType, u32, f32)> {
     let mut factions: Vec<AiShipType> = ship_factions_for_star(star).to_vec();
     factions.shuffle(rng);
     for faction in factions {
-        if let Some((bounty_id, distance)) = sim.tag_bounty_target(faction, rng) {
+        if let Some((bounty_id, distance)) = sim.tag_bounty_target(faction, active_systems, rng) {
             return Some((faction, bounty_id, distance));
         }
     }
@@ -213,6 +213,7 @@ fn generate_single_contract(
     contract_type: ContractType,
     id: u32,
     sim: &mut WorldSimulation,
+    active_systems: &[u32],
     rng: &mut impl Rng,
 ) -> Option<Contract> {
     let zone = zone_for_star(star);
@@ -275,7 +276,7 @@ fn generate_single_contract(
             )
         }
         ContractType::DestroyShip => {
-            let Some((ship_type, target_id, distance)) = tag_destroy_ship_target(star, sim, rng) else {
+            let Some((ship_type, target_id, distance)) = tag_destroy_ship_target(star, sim, active_systems, rng) else {
                 return None;
             };
             reward = destroy_ship_reward(star, ship_type, distance, rng);
@@ -320,6 +321,7 @@ pub fn generate_station_board(
     rep: &FactionReputation,
     next_id: &mut u32,
     sim: &mut WorldSimulation,
+    active_systems: &[u32],
 ) -> Vec<Contract> {
     let mut rng = rand::thread_rng();
     let mut contracts = Vec::new();
@@ -332,7 +334,7 @@ pub fn generate_station_board(
             let star = rng.gen_range(1..=max_star);
             let weights = weighted_contract_types(faction);
             let contract_type = pick_weighted(&weights, &mut rng);
-            if let Some(contract) = generate_single_contract(*faction, star, contract_type, *next_id, sim, &mut rng) {
+            if let Some(contract) = generate_single_contract(*faction, star, contract_type, *next_id, sim, active_systems, &mut rng) {
                 *next_id += 1;
                 contracts.push(contract);
             }
@@ -351,10 +353,11 @@ pub fn ensure_station_board(
     state: &mut ContractState,
     rep: &FactionReputation,
     sim: &mut WorldSimulation,
+    active_systems: &[u32],
 ) {
     if !state.board_mut(station).is_empty() {
         return;
     }
-    let contracts = generate_station_board(rep, &mut state.next_id, sim);
+    let contracts = generate_station_board(rep, &mut state.next_id, sim, active_systems);
     *state.board_mut(station) = contracts;
 }

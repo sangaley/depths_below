@@ -50,14 +50,15 @@ pub struct SupernovaShockwave {
     pub radius: f32,
 }
 
-/// Warp jump initiated to another star system
+/// Warp jump initiated — either a known system or a blind point in space
 #[derive(Message)]
 pub struct WarpJumpStarted {
-    pub target_system: u32,
+    pub target: super::resources::GalaxyWarpTarget,
 }
 
-/// Warp jump completed — arrived at new system
+/// Warp jump completed. system_id is None if the jump landed in empty space
+/// (a blind point with no system close enough to snap to).
 #[derive(Message)]
 pub struct WarpJumpCompleted {
-    pub system_id: u32,
+    pub system_id: Option<u32>,
 }

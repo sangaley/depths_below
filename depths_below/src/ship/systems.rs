@@ -95,7 +95,7 @@ pub fn update_inventory_capacity(
     cargo_query: Query<(&CargoHold, &Module), Without<crate::ai_ship::components::OwnedByAiShip>>,
     mut inventory: ResMut<Inventory>,
 ) {
-    let base_capacity = 50.0f32;
+    let base_capacity = 100.0f32;
     let cargo_bonus: f32 = cargo_query
         .iter()
         .filter(|(_, module)| module.is_active)

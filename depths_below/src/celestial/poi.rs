@@ -53,9 +53,8 @@ pub fn spawn_system_pois(
     system_center: Vec2,
     system_id: u32,
     planet_positions: &[Vec2],
+    rng: &mut impl Rng,
 ) {
-    let mut rng = rand::thread_rng();
-
     // Derelict ships (1-3 per system)
     let derelict_count = rng.gen_range(1..=3);
     for i in 0..derelict_count {

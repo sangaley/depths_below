@@ -159,6 +159,10 @@ pub struct AiShipWreck {
 /// A simulated (off-screen) AI ship tracked by position only
 #[derive(Clone, Debug)]
 pub struct SimulatedShip {
+    /// Which star system this ship belongs to — gates whether
+    /// tick_world_simulation actually ticks it (Hot/Warm systems only, see
+    /// SystemStreamingManager) or leaves it frozen (Cold). 0 = Haven.
+    pub system_id: u32,
     pub faction: AiShipType,
     pub position: Vec2,
     pub velocity: Vec2,
@@ -233,16 +237,22 @@ impl WorldSimulation {
     /// respawns. Falls back to spawned ships if that's all a faction has
     /// left (better a rare edge case than no bounty at all for a
     /// small-population faction).
-    pub fn tag_bounty_target(&mut self, faction: AiShipType, rng: &mut impl rand::Rng) -> Option<(u32, f32)> {
+    ///
+    /// `active_systems` restricts candidates to ships in the Hot/Warm
+    /// systems (SystemStreamingManager) — since ships now belong to
+    /// different star systems, a contract tagging a ship in some Cold
+    /// system the player has never been near would be an unreachable
+    /// bounty with no way to even see it on the current map.
+    pub fn tag_bounty_target(&mut self, faction: AiShipType, active_systems: &[u32], rng: &mut impl rand::Rng) -> Option<(u32, f32)> {
         let unspawned: Vec<usize> = self.ships.iter().enumerate()
-            .filter(|(_, s)| s.faction == faction && s.behavior != SimBehavior::Dead && s.bounty_id.is_none() && !s.spawned)
+            .filter(|(_, s)| s.faction == faction && s.behavior != SimBehavior::Dead && s.bounty_id.is_none() && !s.spawned && active_systems.contains(&s.system_id))
             .map(|(i, _)| i)
             .collect();
         let candidates = if !unspawned.is_empty() {
             unspawned
         } else {
             self.ships.iter().enumerate()
-                .filter(|(_, s)| s.faction == faction && s.behavior != SimBehavior::Dead && s.bounty_id.is_none())
+                .filter(|(_, s)| s.faction == faction && s.behavior != SimBehavior::Dead && s.bounty_id.is_none() && active_systems.contains(&s.system_id))
                 .map(|(i, _)| i)
                 .collect()
         };
@@ -391,6 +401,30 @@ pub fn faction_power(faction: AiShipType) -> f32 {
     }
 }
 
+/// Per-faction color for the galaxy map — a visited system's pip is colored
+/// by whose territory it is, not by danger_tier (that's directly derivable
+/// from the faction anyway once you know it, and a real faction identity is
+/// more useful than a 4-bucket threat color once you're familiar with the
+/// roster). Deliberately a different, brighter palette than
+/// ai_ship::spawner::ship_tint — that one's tuned for a ship sprite lit at
+/// combat distance, several of those hues (Blackwater, PressureKing) are
+/// near-black and would be invisible as a small flat map pip.
+pub fn faction_map_color(faction: AiShipType) -> bevy::prelude::Color {
+    use bevy::prelude::Color;
+    match faction {
+        AiShipType::VoidTitan => Color::srgb(1.0, 0.85, 0.2),      // bright gold
+        AiShipType::Dreadnought => Color::srgb(0.95, 0.2, 0.2),    // crimson
+        AiShipType::Leviathan => Color::srgb(0.25, 0.85, 0.75),    // teal
+        AiShipType::AbyssalCult => Color::srgb(0.75, 0.35, 0.95),  // purple
+        AiShipType::Drowned => Color::srgb(0.6, 0.8, 0.65),        // pale gray-green
+        AiShipType::PressureKing => Color::srgb(0.55, 0.35, 0.9),  // violet
+        AiShipType::GlassEye => Color::srgb(0.9, 0.92, 0.95),      // near-white
+        AiShipType::IronTide => Color::srgb(0.65, 0.7, 0.8),       // steel blue-gray
+        AiShipType::Blackwater => Color::srgb(0.4, 0.45, 0.65),    // slate blue
+        AiShipType::RustSwarm => Color::srgb(0.95, 0.55, 0.2),     // rusty orange
+    }
+}
+
 /// Fraction of a faction's crew-eligible stations (Reactor/Engine/Weapon/
 /// etc — anything the module registry marks crew_station:true) that
 /// actually get a warm body. The AI-side equivalent of the player's own
@@ -414,6 +448,25 @@ pub fn crew_fill_fraction(faction: AiShipType) -> f32 {
         AiShipType::GlassEye => 0.7,       // silent skeleton crew (no weapons anyway)
         AiShipType::RustSwarm => 0.6,      // scrappy, individually weak — half their guns dark
         AiShipType::Drowned => 0.55,       // ghost ship, half-crewed by nature
+    }
+}
+
+/// Small AI-only derate on reactor power generation for the factions
+/// already flagged weakest by crew_fill_fraction (RustSwarm, Drowned,
+/// GlassEye). Applied in ai_ship::power's per-ship BFS, NOT the shared
+/// building::registry ModuleDef.power_generation the player's own ships
+/// also read from — so this can't touch player or other-faction balance.
+/// Deliberately mild: at full health every faction still runs a healthy
+/// positive balance (this isn't meant to silence guns on its own), it just
+/// thins the margin so reactor damage — which already reduces generation
+/// via efficiency — tips these factions into hold-fire sooner than a
+/// faction with a fat multi-x buffer.
+pub fn power_output_multiplier(faction: AiShipType) -> f32 {
+    match faction {
+        AiShipType::RustSwarm => 0.85,
+        AiShipType::Drowned => 0.8,
+        AiShipType::GlassEye => 0.85,
+        _ => 1.0,
     }
 }
 

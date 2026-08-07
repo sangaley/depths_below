@@ -24,6 +24,8 @@ const DESPAWN_DISTANCE: f32 = 14_000.0;
 /// Initialize the world simulation with all factions in their territories
 pub fn init_world_simulation(
     mut sim: ResMut<WorldSimulation>,
+    galaxy_map: Res<crate::celestial::resources::GalaxyMap>,
+    streaming: Res<crate::celestial::resources::SystemStreamingManager>,
 ) {
     if sim.initialized {
         return;
@@ -58,6 +60,7 @@ pub fn init_world_simulation(
                 _ => AiShipType::Drowned,
             };
             sim.ships.push(SimulatedShip {
+                system_id: 0,
                 faction,
                 position: Vec2::new(500.0, 0.0),
                 velocity: Vec2::ZERO,
@@ -84,6 +87,7 @@ pub fn init_world_simulation(
                 let angle = (i as f32 / count as f32) * std::f32::consts::TAU;
                 let pos = Vec2::new(angle.cos(), angle.sin()) * 400.0;
                 sim.ships.push(SimulatedShip {
+                    system_id: 0,
                     faction: factions[i % factions.len()],
                     position: pos,
                     velocity: Vec2::ZERO,
@@ -101,112 +105,94 @@ pub fn init_world_simulation(
         return;
     }
 
-    let mut rng = rand::thread_rng();
-
-    for territory in faction_territories() {
-        // faction_territories() gives fixed centers — same every single game,
-        // so e.g. Rust Swarm (closest faction) was always waiting in the
-        // exact same spot/direction from spawn, run after run. Re-roll each
-        // territory's direction (and jitter its distance ±20%) once per game
-        // instead of using that fixed center directly — distance from origin
-        // stays in the same ballpark, so the existing near-spawn=easier,
-        // far-out=harder progression (see distance_difficulty in spawner.rs)
-        // is preserved; only *where* that distance band points changes.
-        let base_dist = territory.center.length();
-        let rolled_angle = rng.gen_range(0.0..std::f32::consts::TAU);
-        let rolled_dist = base_dist * rng.gen_range(0.85..1.15);
-        let center = Vec2::new(rolled_angle.cos(), rolled_angle.sin()) * rolled_dist;
-
-        for _ in 0..territory.ship_count {
-            let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-            let dist = rng.gen_range(0.0..territory.radius * 0.8);
-            let pos = center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
-
-            let patrol_angle = rng.gen_range(0.0..std::f32::consts::TAU);
-            let vel = Vec2::new(patrol_angle.cos(), patrol_angle.sin()) * 30.0;
-
-            sim.ships.push(SimulatedShip {
-                faction: territory.faction,
-                position: pos,
-                velocity: vel,
-                health: 1.0,
-                fuel: 1.0,
-                behavior: SimBehavior::Patrolling,
-                home_zone: center,
-                patrol_radius: territory.radius,
-                spawned: false,
-                bounty_id: None,
-            });
-        }
+    // System-scoped faction population: each star system now carries its
+    // own fixed faction + danger tier (StarSystemDef.faction/danger_tier,
+    // assigned once at galaxy generation — celestial/galaxy.rs) instead of
+    // the old model of all 10 territories jittered around a single shared
+    // origin every game. Haven (system 0) has faction: None — always safe,
+    // nothing spawns for it. Its initial Warm neighbors (set by
+    // generate_galaxy_on_enter) get populated too, so they're already
+    // "alive" the moment the game starts, not just on first visit.
+    //
+    // This also removes the old "ambient" (3 ships) and "roaming wanderer"
+    // (24 ships) filler groups that used to surround the origin regardless
+    // of faction — they existed to make the immediate spawn area feel
+    // populated, which directly conflicted with Haven now being a
+    // deliberately safe hub. The systems reachable by warp are where the
+    // populated universe lives now.
+    ensure_system_population(&mut sim, &galaxy_map, 0);
+    for warm_id in &streaming.warm_systems {
+        ensure_system_population(&mut sim, &galaxy_map, *warm_id);
     }
 
-    // Distant patrols around the starting area — meant to be beyond
-    // RENDER_DISTANCE (10,000) so the immediate spawn area stays calm and
-    // they only materialize as the player flies out. Factions chosen to be
-    // non-committal: Drowned wander erratically, GlassEye never attacks.
-    // Was 3 fixed points ~3,000 units out — despite the comment above, that's
-    // well *inside* RENDER_DISTANCE, so all 3 were visible immediately at
-    // spawn, in the exact same spots, every single game (the literal "3
-    // enemies right out of spawn" complaint). Now randomized per game and
-    // actually pushed past render distance to match the stated intent.
-    let ambient_factions = [AiShipType::Drowned, AiShipType::GlassEye, AiShipType::Drowned];
-    for faction in ambient_factions {
+    info!("World simulation initialized with {} AI vessels", sim.ships.len());
+}
+
+/// Spawns a system's faction population the FIRST time it's ever loaded
+/// (Hot or Warm) — persistence-safe: if any SimulatedShip already carries
+/// this system_id (from an earlier visit, however depleted by combat since
+/// then), does nothing and leaves it exactly as it is. Called from
+/// celestial::warp::execute_warp_jump whenever a system newly becomes Hot
+/// or joins the Warm neighbor set.
+pub fn ensure_system_population(sim: &mut WorldSimulation, galaxy_map: &crate::celestial::resources::GalaxyMap, system_id: u32) {
+    if sim.ships.iter().any(|s| s.system_id == system_id) {
+        return;
+    }
+    if let Some(system) = galaxy_map.systems.iter().find(|s| s.id == system_id) {
+        spawn_system_faction_population(sim, system);
+    }
+}
+
+/// Spawns one star system's faction population — ship_count/radius pulled
+/// from that faction's existing territory template (faction_territories()),
+/// centered on the system's faction cluster point (offset clear of the
+/// star itself — see celestial::galaxy::faction_cluster_center) instead of
+/// a jittered-origin position. No-ops for a safe system (faction: None,
+/// e.g. Haven).
+fn spawn_system_faction_population(sim: &mut WorldSimulation, system: &crate::celestial::resources::StarSystemDef) {
+    let Some(faction) = system.faction else { return };
+    let Some(template) = faction_territories().into_iter().find(|t| t.faction == faction) else { return };
+    let mut rng = rand::thread_rng();
+    let cluster_center = crate::celestial::galaxy::faction_cluster_center(system);
+
+    for _ in 0..template.ship_count {
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-        let dist = rng.gen_range(11_000.0..15_000.0);
-        let pos = Vec2::new(angle.cos() * dist, angle.sin() * dist);
-        let heading = rng.gen_range(0.0..std::f32::consts::TAU);
-        let vel = Vec2::new(heading.cos(), heading.sin()) * rng.gen_range(10.0..16.0);
+        let dist = rng.gen_range(0.0..template.radius * 0.8);
+        let pos = cluster_center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
+
+        let patrol_angle = rng.gen_range(0.0..std::f32::consts::TAU);
+        let vel = Vec2::new(patrol_angle.cos(), patrol_angle.sin()) * 30.0;
+
         sim.ships.push(SimulatedShip {
+            system_id: system.id,
             faction,
             position: pos,
             velocity: vel,
             health: 1.0,
             fuel: 1.0,
             behavior: SimBehavior::Patrolling,
-            home_zone: pos,
-            patrol_radius: 2000.0,
+            home_zone: cluster_center,
+            patrol_radius: template.radius,
             spawned: false,
             bounty_id: None,
         });
     }
-
-    // Roaming wanderers scattered across the space between and beyond the
-    // fixed faction territories (now 25k-345k out, see faction_territories)
-    // and out toward the first star system (~492k out, see celestial/mod.rs)
-    // so the whole map reads as populated instead of "a cluster near spawn,
-    // then empty space, then a star." 24 wanderers spread 20k-420k out.
-    for i in 0..24 {
-        let angle = (i as f32 / 24.0) * std::f32::consts::TAU + rng.gen_range(-0.2..0.2);
-        let dist = rng.gen_range(20_000.0..420_000.0);
-        let pos = Vec2::new(angle.cos() * dist, angle.sin() * dist);
-        let heading = rng.gen_range(0.0..std::f32::consts::TAU);
-        let faction = match i % 4 {
-            0 => AiShipType::Drowned,
-            1 => AiShipType::GlassEye,
-            2 => AiShipType::RustSwarm,
-            _ => AiShipType::Blackwater,
-        };
-        sim.ships.push(SimulatedShip {
-            faction,
-            position: pos,
-            velocity: Vec2::new(heading.cos(), heading.sin()) * rng.gen_range(20.0..45.0),
-            health: 1.0,
-            fuel: 1.0,
-            behavior: SimBehavior::Patrolling,
-            home_zone: pos,
-            patrol_radius: 18_000.0,
-            spawned: false,
-            bounty_id: None,
-        });
-    }
-
-    info!("World simulation initialized with {} AI vessels across 8 factions", sim.ships.len());
 }
 
-/// Tick the off-screen simulation: move ships, resolve encounters
+/// Tick the off-screen simulation: move ships, resolve encounters. Only
+/// ships in the Hot (loaded) or Warm (nearest-neighbor) systems actually
+/// tick — Cold systems' ships stay exactly where they are, frozen, until
+/// something brings that system back into range. This is deliberately the
+/// cheapest possible "state preserved while you're away" mechanism (nothing
+/// to snapshot or restore) and fixes a real pre-existing perf issue: the
+/// Phase 2 pairwise combat check below is O(n^2) over however many ships
+/// are active — bounding that to Hot+Warm keeps it small regardless of how
+/// large the galaxy grows, instead of silently scaling with total ship
+/// count across every system that's ever existed.
 pub fn tick_world_simulation(
     time: Res<Time>,
     mut sim: ResMut<WorldSimulation>,
+    streaming: Res<crate::celestial::resources::SystemStreamingManager>,
 ) {
     sim.tick_timer.tick(time.delta());
     if !sim.tick_timer.just_finished() {
@@ -216,15 +202,19 @@ pub fn tick_world_simulation(
     let dt = sim.tick_timer.duration().as_secs_f32();
     let mut rng = rand::thread_rng();
 
+    let is_active_system = |system_id: u32| {
+        streaming.loaded_system == Some(system_id) || streaming.warm_systems.contains(&system_id)
+    };
+
     // Collect positions for interaction checks
     let positions: Vec<(usize, AiShipType, Vec2, f32)> = sim.ships.iter().enumerate()
-        .filter(|(_, s)| !s.spawned && s.behavior != SimBehavior::Dead)
+        .filter(|(_, s)| !s.spawned && s.behavior != SimBehavior::Dead && is_active_system(s.system_id))
         .map(|(i, s)| (i, s.faction, s.position, s.health))
         .collect();
 
     // Phase 1: Move off-screen ships
     for ship in sim.ships.iter_mut() {
-        if ship.spawned || ship.behavior == SimBehavior::Dead {
+        if ship.spawned || ship.behavior == SimBehavior::Dead || !is_active_system(ship.system_id) {
             continue;
         }
 
@@ -335,6 +325,7 @@ pub fn spawn_raider_waves(
     mut notifications: MessageWriter<crate::events::ShowNotification>,
     mut next_wave_at: Local<f32>,
     mut elapsed: Local<f32>,
+    streaming: Res<crate::celestial::resources::SystemStreamingManager>,
 ) {
     let Ok(player_transform) = ship_query.single() else { return };
     *elapsed += time.delta_secs();
@@ -370,6 +361,7 @@ pub fn spawn_raider_waves(
         let pos = player_pos + Vec2::new(angle.cos(), angle.sin()) * dist;
         let toward_player = (player_pos - pos).normalize_or_zero() * 60.0;
         sim.ships.push(SimulatedShip {
+            system_id: streaming.loaded_system.unwrap_or(0),
             faction,
             position: pos,
             velocity: toward_player,

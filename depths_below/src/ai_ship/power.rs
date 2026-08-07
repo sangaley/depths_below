@@ -4,7 +4,7 @@ use std::collections::{HashSet, VecDeque};
 use crate::combat::shields::ShipShield;
 use crate::components::*;
 
-use super::components::{AiShip, OwnedByAiShip};
+use super::components::{AiShip, AiShipType, OwnedByAiShip};
 
 /// Per-ship power balance for AI ships — the AI-side mirror of the player's
 /// PowerGraph/PowerState (ship/power.rs), computed independently per AI
@@ -29,11 +29,11 @@ pub struct AiPowerState {
 /// every ship's graph, exactly why the player's version is scoped too.
 pub fn update_ai_power(
     mut commands: Commands,
-    ai_ships: Query<(Entity, Option<&ShipShield>), With<AiShip>>,
+    ai_ships: Query<(Entity, &AiShipType, Option<&ShipShield>), With<AiShip>>,
     module_query: Query<(&Module, &OwnedByAiShip, Option<&ModuleEfficiency>)>,
     hull_query: Query<(&HullSegment, &OwnedByAiShip)>,
 ) {
-    for (ai_root, shield) in ai_ships.iter() {
+    for (ai_root, ship_type, shield) in ai_ships.iter() {
         let mut conductive_tiles: HashSet<IVec2> = HashSet::new();
         let mut power_sources: Vec<IVec2> = Vec::new();
 
@@ -92,7 +92,7 @@ pub fn update_ai_power(
             }
             let efficiency = effective_efficiency(module, eff);
             if module.power_generation > 0.0 {
-                total_generation += module.power_generation * efficiency;
+                total_generation += module.power_generation * efficiency * super::components::power_output_multiplier(*ship_type);
                 continue;
             }
             if powered_tiles.contains(&module.grid_position) {

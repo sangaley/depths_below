@@ -24,7 +24,10 @@ impl Plugin for AiShipPlugin {
         app
             .init_resource::<WorldSimulation>()
             .init_resource::<scavenger::ScavengerWaves>()
-            .add_systems(OnEnter(GameState::Exploring), simulation::init_world_simulation)
+            // Ordered after the galaxy layout exists (CelestialPlugin) —
+            // init_world_simulation reads GalaxyMap/SystemStreamingManager
+            // to know which system(s) to populate.
+            .add_systems(OnEnter(GameState::Exploring), simulation::init_world_simulation.after(crate::celestial::galaxy::generate_galaxy_on_enter))
             .add_systems(
                 Update,
                 (

@@ -8,6 +8,7 @@ pub mod black_holes;
 pub mod spawning;
 pub mod warp;
 pub mod poi;
+pub mod galaxy;
 
 use bevy::prelude::*;
 use crate::states::GameState;
@@ -30,6 +31,9 @@ impl Plugin for CelestialPlugin {
         app
             .init_resource::<resources::GalaxyState>()
             .init_resource::<resources::CelestialConfig>()
+            .init_resource::<resources::GalaxyMap>()
+            .init_resource::<resources::SystemStreamingManager>()
+            .init_resource::<resources::PendingGalaxyWarpTarget>()
             // Events
             .add_message::<events::RadiationFlare>()
             .add_message::<events::StarDestroyed>()
@@ -85,60 +89,42 @@ impl Plugin for CelestialPlugin {
                 warp::on_warp_complete.after(warp::execute_warp_jump),
                 poi::mining_system,
                 poi::loot_derelict_system,
+                galaxy::passive_proximity_discovery_system,
             ).run_if(in_state(GameState::Exploring)))
-            // Spawn initial star system on entering Exploring
-            .add_systems(OnEnter(GameState::Exploring), spawn_initial_system)
+            // Spawn initial star system on entering Exploring — chained so
+            // the galaxy layout always exists before Haven tries to read
+            // its assigned StarSystemDef from it.
+            .add_systems(OnEnter(GameState::Exploring), (galaxy::generate_galaxy_on_enter, spawn_initial_system).chain())
         ;
     }
 }
 
-/// Spawn the first star system when the player starts exploring
+/// Spawn the first star system (Haven) when the player starts exploring.
+/// Delegates the actual generation to galaxy::spawn_system_contents so
+/// Haven spawns through the exact same deterministic path every other
+/// system does — this used to have its own inline copy of the seeded-RNG
+/// spawn sequence, which only invited the two from drifting apart.
 fn spawn_initial_system(
     mut commands: Commands,
     mut galaxy: ResMut<resources::GalaxyState>,
+    mut galaxy_map: ResMut<resources::GalaxyMap>,
     textures: Res<crate::vfx::procedural_textures::CelestialTextures>,
     asset_server: Res<AssetServer>,
+    time: Res<Time>,
 ) {
     // Only spawn if no systems exist yet
     if !galaxy.systems.is_empty() {
         return;
     }
+    if galaxy_map.systems.is_empty() {
+        return; // galaxy::generate_galaxy_on_enter hasn't run yet this frame
+    }
 
-    // Far below-right of the station start area. Star radii run 40k-150k and
-    // their color/gravity influence extends to 4x that — the old center of
-    // (0, -5000) put the starting station INSIDE the star's body, washing
-    // the whole starting area in the star's warm tint (and rendering the
-    // station on top of the star sprite). Distance is progression: the sun
-    // is a destination, not a spawn point.
-    let center = Vec2::new(200_000.0, -450_000.0);
-    let system_id = galaxy.next_system_id;
-    galaxy.next_system_id += 1;
+    galaxy::catch_up_system(&mut galaxy_map.systems[0], time.elapsed_secs_f64());
+    let def = galaxy_map.systems[0].clone();
+    let system_info = galaxy::spawn_system_contents(&mut commands, &asset_server, &textures, &def);
 
-    let system_info = spawning::spawn_star_system(
-        &mut commands,
-        &asset_server,
-        center,
-        system_id,
-        42, // Seed for first system
-        &textures,
-    );
-
-    // Also spawn some asteroids
-    spawning::spawn_asteroid_field(
-        &mut commands,
-        &asset_server,
-        center + Vec2::new(50_000.0, 0.0),
-        20,
-        30_000.0,
-        system_id,
-    );
-
-    // Spawn POIs
-    let planet_positions: Vec<Vec2> = system_info.planet_entities.iter()
-        .map(|_| center + Vec2::new(rand::random::<f32>() * 60_000.0 - 30_000.0, rand::random::<f32>() * 60_000.0 - 30_000.0))
-        .collect();
-    poi::spawn_system_pois(&mut commands, center, system_id, &planet_positions);
-
+    galaxy.next_system_id = def.id + 1;
     galaxy.systems.push(system_info);
     galaxy.total_bodies = 1;
 }

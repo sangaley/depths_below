@@ -1,4 +1,98 @@
 use bevy::prelude::*;
+use crate::ai_ship::components::AiShipType;
+
+/// How much is known about a star system on the galaxy map. Unknown systems
+/// are invisible; Located ones show up as a bare pip (position known, not
+/// much else) once revealed by scanning or a purchased star chart; Visited
+/// is everything once you've actually warped there.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SystemDiscovery {
+    Unknown,
+    Located,
+    Visited,
+}
+
+/// One star system's entry in the persistent galaxy layout — generated once
+/// per session, not regenerated per-warp like today's disposable systems.
+#[derive(Clone, Debug)]
+pub struct StarSystemDef {
+    pub id: u32,
+    pub name: String,
+    /// Abstract position used only for the galaxy map layout and the
+    /// distance-based warp cost/charge-time formula — NOT a real Bevy
+    /// Transform coordinate (see the plan's coordinate-model writeup for why:
+    /// only one system is ever physically spawned at a time, so there's no
+    /// shared physics frame for this to be a "real" position in).
+    pub galaxy_pos: Vec2,
+    /// Where this system's star/planets/asteroids actually spawn when it's
+    /// loaded, at today's existing spawn-scale (hundreds of thousands of
+    /// units) — unrelated to `galaxy_pos`.
+    pub local_center: Vec2,
+    pub seed: u64,
+    /// None = safe (Haven's system only, for now).
+    pub faction: Option<AiShipType>,
+    /// == faction_power(faction), or 0.0 if safe. Cached here rather than
+    /// recomputed from `faction` every time so danger_tier is one field to
+    /// read wherever it's needed (spawner.rs, map UI color-coding).
+    pub danger_tier: f32,
+    pub discovery: SystemDiscovery,
+    /// Game time (Time::elapsed_secs_f64) this system's mutable state was
+    /// last brought up to date — the anchor for the Cold-tier catch-up
+    /// math (Phase 4): `elapsed = now - last_updated`.
+    pub last_updated: f64,
+    /// 1.0 = untouched, 0.0 = fully depleted. No floor — real depletion,
+    /// driven by real Warm-tier simulation or the Cold-tier lazy formula.
+    pub resource_fraction_remaining: f32,
+}
+
+/// The persistent galaxy layout — generated once per session. Replaces the
+/// old model of despawning/regenerating a single disposable system on every
+/// warp; see celestial::galaxy for generation and celestial::warp for how a
+/// warp now targets one of these by id instead of rolling a random one.
+#[derive(Resource, Default)]
+pub struct GalaxyMap {
+    pub systems: Vec<StarSystemDef>,
+    pub galaxy_seed: u64,
+}
+
+/// Tracks the Hot/Warm tiers of the galaxy's tiered simulation (see the
+/// plan's coordinate-model writeup): `loaded_system` is the one system with
+/// real physical entities right now (Haven at game start); `warm_systems`
+/// are its nearest neighbors on the galaxy map, which keep ticking through
+/// `ai_ship::simulation::tick_world_simulation`'s abstract off-screen
+/// combat/movement even with nothing physically spawned. Everything else is
+/// Cold — never ticked, brought up to date via one-shot catch-up math
+/// (celestial::galaxy::catch_up_system) the moment it matters again.
+#[derive(Resource, Default)]
+pub struct SystemStreamingManager {
+    pub loaded_system: Option<u32>,
+    pub warm_systems: Vec<u32>,
+    /// Galaxy-space position of wherever the player currently is — mirrors
+    /// `loaded_system`'s galaxy_pos when Hot is a real system, but also
+    /// valid when loaded_system is None (a blind warp landed in empty
+    /// space). Used for passive proximity discovery, which doesn't care
+    /// whether you're standing in a system or open void.
+    pub current_galaxy_pos: Vec2,
+}
+
+/// Where an interstellar warp is headed — either a known system (clicked
+/// directly, or close enough on the map to snap to it) or a raw point in
+/// galaxy space with nothing confirmed there yet (a blind jump: the galaxy
+/// map is clickable anywhere, not just on discovered pips, matching "one
+/// continuous space" rather than a discovered-systems-only picker).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum GalaxyWarpTarget {
+    System(u32),
+    BlindPoint(Vec2),
+}
+
+/// What the player has chosen to warp to via the galaxy map — what
+/// celestial::warp::warp_input_system now charges toward, replacing the old
+/// GalaxyState.next_system_id auto-increment. Distinct from
+/// ui::PendingWarpTarget (a Vec2, the LOCAL same-system G-key dash target)
+/// — different scales, must not be conflated.
+#[derive(Resource, Default)]
+pub struct PendingGalaxyWarpTarget(pub Option<GalaxyWarpTarget>);
 
 /// Lightweight metadata per star system (bookkeeping, not ECS)
 #[derive(Clone, Debug)]

@@ -187,26 +187,41 @@ pub fn fire_laser_system(
                 }
 
                 if target.is_none() {
-                    let mut best_module: Option<(Entity, f32)> = None;
+                    // Pick the FIRST block the beam actually reaches — the
+                    // one with the smallest projection along the beam from
+                    // the weapon — not whichever block sits nearest the
+                    // ship's overall centroid (the old `closest_point` was
+                    // the beam's closest approach to `center`, a point that
+                    // can land behind several rows of armor on an off-center
+                    // or angled ship). Picking by that instead of true
+                    // front-to-back order let the beam skip visible hull and
+                    // light up something several blocks back.
+                    let mut best_module: Option<(Entity, f32)> = None; // (entity, projection)
                     for child in children.iter() {
                         if let Ok((_, gt)) = ai_module_query.get(child) {
-                            let d = closest_point.distance(gt.translation().truncate());
-                            if d < 45.0 && best_module.map(|(_, bd)| d < bd).unwrap_or(true) {
-                                best_module = Some((child, d));
+                            let pos = gt.translation().truncate();
+                            let proj = (pos - weapon_pos).dot(beam_dir);
+                            if proj < 0.0 || proj > beam_range { continue; }
+                            let perp = pos.distance(weapon_pos + beam_dir * proj);
+                            if perp < 45.0 && best_module.map(|(_, bp)| proj < bp).unwrap_or(true) {
+                                best_module = Some((child, proj));
                             }
                         }
                     }
                     let mut best_hull: Option<(Entity, f32)> = None;
                     for child in children.iter() {
                         if let Ok((_, gt)) = ai_hull_query.get(child) {
-                            let d = closest_point.distance(gt.translation().truncate());
-                            if d < 45.0 && best_hull.map(|(_, bd)| d < bd).unwrap_or(true) {
-                                best_hull = Some((child, d));
+                            let pos = gt.translation().truncate();
+                            let proj = (pos - weapon_pos).dot(beam_dir);
+                            if proj < 0.0 || proj > beam_range { continue; }
+                            let perp = pos.distance(weapon_pos + beam_dir * proj);
+                            if perp < 45.0 && best_hull.map(|(_, bp)| proj < bp).unwrap_or(true) {
+                                best_hull = Some((child, proj));
                             }
                         }
                     }
 
-                    let hit_module = matches!((best_module, best_hull), (Some((_, md)), Some((_, hd))) if md <= hd)
+                    let hit_module = matches!((best_module, best_hull), (Some((_, mp)), Some((_, hp))) if mp <= hp)
                         || (best_module.is_some() && best_hull.is_none());
 
                     target = if hit_module {

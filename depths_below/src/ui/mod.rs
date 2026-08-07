@@ -26,6 +26,7 @@ impl Plugin for UiPlugin {
             .init_resource::<windows::tooltip::TooltipState>()
             .init_resource::<windows::notification_log::NotificationHistory>()
             .init_resource::<PendingWarpTarget>()
+            .init_resource::<MapViewMode>()
             .add_systems(Startup, (setup_ui, cursor::setup_custom_cursor))
             .add_systems(
                 Update,
@@ -147,6 +148,7 @@ impl Plugin for UiPlugin {
                 (
                     toggle_crew_menu,
                     toggle_map_overlay,
+                    toggle_galaxy_view,
                     crew_menu_assign_input,
                 ).run_if(in_state(GameState::Exploring)),
             )
@@ -155,6 +157,7 @@ impl Plugin for UiPlugin {
                 Update,
                 (
                     map_click_system,
+                    galaxy_map_click_system,
                     warp_dash_input,
                     execute_warp_dash,
                 ).run_if(in_state(GameState::Exploring)),
@@ -280,6 +283,9 @@ pub struct CreditsText;
 #[derive(Component)]
 pub struct CrewText;
 
+#[derive(Component)]
+pub struct CargoText;
+
 /// Marker for a HUD bar fill element
 #[derive(Component)]
 pub struct HudBar {
@@ -314,6 +320,13 @@ pub struct MapOverlay;
 #[derive(Component)]
 struct MapPanel;
 
+/// The clickable galaxy-scale map square — same idea as MapPanel, but for
+/// the galaxy view. Separate marker since only one of the two is ever
+/// spawned at a time (Local vs. Galaxy view) and their coordinate
+/// conversions are entirely different scales.
+#[derive(Component)]
+struct GalaxyMapPanel;
+
 /// Gold crosshair marking the currently selected warp destination.
 #[derive(Component)]
 struct PendingWarpMarker;
@@ -323,6 +336,17 @@ struct PendingWarpMarker;
 /// entities) so the selection sticks until they pick a new one.
 #[derive(Resource, Default)]
 pub struct PendingWarpTarget(pub Option<Vec2>);
+
+/// Which panel the M-key overlay is currently showing — Local (the existing
+/// current-system tactical view) or Galaxy (the new galaxy-scale starmap).
+/// Always resets to Local when the overlay is freshly opened; Tab flips it
+/// while open.
+#[derive(Resource, Default, PartialEq, Eq, Clone, Copy)]
+pub enum MapViewMode {
+    #[default]
+    Local,
+    Galaxy,
+}
 
 /// On the ship while a long-range warp dash is charging. Target position and
 /// fuel cost are locked in at charge-start; hold G to keep charging, release
@@ -525,6 +549,12 @@ fn setup_ui(mut commands: Commands) {
                 group.spawn((
                     (Text::new("0/0"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::ACCENT_GREEN)),
                     CrewText,
+                ));
+            });
+            spawn_hud_group(top_bar, "CARGO", ThemeColors::ACCENT_BLUE, |group| {
+                group.spawn((
+                    (Text::new("0/0"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::ACCENT_BLUE)),
+                    CargoText,
                 ));
             });
         });
@@ -732,8 +762,12 @@ pub fn update_hud_secondary(
     mut credits_query: Query<&mut Text, (With<CreditsText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CrewText>)>,
     mut crew_query_hud: Query<(&mut Text, &mut TextColor), (With<CrewText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>)>,
     mut bar_query: Query<(&HudBar, &mut Node, &mut BackgroundColor)>,
+    // Bundled into one tuple param — this system is already at Bevy's
+    // 16-param ceiling (see the ammo_ui tuple above for the same reason).
+    mut cargo_ui: (Res<Inventory>, Query<(&mut Text, &mut TextColor), (With<CargoText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>),
 ) {
     let (ammo_container_query, ammo_line_query, mut commands, mut last_ammo_snapshot) = ammo_ui;
+    let (inventory, mut cargo_query) = cargo_ui;
     let Ok(player_ship) = ship_query.single() else { return };
 
     // Fuel
@@ -852,6 +886,20 @@ pub fn update_hud_secondary(
             Color::srgb(1.0, 0.0, 0.0)
         } else {
             Color::srgb(0.7, 0.9, 0.7)
+        };
+    }
+
+    // Cargo hold — weight-based (matches Inventory.max_capacity, not an
+    // item count), the same numbers the Map overlay's Inventory section and
+    // sell/buy pricing already use.
+    if let Ok((mut text, mut text_color)) = cargo_query.single_mut() {
+        text.0 = format!("{:.0}/{:.0}", inventory.current_weight, inventory.max_capacity);
+        text_color.0 = if inventory.current_weight >= inventory.max_capacity {
+            Color::srgb(1.0, 0.0, 0.0)
+        } else if inventory.max_capacity > 0.0 && inventory.current_weight / inventory.max_capacity > 0.85 {
+            Color::srgb(1.0, 1.0, 0.0)
+        } else {
+            Color::srgb(0.6, 0.8, 1.0)
         };
     }
 }
@@ -1243,18 +1291,26 @@ fn crew_menu_assign_input(
 // ============================================================================
 
 /// World-units-to-map-pixels scale. Covers -MAP_WORLD_RANGE..MAP_WORLD_RANGE
-/// on each axis, centered on world origin (where the player starts) — big
-/// enough to fit every faction territory (25k-175k out) and the first star
-/// system (star at ~492k out, planets orbiting another 25k-45k+ beyond it).
+/// on each axis around `center` — big enough to fit every faction territory
+/// (25k-175k out) and a star system (star at ~50k-100k out from its own
+/// local_center, planets orbiting another 25k-45k+ beyond that).
 const MAP_WORLD_RANGE: f32 = 600_000.0;
 
 /// Converts a world position to a pixel offset within a square map panel of
 /// the given size (top-left origin, Y flipped since world +Y is up but UI
-/// +Y is down).
-fn world_to_map_px(world_pos: Vec2, panel_size: f32) -> (f32, f32) {
+/// +Y is down). `center` is the map's fixed reference point — NOT the
+/// player (see map_click_system's doc comment on why the frame doesn't
+/// recenter every frame) but the CURRENT SYSTEM's local_center. Every
+/// system's local_center lives somewhere in a multi-million-unit box (see
+/// celestial::galaxy::generate_galaxy_map's LOCAL_RANGE), not clustered near
+/// world origin like only-Haven-ever-existing used to guarantee — hardcoding
+/// origin here left every non-Haven system's contents clamped to whichever
+/// panel edge was closest, reading as a "glitch."
+fn world_to_map_px(world_pos: Vec2, center: Vec2, panel_size: f32) -> (f32, f32) {
+    let rel = world_pos - center;
     let half = panel_size / 2.0;
-    let x = half + (world_pos.x / MAP_WORLD_RANGE) * half;
-    let y = half - (world_pos.y / MAP_WORLD_RANGE) * half;
+    let x = half + (rel.x / MAP_WORLD_RANGE) * half;
+    let y = half - (rel.y / MAP_WORLD_RANGE) * half;
     (x.clamp(0.0, panel_size), y.clamp(0.0, panel_size))
 }
 
@@ -1269,6 +1325,8 @@ struct MapWorldData<'w, 's> {
     planet_query: Query<'w, 's, &'static Transform, With<crate::celestial::components::Planet>>,
     bounty_ship_query: Query<'w, 's, (&'static Transform, &'static crate::ai_ship::components::BountyTarget), With<crate::ai_ship::components::AiShip>>,
     contract_state: Res<'w, crate::contracts::ContractState>,
+    streaming: Res<'w, crate::celestial::resources::SystemStreamingManager>,
+    galaxy_map: Res<'w, crate::celestial::resources::GalaxyMap>,
 }
 
 /// Plain-data snapshot of everything the map needs to render — decoupled
@@ -1278,8 +1336,17 @@ struct MapWorldData<'w, 's> {
 struct MapSnapshot {
     panel_size: f32,
     player_pos: Vec2,
+    // Fixed reference point the local map is drawn around — see
+    // world_to_map_px's doc comment.
+    map_center: Vec2,
     pending_target: Option<Vec2>,
     current_fuel: f32,
+    // Haven's station/outpost icons are fixed world positions unrelated to
+    // which star system is actually loaded — only meaningful to show while
+    // physically in Haven's system (id 0). Without this, warping elsewhere
+    // would still show Haven's furniture plastered on a totally unrelated
+    // system's local map.
+    in_haven: bool,
     stars: Vec<Vec2>,
     planets: Vec<Vec2>,
     hostiles: Vec<Vec2>,
@@ -1335,7 +1402,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
         )).with_children(|map| {
             // Star(s)
             for star_pos in &snap.stars {
-                let (x, y) = world_to_map_px(*star_pos, panel_size);
+                let (x, y) = world_to_map_px(*star_pos, snap.map_center, panel_size);
                 map.spawn((
                     Node {
                         position_type: PositionType::Absolute,
@@ -1350,7 +1417,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
             }
             // Planets
             for planet_pos in &snap.planets {
-                let (x, y) = world_to_map_px(*planet_pos, panel_size);
+                let (x, y) = world_to_map_px(*planet_pos, snap.map_center, panel_size);
                 map.spawn((
                     Node {
                         position_type: PositionType::Absolute,
@@ -1363,26 +1430,30 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
                     BackgroundColor(Color::srgb(0.5, 0.6, 0.8)),
                 ));
             }
-            // Stations: Haven + resupply outposts
-            for station_pos in std::iter::once(crate::world::home_base::STATION_POS)
-                .chain(crate::world::home_base::OUTPOST_POSITIONS.iter().copied())
-            {
-                let (x, y) = world_to_map_px(station_pos, panel_size);
-                map.spawn((
-                    Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(x - 4.0),
-                        top: Val::Px(y - 4.0),
-                        width: Val::Px(8.0),
-                        height: Val::Px(8.0),
-                        ..default()
-                    },
-                    BackgroundColor(Color::srgb(0.25, 1.0, 0.35)),
-                ));
+            // Stations: Haven + resupply outposts — fixed world positions
+            // that only exist/matter in Haven's own system (see
+            // MapSnapshot::in_haven doc comment).
+            if snap.in_haven {
+                for station_pos in std::iter::once(crate::world::home_base::STATION_POS)
+                    .chain(crate::world::home_base::OUTPOST_POSITIONS.iter().copied())
+                {
+                    let (x, y) = world_to_map_px(station_pos, snap.map_center, panel_size);
+                    map.spawn((
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: Val::Px(x - 4.0),
+                            top: Val::Px(y - 4.0),
+                            width: Val::Px(8.0),
+                            height: Val::Px(8.0),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.25, 1.0, 0.35)),
+                    ));
+                }
             }
             // Hostiles: real (in render range) + still-off-screen simulated
             for hostile_pos in &snap.hostiles {
-                let (x, y) = world_to_map_px(*hostile_pos, panel_size);
+                let (x, y) = world_to_map_px(*hostile_pos, snap.map_center, panel_size);
                 map.spawn((
                     Node {
                         position_type: PositionType::Absolute,
@@ -1398,7 +1469,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
             // Active bounty targets, highlighted on top of the generic red
             // hostile dot at the same spot — this is specifically "your" hunt.
             for bounty_pos in &snap.bounties {
-                let (x, y) = world_to_map_px(*bounty_pos, panel_size);
+                let (x, y) = world_to_map_px(*bounty_pos, snap.map_center, panel_size);
                 map.spawn((
                     Node {
                         position_type: PositionType::Absolute,
@@ -1414,7 +1485,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
 
             // Pending warp destination, if one is selected — gold crosshair
             if let Some(target) = snap.pending_target {
-                let (x, y) = world_to_map_px(target, panel_size);
+                let (x, y) = world_to_map_px(target, snap.map_center, panel_size);
                 map.spawn((
                     Node {
                         position_type: PositionType::Absolute,
@@ -1442,7 +1513,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
             }
 
             // Player marker on top, slightly bigger so it's easy to find
-            let (px, py) = world_to_map_px(snap.player_pos, panel_size);
+            let (px, py) = world_to_map_px(snap.player_pos, snap.map_center, panel_size);
             map.spawn((
                 Node {
                     position_type: PositionType::Absolute,
@@ -1584,6 +1655,18 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
     });
 }
 
+/// The local map's fixed reference point — the current system's
+/// local_center, or the player's own position if there's no real system
+/// loaded (a blind warp landed in empty space, see execute_warp_jump).
+/// Shared by build_map_snapshot (render) and map_click_system (the inverse
+/// screen-to-world conversion) so both agree on the same frame.
+fn current_map_center(world_data: &MapWorldData, player_pos: Vec2) -> Vec2 {
+    world_data.streaming.loaded_system
+        .and_then(|id| world_data.galaxy_map.systems.iter().find(|s| s.id == id))
+        .map(|s| s.local_center)
+        .unwrap_or(player_pos)
+}
+
 fn build_map_snapshot(
     windows: &Query<&Window>,
     player_pos: Vec2,
@@ -1596,23 +1679,35 @@ fn build_map_snapshot(
 ) -> MapSnapshot {
     let (win_w, win_h) = windows.single().map(|w| (w.width(), w.height())).unwrap_or((1280.0, 800.0));
     let panel_size = (win_w.min(win_h) * 0.85).max(200.0);
+    let current_system = world_data.streaming.loaded_system;
+    let map_center = current_map_center(world_data, player_pos);
 
+    // sim.ships now spans every Hot/Warm system, not just "the one system
+    // that exists" like before the galaxy map — an off-screen ship ticking
+    // in a Warm neighbor is real but belongs to a totally different local
+    // space, so plotting its raw position on THIS system's local map would
+    // be meaningless (or just pile up at the map edge). Only this system's
+    // own off-screen ships belong on the local tactical view.
     let mut hostiles: Vec<Vec2> = world_data.ai_ship_query.iter().map(|t| t.translation.truncate()).collect();
     hostiles.extend(
         world_data.sim.ships.iter()
-            .filter(|s| !s.spawned && s.behavior != crate::ai_ship::components::SimBehavior::Dead)
+            .filter(|s| !s.spawned && s.behavior != crate::ai_ship::components::SimBehavior::Dead && Some(s.system_id) == current_system)
             .map(|s| s.position)
     );
 
     let bounties: Vec<Vec2> = crate::contracts::bounty_nav::active_bounty_positions_with_id(
         &world_data.contract_state, &world_data.sim, &world_data.bounty_ship_query,
-    ).into_iter().map(|(pos, _)| pos).collect();
+    ).into_iter()
+        .filter(|(_, id)| world_data.sim.ships.iter().find(|s| s.bounty_id == Some(*id)).is_none_or(|s| Some(s.system_id) == current_system))
+        .map(|(pos, _)| pos).collect();
 
     MapSnapshot {
         panel_size,
         player_pos,
+        map_center,
         pending_target,
         current_fuel: fuel_state.current_fuel,
+        in_haven: current_system == Some(0),
         stars: world_data.star_query.iter().map(|t| t.translation.truncate()).collect(),
         planets: world_data.planet_query.iter().map(|t| t.translation.truncate()).collect(),
         hostiles,
@@ -1639,6 +1734,7 @@ fn toggle_map_overlay(
     fuel_state: Res<FuelState>,
     windows: Query<&Window>,
     mut virtual_time: ResMut<Time<Virtual>>,
+    mut view_mode: ResMut<MapViewMode>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyM) {
         return;
@@ -1650,6 +1746,10 @@ fn toggle_map_overlay(
         return;
     }
 
+    // Always opens on the local view — Tab switches to the galaxy view
+    // while open (see toggle_galaxy_view).
+    *view_mode = MapViewMode::Local;
+
     // Full-screen map pauses the simulation — ships, timers, damage, fuel
     // burn etc. all read Time<Virtual>, so this freezes everything except
     // UI input (which doesn't depend on Time) with no extra state juggling.
@@ -1658,6 +1758,281 @@ fn toggle_map_overlay(
     let player_pos = player_query.single().map(|t| t.translation.truncate()).unwrap_or(Vec2::ZERO);
     let snapshot = build_map_snapshot(&windows, player_pos, pending.0, &fuel_state, &discovered, &inventory, &statistics, &world_data);
     spawn_map_overlay(&mut commands, &snapshot);
+}
+
+/// Tab, while the M-key overlay is open, flips between the local tactical
+/// view and the galaxy-scale starmap — rebuilds whichever view is now
+/// active from scratch, same pattern as toggle_map_overlay.
+fn toggle_galaxy_view(
+    mut commands: Commands,
+    keyboard: Res<ButtonInput<KeyCode>>,
+    existing: Query<Entity, With<MapOverlay>>,
+    mut view_mode: ResMut<MapViewMode>,
+    galaxy_map: Res<crate::celestial::resources::GalaxyMap>,
+    streaming: Res<crate::celestial::resources::SystemStreamingManager>,
+    pending_galaxy: Res<crate::celestial::resources::PendingGalaxyWarpTarget>,
+    discovered: Res<DiscoveredLocations>,
+    inventory: Res<Inventory>,
+    statistics: Res<Statistics>,
+    player_query: Query<&Transform, With<Ship>>,
+    world_data: MapWorldData,
+    pending: Res<PendingWarpTarget>,
+    fuel_state: Res<FuelState>,
+    windows: Query<&Window>,
+) {
+    let Ok(entity) = existing.single() else { return };
+    if !keyboard.just_pressed(KeyCode::Tab) {
+        return;
+    }
+
+    commands.entity(entity).despawn();
+    *view_mode = match *view_mode {
+        MapViewMode::Local => MapViewMode::Galaxy,
+        MapViewMode::Galaxy => MapViewMode::Local,
+    };
+
+    match *view_mode {
+        MapViewMode::Local => {
+            let player_pos = player_query.single().map(|t| t.translation.truncate()).unwrap_or(Vec2::ZERO);
+            let snapshot = build_map_snapshot(&windows, player_pos, pending.0, &fuel_state, &discovered, &inventory, &statistics, &world_data);
+            spawn_map_overlay(&mut commands, &snapshot);
+        }
+        MapViewMode::Galaxy => {
+            let (win_w, win_h) = windows.single().map(|w| (w.width(), w.height())).unwrap_or((1280.0, 800.0));
+            let panel_size = (win_w.min(win_h) * 0.85).max(200.0);
+            spawn_galaxy_map_overlay(&mut commands, &galaxy_map, &streaming, pending_galaxy.0, &fuel_state, panel_size);
+        }
+    }
+}
+
+/// World-to-pixel projection for the galaxy view, using StarSystemDef's
+/// abstract galaxy_pos (map-only, not a real Transform coordinate — see its
+/// doc comment) instead of world_to_map_px's real-Transform local scale.
+fn galaxy_to_map_px(galaxy_pos: Vec2, panel_size: f32) -> (f32, f32) {
+    let half = panel_size / 2.0;
+    let range = crate::celestial::galaxy::GALAXY_RADIUS;
+    let x = half + (galaxy_pos.x / range) * half;
+    let y = half - (galaxy_pos.y / range) * half;
+    (x.clamp(0.0, panel_size), y.clamp(0.0, panel_size))
+}
+
+/// Galaxy-scale starmap. Unknown systems render nothing at all (true fog of
+/// war); Located systems show as a dim unlabeled pip (revealed passively by
+/// proximity — celestial::galaxy::passive_proximity_discovery — or by a
+/// blind warp landing near one); Visited systems show colored by
+/// danger_tier. Clickable ANYWHERE, not just on discovered pips — one
+/// continuous space, not a picker limited to what you've already found;
+/// see galaxy_map_click_system.
+fn spawn_galaxy_map_overlay(
+    commands: &mut Commands,
+    galaxy_map: &crate::celestial::resources::GalaxyMap,
+    streaming: &crate::celestial::resources::SystemStreamingManager,
+    pending: Option<crate::celestial::resources::GalaxyWarpTarget>,
+    fuel_state: &FuelState,
+    panel_size: f32,
+) {
+    use crate::celestial::resources::SystemDiscovery;
+
+    commands.spawn((
+        (Node {
+                position_type: PositionType::Absolute,
+                width: Val::Percent(100.0),
+                height: Val::Percent(100.0),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                column_gap: Val::Px(20.0),
+                padding: UiRect::all(Val::Px(20.0)),
+                ..default()
+            }, BackgroundColor(theme::ThemeColors::BG_VOID), ZIndex(50)),
+        MapOverlay,
+    )).with_children(|parent| {
+        parent.spawn(Node {
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(8.0),
+            flex_shrink: 0.0,
+            ..default()
+        }).with_children(|col| {
+            col.spawn((
+                Node {
+                    width: Val::Px(panel_size),
+                    height: Val::Px(panel_size),
+                    position_type: PositionType::Relative,
+                    overflow: Overflow::clip(),
+                    flex_shrink: 0.0,
+                    ..default()
+                },
+                BackgroundColor(theme::ThemeColors::HUD_BG),
+                Interaction::None,
+                GalaxyMapPanel,
+            )).with_children(|map| {
+                for sys in &galaxy_map.systems {
+                    let (size, color) = match sys.discovery {
+                        SystemDiscovery::Unknown => continue,
+                        SystemDiscovery::Located => (6.0, theme::ThemeColors::TEXT_MUTED),
+                        SystemDiscovery::Visited => {
+                            // Colored by WHOSE territory it is, not a
+                            // generic danger bucket — see
+                            // ai_ship::components::faction_map_color.
+                            let color = match sys.faction {
+                                None => Color::srgb(0.3, 0.9, 1.0), // Haven
+                                Some(faction) => crate::ai_ship::components::faction_map_color(faction),
+                            };
+                            (10.0, color)
+                        }
+                    };
+                    let (x, y) = galaxy_to_map_px(sys.galaxy_pos, panel_size);
+                    map.spawn((
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: Val::Px(x - size / 2.0),
+                            top: Val::Px(y - size / 2.0),
+                            width: Val::Px(size),
+                            height: Val::Px(size),
+                            ..default()
+                        },
+                        BackgroundColor(color),
+                    ));
+                }
+
+                // "You are here" — current position, whether it's a real
+                // system or an open patch of blind-warped space.
+                let (px, py) = galaxy_to_map_px(streaming.current_galaxy_pos, panel_size);
+                map.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(px - 4.0),
+                        top: Val::Px(py - 4.0),
+                        width: Val::Px(8.0),
+                        height: Val::Px(8.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.3, 0.9, 1.0)),
+                ));
+
+                // Pending target crosshair, wherever it resolves to —
+                // a known system's position, or the raw blind-click point.
+                if let Some(target) = pending {
+                    if let Some(pos) = crate::celestial::warp::target_galaxy_pos(galaxy_map, target) {
+                        let (tx, ty) = galaxy_to_map_px(pos, panel_size);
+                        map.spawn((
+                            Node { position_type: PositionType::Absolute, left: Val::Px(tx - 6.0), top: Val::Px(ty - 1.0), width: Val::Px(12.0), height: Val::Px(2.0), ..default() },
+                            BackgroundColor(Color::srgb(1.0, 0.85, 0.1)),
+                        ));
+                        map.spawn((
+                            Node { position_type: PositionType::Absolute, left: Val::Px(tx - 1.0), top: Val::Px(ty - 6.0), width: Val::Px(2.0), height: Val::Px(12.0), ..default() },
+                            BackgroundColor(Color::srgb(1.0, 0.85, 0.1)),
+                        ));
+                    }
+                }
+            });
+            col.spawn((Text::new("GALAXY MAP — Tab: local view | M: close"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
+
+            // Faction color reference — Visited systems are colored by
+            // whose territory they are (see faction_map_color); Located
+            // ones show as a dim pip since the faction isn't known yet.
+            col.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                flex_wrap: FlexWrap::Wrap,
+                column_gap: Val::Px(12.0),
+                row_gap: Val::Px(4.0),
+                width: Val::Px(panel_size),
+                ..default()
+            }).with_children(|legend| {
+                use crate::ai_ship::components::{faction_map_color, AiShipType};
+                let entries: &[(Color, &str)] = &[
+                    (Color::srgb(0.3, 0.9, 1.0), "Haven"),
+                    (faction_map_color(AiShipType::RustSwarm), "Rust Swarm"),
+                    (faction_map_color(AiShipType::Drowned), "Drowned"),
+                    (faction_map_color(AiShipType::Leviathan), "Leviathan"),
+                    (faction_map_color(AiShipType::AbyssalCult), "Abyssal Cult"),
+                    (faction_map_color(AiShipType::GlassEye), "Glass Eye"),
+                    (faction_map_color(AiShipType::Blackwater), "Blackwater"),
+                    (faction_map_color(AiShipType::PressureKing), "Pressure King"),
+                    (faction_map_color(AiShipType::IronTide), "Iron Tide"),
+                    (faction_map_color(AiShipType::Dreadnought), "Dreadnought"),
+                    (faction_map_color(AiShipType::VoidTitan), "Void Titan"),
+                    (theme::ThemeColors::TEXT_MUTED, "Located (unknown)"),
+                ];
+                for (color, label) in entries {
+                    legend.spawn(Node {
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::Center,
+                        column_gap: Val::Px(5.0),
+                        ..default()
+                    }).with_children(|row| {
+                        row.spawn((
+                            Node { width: Val::Px(9.0), height: Val::Px(9.0), ..default() },
+                            BackgroundColor(*color),
+                        ));
+                        row.spawn((Text::new(*label), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(theme::ThemeColors::TEXT_SECONDARY)));
+                    });
+                }
+            });
+        });
+
+        // Sidebar: simple discovery-progress readout for now — per-system
+        // detail (name/faction/danger/click-to-warp) lands in Phase 5 once
+        // discovery mechanics exist to gate it.
+        parent.spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                width: Val::Px(260.0),
+                height: Val::Percent(90.0),
+                padding: UiRect::all(Val::Px(10.0)),
+                row_gap: Val::Px(6.0),
+                flex_shrink: 0.0,
+                ..default()
+            },
+            BackgroundColor(theme::ThemeColors::BG_PANEL),
+        )).with_children(|parent| {
+            parent.spawn((Text::new("GALAXY"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() }, TextColor(theme::ThemeColors::TEXT_TITLE)));
+
+            let visited = galaxy_map.systems.iter().filter(|s| s.discovery == SystemDiscovery::Visited).count();
+            let located = galaxy_map.systems.iter().filter(|s| s.discovery == SystemDiscovery::Located).count();
+            let total = galaxy_map.systems.len();
+            let unknown = total - visited - located;
+
+            for (label, count, color) in [
+                ("Visited", visited, theme::ThemeColors::ACCENT_GREEN),
+                ("Located", located, theme::ThemeColors::TEXT_SECONDARY),
+                ("Unknown", unknown, theme::ThemeColors::TEXT_MUTED),
+            ] {
+                parent.spawn(Node { flex_direction: FlexDirection::Row, column_gap: Val::Px(6.0), ..default() })
+                    .with_children(|row| {
+                        row.spawn((Text::new(label), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(color)));
+                        row.spawn((Text::new(format!("{}", count)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_PRIMARY)));
+                    });
+            }
+
+            // Cost/charge preview for the pending target, if any — same
+            // numbers celestial::warp::warp_input_system will actually use.
+            if let Some(target) = pending {
+                if let Some(pos) = crate::celestial::warp::target_galaxy_pos(galaxy_map, target) {
+                    let dist = streaming.current_galaxy_pos.distance(pos);
+                    let t = dist / crate::celestial::galaxy::GALAXY_RADIUS;
+                    let charge = crate::celestial::warp::interstellar_charge_time(t);
+                    let fuel = crate::celestial::warp::interstellar_fuel_cost(t);
+                    let name = match target {
+                        crate::celestial::resources::GalaxyWarpTarget::System(id) => galaxy_map.systems.iter().find(|s| s.id == id).map(|s| s.name.clone()).unwrap_or_default(),
+                        crate::celestial::resources::GalaxyWarpTarget::BlindPoint(_) => "Uncharted space".to_string(),
+                    };
+                    parent.spawn((
+                        Text::new("WARP TARGET"),
+                        TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                        TextColor(theme::ThemeColors::TEXT_MUTED),
+                        Node { margin: UiRect::top(Val::Px(theme::ThemeSpacing::SM)), ..default() },
+                    ));
+                    parent.spawn((Text::new(name), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_PRIMARY)));
+                    let fuel_color = if fuel_state.current_fuel < fuel { theme::ThemeColors::ACCENT_ORANGE } else { theme::ThemeColors::TEXT_SECONDARY };
+                    parent.spawn((Text::new(format!("Charge: {:.0}s   Fuel: {:.0}", charge, fuel)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(fuel_color)));
+                    parent.spawn((Text::new("Press V to jump"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
+                }
+            }
+
+            parent.spawn((Text::new("Press M to close"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
+        });
+    });
 }
 
 /// Handles clicks on the map panel: converts cursor position to world
@@ -1703,12 +2078,11 @@ fn map_click_system(
         return; // click landed outside the map panel (e.g. on the sidebar)
     }
 
-    let world_x = norm.x * 2.0 * MAP_WORLD_RANGE;
-    let world_y = -norm.y * 2.0 * MAP_WORLD_RANGE;
-    let target = Vec2::new(world_x, world_y);
+    let player_pos = player_query.single().map(|t| t.translation.truncate()).unwrap_or(Vec2::ZERO);
+    let map_center = current_map_center(&world_data, player_pos);
+    let target = map_center + Vec2::new(norm.x * 2.0 * MAP_WORLD_RANGE, -norm.y * 2.0 * MAP_WORLD_RANGE);
     pending.0 = Some(target);
 
-    let player_pos = player_query.single().map(|t| t.translation.truncate()).unwrap_or(Vec2::ZERO);
     let dist = player_pos.distance(target);
     notifications.write(ShowNotification {
         message: format!("Warp target set — {:.0} units away.", dist),
@@ -1722,6 +2096,71 @@ fn map_click_system(
     }
     let snapshot = build_map_snapshot(&windows, player_pos, pending.0, &fuel_state, &discovered, &inventory, &statistics, &world_data);
     spawn_map_overlay(&mut commands, &snapshot);
+}
+
+/// Handles clicks on the galaxy map panel — clickable ANYWHERE, not just on
+/// discovered pips (one continuous space, see spawn_galaxy_map_overlay's
+/// doc comment). If the click lands within SNAP_TOLERANCE of a system
+/// that's already Located/Visited (i.e. a pip you can actually see), it
+/// targets that system precisely; otherwise it's a blind point — whether
+/// anything is actually there is only revealed on arrival
+/// (celestial::warp::execute_warp_jump).
+fn galaxy_map_click_system(
+    mut commands: Commands,
+    mouse: Res<ButtonInput<MouseButton>>,
+    map_panel: Query<(&ComputedNode, &bevy::ui::UiGlobalTransform), With<GalaxyMapPanel>>,
+    existing: Query<Entity, With<MapOverlay>>,
+    windows: Query<&Window>,
+    mut pending: ResMut<crate::celestial::resources::PendingGalaxyWarpTarget>,
+    galaxy_map: Res<crate::celestial::resources::GalaxyMap>,
+    streaming: Res<crate::celestial::resources::SystemStreamingManager>,
+    fuel_state: Res<FuelState>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    use crate::celestial::resources::{GalaxyWarpTarget, SystemDiscovery};
+
+    if !mouse.just_pressed(MouseButton::Left) {
+        return;
+    }
+    let Ok((node, transform)) = map_panel.single() else { return };
+    let Ok(window) = windows.single() else { return };
+    let Some(cursor_pos) = window.cursor_position().map(|p| p * window.scale_factor()) else { return };
+    let Some(norm) = node.normalize_point(*transform, cursor_pos) else { return };
+    if norm.x.abs() > 0.5 || norm.y.abs() > 0.5 {
+        return; // click landed outside the map panel (e.g. on the sidebar)
+    }
+
+    let range = crate::celestial::galaxy::GALAXY_RADIUS;
+    let clicked_pos = Vec2::new(norm.x * 2.0 * range, -norm.y * 2.0 * range);
+
+    // Snap onto a VISIBLE pip if the click is close to one — precision aid
+    // for known systems. Undiscovered systems don't get this treatment
+    // (there's no pip to aim at), so clicking near one still just sets a
+    // blind point; the arrival-time snap in execute_warp_jump is what
+    // reveals it as a surprise.
+    let snapped = galaxy_map.systems.iter()
+        .filter(|s| s.discovery != SystemDiscovery::Unknown && s.galaxy_pos.distance(clicked_pos) <= crate::celestial::galaxy::SNAP_TOLERANCE)
+        .min_by(|a, b| a.galaxy_pos.distance(clicked_pos).partial_cmp(&b.galaxy_pos.distance(clicked_pos)).unwrap());
+
+    let (target, desc) = match snapped {
+        Some(sys) => (GalaxyWarpTarget::System(sys.id), sys.name.clone()),
+        None => (GalaxyWarpTarget::BlindPoint(clicked_pos), "uncharted space".to_string()),
+    };
+    pending.0 = Some(target);
+
+    let dist = streaming.current_galaxy_pos.distance(clicked_pos);
+    notifications.write(ShowNotification {
+        message: format!("Warp target set — {} ({:.0} units away).", desc, dist),
+        notification_type: NotificationType::Info,
+        duration: 2.5,
+    });
+
+    if let Ok(entity) = existing.single() {
+        commands.entity(entity).despawn();
+    }
+    let (win_w, win_h) = windows.single().map(|w| (w.width(), w.height())).unwrap_or((1280.0, 800.0));
+    let panel_size = (win_w.min(win_h) * 0.85).max(200.0);
+    spawn_galaxy_map_overlay(&mut commands, &galaxy_map, &streaming, pending.0, &fuel_state, panel_size);
 }
 
 /// G: hold to charge a warp dash toward the pending map destination. Release

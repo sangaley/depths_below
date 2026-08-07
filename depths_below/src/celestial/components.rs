@@ -219,6 +219,9 @@ pub struct StarSystemMember {
 /// Marks the ship as currently charging a warp jump
 #[derive(Component)]
 pub struct WarpCharging {
-    pub target_system: u32,
+    pub target: super::resources::GalaxyWarpTarget,
     pub charge_timer: Timer,
+    /// Computed once at charge-start from galaxy-map distance (see
+    /// celestial::warp::interstellar_fuel_cost) and deducted on completion.
+    pub fuel_cost: f32,
 }

@@ -355,13 +355,13 @@ impl ItemType {
     /// identical at every station.
     fn base_value(&self) -> u32 {
         match self {
-            ItemType::ScrapMetal => 10,
-            ItemType::Crystal => 25,
-            ItemType::BioSample => 15,
-            ItemType::FuelCell => 20,
-            ItemType::RareAlloy => 50,
-            ItemType::AncientArtifact => 100,
-            ItemType::AmmoCrate => 30,
+            ItemType::ScrapMetal => 12,
+            ItemType::Crystal => 30,
+            ItemType::BioSample => 18,
+            ItemType::FuelCell => 24,
+            ItemType::RareAlloy => 60,
+            ItemType::AncientArtifact => 120,
+            ItemType::AmmoCrate => 36,
         }
     }
 }
@@ -457,7 +457,7 @@ impl Default for Inventory {
     fn default() -> Self {
         Self {
             items: HashMap::new(),
-            max_capacity: 50.0,
+            max_capacity: 100.0,
             current_weight: 0.0,
         }
     }

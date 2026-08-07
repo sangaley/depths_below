@@ -55,6 +55,7 @@ pub fn toggle_mission_board(
     rep: Res<FactionReputation>,
     mut sim: ResMut<WorldSimulation>,
     mut notifications: MessageWriter<ShowNotification>,
+    streaming: Res<crate::celestial::resources::SystemStreamingManager>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyJ) { return; }
 
@@ -87,7 +88,8 @@ pub fn toggle_mission_board(
     };
 
     viewing.0 = station;
-    generation::ensure_station_board(station, &mut contract_state, &rep, &mut sim);
+    let active_systems: Vec<u32> = streaming.loaded_system.into_iter().chain(streaming.warm_systems.iter().copied()).collect();
+    generation::ensure_station_board(station, &mut contract_state, &rep, &mut sim, &active_systems);
 
     board_open.0 = true;
     commands.init_resource::<MissionBoardSelection>();

@@ -53,16 +53,17 @@ fn design_body_size(design: &Blueprint) -> Vec2 {
     )
 }
 
-/// How much tougher and harder-hitting a ship gets the farther its spawn
-/// position sits from Haven Station (world origin). Distance is normalized
-/// against ~350,000 units — roughly the farthest faction territory (Pressure
-/// Kings) — and clamped so the far-out wanderers past that don't run away
-/// with the multiplier. Health scales more aggressively than weapon damage
-/// so distant ships read as tankier fights, not instant-death ones.
-fn distance_difficulty(position: Vec2) -> (f32, f32) {
-    let t = (position.length() / 350_000.0).clamp(0.0, 1.0);
-    let health_mult = 1.0 + t * 1.5; // up to 2.5x hull HP far out
-    let damage_mult = 1.0 + t * 0.8; // up to 1.8x weapon damage far out
+/// How much tougher and harder-hitting a ship gets based on its faction's
+/// fixed danger tier (faction_power, 0.1..8.0) — replaces the old raw-
+/// distance-from-Haven scaling now that danger is a per-system fixed
+/// assignment (see StarSystemDef.danger_tier, celestial/galaxy.rs) instead
+/// of a continuous function of how far you've traveled. Same output shape
+/// as before (health up to 2.5x, damage up to 1.8x) so existing combat
+/// balance doesn't need re-tuning from scratch — only the INPUT changed.
+fn faction_difficulty(ship_type: AiShipType) -> (f32, f32) {
+    let t = (super::components::faction_power(ship_type) / 8.0).clamp(0.0, 1.0);
+    let health_mult = 1.0 + t * 1.5; // up to 2.5x hull HP for the toughest factions
+    let damage_mult = 1.0 + t * 0.8; // up to 1.8x weapon damage for the toughest factions
     (health_mult, damage_mult)
 }
 
@@ -176,7 +177,7 @@ pub fn spawn_ai_ship(
         Depth(position.y.abs() / 10.0),
     )).id();
 
-    let (health_mult, damage_mult) = distance_difficulty(position);
+    let (health_mult, damage_mult) = faction_difficulty(ship_type);
 
     // Spawn hull segments as children
     spawn_ai_hull(commands, asset_server, root, &design.hull_cells, health_mult);
@@ -200,8 +201,8 @@ pub fn spawn_ai_ship(
             apply_module_extras(commands, module_entity, extras);
         }
 
-        // Distant ships hit harder too — scale weapon damage by the same
-        // distance factor (see distance_difficulty doc comment).
+        // Tougher factions hit harder too — scale weapon damage by the same
+        // danger factor (see faction_difficulty doc comment).
         if damage_mult > 1.0 {
             if let CompanionData::Weapon { damage, range, fire_rate, ammo, .. } = &registry.get(mp.module_type).companion {
                 commands.entity(module_entity).insert(Weapon {
@@ -227,6 +228,12 @@ pub fn spawn_ai_ship(
     // permanently dark, not "half dark" as crew_fill_fraction intended.
     // Guarantee at least one weapon slot for any faction that has weapons,
     // so "understaffed" always means fewer guns firing, never zero.
+    //
+    // The floor scales with weapon-station count, not a flat +1: a flat
+    // floor barely dents a weapon-heavy design (Drowned's 5 weapon stations
+    // vs RustSwarm's 2) — same fraction, wildly different dark-gun ratio
+    // (Drowned ended up at 1-of-5 firing, effectively silent, while
+    // RustSwarm's 1-of-2 matched its 0.6 fraction reasonably well).
     let non_weapon_stations = design.modules.iter()
         .filter(|m| {
             let def = registry.get(m.module_type);
@@ -236,13 +243,46 @@ pub fn spawn_ai_ship(
     let total_stations = design.modules.iter()
         .filter(|m| registry.get(m.module_type).crew_station)
         .count();
-    let has_weapons = total_stations > non_weapon_stations;
+    let weapon_stations = total_stations.saturating_sub(non_weapon_stations);
+    let has_weapons = weapon_stations > 0;
     let fraction_complement = ((total_stations as f32) * super::components::crew_fill_fraction(ship_type)).round() as u32;
-    let min_floor = if has_weapons { (non_weapon_stations as u32 + 1).min(total_stations as u32) } else { 1 };
-    let crew_complement = fraction_complement.max(min_floor);
+    let min_floor = if has_weapons {
+        let weapon_floor = ((weapon_stations as f32) * super::components::crew_fill_fraction(ship_type)).round().max(1.0) as u32;
+        (non_weapon_stations as u32 + weapon_floor).min(total_stations as u32)
+    } else {
+        1
+    };
+    // crew_fill_fraction is a per-faction TARGET, not a fixed headcount —
+    // every RustSwarm ship landing on exactly the same crew size read as
+    // robotic. Roll each spawn's actual complement from a triangular
+    // distribution: `typical` (the old deterministic value) is the peak, so
+    // most ships land near it, but `min_floor` (skeleton crew) and
+    // `full_complement` (every station manned) are both reachable, rarely.
+    let typical_complement = fraction_complement.max(min_floor);
+    let full_complement = typical_complement.max(total_stations as u32);
+    let crew_complement = roll_crew_complement(&mut rng, min_floor, typical_complement, full_complement);
     super::crew::spawn_ai_crew(commands, root, crew_complement);
 
     root
+}
+
+/// Samples a crew headcount from a triangular distribution — `floor` and
+/// `ceiling` are the hard bounds, `typical` is the peak (most spawns land
+/// near it). Standard inverse-transform sampling for a triangular
+/// distribution; degenerates to a flat `floor` if there's no room to roll.
+fn roll_crew_complement(rng: &mut impl Rng, floor: u32, typical: u32, ceiling: u32) -> u32 {
+    if ceiling <= floor {
+        return floor;
+    }
+    let (min, mode, max) = (floor as f32, typical.clamp(floor, ceiling) as f32, ceiling as f32);
+    let u: f32 = rng.gen_range(0.0..1.0);
+    let split = (mode - min) / (max - min);
+    let sample = if u < split {
+        min + (u * (max - min) * (mode - min)).sqrt()
+    } else {
+        max - ((1.0 - u) * (max - min) * (max - mode)).sqrt()
+    };
+    sample.round() as u32
 }
 
 /// Spawns hull segment children for the AI ship

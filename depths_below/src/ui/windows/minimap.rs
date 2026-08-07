@@ -140,6 +140,7 @@ pub fn update_minimap(
     contract_state: Res<ContractState>,
     sim: Res<WorldSimulation>,
     bounty_ship_query: Query<(&Transform, &BountyTarget), With<AiShip>>,
+    streaming: Res<crate::celestial::resources::SystemStreamingManager>,
 ) {
     if minimap_exists.is_empty() {
         return;
@@ -168,18 +169,33 @@ pub fn update_minimap(
         style.top = Val::Px((half + py).clamp(0.0, MINIMAP_SIZE));
     };
 
-    // Stations move relative to the ship; clamp to the canvas edge when
-    // beyond MINIMAP_RANGE so far outposts still show a direction.
+    // Stations are fixed at Haven — only meaningful to show while actually
+    // in Haven's system (see ui::MapSnapshot::in_haven for the same fix on
+    // the full map). Hidden rather than placed-somewhere-wrong everywhere
+    // else, since world_pos is millions of units from any other system's
+    // local space and would otherwise clamp to a meaningless edge position.
+    let in_haven = streaming.loaded_system == Some(0);
     for (mut style, dot) in station_dot_query.iter_mut() {
-        place(&mut style, dot.world_pos);
+        if in_haven {
+            style.display = Display::Flex;
+            place(&mut style, dot.world_pos);
+        } else {
+            style.display = Display::None;
+        }
     }
 
     // Active bounty targets: resolve each one's live position (spawned real
     // entity first, else the off-screen simulated position), sync dots to
     // match, and place them — same clamp-to-edge treatment as stations.
+    // Only bounties whose ship is actually in THIS system are meaningful
+    // here — a Warm-neighbor ship's position is relative to a different
+    // system's local space entirely.
     let active_targets: Vec<(u32, Vec2)> = contract_state.active_contracts.iter()
         .filter_map(|c| match &c.objective {
             ContractObjective::DestroyShip { target_id, destroyed: false, .. } => {
+                if sim.ships.iter().find(|s| s.bounty_id == Some(*target_id)).is_some_and(|s| Some(s.system_id) != streaming.loaded_system) {
+                    return None;
+                }
                 let pos = bounty_ship_query.iter()
                     .find(|(_, b)| b.0 == *target_id)
                     .map(|(t, _)| t.translation.truncate())
