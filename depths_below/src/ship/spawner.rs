@@ -266,22 +266,41 @@ pub fn spawn_module(
     let bounds_w = (max_x - min_x) as f32;
     let bounds_h = (max_y - min_y) as f32;
     let quarter = ((visual_angle / std::f32::consts::FRAC_PI_2).round() as i32).rem_euclid(4);
-    let (cells_w, cells_h) = if quarter % 2 == 1 {
-        (bounds_h, bounds_w)
+    // Local (unrotated) sprite size. Barrel weapons get a forward-extended
+    // canvas — their art is drawn 1:3 with the turret centered and the barrel
+    // pointing up — so the barrel overhangs the cells ahead. Combined with the
+    // raised z below, the barrel renders over neighbouring blocks. The extension
+    // is applied in LOCAL space and then run through the same quarter-turn swap,
+    // so the barrel follows the weapon's facing at any rotation.
+    let local_w = 60.0 + bounds_w * 66.0;
+    // Directional parts (thruster nozzles, gun barrels) protrude PAST their
+    // block: the sprite is lengthened along its local vertical axis by
+    // `overhang`, and the whole sprite is nudged so the housing stays centred on
+    // the cell while the extension hangs off the protruding end. `protrude` is
+    // +1 when that end is the art's top (barrels), -1 when it's the bottom
+    // (nozzles). The matching art carries the extra length in its canvas so
+    // nothing stretches.
+    let (overhang, protrude) = sprite_map::sprite_overhang(module_type);
+    let local_h = 60.0 + bounds_h * 66.0 + overhang;
+    let (sprite_w, sprite_h) = if quarter % 2 == 1 {
+        (local_h, local_w)
     } else {
-        (bounds_w, bounds_h)
+        (local_w, local_h)
     };
-    let sprite_w = 60.0 + cells_w * 66.0;
-    let sprite_h = 60.0 + cells_h * 66.0;
+    // Offset in art-local space (art +Y = up), rotated into world by the same
+    // visual angle so the barrel/nozzle follows the part's facing at any turn.
+    let sprite_off = Quat::from_rotation_z(visual_angle)
+        * Vec3::new(0.0, protrude * overhang * 0.5, 0.0);
+    // Raise directional parts so the protruding end renders over the neighbour.
+    let sprite_z = if overhang > 0.0 { 0.4 } else { 0.2 };
 
-    let module_base_color = {
-        let srgba = def.color.to_srgba();
-        Color::srgb(
-            (srgba.red * 1.5).min(1.0),
-            (srgba.green * 1.5).min(1.0),
-            (srgba.blue * 1.5).min(1.0),
-        )
-    };
+    // The new module sprites carry their own colour and detail, so render
+    // them at full white — the old per-module def.color multiply (a leftover
+    // from the flat placeholder art that relied on colour to tell modules
+    // apart) washed the detailed sprites into solid coloured blocks. Damage
+    // darkening and wreck greying still work: they multiply DOWN from this
+    // base (stored in BaseSpriteColor), and white is their neutral start.
+    let module_base_color = Color::WHITE;
 
     let module_entity = commands.spawn((
         (Sprite {
@@ -290,7 +309,7 @@ pub fn spawn_module(
                 custom_size: Some(Vec2::new(sprite_w, sprite_h)),
                 ..default()
             }, Transform {
-                translation: Vec3::new(center_x, center_y, 0.2),
+                translation: Vec3::new(center_x + sprite_off.x, center_y + sprite_off.y, sprite_z),
                 rotation: Quat::from_rotation_z(visual_angle),
                 ..default()
             }),

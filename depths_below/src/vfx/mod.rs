@@ -39,11 +39,14 @@ impl Plugin for VfxPlugin {
                     celestial_visuals::attach_black_hole_visuals,
                 ).run_if(in_state(GameState::Exploring)),
             )
-            // Block visuals — attach unique look to every placed module
-            .add_systems(
-                Update,
-                block_visuals::attach_block_visuals,
-            )
+            // Block visuals DISABLED: this bolted crude colored-rectangle
+            // silhouettes (barrel stubs, cores, rails) onto every module to
+            // give the old flat-placeholder art some shape. Every module now
+            // has a real detailed sprite, so these overlays just clashed —
+            // "old graphics on top of the new ones". Left in the tree
+            // commented rather than deleted in case a per-module overlay is
+            // wanted again later.
+            // .add_systems(Update, block_visuals::attach_block_visuals)
             // Parallax starfield — active while docked and exploring so the
             // void reads as space and motion is always perceptible
             .add_systems(

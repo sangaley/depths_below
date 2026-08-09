@@ -5,15 +5,16 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
     Some(match module_type {
         // Power
         ModuleType::SmallReactor | ModuleType::StandardReactor => "sprites/modules/small_reactor.png",
-        ModuleType::LargeReactor => "sprites/modules/large_reactor.png",
+        ModuleType::LargeReactor => "sprites/modules/large_reactor_2x1.png",
         ModuleType::BatteryBank => "sprites/modules/battery.png",
         ModuleType::RTG => "sprites/modules/small_reactor.png",
-        ModuleType::FusionReactor => "sprites/modules/large_reactor.png",
+        ModuleType::FusionReactor => "sprites/modules/large_reactor_3x3.png",
         ModuleType::Capacitor => "sprites/modules/battery.png",
         ModuleType::PowerConduit => "sprites/modules/battery.png",
         ModuleType::SolarCell => "sprites/modules/small_reactor.png",
         // Propulsion
-        ModuleType::SmallEngine | ModuleType::StandardEngine | ModuleType::LargeEngine => "sprites/modules/standard_engine.png",
+        ModuleType::SmallEngine | ModuleType::StandardEngine => "sprites/modules/standard_engine.png",
+        ModuleType::LargeEngine => "sprites/modules/standard_engine_2x1.png",
         ModuleType::SilentDrive => "sprites/modules/silent_drive.png",
         ModuleType::ManeuveringThruster => "sprites/modules/standard_engine.png",
         ModuleType::JetDrive => "sprites/modules/standard_engine.png",
@@ -23,7 +24,7 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::OxygenScrubber => "sprites/modules/oxygen_scrubber.png",
         ModuleType::CO2Scrubber => "sprites/modules/life_support.png",
         ModuleType::WasteRecycler => "sprites/modules/life_support.png",
-        ModuleType::AdvancedOxygenator => "sprites/modules/oxygen_scrubber.png",
+        ModuleType::AdvancedOxygenator => "sprites/modules/oxygen_scrubber_2x1.png",
         ModuleType::FireSuppression => "sprites/modules/life_support.png",
         ModuleType::AtmosphereMonitor => "sprites/modules/life_support.png",
         // Control
@@ -32,7 +33,7 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         // Weapons
         // Kinetic weapons
         ModuleType::Cannon => "sprites/modules/point_defense.png",
-        ModuleType::Railgun => "sprites/modules/railgun.png",
+        ModuleType::Railgun => "sprites/modules/railgun_2x1.png",
         ModuleType::Coilgun => "sprites/modules/railgun.png",
         ModuleType::Gatling => "sprites/modules/point_defense.png",
         // Energy weapons
@@ -51,18 +52,20 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::RadarArray | ModuleType::AdvancedRadar => "sprites/modules/sonar_array.png",
         ModuleType::PassiveRadar => "sprites/modules/passive_sonar.png",
         ModuleType::DepthScanner => "sprites/modules/depth_sensor.png",
-        ModuleType::HydrophoneArray => "sprites/modules/passive_sonar.png",
+        ModuleType::HydrophoneArray => "sprites/modules/passive_sonar_2x1.png",
         ModuleType::ThermalImager => "sprites/modules/depth_sensor.png",
         ModuleType::ProximityAlarm => "sprites/modules/depth_sensor.png",
         // Storage
-        ModuleType::SmallCargo | ModuleType::LargeCargo => "sprites/modules/cargo_hold.png",
+        ModuleType::SmallCargo => "sprites/modules/cargo_hold.png",
+        ModuleType::LargeCargo => "sprites/modules/cargo_hold_2x1.png",
         ModuleType::AmmoBay => "sprites/modules/cargo_hold.png",
         ModuleType::FuelTank => "sprites/modules/ballast_tank.png",
         ModuleType::SpecimenVault => "sprites/modules/research_lab.png",
         ModuleType::ReinforcedVault => "sprites/modules/cargo_hold.png",
         ModuleType::CryoStorage => "sprites/modules/research_lab.png",
         // Crew
-        ModuleType::BasicQuarters | ModuleType::Barracks => "sprites/modules/basic_quarters.png",
+        ModuleType::BasicQuarters => "sprites/modules/basic_quarters.png",
+        ModuleType::Barracks => "sprites/modules/basic_quarters_2x1.png",
         ModuleType::MedBay => "sprites/modules/medical_bay.png",
         ModuleType::MessHall => "sprites/modules/basic_quarters.png",
         ModuleType::RecRoom => "sprites/modules/basic_quarters.png",
@@ -76,8 +79,8 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::AirlockChamber => "sprites/modules/docking_port.png",
         ModuleType::DockingPort => "sprites/modules/docking_port.png",
         ModuleType::SalvageArm => "sprites/modules/salvage_arm.png",
-        ModuleType::AdvancedRepairBay => "sprites/modules/repair_station.png",
-        ModuleType::DroneBay => "sprites/modules/repair_station.png",
+        ModuleType::AdvancedRepairBay => "sprites/modules/repair_station_2x1.png",
+        ModuleType::DroneBay => "sprites/modules/repair_station_2x1.png",
         ModuleType::DeepFloodlight => "sprites/modules/floodlight.png",
         ModuleType::StealthCoating => "sprites/modules/silent_drive.png",
         ModuleType::HullPatch => "sprites/modules/repair_station.png",
@@ -113,11 +116,11 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::PressureSensor => "sprites/modules/depth_sensor.png",
         ModuleType::TargetingComputer => "sprites/modules/navigation.png",
         ModuleType::AutopilotCore => "sprites/modules/navigation.png",
-        ModuleType::AICombatCore => "sprites/modules/navigation.png",
+        ModuleType::AICombatCore => "sprites/modules/navigation_2x1.png",
         ModuleType::ThermalVentGenerator => "sprites/modules/small_reactor.png",
         ModuleType::MineralExtractor => "sprites/modules/salvage_arm.png",
-        ModuleType::CreatureContainment => "sprites/modules/research_lab.png",
-        ModuleType::ResearchLab => "sprites/modules/repair_station.png",
+        ModuleType::CreatureContainment => "sprites/modules/research_lab_2x1.png",
+        ModuleType::ResearchLab => "sprites/modules/research_lab_2x1.png",
         ModuleType::Corridor => "sprites/modules/hull_beam.png",
         ModuleType::LadderShaft => "sprites/modules/docking_port.png",
         ModuleType::MaintenanceTunnel => "sprites/modules/hull_beam.png",
@@ -164,14 +167,14 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::VibrationDamper => "sprites/modules/hull_beam.png",
         ModuleType::ThermalInsulator => "sprites/modules/hull_beam.png",
         ModuleType::StructuralBrace => "sprites/modules/hull_beam.png",
-        ModuleType::CornerArmorPlate => "sprites/modules/hull_beam.png",
-        ModuleType::BridgeWing => "sprites/modules/navigation.png",
-        ModuleType::SurgicalBay => "sprites/modules/medical_bay.png",
-        ModuleType::GalleyMess => "sprites/modules/basic_quarters.png",
-        ModuleType::BulkCargoHold => "sprites/modules/cargo_hold.png",
-        ModuleType::DockingHub => "sprites/modules/docking_port.png",
-        ModuleType::WellnessHub => "sprites/modules/basic_quarters.png",
-        ModuleType::StaggeredArmorPlate => "sprites/modules/hull_beam.png",
+        ModuleType::CornerArmorPlate => "sprites/modules/hull_beam_2x2.png",
+        ModuleType::BridgeWing => "sprites/modules/navigation_3x2.png",
+        ModuleType::SurgicalBay => "sprites/modules/medical_bay_3x2.png",
+        ModuleType::GalleyMess => "sprites/modules/basic_quarters_2x2.png",
+        ModuleType::BulkCargoHold => "sprites/modules/cargo_hold_2x2.png",
+        ModuleType::DockingHub => "sprites/modules/docking_port_3x3.png",
+        ModuleType::WellnessHub => "sprites/modules/basic_quarters_3x3.png",
+        ModuleType::StaggeredArmorPlate => "sprites/modules/hull_beam_3x2.png",
         ModuleType::AngledHullPlate => "sprites/modules/hull_beam.png",
         ModuleType::AngledArmorPlate => "sprites/modules/hull_beam.png",
     })
@@ -233,20 +236,68 @@ pub fn effect_sprite_path(effect: &str) -> &'static str {
 /// Most sprites are drawn facing "up" (North = 0). Modules whose sprite
 /// has a different natural orientation need an offset so that rotation
 /// math works correctly.
+/// Barrel-type weapons whose sprite is drawn long (1:3, turret centered,
+/// barrel pointing "up"/North) so the barrel overhangs into the cells ahead.
+/// spawner.rs sizes these tall and renders them on a higher z-layer so the
+/// barrel draws over neighbouring blocks (Cosmoteer-style). Missile tubes,
+/// mine layers and beam-only weapons are NOT barrel weapons.
+pub fn is_barrel_weapon(module_type: ModuleType) -> bool {
+    matches!(module_type,
+        ModuleType::Cannon | ModuleType::Gatling | ModuleType::Coilgun | ModuleType::Railgun
+        | ModuleType::MiningDrill | ModuleType::MagneticAccelerator | ModuleType::PointDefenseDrone)
+}
+
 pub fn sprite_base_rotation(module_type: ModuleType) -> f32 {
-    match module_type {
-        // Forward-firing weapons are drawn pointing right (East), offset by -π/2
-        ModuleType::HeavyMissile | ModuleType::Railgun | ModuleType::Cannon
-        | ModuleType::GuidedMissile | ModuleType::ClusterRocket
-        | ModuleType::TractorBeam | ModuleType::MiningDrill => -std::f32::consts::FRAC_PI_2,
-        // Engines are drawn pointing right (East)
-        ModuleType::SmallEngine | ModuleType::StandardEngine | ModuleType::LargeEngine
-        | ModuleType::SilentDrive | ModuleType::ManeuveringThruster
-        | ModuleType::JetDrive | ModuleType::EmergencyThruster
-        | ModuleType::RudderAssembly
-        | ModuleType::VectorThruster => -std::f32::consts::FRAC_PI_2,
-        // Salvage arm drawn pointing right
-        ModuleType::SalvageArm => -std::f32::consts::FRAC_PI_2,
-        _ => 0.0,
+    use crate::components::ModuleCategory;
+    // Base offset that aligns the sprite's native "facing" with the module's
+    // placement Rotation. Derived from the two authored cases in the starter
+    // ship (spawner.rs):
+    //   • Engine art draws its exhaust pointing DOWN (South). Engines are
+    //     placed Rotation::West (to_radians = +π/2) and must vent West (aft).
+    //     South → West needs visual_angle = -π/2, so base = -π/2 - π/2 = -π.
+    //   • Weapon art draws its muzzle pointing UP (North). Weapons are placed
+    //     Rotation::East (to_radians = -π/2) and must fire East (forward).
+    //     North → East needs visual_angle = -π/2, so base = 0.
+    // Net: placement Rotation reads as the exhaust direction for engines and
+    // the muzzle direction for weapons — the intuitive result at any angle.
+    let is_engine = matches!(module_type.category(), ModuleCategory::Propulsion);
+    let is_weapon = is_barrel_weapon(module_type)
+        || matches!(module_type,
+            ModuleType::Laser | ModuleType::PlasmaCaster | ModuleType::IonDisruptor
+            | ModuleType::EMPPulse | ModuleType::HeavyMissile | ModuleType::GuidedMissile
+            | ModuleType::ClusterRocket | ModuleType::TractorBeam | ModuleType::SalvageArm);
+    if is_engine {
+        -std::f32::consts::PI
+    } else if is_weapon {
+        0.0
+    } else {
+        0.0
+    }
+}
+
+/// How far a module's working end protrudes PAST its block, and which way.
+/// Returns `(extension_world_units, protrude_sign)` where the sign is +1 when
+/// the art's protruding end is the TOP (art +Y — gun barrels) and -1 when it's
+/// the BOTTOM (art −Y — engine nozzles). The extension lengthens the sprite
+/// along its local vertical axis and is offset so the housing stays centred on
+/// the cell while the barrel/nozzle hangs off the end (rendered over the
+/// neighbour via a raised Z, see spawner).
+///
+/// Tied to the specific sprite FILES whose art has actually been drawn with an
+/// extended canvas — a module gets overhang only once its sprite includes the
+/// protruding region, otherwise the square art would just stretch.
+pub fn sprite_overhang(module_type: ModuleType) -> (f32, f32) {
+    match module_sprite_path(module_type) {
+        // Engines: nozzle vents aft (art bottom, −1). 1×1 sprites only — the
+        // art aspect matches the cell exactly there, so the extension doesn't
+        // distort (multi-cell overhang needs the base-size fix first).
+        Some("sprites/modules/standard_engine.png") => (30.0, -1.0),
+        Some("sprites/modules/silent_drive.png") => (24.0, -1.0),
+        // Weapons: barrel/arm leads forward (art top, +1).
+        Some("sprites/modules/point_defense.png") => (24.0, 1.0),
+        Some("sprites/modules/railgun.png") => (26.0, 1.0),
+        Some("sprites/modules/torpedo_tube.png") => (26.0, 1.0),
+        Some("sprites/modules/salvage_arm.png") => (34.0, 1.0),
+        _ => (0.0, 0.0),
     }
 }
