@@ -53,8 +53,6 @@ impl ShipShield {
 #[derive(Component)]
 pub struct ShieldBubble;
 
-const BUBBLE_SPRITE: &str = "sprites/effects/shield_bubble.png";
-
 /// Bubble geometry that actually wraps the ship: centered on the blocks'
 /// centroid (the root is often at one end of the layout), radius = farthest
 /// block from that centroid plus margin. Root-centered fixed radii produced
@@ -72,20 +70,6 @@ fn ship_extent(ship: Entity, modules: &Query<(&Transform, &ChildOf), With<Module
         .map(|p| p.distance(centroid))
         .fold(0.0_f32, f32::max);
     (centroid, (max_dist + 70.0).max(150.0))
-}
-
-fn spawn_bubble(commands: &mut Commands, asset_server: &AssetServer, owner: Entity, center: Vec2, radius: f32) {
-    let bubble = commands.spawn((
-        Sprite {
-            image: asset_server.load(BUBBLE_SPRITE),
-            color: Color::srgba(0.5, 0.8, 1.0, 0.35),
-            custom_size: Some(Vec2::splat(radius * 2.0)),
-            ..default()
-        },
-        Transform::from_xyz(center.x, center.y, 0.9),
-        ShieldBubble,
-    )).id();
-    commands.entity(owner).add_child(bubble);
 }
 
 /// The grid cells the ship occupies (module footprints + hull segments). Cell
@@ -299,9 +283,11 @@ pub fn refresh_player_shield_skin(
 /// Attach shields to AI ships as they spawn, sized by faction.
 pub fn attach_ai_shields(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
+    mut images: ResMut<Assets<Image>>,
     ai_query: Query<(Entity, &AiShipType, &Children), (With<AiShip>, Without<ShipShield>)>,
     transform_query: Query<(&Transform, &ChildOf), With<Module>>,
+    module_query: Query<(&Module, &ChildOf)>,
+    hull_query: Query<(&HullSegment, &ChildOf)>,
 ) {
     // DEPTHS_MOVETEST_ENEMY: zero-HP shield on the test dummy. The shield
     // component is still what defines the ship's hittable radius/center in
@@ -345,7 +331,10 @@ pub fn attach_ai_shields(
             enabled: true,
             surge: 0.0,
         });
-        spawn_bubble(&mut commands, &asset_server, entity, center, radius);
+        // Same silhouette skin as the player (built once — AI ships don't get
+        // rebuilt in a hangar; a destroyed one just leaves its skin slightly wide).
+        let cells = ship_cells(entity, &module_query, &hull_query);
+        spawn_shield_skin(&mut commands, &mut images, entity, &cells);
     }
 }
 
