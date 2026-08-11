@@ -12,6 +12,7 @@ pub(crate) mod projectiles;
 mod mines;
 mod effects;
 pub mod shields;
+pub mod turrets;
 pub mod targeting;
 pub mod new_projectiles;
 pub mod missiles;
@@ -191,9 +192,11 @@ impl Plugin for CombatPlugin {
             // Shields: attach to player + AI ships, recharge, drive bubble visuals
             .add_systems(Update, (
                 shields::attach_player_shield,
+                shields::refresh_player_shield_skin,
                 shields::attach_ai_shields,
                 shields::toggle_player_shield,
                 shields::update_shields,
+                turrets::aim_turrets,
             ).run_if(in_state(GameState::Exploring)))
             // Player weapons: kinetic projectiles + missiles (new physics system)
             .add_systems(Update, (

@@ -56,15 +56,17 @@ pub fn ship_input(
 /// few seconds of burn away while keeping engine count meaningful.
 const THRUST_SCALE: f32 = 180.0;
 
-/// Max yaw rate at full deflection (rad/s). ~115°/s.
-const MAX_TURN_RATE: f32 = 2.0;
-/// How quickly angular velocity reaches the target rate (per second).
-/// Higher = snappier stick response, framerate-independent.
-const TURN_RESPONSE: f32 = 14.0;
-/// Turn rate per radian of aim error. This is what makes SMALL corrections
-/// fast — the previous low gain meant the cap above only mattered for huge
-/// swings while ordinary cursor-tracking still felt sluggish.
-const TURN_GAIN: f32 = 12.0;
+/// Max yaw rate at full deflection (rad/s). ~49°/s — a heavy warship, not a
+/// fighter. Deliberately slow: the turrets aim independently now, so the hull
+/// turns for positioning/thrust, not to point the guns.
+const MAX_TURN_RATE: f32 = 0.68;
+/// How quickly angular velocity reaches the target rate (per second). Lower =
+/// more rotational inertia — the ship takes a moment to build and shed its spin
+/// instead of snapping to the target rate.
+const TURN_RESPONSE: f32 = 4.5;
+/// Turn rate per radian of aim error. Lower so the ship eases onto heading
+/// rather than darting after every small cursor movement.
+const TURN_GAIN: f32 = 4.5;
 /// When coasting (no thrust input, no brake), speed halves every this many
 /// seconds. Pure Newtonian drift meant the ship "kept flying forward
 /// forever" after any tap of W.

@@ -42,7 +42,7 @@ pub fn wl(
     WeaponLoadout {
         grid_pos,
         fire_group,
-        tuning: crate::building::customization::tuning::WeaponTuning { velocity, fire_rate, damage },
+        tuning: crate::building::customization::tuning::WeaponTuning { velocity, fire_rate, damage, traverse: 1.0 },
         ammo,
     }
 }

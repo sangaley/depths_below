@@ -169,7 +169,7 @@ fn builtin_starter_design() -> crate::building::blueprint::Blueprint {
         custom_name: None,
         subcomponents: None,
         extras: Some(crate::building::blueprint::ModuleExtras {
-            tuning: Some(crate::building::customization::tuning::WeaponTuning { velocity, fire_rate, damage }),
+            tuning: Some(crate::building::customization::tuning::WeaponTuning { velocity, fire_rate, damage, traverse: 1.0 }),
             fire_group: Some(fire_group),
             ammo: ammo.map(crate::building::customization::tuning::SelectedAmmo),
         }),
@@ -281,12 +281,20 @@ pub fn spawn_module(
     // (nozzles). The matching art carries the extra length in its canvas so
     // nothing stretches.
     let (overhang, protrude) = sprite_map::sprite_overhang(module_type);
-    let local_h = 60.0 + bounds_h * 66.0 + overhang;
-    let (sprite_w, sprite_h) = if quarter % 2 == 1 {
+    let local_h = 60.0 + bounds_h * 66.0;
+    // Footprint dims after the quarter-turn swap (handles rotated multi-cell
+    // aspect). The swap must run on the FOOTPRINT only.
+    let (foot_w, foot_h) = if quarter % 2 == 1 {
         (local_h, local_w)
     } else {
         (local_w, local_h)
     };
+    // The overhang lengthens the TEXTURE's own vertical axis (barrel/nozzle),
+    // which is always sprite_h regardless of the footprint swap. Adding it before
+    // the swap put it on the width for East/West-facing parts (odd quarter-turns)
+    // and stretched them — the in-game gun/engine distortion.
+    let sprite_w = foot_w;
+    let sprite_h = foot_h + overhang;
     // Offset in art-local space (art +Y = up), rotated into world by the same
     // visual angle so the barrel/nozzle follows the part's facing at any turn.
     let sprite_off = Quat::from_rotation_z(visual_angle)
@@ -341,6 +349,26 @@ pub fn spawn_module(
     )).id();
 
     insert_companion_components(commands, module_entity, &def.companion);
+
+    // Gun turrets: the module sprite above is the static base mount; add a
+    // pivot-centred barrel child sprite that the aim system rotates to track the
+    // target (cursor for the player, the player ship for AI).
+    if let Some(barrel_path) = sprite_map::turret_barrel_sprite(module_type) {
+        let barrel = commands.spawn((
+            Sprite {
+                image: asset_server.load(barrel_path),
+                custom_size: Some(Vec2::splat(132.0)),
+                ..default()
+            },
+            Transform::from_xyz(0.0, 0.0, 0.3),
+            TurretBarrel,
+        )).id();
+        commands.entity(module_entity).add_child(barrel);
+        commands.entity(module_entity).insert(Turret {
+            turn_speed: sprite_map::turret_turn_speed(module_type),
+            world_angle: 0.0,
+        });
+    }
 
     // FirebreakWall gets a marker component for fire blocking
     if module_type == ModuleType::FirebreakWall {

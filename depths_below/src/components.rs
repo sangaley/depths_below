@@ -1143,6 +1143,21 @@ pub enum MountType {
     Broadside,
 }
 
+/// A gun turret that traverses to aim. Lives on the weapon MODULE entity; the
+/// barrel is a separate `TurretBarrel` child sprite the aim system rotates to
+/// point at the target (cursor for the player, the player ship for AI).
+#[derive(Component)]
+pub struct Turret {
+    /// Base traverse speed in radians/sec (before per-weapon customization).
+    pub turn_speed: f32,
+    /// Current barrel heading in WORLD space (radians), eased toward the target.
+    pub world_angle: f32,
+}
+
+/// Marker on a turret's rotating barrel child sprite.
+#[derive(Component)]
+pub struct TurretBarrel;
+
 /// Ammo storage for weapon systems
 #[derive(Component)]
 pub struct AmmoStorage {

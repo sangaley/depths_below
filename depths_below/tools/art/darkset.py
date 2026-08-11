@@ -170,35 +170,23 @@ def life_support(cw,ch,fn):
 
 # WEAPONS (1x1 barrels protrude; multi-cell railgun at edge)
 def point_defense(cw,ch,fn):
-    r,by0,by1,ext=Rext2(24,'top'); W=r.WU_w; cx=W/2; BT=by0; BB=by1
-    fill_block(r,6,BT,W-6,BB-4,"pd",haz_bottom=True)
-    cyb=BT+(BB-BT)*0.5
-    # bigger turret base
+    # Base/mount only — the head + barrels are a separate rotating sprite
+    # (turret_pd_barrel.png) the game spins to aim. No overhang here.
+    r=R(1,1); W=r.WU_w; cx=cyb=W/2
+    fill_block(r,6,6,W-6,W-6,"pd",haz_bottom=True)
     r.d.ellipse([U(r,cx-27),U(r,cyb-27),U(r,cx+27),U(r,cyb+27)],fill=mix(STEEL_D,STEEL,0.3)+(255,),outline=EDGE+(255,),width=SS*2); rim3d(r,cx,cyb,27,1.8)
-    r.d.ellipse([U(r,cx-18),U(r,cyb-18),U(r,cx+18),U(r,cyb+18)],fill=mix(STEEL_D,DARK,0.2)+(255,),outline=EDGE+(255,),width=SS)
-    rr(r,[cx-13,cyb-8,cx+13,cyb+15],radius=U(r,3),fill=mix(STEEL_D,STEEL,0.3)+(255,),outline=EDGE+(255,),width=SS*2)
+    r.d.ellipse([U(r,cx-20),U(r,cyb-20),U(r,cx+20),U(r,cyb+20)],fill=mix(STEEL_D,DARK,0.35)+(255,),outline=EDGE+(255,),width=SS)  # recessed turret well
     led(r,cx-24,cyb,GRN,1.5); led(r,cx+24,cyb,RD,1.5)
-    # twin SHORT barrels into extension
-    for ox in (-5,5):
-        rr(r,[cx+ox-2,BT-ext+4,cx+ox+2,cyb-6],radius=U(r,1),fill=STEEL_L+(255,),outline=EDGE+(255,),width=SS)
-        r.d.rectangle([U(r,cx+ox-3),U(r,BT-ext+4),U(r,cx+ox+3),U(r,BT-ext+8)],fill=mix(STEEL_D,STEEL,0.4)+(255,),outline=EDGE+(255,))
     save(r,fn)
 
 def railgun_1x1(cw,ch,fn):
-    r,by0,by1,ext=Rext2(26,'top'); W=r.WU_w; cx=W/2; BT=by0; BB=by1
-    fill_block(r,6,BT,W-6,BB-4,"rg",haz_bottom=True)
-    cyb=BT+(BB-BT)*0.55
-    for wx in (cx-22,cx+12): coilbank(r,wx,BT+8,BB-16,10)
-    rr(r,[cx-24,cyb-6,cx+24,BB-16],radius=U(r,4),fill=mix(STEEL_D,DARK,0.25)+(255,),outline=EDGE+(255,),width=SS)
-    # rail barrel to extension top, energized segments
-    for rxx in (cx-4,cx):
-        r.d.rectangle([U(r,rxx-1),U(r,BT-ext+2),U(r,rxx+1),U(r,cyb)],fill=STEEL_L+(255,),outline=EDGE+(200,),width=SS)
-    g,gd=layer(r); y=BT-ext+6
-    while y<cyb-4:
-        gd.rectangle([U(r,cx-4),U(r,y),U(r,cx+4),U(r,y+2)],fill=A(COREBLUE,220)); y+=9
-    compose(r,blur(g,0.5))
-    r.d.rectangle([U(r,cx-6),U(r,BT-ext+2),U(r,cx+6),U(r,BT-ext+6)],fill=mix(STEEL_D,STEEL,0.4)+(255,),outline=EDGE+(255,))
-    small_glow(r,cx,cyb+6,7,COLD,HOT)
+    # Base/mount only — the rail barrel is a separate rotating sprite
+    # (turret_rg_barrel.png). No overhang here.
+    r=R(1,1); W=r.WU_w; cx=cyb=W/2
+    fill_block(r,6,6,W-6,W-6,"rg",haz_bottom=True)
+    for wx in (cx-24,cx+14): coilbank(r,wx,10,W-16,10)
+    r.d.ellipse([U(r,cx-24),U(r,cyb-24),U(r,cx+24),U(r,cyb+24)],fill=mix(STEEL_D,STEEL,0.25)+(255,),outline=EDGE+(255,),width=SS*2); rim3d(r,cx,cyb,24,1.6)
+    r.d.ellipse([U(r,cx-16),U(r,cyb-16),U(r,cx+16),U(r,cyb+16)],fill=mix(STEEL_D,DARK,0.35)+(255,),outline=EDGE+(255,),width=SS)  # recessed turret well
     save(r,fn)
 
 def railgun_2x1(cw,ch,fn):

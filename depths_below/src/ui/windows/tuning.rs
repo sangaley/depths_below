@@ -250,6 +250,10 @@ fn spawn_tuning_window(
     if module_type != ModuleType::Laser {
         fields.insert(0, (TuningField::Velocity, velocity_label(module_type)));
     }
+    // Turret guns get a traverse (aim-speed) slider.
+    if crate::sprite_map::turret_barrel_sprite(module_type).is_some() {
+        fields.push((TuningField::Traverse, "TRAVERSE"));
+    }
 
     for (field, label) in fields {
         spawn_slider_row(commands, content, field, label);

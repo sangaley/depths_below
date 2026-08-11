@@ -294,10 +294,36 @@ pub fn sprite_overhang(module_type: ModuleType) -> (f32, f32) {
         Some("sprites/modules/standard_engine.png") => (30.0, -1.0),
         Some("sprites/modules/silent_drive.png") => (24.0, -1.0),
         // Weapons: barrel/arm leads forward (art top, +1).
-        Some("sprites/modules/point_defense.png") => (24.0, 1.0),
-        Some("sprites/modules/railgun.png") => (26.0, 1.0),
+        // point_defense / railgun are turrets now — their barrels are separate
+        // rotating sprites (see turret_barrel_sprite), so the base has no overhang.
         Some("sprites/modules/torpedo_tube.png") => (26.0, 1.0),
         Some("sprites/modules/salvage_arm.png") => (34.0, 1.0),
         _ => (0.0, 0.0),
+    }
+}
+
+/// The rotating barrel sprite for a gun turret, if this module is one. The base
+/// mount stays static (the module's own sprite); this sprite is spawned as a
+/// pivot-centred child the turret aim system rotates to point at the target.
+pub fn turret_barrel_sprite(module_type: ModuleType) -> Option<&'static str> {
+    match module_sprite_path(module_type) {
+        Some("sprites/modules/point_defense.png") => Some("sprites/modules/turret_pd_barrel.png"),
+        Some("sprites/modules/railgun.png") => Some("sprites/modules/turret_rg_barrel.png"),
+        _ => None,
+    }
+}
+
+/// Base traverse speed (radians/sec) for a turret weapon — the "how fast it
+/// tracks" knob, per weapon. Light autocannons whip around; the railgun is
+/// ponderous. Per-weapon customization scales this (WeaponTuning::traverse).
+pub fn turret_turn_speed(module_type: ModuleType) -> f32 {
+    match module_type {
+        ModuleType::Gatling | ModuleType::PointDefenseDrone => 6.5,
+        ModuleType::Cannon => 3.2,
+        ModuleType::Coilgun | ModuleType::Laser | ModuleType::PlasmaCaster
+        | ModuleType::IonDisruptor | ModuleType::EMPPulse => 2.6,
+        ModuleType::Railgun | ModuleType::MagneticAccelerator => 1.5,
+        ModuleType::MiningDrill => 2.0,
+        _ => 3.0,
     }
 }

@@ -22,7 +22,11 @@ pub enum TuningField {
     Velocity,
     FireRate,
     Damage,
+    /// Turret traverse (aim) speed multiplier — only meaningful for turret guns.
+    Traverse,
 }
+
+fn one() -> f32 { 1.0 }
 
 /// Per-weapon stat multipliers set from the tuning window.
 /// AI ships get the identity default via the shared spawn path — unaffected.
@@ -31,11 +35,14 @@ pub struct WeaponTuning {
     pub velocity: f32,
     pub fire_rate: f32,
     pub damage: f32,
+    /// Turret aim-speed multiplier (applied to sprite_map::turret_turn_speed).
+    #[serde(default = "one")]
+    pub traverse: f32,
 }
 
 impl Default for WeaponTuning {
     fn default() -> Self {
-        Self { velocity: 1.0, fire_rate: 1.0, damage: 1.0 }
+        Self { velocity: 1.0, fire_rate: 1.0, damage: 1.0, traverse: 1.0 }
     }
 }
 
@@ -45,6 +52,7 @@ impl WeaponTuning {
             TuningField::Velocity => self.velocity,
             TuningField::FireRate => self.fire_rate,
             TuningField::Damage => self.damage,
+            TuningField::Traverse => self.traverse,
         }
     }
 
@@ -54,6 +62,7 @@ impl WeaponTuning {
             TuningField::Velocity => self.velocity = v,
             TuningField::FireRate => self.fire_rate = v,
             TuningField::Damage => self.damage = v,
+            TuningField::Traverse => self.traverse = v,
         }
     }
 
