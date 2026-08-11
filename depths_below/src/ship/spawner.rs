@@ -90,34 +90,39 @@ pub fn spawn_starter_ship(
 /// the built-in fallback; on first run it's exported to designs/starter.json
 /// and the file wins from then on.
 ///
-/// Hull shape (top-down, x is forward, bow at +x):
-///                                     [O][O]
-///                            [O][O][O][O][O][O]
-///                      [O][O][O][O][O][O][O][O][O]
-///          [O][O][O][O][O][O][O][O][O][O][O][O][O][O]
-///    [O][O][O][O][O][O][O][O][O][O][O][O][O][O][O][O]
+/// Star-Destroyer wedge, symmetric across the centerline (top-down, x forward):
 ///
-/// Stern: engines/reactors/fuel · Mid: crew + gun deck · Bow: missiles/armor
+///     stern (flat, engines)                       bow (sharp point)
+///     [O][O][O][O][O][O][O][O][O][O]
+///     [O][O][O][O][O][O][O][O][O][O][O][O][O][O]
+///     [O][O][O][O][O][O][O][O][O][O][O][O][O][O][O][O][O][O][O][O]  <- spine
+///     [O][O][O][O][O][O][O][O][O][O][O][O][O][O]
+///     [O][O][O][O][O][O][O][O][O][O]
+///
+/// Stern: engine bank/reactors/fuel · Mid: crew + gun deck · Bow: bridge/missiles/armor
 fn builtin_starter_design() -> crate::building::blueprint::Blueprint {
     use crate::building::blueprint::{Blueprint, BlueprintHullCell, BlueprintModule, BLUEPRINT_VERSION};
 
-    // Destroyer profile: long, narrow, pointed bow. Each row is (y, x_min, x_max).
+    // Isosceles wedge: flat wide stern at -x, tapering to a sharp bow at +x.
+    // Symmetric across y=0. Each row is (y, x_min, x_max).
     let hull_rows: &[(i32, i32, i32)] = &[
-        ( 3,  -2,  4),   // upper superstructure
-        ( 2,  -4,  7),   // upper deck
-        ( 1,  -6,  9),   // upper hull
-        ( 0,  -7, 10),   // spine (bow tip at +x)
-        (-1,  -6,  9),   // lower hull
-        (-2,  -4,  7),   // lower deck
-        (-3,  -2,  4),   // lower superstructure
+        ( 5,  -8, -7),
+        ( 4,  -8, -3),
+        ( 3,  -8,  1),
+        ( 2,  -8,  5),
+        ( 1,  -8,  9),
+        ( 0,  -8, 11),   // spine: flat stern (-8) to bow tip (+11)
+        (-1,  -8,  9),
+        (-2,  -8,  5),
+        (-3,  -8,  1),
+        (-4,  -8, -3),
+        (-5,  -8, -7),
     ];
 
-    // Compartment separators — these REPLACE the plain cell at their
-    // position (the old spawn code double-stacked a second segment there).
-    let bulkheads = [
-        IVec2::new(-1, 0), IVec2::new(-1, -1),  // engineering ↔ gun deck
-        IVec2::new(2, -1), IVec2::new(3, -1),   // gun deck ↔ bridge
-    ];
+    // No fixed bulkhead doors in the symmetric starter — an odd door set would
+    // break the mirror symmetry. Typed empty array so the .contains()/loop below
+    // still compile.
+    let bulkheads: [IVec2; 0] = [];
 
     let mut hull_cells = Vec::new();
     for &(y, x_min, x_max) in hull_rows {
@@ -175,48 +180,52 @@ fn builtin_starter_design() -> crate::building::blueprint::Blueprint {
         }),
     };
 
+    // Symmetric across the centerline: paired modules mirror ±y (same rotation —
+    // these sprites have base_rotation 0 / no directional overhang, so a N<->S
+    // flip would only render the bottom copy upside-down); singletons and
+    // centered T-modules (medbay/bridge) sit on the spine. The one unavoidable
+    // exception is the 2×1 spinal Railgun, which can't straddle an odd-width
+    // spine exactly — a negligible half-cell offset under a centered barrel.
     let modules = vec![
-        // Stern: engineering (4 engines, twin reactors, fuel)
-        m(ModuleType::StandardEngine, -7, 0, Rotation::West),
-        m(ModuleType::StandardEngine, -6, 1, Rotation::West),
-        m(ModuleType::StandardEngine, -6, -1, Rotation::West),
-        m(ModuleType::StandardEngine, -6, 0, Rotation::West),
-        m(ModuleType::FuelTank, -5, 0, Rotation::North),
-        m(ModuleType::FuelTank, -5, 1, Rotation::North),
-        m(ModuleType::ManeuverThruster, -5, -1, Rotation::North),
-        m(ModuleType::OxygenScrubber, -4, 0, Rotation::North),
-        m(ModuleType::OxygenScrubber, -4, -1, Rotation::North),
-        m(ModuleType::CoolingPump, -4, 1, Rotation::North),
-        m(ModuleType::HeatVent, -3, 1, Rotation::North),
-        m(ModuleType::StandardReactor, -3, 0, Rotation::North),
-        m(ModuleType::StandardReactor, -3, -1, Rotation::North),
-        m(ModuleType::CoolingPump, -2, -1, Rotation::North),
-        // Crew
-        m(ModuleType::BasicQuarters, -2, 0, Rotation::North),
-        m(ModuleType::BasicQuarters, -2, 1, Rotation::North),
-        m(ModuleType::GalleyMess, -1, 2, Rotation::North),
-        m(ModuleType::SurgicalBay, -2, -3, Rotation::North),
-        // Gun deck: railgun spine + twin cannons + twin gatlings
+        // --- Stern / engineering: 5-wide engine bank, fuel, reactors, life support ---
+        m(ModuleType::StandardEngine, -8, 1, Rotation::West),
+        m(ModuleType::StandardEngine, -8, -1, Rotation::West),
+        m(ModuleType::StandardEngine, -8, 2, Rotation::West),
+        m(ModuleType::StandardEngine, -8, -2, Rotation::West),
+        m(ModuleType::StandardEngine, -8, 0, Rotation::West),
+        m(ModuleType::FuelTank, -7, 1, Rotation::North),
+        m(ModuleType::FuelTank, -7, -1, Rotation::North),
+        m(ModuleType::ManeuverThruster, -7, 4, Rotation::North),
+        m(ModuleType::ManeuverThruster, -7, -4, Rotation::North),
+        m(ModuleType::StandardReactor, -6, 1, Rotation::North),
+        m(ModuleType::StandardReactor, -6, -1, Rotation::North),
+        m(ModuleType::OxygenScrubber, -5, 2, Rotation::North),
+        m(ModuleType::OxygenScrubber, -5, -2, Rotation::North),
+        m(ModuleType::CoolingPump, -5, 1, Rotation::North),
+        m(ModuleType::CoolingPump, -5, -1, Rotation::North),
+        m(ModuleType::HeatVent, -4, 3, Rotation::North),
+        m(ModuleType::HeatVent, -4, -3, Rotation::North),
+        // --- Crew + mid spine: medbay (centered), quarters, repair ---
+        m(ModuleType::SurgicalBay, -4, 1, Rotation::East),
+        m(ModuleType::BasicQuarters, -3, 1, Rotation::North),
+        m(ModuleType::BasicQuarters, -3, -1, Rotation::North),
+        m(ModuleType::RepairBay, -2, 0, Rotation::North),
+        // --- Gun deck: spinal railgun, twin cannons, twin gatling PD ---
         mw(ModuleType::Railgun, 0, 0, Rotation::East, 2, 1.15, 0.85, 1.2, Some(crate::combat::ammo_types::KineticAmmoType::APFSDS)),
-        mw(ModuleType::Cannon, 0, 1, Rotation::East, 0, 1.0, 1.0, 1.15, Some(crate::combat::ammo_types::KineticAmmoType::APHE)),
-        mw(ModuleType::Cannon, 0, -1, Rotation::East, 0, 1.0, 1.0, 1.15, Some(crate::combat::ammo_types::KineticAmmoType::APHE)),
-        mw(ModuleType::Gatling, 2, 2, Rotation::East, 1, 1.0, 1.2, 1.0, Some(crate::combat::ammo_types::KineticAmmoType::Flak)),
-        mw(ModuleType::Gatling, 0, -2, Rotation::East, 1, 1.0, 1.2, 1.0, Some(crate::combat::ammo_types::KineticAmmoType::Flak)),
-        // Shields + logistics
-        m(ModuleType::ShieldEmitter, 4, 2, Rotation::North),
-        m(ModuleType::ShieldEmitter, 6, -1, Rotation::North),
-        m(ModuleType::BulkCargoHold, 2, 0, Rotation::North),
-        m(ModuleType::RepairBay, 4, 0, Rotation::North),
-        m(ModuleType::Floodlight, 5, 0, Rotation::East),
-        m(ModuleType::RadarArray, 6, 0, Rotation::East),
-        // Bridge
-        m(ModuleType::BridgeWing, 4, -2, Rotation::North),
-        // Bow: missile battery + armor prow
+        mw(ModuleType::Cannon, 1, 2, Rotation::East, 0, 1.0, 1.0, 1.15, Some(crate::combat::ammo_types::KineticAmmoType::APHE)),
+        mw(ModuleType::Cannon, 1, -2, Rotation::East, 0, 1.0, 1.0, 1.15, Some(crate::combat::ammo_types::KineticAmmoType::APHE)),
+        m(ModuleType::ShieldEmitter, 2, 2, Rotation::North),
+        m(ModuleType::ShieldEmitter, 2, -2, Rotation::North),
+        mw(ModuleType::Gatling, 3, 2, Rotation::East, 1, 1.0, 1.2, 1.0, Some(crate::combat::ammo_types::KineticAmmoType::Flak)),
+        mw(ModuleType::Gatling, 3, -2, Rotation::East, 1, 1.0, 1.2, 1.0, Some(crate::combat::ammo_types::KineticAmmoType::Flak)),
+        // --- Forward / command: sensors, floodlight, bridge (centered), missiles, prow armor ---
+        m(ModuleType::RadarArray, 3, 0, Rotation::East),
+        m(ModuleType::Floodlight, 4, 0, Rotation::East),
+        m(ModuleType::BridgeWing, 5, 1, Rotation::East),
         mw(ModuleType::HeavyMissile, 7, 1, Rotation::East, 3, 1.0, 1.0, 1.1, None),
         mw(ModuleType::HeavyMissile, 7, -1, Rotation::East, 3, 1.0, 1.0, 1.1, None),
-        m(ModuleType::CornerArmorPlate, 8, 0, Rotation::North),
-        m(ModuleType::AngledArmorPlate, 10, 0, Rotation::North),
-        m(ModuleType::StaggeredArmorPlate, 1, -3, Rotation::North),
+        m(ModuleType::AngledArmorPlate, 8, 0, Rotation::North),
+        m(ModuleType::AngledArmorPlate, 9, 0, Rotation::North),
     ];
 
     Blueprint {
