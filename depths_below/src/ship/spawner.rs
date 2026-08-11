@@ -210,6 +210,10 @@ fn builtin_starter_design() -> crate::building::blueprint::Blueprint {
         m(ModuleType::BasicQuarters, -3, 1, Rotation::North),
         m(ModuleType::BasicQuarters, -3, -1, Rotation::North),
         m(ModuleType::RepairBay, -2, 0, Rotation::North),
+        // Galley (+y) + cargo (-y): chiral L-shapes placed so their cells are
+        // exact y-mirrors of each other — a matched 2x2 room on each side.
+        m(ModuleType::GalleyMess, -1, 2, Rotation::North),
+        m(ModuleType::BulkCargoHold, 0, -3, Rotation::West),
         // --- Gun deck: spinal railgun, twin cannons, twin gatling PD ---
         mw(ModuleType::Railgun, 0, 0, Rotation::East, 2, 1.15, 0.85, 1.2, Some(crate::combat::ammo_types::KineticAmmoType::APFSDS)),
         mw(ModuleType::Cannon, 1, 2, Rotation::East, 0, 1.0, 1.0, 1.15, Some(crate::combat::ammo_types::KineticAmmoType::APHE)),

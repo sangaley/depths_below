@@ -1195,6 +1195,28 @@
       "extras": null
     },
     {
+      "module_type": "GalleyMess",
+      "grid_pos": [
+        -1,
+        2
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "BulkCargoHold",
+      "grid_pos": [
+        0,
+        -3
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
       "module_type": "Railgun",
       "grid_pos": [
         0,
