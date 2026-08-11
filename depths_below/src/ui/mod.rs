@@ -71,6 +71,15 @@ impl Plugin for UiPlugin {
                     save_load_input,
                 ).run_if(in_state(GameState::Paused)),
             )
+            // Quick-save (F5) / quick-load (F9) during normal play — no menu needed
+            .add_systems(
+                Update,
+                quick_save_load_input.run_if(
+                    in_state(GameState::Exploring)
+                        .or_else(in_state(GameState::StationDocked))
+                        .or_else(in_state(GameState::Paused)),
+                ),
+            )
             // Docked state
             .add_systems(OnEnter(GameState::Docked), spawn_docking_menu)
             .add_systems(OnExit(GameState::Docked), despawn_docking_menu)
@@ -2591,6 +2600,22 @@ fn despawn_pause_menu(
 // ============================================================================
 // SAVE/LOAD INPUT (while paused)
 // ============================================================================
+
+/// Universal quick-save / quick-load: F5 saves, F9 loads (slot 0). Unlike
+/// `save_load_input` (multi-slot, pause-menu only) this runs during normal play
+/// so you never have to open a menu — the common-case save/reload loop.
+fn quick_save_load_input(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut save_events: MessageWriter<SaveGameRequest>,
+    mut load_events: MessageWriter<LoadGameRequest>,
+) {
+    if keyboard.just_pressed(KeyCode::F5) {
+        save_events.write(SaveGameRequest { slot: 0 });
+    }
+    if keyboard.just_pressed(KeyCode::F9) {
+        load_events.write(LoadGameRequest { slot: 0 });
+    }
+}
 
 /// Handle F1-F3 to save, L+1-3 to load (also L+0 for auto-save)
 fn save_load_input(

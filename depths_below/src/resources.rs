@@ -1312,6 +1312,19 @@ pub struct SaveSlotInfo {
     pub hull_integrity: f32,
 }
 
+/// Per-system galaxy state that a save must carry. Everything else about a
+/// system (name, positions, seed, faction, danger) regenerates deterministically
+/// from `SaveData::galaxy_seed` via celestial::galaxy::generate_galaxy_map, so
+/// only the mutable, player-driven bits are persisted here.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SystemSaveData {
+    pub id: u32,
+    /// SystemDiscovery encoded (0=Unknown,1=Located,2=Visited); see as_u8/from_u8.
+    pub discovery: u8,
+    pub last_updated: f64,
+    pub resource_fraction_remaining: f32,
+}
+
 #[derive(Resource, Serialize, Deserialize)]
 pub struct SaveData {
     pub version: u32,
@@ -1334,6 +1347,10 @@ pub struct SaveData {
     /// Galaxy seed for reproducible system generation
     #[serde(default)]
     pub galaxy_seed: u64,
+    /// Per-system mutable state (discovery/depletion). Empty on legacy saves —
+    /// the galaxy then regenerates fresh from `galaxy_seed`.
+    #[serde(default)]
+    pub galaxy_systems: Vec<SystemSaveData>,
 }
 
 impl Default for SaveData {
@@ -1361,6 +1378,7 @@ impl Default for SaveData {
             was_exploring: false,
             current_system_id: 0,
             galaxy_seed: 0,
+            galaxy_systems: Vec::new(),
         }
     }
 }

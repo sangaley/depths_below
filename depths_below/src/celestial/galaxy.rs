@@ -16,6 +16,13 @@ pub const WARM_NEIGHBOR_COUNT: usize = 3;
 /// details) — no scanning action needed, just proximity, Cosmoteer-style.
 pub const SENSOR_RANGE: f32 = 900_000.0;
 
+/// Active scan range: pressing the radar ping (Z) with an active detection
+/// module sweeps interstellar space and reveals any Unknown system within this
+/// distance as Located — much longer reach than passive proximity, so a scan
+/// actually surfaces systems you couldn't see just by sitting still. Half the
+/// galaxy radius: a scan lights up a big neighbourhood but never the whole map.
+pub const GALAXY_SCAN_RANGE: f32 = 2_500_000.0;
+
 /// How close a blind-warp target has to land to an actual system's
 /// galaxy_pos to snap to arriving AT that system (revealing it fully)
 /// instead of landing in genuinely empty space nearby. Forgiving on

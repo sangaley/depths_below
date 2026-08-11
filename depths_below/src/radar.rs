@@ -6,6 +6,8 @@ use crate::states::{GameState, RadarSet};
 use crate::ai_ship::components::{AiShip, AiShipType, AiShipRadarContact, BountyTarget, WorldSimulation};
 use crate::contracts::{ContractObjective, ContractState};
 use crate::world::home_base::{OUTPOST_POSITIONS, STATION_POS};
+use crate::celestial::resources::{GalaxyMap, SystemStreamingManager, SystemDiscovery};
+use crate::celestial::galaxy::GALAXY_SCAN_RANGE;
 
 /// Marker for the radar radar display UI
 #[derive(Component)]
@@ -412,6 +414,8 @@ fn radar_ping_system(
     ship_query: Query<&Transform, With<Ship>>,
     mut noise_state: ResMut<NoiseState>,
     mut notifications: MessageWriter<ShowNotification>,
+    mut galaxy_map: ResMut<GalaxyMap>,
+    streaming: Res<SystemStreamingManager>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyZ) {
         return;
@@ -432,6 +436,33 @@ fn radar_ping_system(
         });
         return;
     };
+
+    // Interstellar scan: reveal Unknown galaxy systems within scan range as
+    // Located (Phase 5 active discovery — longer reach than passive proximity).
+    let scan_pos = streaming.current_galaxy_pos;
+    let mut newly_found = 0;
+    for system in galaxy_map.systems.iter_mut() {
+        if system.discovery == SystemDiscovery::Unknown
+            && system.galaxy_pos.distance(scan_pos) <= GALAXY_SCAN_RANGE
+        {
+            system.discovery = SystemDiscovery::Located;
+            newly_found += 1;
+        }
+    }
+    if newly_found > 0 {
+        notifications.write(ShowNotification {
+            message: format!("Scan: {} new system{} detected — check the galaxy map (M).",
+                newly_found, if newly_found == 1 { "" } else { "s" }),
+            notification_type: NotificationType::Success,
+            duration: 3.0,
+        });
+    } else {
+        notifications.write(ShowNotification {
+            message: "Scan complete — no new systems in range.".into(),
+            notification_type: NotificationType::Info,
+            duration: 2.0,
+        });
+    }
 
     // Spawn expanding ping ring visual
     commands.spawn((

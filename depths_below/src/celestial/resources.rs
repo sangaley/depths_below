@@ -12,6 +12,24 @@ pub enum SystemDiscovery {
     Visited,
 }
 
+impl SystemDiscovery {
+    /// Stable numeric encoding for save files (see resources::SystemSaveData).
+    pub fn as_u8(self) -> u8 {
+        match self {
+            SystemDiscovery::Unknown => 0,
+            SystemDiscovery::Located => 1,
+            SystemDiscovery::Visited => 2,
+        }
+    }
+    pub fn from_u8(v: u8) -> Self {
+        match v {
+            1 => SystemDiscovery::Located,
+            2 => SystemDiscovery::Visited,
+            _ => SystemDiscovery::Unknown,
+        }
+    }
+}
+
 /// One star system's entry in the persistent galaxy layout — generated once
 /// per session, not regenerated per-warp like today's disposable systems.
 #[derive(Clone, Debug)]

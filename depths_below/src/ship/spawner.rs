@@ -321,11 +321,13 @@ pub fn spawn_module(
             power_consumption: def.power_consumption,
             power_generation: def.power_generation,
             // Essential modules start active, others start inactive to save power.
-            // Weapons included: a gun that silently won't fire because of a
-            // hidden power toggle reads as a bug, not a mechanic.
+            // Weapons AND Detection included: a gun that silently won't fire — or
+            // a radar you placed that silently won't scan ("no active detection
+            // module") — because of a hidden power toggle reads as a bug, not a
+            // mechanic.
             is_active: matches!(module_type.category(),
                 ModuleCategory::Power | ModuleCategory::Propulsion | ModuleCategory::LifeSupport
-                | ModuleCategory::Weapons
+                | ModuleCategory::Weapons | ModuleCategory::Detection
             ) || matches!(module_type,
                 ModuleType::HelmStation | ModuleType::ManeuverThruster | ModuleType::CoolingPump
                 | ModuleType::HeatVent | ModuleType::BasicQuarters | ModuleType::Barracks

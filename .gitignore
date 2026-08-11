@@ -26,3 +26,6 @@ __pycache__/
 *.mov
 *.mp4
 *.gif
+
+# Runtime save files
+depths_below/saves/

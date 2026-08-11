@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 use crate::components::*;
 use crate::resources::*;
+use crate::celestial::resources::{GalaxyMap, SystemStreamingManager, SystemDiscovery};
+use crate::celestial::galaxy::{generate_galaxy_map, nearest_neighbors, WARM_NEIGHBOR_COUNT};
 use crate::events::*;
 use crate::states::GameState;
 
@@ -23,7 +25,10 @@ impl Plugin for MetaPlugin {
             .init_resource::<PendingEntityRebuild>()
             .add_systems(Startup, load_unlocks)
             .add_systems(OnEnter(GameState::GameOver), save_unlocks)
-            .add_systems(Update, handle_save_request.run_if(in_state(GameState::Paused)))
+            // Ungated (like handle_load_request): it only acts when a
+            // SaveGameRequest event is present, and quick-save (F5) fires that
+            // during Exploring — a Paused-only gate here silently dropped those.
+            .add_systems(Update, handle_save_request)
             .add_systems(Update, handle_load_request)
             .add_systems(Update, apply_pending_load)
             .add_systems(Update, rebuild_entities_from_save)
@@ -112,6 +117,8 @@ fn collect_save_data(
     hull_query: &Query<(&HullSegment, &Transform)>,
     crew_query: &Query<(Entity, &CrewMember)>,
     current_state: &State<GameState>,
+    galaxy_map: &GalaxyMap,
+    streaming: &SystemStreamingManager,
 ) -> SaveData {
     let position = ship_query
         .single()
@@ -199,8 +206,14 @@ fn collect_save_data(
         current_depth: depth_state.current_depth,
         world_seed: world_state.seed,
         was_exploring: *current_state.get() == GameState::Exploring,
-        current_system_id: 0, // Will be set by save system that reads GalaxyState
-        galaxy_seed: world_state.seed,
+        current_system_id: streaming.loaded_system.unwrap_or(0),
+        galaxy_seed: galaxy_map.galaxy_seed,
+        galaxy_systems: galaxy_map.systems.iter().map(|s| SystemSaveData {
+            id: s.id,
+            discovery: s.discovery.as_u8(),
+            last_updated: s.last_updated,
+            resource_fraction_remaining: s.resource_fraction_remaining,
+        }).collect(),
     }
 }
 
@@ -240,7 +253,8 @@ fn handle_save_request(
     currency: Res<Currency>,
     unlocks: Res<Unlocks>,
     discovered_locations: Res<DiscoveredLocations>,
-    world_state: Res<WorldState>,
+    // Bundled to stay under Bevy's 16-param cap: local world seed + galaxy state.
+    world_galaxy: (Res<WorldState>, Res<GalaxyMap>, Res<SystemStreamingManager>),
     current_state: Res<State<GameState>>,
     ship_query: Query<&Transform, With<Ship>>,
     module_query: Query<(
@@ -252,6 +266,7 @@ fn handle_save_request(
     hull_query: Query<(&HullSegment, &Transform)>,
     crew_query: Query<(Entity, &CrewMember)>,
 ) {
+    let (world_state, galaxy_map, streaming) = &world_galaxy;
     for event in save_events.read() {
         let save_data = collect_save_data(
             event.slot,
@@ -262,12 +277,14 @@ fn handle_save_request(
             &currency,
             &unlocks,
             &discovered_locations,
-            &world_state,
+            world_state,
             &ship_query,
             &module_query,
             &hull_query,
             &crew_query,
             &current_state,
+            galaxy_map,
+            streaming,
         );
 
         // Tier 3 customization is saved via customization_params field
@@ -397,6 +414,8 @@ fn rebuild_entities_from_save(
     module_entities: Query<Entity, With<Module>>,
     hull_entities: Query<Entity, With<HullSegment>>,
     crew_entities: Query<Entity, With<CrewMember>>,
+    mut galaxy_map: ResMut<GalaxyMap>,
+    mut streaming: ResMut<SystemStreamingManager>,
 ) {
     let Some(save) = pending.save_data.take() else { return };
     let slot = pending.slot;
@@ -520,6 +539,30 @@ fn rebuild_entities_from_save(
     }
     commands.insert_resource(CrewRoster { members: roster_members });
     // Auto-assign will re-staff stations on next tick
+
+    // ---- Restore galaxy state ----
+    // Regenerate the deterministic layout from the saved seed, then overlay the
+    // persisted per-system mutable state (discovery / depletion) and re-point the
+    // streaming manager at the system the player was in. Legacy saves have
+    // galaxy_seed == 0 → leave the freshly-generated galaxy alone.
+    if save.galaxy_seed != 0 {
+        *galaxy_map = generate_galaxy_map(save.galaxy_seed);
+        for sd in &save.galaxy_systems {
+            if let Some(sys) = galaxy_map.systems.iter_mut().find(|s| s.id == sd.id) {
+                sys.discovery = SystemDiscovery::from_u8(sd.discovery);
+                sys.last_updated = sd.last_updated;
+                sys.resource_fraction_remaining = sd.resource_fraction_remaining;
+            }
+        }
+        let cur = save.current_system_id;
+        streaming.loaded_system = Some(cur);
+        streaming.current_galaxy_pos = galaxy_map.systems.iter()
+            .find(|s| s.id == cur)
+            .map(|s| s.galaxy_pos)
+            .unwrap_or(Vec2::ZERO);
+        streaming.warm_systems = nearest_neighbors(&galaxy_map, cur, WARM_NEIGHBOR_COUNT);
+        info!("Galaxy restored: seed={}, current system={}, {} systems", save.galaxy_seed, cur, galaxy_map.systems.len());
+    }
 
     // ---- Set game state ----
     if save.was_exploring {
