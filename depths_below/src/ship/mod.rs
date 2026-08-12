@@ -56,6 +56,7 @@ impl Plugin for ShipPlugin {
                     collision::refresh_ship_colliders,
                     collision::integrate_drift.run_if(in_state(GameState::Exploring)),
                     collision::rebuild_collider_grid.run_if(in_state(GameState::Exploring)),
+                    collision::shots_hit_terrain.run_if(in_state(GameState::Exploring)),
                     collision::resolve_collisions.run_if(in_state(GameState::Exploring)),
                 )
                     .chain()

@@ -87,7 +87,12 @@ pub fn check_section_severance(
                     })
                     .insert(Velocity(eject_velocity))
                     .insert(GravityAffected { mass: 50.0 })
-                    .insert(GravityForce::default());
+                    .insert(GravityForce::default())
+                    // Light physical body: chunks carom off hulls and rocks
+                    // instead of ghosting through (ships barely feel them —
+                    // 50 mass vs a ship's ~1200). Shots still pass through
+                    // debris (see collision::TerrainFilter).
+                    .insert(crate::ship::collision::Collider::circle(45.0, 50.0));
 
                 notifications.write(ShowNotification {
                     message: format!("SECTION SEVERED! {} detached!", module.module_type.name()),

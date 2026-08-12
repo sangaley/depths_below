@@ -55,10 +55,17 @@ pub fn fire_laser_system(
     mut ai_module_query: Query<(&mut Module, &GlobalTransform), (Without<DestroyedModule>, With<crate::ai_ship::components::OwnedByAiShip>)>,
     mut ai_hull_query: Query<(&mut HullSegment, &GlobalTransform), (Without<crate::components::HullDestroyed>, With<crate::ai_ship::components::OwnedByAiShip>)>,
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
-    // Replaced an unused ShowNotification writer — Bevy caps systems at 16
-    // params and this function is at the limit.
-    mut fired_events: MessageWriter<crate::events::WeaponFired>,
-    mut commands: Commands,
+    // Bevy caps systems at 16 params and this function is at the limit —
+    // related params are grouped into tuples (one SystemParam each) to fit.
+    (mut fired_events, mut commands): (MessageWriter<crate::events::WeaponFired>, Commands),
+    // Terrain occlusion for the beam (rocks are cover) — see ship::collision.
+    (collider_grid, terrain): (
+        Res<crate::ship::collision::ColliderGrid>,
+        Query<
+            (&Transform, &crate::ship::collision::Collider),
+            crate::ship::collision::TerrainFilter,
+        >,
+    ),
     existing_beams: Query<Entity, With<LaserBeamVisual>>,
     // Per-weapon "which block am I currently cutting into" — without this,
     // the beam picked the nearest block to its aim point fresh every frame,
@@ -101,7 +108,7 @@ pub fn fire_laser_system(
         }
 
         let weapon_pos = global_transform.translation().truncate();
-        let beam_range = weapon.range;
+        let mut beam_range = weapon.range;
 
         // Aim at selected target or straight ahead
         let beam_dir = if let Some(target) = selection.target {
@@ -128,6 +135,24 @@ pub fn fire_laser_system(
             position: weapon_pos,
             from_player: true,
         });
+
+        // Terrain blocks the beam: clamp range at the first asteroid/station/
+        // planet along the ray, so rocks are cover against lasers too.
+        let mut terrain_stop: Option<Vec2> = None;
+        if let Some((_, point)) = crate::ship::collision::terrain_segment_hit(
+            &collider_grid,
+            &terrain,
+            weapon_pos,
+            weapon_pos + beam_dir * beam_range,
+            0.0,
+        ) {
+            beam_range = weapon_pos.distance(point);
+            terrain_stop = Some(point);
+        }
+        // The beam chews at the rock face — small continuous scorch glow.
+        if let Some(point) = terrain_stop {
+            spawn_hit_effect(&mut commands, point, Color::srgba(1.0, 0.7, 0.4, 0.7), 8.0);
+        }
 
         // Trace beam — check all creatures along the line
         let beam_end = weapon_pos + beam_dir * beam_range;

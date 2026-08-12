@@ -15,13 +15,21 @@ pub fn ai_ship_movement_system(
         &AiShipState,
         &AiShipType,
         &Children,
+        Option<&crate::ship::collision::Collider>,
     ), With<AiShip>>,
     engine_query: Query<(&Engine, &Module, &OwnedByAiShip)>,
     weapon_query: Query<(&Weapon, &Module, &OwnedByAiShip), Without<Engine>>,
+    // Terrain look-ahead so ships swing around rocks/stations on their way
+    // instead of grinding along everything that's solid now.
+    collider_grid: Res<crate::ship::collision::ColliderGrid>,
+    terrain: Query<
+        (&Transform, &crate::ship::collision::Collider),
+        crate::ship::collision::TerrainFilter,
+    >,
 ) {
     let dt = time.delta_secs();
 
-    for (_entity, mut transform, mut velocity, behavior, nav, state, ship_type, children) in ai_ships.iter_mut() {
+    for (_entity, mut transform, mut velocity, behavior, nav, state, ship_type, children, collider) in ai_ships.iter_mut() {
         if *behavior == AiShipBehavior::Dead || state.is_destroyed {
             velocity.0 = Vec2::ZERO;
             continue;
@@ -156,7 +164,16 @@ pub fn ai_ship_movement_system(
                 let target_rotation = Quat::from_rotation_z(target_angle);
                 transform.rotation = transform.rotation.slerp(target_rotation, turn_blend);
             } else if dist > 5.0 {
-                let direction = to_dest / dist;
+                // Bend the heading around any terrain blocking the way.
+                let own_radius = collider.map(|c| c.bound_radius).unwrap_or(300.0);
+                let direction = crate::ship::collision::steer_around(
+                    &collider_grid,
+                    &terrain,
+                    pos,
+                    to_dest / dist,
+                    dist,
+                    own_radius,
+                );
 
                 // Gradually accelerate toward desired velocity
                 let desired_vel = direction * max_speed;

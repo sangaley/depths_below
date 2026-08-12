@@ -1,13 +1,21 @@
 use bevy::prelude::*;
 
-use crate::ai_ship::components::AiShip;
+use crate::ai_ship::components::{AiShip, AiShipType};
 use crate::camera::CameraState;
 use crate::celestial::components::{CelestialBody, CelestialBodyType};
 use crate::celestial::poi::{SpacePoi, SpacePoiType};
-use crate::components::{HullSegment, Module, Ship, ShipPhysics, Velocity};
+use crate::combat::energy_weapons::{EmpWarhead, IonPulse};
+use crate::combat::new_projectiles::{MissileProjectile, Projectile as NewProjectile};
+use crate::combat::severance::DetachedSection;
+use crate::components::{HullSegment, Module, Projectile as LegacyProjectile, Ship, ShipPhysics, Velocity};
 use crate::events::{AiShipDamaged, DamageSource, ShipDamaged};
 use crate::spatial::SpatialGrid;
 use crate::world::home_base::{HomeStation, ResupplyOutpost};
+
+/// "Terrain" for weapons fire and AI steering: solid scenery, not ships and
+/// not battle debris (shots pass through drifting chunks; only real obstacles
+/// stop them).
+pub type TerrainFilter = (Without<Ship>, Without<AiShip>, Without<DetachedSection>);
 
 // ============================================================================
 // PHYSICAL COLLISION — ships, stations, asteroids, planets, stars.
@@ -66,7 +74,7 @@ pub struct Collider {
 }
 
 impl Collider {
-    fn circle(radius: f32, mass: f32) -> Self {
+    pub(crate) fn circle(radius: f32, mass: f32) -> Self {
         Self {
             circles: vec![(Vec2::ZERO, radius)],
             bound_center: Vec2::ZERO,
@@ -105,6 +113,138 @@ pub struct ColliderGrid {
 impl Default for ColliderGrid {
     fn default() -> Self {
         Self { grid: SpatialGrid::new(512.0), max_small: 0.0, huge: Vec::new() }
+    }
+}
+
+impl ColliderGrid {
+    /// Collider entities whose bounds could touch a circle around `pos` —
+    /// grid candidates plus every huge body. Callers do the exact test.
+    pub fn candidates(&self, pos: Vec2, radius: f32) -> impl Iterator<Item = Entity> + '_ {
+        self.grid
+            .nearby(pos, radius + self.max_small)
+            .map(|(entity, _)| entity)
+            .chain(self.huge.iter().copied())
+    }
+}
+
+/// Nearest terrain collider hit by the segment `from -> to` (padded by
+/// `pad`), as (entity, impact point). Uses bounding circles — plenty for
+/// bullets vs rocks.
+pub fn terrain_segment_hit(
+    grid: &ColliderGrid,
+    terrain: &Query<(&Transform, &Collider), TerrainFilter>,
+    from: Vec2,
+    to: Vec2,
+    pad: f32,
+) -> Option<(Entity, Vec2)> {
+    let travel = to - from;
+    let len = travel.length();
+    let dir = if len > 1e-4 { travel / len } else { Vec2::X };
+    let mid = from + travel * 0.5;
+
+    let mut best: Option<(f32, Entity)> = None;
+    for entity in grid.candidates(mid, len * 0.5 + pad) {
+        let Ok((transform, collider)) = terrain.get(entity) else { continue };
+        let center = world_point(transform, collider.bound_center);
+        let radius = collider.bound_radius + pad;
+        // Ray-circle intersection along the segment.
+        let m = from - center;
+        let b = m.dot(dir);
+        let c = m.length_squared() - radius * radius;
+        if c > 0.0 && b > 0.0 {
+            continue; // starts outside, pointing away
+        }
+        let disc = b * b - c;
+        if disc < 0.0 {
+            continue;
+        }
+        let t = (-b - disc.sqrt()).max(0.0);
+        if t <= len && best.map(|(bt, _)| t < bt).unwrap_or(true) {
+            best = Some((t, entity));
+        }
+    }
+    best.map(|(t, entity)| (entity, from + dir * t))
+}
+
+/// Bends a desired travel direction to slide around blocking terrain — the
+/// same "swing around, don't clip through" trick the EVA crew use, scaled up.
+/// Returns the (unit) direction to actually fly.
+pub fn steer_around(
+    grid: &ColliderGrid,
+    terrain: &Query<(&Transform, &Collider), TerrainFilter>,
+    pos: Vec2,
+    desired: Vec2,
+    travel: f32,
+    own_radius: f32,
+) -> Vec2 {
+    let look = travel.min(2200.0);
+    if look < 1.0 {
+        return desired;
+    }
+    // Nearest obstacle whose clearance the look-ahead corridor violates.
+    let mut best: Option<(f32, Vec2, f32)> = None; // (t_along, center, clearance)
+    for entity in grid.candidates(pos + desired * (look * 0.5), look * 0.5) {
+        let Ok((transform, collider)) = terrain.get(entity) else { continue };
+        let center = world_point(transform, collider.bound_center);
+        let clearance = collider.bound_radius + own_radius + 60.0;
+        let rel = center - pos;
+        let t_along = rel.dot(desired);
+        if t_along < 0.0 || t_along > look + clearance {
+            continue;
+        }
+        let lateral = rel - desired * t_along;
+        if lateral.length() < clearance && best.map(|(bt, ..)| t_along < bt).unwrap_or(true) {
+            best = Some((t_along, center, clearance));
+        }
+    }
+    let Some((t_along, center, clearance)) = best else { return desired };
+
+    let rel = center - pos;
+    let lateral = rel - desired * rel.dot(desired);
+    // Slide away from the obstacle's center; dead-ahead picks a side.
+    let away = lateral.try_normalize().map(|l| -l).unwrap_or(desired.perp());
+    let need = ((clearance - lateral.length()) / clearance).clamp(0.0, 1.0);
+    let urgency = (1.0 - t_along / look).clamp(0.2, 1.0);
+    (desired + away * (need * (0.6 + 1.4 * urgency)))
+        .try_normalize()
+        .unwrap_or(desired)
+}
+
+/// Weapons fire smashes into terrain: bullets, missiles, ion pulses and EMP
+/// warheads fizzle against asteroids/stations/planets instead of passing
+/// through — rocks are cover now. Lasers are clamped separately at fire time
+/// (instant rays), and debris chunks deliberately don't block shots.
+pub fn shots_hit_terrain(
+    grid: Res<ColliderGrid>,
+    shots: Query<
+        (Entity, &Transform),
+        Or<(
+            With<NewProjectile>,
+            With<LegacyProjectile>,
+            With<MissileProjectile>,
+            With<IonPulse>,
+            With<EmpWarhead>,
+        )>,
+    >,
+    terrain: Query<(&Transform, &Collider), TerrainFilter>,
+    mut commands: Commands,
+) {
+    for (entity, transform) in shots.iter() {
+        let pos = transform.translation.truncate();
+        for candidate in grid.candidates(pos, 8.0) {
+            let Ok((terrain_transform, collider)) = terrain.get(candidate) else { continue };
+            let center = world_point(terrain_transform, collider.bound_center);
+            if pos.distance_squared(center) < (collider.bound_radius + 6.0).powi(2) {
+                crate::combat::spawn_hit_effect(
+                    &mut commands,
+                    pos,
+                    Color::srgba(0.9, 0.8, 0.6, 0.8),
+                    10.0,
+                );
+                commands.entity(entity).try_despawn();
+                break;
+            }
+        }
     }
 }
 
@@ -320,6 +460,7 @@ pub fn resolve_collisions(
     )>,
     player: Query<(), With<Ship>>,
     ai: Query<(), With<AiShip>>,
+    ship_types: Query<&AiShipType>,
     mut camera: ResMut<CameraState>,
     mut ship_damage: MessageWriter<ShipDamaged>,
     mut ai_damage: MessageWriter<AiShipDamaged>,
@@ -422,11 +563,20 @@ pub fn resolve_collisions(
         // (block damage, breaches, death attribution, HUD arrows).
         if approach > DAMAGE_MIN_SPEED {
             let energy = ((approach - DAMAGE_MIN_SPEED) * DAMAGE_SCALE).min(DAMAGE_CAP);
+            // Ram identity: (damage dealt mult, damage taken mult) per
+            // faction. Rust Swarm hulls ARE battering rams — they hit way
+            // harder and shrug most of it off; Pressure Kings ram heavy too.
+            let ram_profile = |entity: Entity| match ship_types.get(entity) {
+                Ok(AiShipType::RustSwarm) => (2.5, 0.4),
+                Ok(AiShipType::PressureKing) => (1.8, 0.7),
+                _ => (1.0, 1.0),
+            };
             for (entity, other, share, into) in [
                 (a, b, inv_a / total_inv, -normal),
                 (b, a, inv_b / total_inv, normal),
             ] {
-                let amount = energy * share;
+                let amount =
+                    (energy * share * ram_profile(other).0 * ram_profile(entity).1).min(150.0);
                 if amount < 1.0 {
                     continue;
                 }
