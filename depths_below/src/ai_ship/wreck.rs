@@ -123,9 +123,17 @@ pub fn ai_ship_death_system(
     children_query: Query<&Children>,
     mut module_query: Query<(&mut Module, &mut Sprite, Has<DestroyedModule>), Without<HullSegment>>,
     mut hull_query: Query<(&mut Sprite, &HullSegment, Has<HullDestroyed>), Without<Module>>,
+    mut shield_query: Query<&mut crate::combat::shields::ShipShield>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     for event in destroyed_events.read() {
+        // Dead reactor, dead shield — permanently. update_shields recharges
+        // any enabled shield after a few quiet seconds, so without this a
+        // wreck's bubble came BACK UP and started absorbing shots again.
+        if let Ok(mut shield) = shield_query.get_mut(event.entity) {
+            shield.enabled = false;
+            shield.current = 0.0;
+        }
         let base_loot = match event.ship_type {
             AiShipType::VoidTitan => 30,    // legendary hoard
             AiShipType::Dreadnought => 20,  // colossal wreck

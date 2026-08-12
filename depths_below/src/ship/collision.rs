@@ -311,9 +311,11 @@ pub fn attach_knock(
     }
 }
 
-/// Fits a handful of circles along the hull's longer axis. Buckets the block
-/// positions, one circle per bucket — a wedge gets a small nose circle and a
-/// wide stern circle instead of one giant ball.
+/// Fits circles over the hull via a 2D bucket grid (~2.5 blocks per cell,
+/// one circle per occupied cell). Fine enough that shooting a pocket of
+/// blocks off a ship actually opens a hole in its collision — the earlier
+/// long-axis-only bucketing kept "phantom hull" where destroyed blocks were.
+/// Cell size scales up on huge hulls to cap the circle count.
 fn fit_ship_collider(points: &[Vec2], mass: f32) -> Collider {
     if points.is_empty() {
         let mut collider = Collider::circle(120.0, mass);
@@ -330,23 +332,23 @@ fn fit_ship_collider(points: &[Vec2], mass: f32) -> Collider {
     }
     let centroid = sum / points.len() as f32;
     let span = max - min;
-    let along_x = span.x >= span.y;
-    let (long, short) = if along_x { (span.x, span.y) } else { (span.y, span.x) };
-    let n = ((long / short.max(66.0)) * 2.0).round().clamp(1.0, 6.0) as usize;
+    let cell = (span.x.max(span.y) / 8.0).max(170.0);
 
-    let lo = if along_x { min.x } else { min.y };
-    let mut buckets: Vec<Vec<Vec2>> = vec![Vec::new(); n];
+    let mut buckets: std::collections::HashMap<IVec2, Vec<Vec2>> =
+        std::collections::HashMap::new();
     for p in points {
-        let c = if along_x { p.x } else { p.y };
-        let idx = if long < 1.0 { 0 } else { (((c - lo) / long) * n as f32) as usize };
-        buckets[idx.min(n - 1)].push(*p);
+        let key = IVec2::new(
+            ((p.x - min.x) / cell) as i32,
+            ((p.y - min.y) / cell) as i32,
+        );
+        buckets.entry(key).or_default().push(*p);
     }
 
     let mut circles = Vec::new();
-    for bucket in buckets.iter().filter(|b| !b.is_empty()) {
+    for bucket in buckets.values() {
         let center = bucket.iter().sum::<Vec2>() / bucket.len() as f32;
         let radius = bucket.iter().map(|p| p.distance(center)).fold(0.0, f32::max) + BLOCK_SLACK;
-        circles.push((center, radius.max(70.0)));
+        circles.push((center, radius.max(50.0)));
     }
     let bound_radius = circles
         .iter()
@@ -361,13 +363,38 @@ fn fit_ship_collider(points: &[Vec2], mass: f32) -> Collider {
 /// player, AI ships, and wrecks (a dead AI ship keeps its entity and blocks).
 pub fn refresh_ship_colliders(
     mut commands: Commands,
-    ships: Query<
-        (Entity, Option<&ShipPhysics>, Option<&Children>),
+    // Refit on child add/remove (build edits, block despawn, severance)...
+    changed: Query<
+        Entity,
         (Or<(With<Ship>, With<AiShip>)>, Or<(Changed<Children>, Without<Collider>)>),
     >,
-    blocks: Query<&Transform, Or<(With<Module>, With<HullSegment>)>>,
+    // ...and the moment a block is MARKED destroyed — its despawn is 0.5s
+    // out (PendingRemoval) and the hole should open now, not then.
+    fresh_destroyed: Query<
+        &ChildOf,
+        Or<(Added<crate::components::HullDestroyed>, Added<crate::components::DestroyedModule>)>,
+    >,
+    ships: Query<
+        (Entity, Option<&ShipPhysics>, Option<&Children>),
+        Or<(With<Ship>, With<AiShip>)>,
+    >,
+    // Destroyed-but-not-yet-despawned blocks (0.5s PendingRemoval window)
+    // don't count toward the shape — a hole is a hole the moment it's made.
+    blocks: Query<
+        &Transform,
+        (
+            Or<(With<Module>, With<HullSegment>)>,
+            Without<crate::components::DestroyedModule>,
+            Without<crate::components::HullDestroyed>,
+        ),
+    >,
 ) {
-    for (entity, physics, children) in ships.iter() {
+    let mut targets: std::collections::HashSet<Entity> = changed.iter().collect();
+    for parent in fresh_destroyed.iter() {
+        targets.insert(parent.parent());
+    }
+    for target in targets {
+        let Ok((entity, physics, children)) = ships.get(target) else { continue };
         let points: Vec<Vec2> = children
             .map(|children| {
                 children
