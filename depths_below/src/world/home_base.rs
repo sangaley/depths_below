@@ -56,8 +56,8 @@ pub const STATION_POS: Vec2 = Vec2::new(-700.0, -450.0);
 // solid now (see ship::collision), and the root of a big ship can sit ~800
 // units behind its own nose — the old 400/350 ranges were physically
 // unreachable with a large hull parked against the station.
-const DOCK_RANGE: f32 = 1000.0;
-const OUTPOST_RANGE: f32 = 900.0;
+const DOCK_RANGE: f32 = 1800.0;
+const OUTPOST_RANGE: f32 = 1600.0;
 
 /// Nearest station within docking/resupply range, as a contract-board index
 /// (0 = Haven, 1..=N = OUTPOST_POSITIONS in order). None if the ship isn't

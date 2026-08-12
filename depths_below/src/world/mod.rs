@@ -156,7 +156,10 @@ fn check_poi_discovery(
         let poi_pos = poi_gt.translation().truncate();
         let dist = ship_pos.distance(poi_pos);
 
-        if dist < 200.0 {
+        // Root-to-center; the ship's own hull spans several hundred units,
+        // so discovery triggers as the hull gets near, not once the root
+        // is parked on top of the POI.
+        if dist < 700.0 {
             poi.discovered = true;
 
             match poi.poi_type {
@@ -202,7 +205,7 @@ fn check_docking_proximity(
         }
 
         let dist = ship_pos.distance(poi_gt.translation().truncate());
-        if dist < 150.0 {
+        if dist < 900.0 {
             docking_events.write(DockingStarted { target: entity });
             notifications.write(ShowNotification {
                 message: "Docking at settlement...".into(),
@@ -290,7 +293,7 @@ fn discover_log_entries(
         let poi_pos = poi_gt.translation().truncate();
         let dist = ship_pos.distance(poi_pos);
 
-        if dist < 120.0 && !discovered_logs.contains(&log.title) {
+        if dist < 500.0 && !discovered_logs.contains(&log.title) {
             discovered_logs.push(log.title.clone());
 
             // Record in statistics

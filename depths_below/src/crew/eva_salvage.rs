@@ -26,7 +26,7 @@ use crate::ai_ship::components::AiShipWreck;
 // Ship root to nearest wreck block. Hulls are solid now (see ship::collision),
 // so a big ship parked against a wreck can still have its root ~500+ units
 // from the contact point — 500 made dispatch unreachable nose-on.
-const ORDER_RANGE: f32 = 800.0;
+const ORDER_RANGE: f32 = 1500.0;
 /// Ship drifting further than this from the worksite recalls the detail.
 const BREAK_RANGE: f32 = 900.0;
 /// Crew stranded further than this from the ship emergency-board instantly.

@@ -159,7 +159,7 @@ pub fn mining_system(
         // solid now, so the reachable minimum is the rock's radius plus most
         // of the ship's own length — scale the range with the rock so big
         // asteroids stay mineable.
-        let range = 700.0 + body.map(|b| b.radius).unwrap_or(0.0);
+        let range = 1200.0 + body.map(|b| b.radius).unwrap_or(0.0);
         if dist > range || resource.resource_remaining <= 0.0 { continue; }
 
         let extracted = resource.extraction_rate * dt;
@@ -219,7 +219,7 @@ pub fn loot_derelict_system(
         let dist = ship_pos.distance(poi_transform.translation.truncate());
         // Root-to-center; derelicts are solid now, so leave room for the
         // ship's own hull between root and contact point.
-        if dist > 800.0 { continue; }
+        if dist > 1400.0 { continue; }
 
         poi.looted = true;
         currency.credits += poi.loot_value;

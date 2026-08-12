@@ -94,7 +94,7 @@ pub fn wreck_drill_system(
         // Hulls are solid now (see ship::collision), which holds a skin gap
         // between ship and wreck — pad the registry's contact range so the
         // drill still reaches across that gap when parked against the hulk.
-        let reach = salvage.range + 150.0;
+        let reach = salvage.range + 300.0;
 
         // Validate the current target, else acquire the nearest wreck
         // block in reach (wreck blocks only — never live ships).
