@@ -5,18 +5,20 @@ use crate::camera::CameraState;
 use crate::celestial::components::{CelestialBody, CelestialBodyType};
 use crate::celestial::poi::{SpacePoi, SpacePoiType};
 use crate::components::{HullSegment, Module, Ship, ShipPhysics, Velocity};
+use crate::events::{AiShipDamaged, DamageSource, ShipDamaged};
 use crate::spatial::SpatialGrid;
 use crate::world::home_base::{HomeStation, ResupplyOutpost};
 
 // ============================================================================
 // PHYSICAL COLLISION — ships, stations, asteroids, planets, stars.
-// Everything solid carries a Collider (one or more circles in local space);
-// anything with a Velocity is pushed and bounced, everything else is an
-// immovable obstacle. Projectiles/missiles keep their own hit systems.
+// Everything solid carries a Collider (one or more circles in local space).
+// Ships and asteroids exchange real momentum (mass-weighted impulses);
+// stations, planets and stars are immovable. Hard crashes damage the hulls
+// on both sides. Projectiles/missiles keep their own hit systems.
 // ============================================================================
 
 /// Bounce energy kept on impact (0 = dead stop, 1 = perfect bounce).
-const RESTITUTION: f32 = 0.22;
+const RESTITUTION: f32 = 0.30;
 /// Fraction of remaining overlap corrected per frame — softens de-penetration
 /// so contacts settle instead of snapping.
 const CORRECTION: f32 = 0.45;
@@ -25,6 +27,13 @@ const CORRECTION: f32 = 0.45;
 const MAX_PUSH: f32 = 350.0;
 /// Relative approach speed above which an impact sparks and kicks the camera.
 const IMPACT_FX_SPEED: f32 = 250.0;
+/// Approach speed above which a crash starts damaging hulls...
+const DAMAGE_MIN_SPEED: f32 = 320.0;
+/// ...damage per unit of speed beyond that, split by mass (the lighter body
+/// takes the bigger share; an immovable wall deals all of it to you).
+const DAMAGE_SCALE: f32 = 0.12;
+/// Cap per contact so an extreme-speed clip can't one-shot a hull.
+const DAMAGE_CAP: f32 = 120.0;
 /// Covers a block's corners from its center (33 * sqrt2) plus a little skin.
 const BLOCK_SLACK: f32 = 48.0;
 /// AI ships have no ShipPhysics; estimate mass from block count. Tuned so a
@@ -34,6 +43,9 @@ const BLOCK_MASS: f32 = 8.0;
 /// against every ship directly — there are only a handful per system, and a
 /// star-sized query radius would defeat the grid entirely.
 const HUGE_RADIUS: f32 = 1500.0;
+/// Below this speed (squared) a body counts as asleep — sleeping asteroids
+/// don't scan for collisions; ships always do.
+const WAKE_SPEED_SQ: f32 = 0.25;
 
 /// Physical collision body: one or more solid circles in entity-local space.
 /// Static obstacles are a single circle with infinite mass; ships get a few
@@ -48,6 +60,9 @@ pub struct Collider {
     pub bound_radius: f32,
     /// f32::INFINITY = immovable.
     pub mass: f32,
+    /// Always scans for collisions (ships). Non-awake movers (asteroids)
+    /// only scan while actually moving; sleeping rocks cost nothing.
+    pub awake: bool,
 }
 
 impl Collider {
@@ -57,6 +72,7 @@ impl Collider {
             bound_center: Vec2::ZERO,
             bound_radius: radius,
             mass,
+            awake: false,
         }
     }
 
@@ -64,6 +80,14 @@ impl Collider {
         if self.mass.is_finite() { 1.0 / self.mass } else { 0.0 }
     }
 }
+
+/// Collision shove for AI ships, kept separate from their steering Velocity —
+/// the AI movement system rewrites Velocity every frame (lerp toward its nav
+/// target), which would silently eat any impulse landed there. Knock is
+/// integrated and decayed independently, so a ram physically displaces an AI
+/// ship (or a dead wreck) while its own steering stays intact.
+#[derive(Component, Default)]
+pub struct KnockVelocity(pub Vec2);
 
 fn world_point(transform: &Transform, local: Vec2) -> Vec2 {
     transform.translation.truncate() + (transform.rotation * local.extend(0.0)).truncate()
@@ -86,7 +110,8 @@ impl Default for ColliderGrid {
 
 /// Gives freshly spawned static world objects their collision circle.
 /// Everything is matched by Added<> here so no spawn site needs to know
-/// about collision.
+/// about collision. Asteroids also get a Velocity: they have finite,
+/// area-scaled mass and can be shunted around, billiards-style.
 pub fn attach_static_colliders(
     mut commands: Commands,
     celestial: Query<(Entity, &CelestialBody), Added<CelestialBody>>,
@@ -95,16 +120,26 @@ pub fn attach_static_colliders(
     pois: Query<(Entity, &SpacePoi), (Added<SpacePoi>, Without<CelestialBody>)>,
 ) {
     for (entity, body) in celestial.iter() {
-        let radius = match body.body_type {
-            // Rock sprites don't fill their square; shrink so the contact
-            // matches what the eye sees.
-            CelestialBodyType::Asteroid => body.radius * 0.85,
-            CelestialBodyType::Planet | CelestialBodyType::Star => body.radius,
+        match body.body_type {
+            CelestialBodyType::Asteroid => {
+                // Rock sprites don't fill their square; shrink so the contact
+                // matches what the eye sees. Mass scales with area: small
+                // rocks shove aside easily, big ones barely notice you.
+                let radius = body.radius * 0.85;
+                let mass = (radius / 100.0).powi(2) * 1200.0;
+                commands
+                    .entity(entity)
+                    .try_insert((Collider::circle(radius, mass), Velocity(Vec2::ZERO)));
+            }
+            CelestialBodyType::Planet | CelestialBodyType::Star => {
+                commands
+                    .entity(entity)
+                    .try_insert(Collider::circle(body.radius, f32::INFINITY));
+            }
             // Black holes consume ships (BeingConsumed spiral) — a solid rim
             // would break that. Debris is not worth bouncing off.
-            CelestialBodyType::BlackHole | CelestialBodyType::Debris => continue,
-        };
-        commands.entity(entity).try_insert(Collider::circle(radius, f32::INFINITY));
+            CelestialBodyType::BlackHole | CelestialBodyType::Debris => {}
+        }
     }
     // Haven: circle hugging the hub — the four arm tips poke out rather than
     // walling off the empty diagonals of the full cross shape.
@@ -126,12 +161,24 @@ pub fn attach_static_colliders(
     }
 }
 
+/// Every AI ship gets a knock channel (see KnockVelocity).
+pub fn attach_knock(
+    mut commands: Commands,
+    ships: Query<Entity, (With<AiShip>, Without<KnockVelocity>)>,
+) {
+    for entity in ships.iter() {
+        commands.entity(entity).try_insert(KnockVelocity::default());
+    }
+}
+
 /// Fits a handful of circles along the hull's longer axis. Buckets the block
 /// positions, one circle per bucket — a wedge gets a small nose circle and a
 /// wide stern circle instead of one giant ball.
 fn fit_ship_collider(points: &[Vec2], mass: f32) -> Collider {
     if points.is_empty() {
-        return Collider::circle(120.0, mass);
+        let mut collider = Collider::circle(120.0, mass);
+        collider.awake = true;
+        return collider;
     }
     let mut min = points[0];
     let mut max = points[0];
@@ -166,7 +213,7 @@ fn fit_ship_collider(points: &[Vec2], mass: f32) -> Collider {
         .map(|(c, r)| c.distance(centroid) + r)
         .fold(0.0, f32::max);
 
-    Collider { circles, bound_center: centroid, bound_radius, mass }
+    Collider { circles, bound_center: centroid, bound_radius, mass, awake: true }
 }
 
 /// (Re)builds ship colliders from their child blocks — on spawn and whenever
@@ -197,6 +244,40 @@ pub fn refresh_ship_colliders(
     }
 }
 
+/// Integrates the motion the regular movement systems don't own: shunted
+/// asteroids drift (with a long half-life so a shove sends them coasting,
+/// not skidding to a halt), and AI-ship knocks play out and decay.
+pub fn integrate_drift(
+    time: Res<Time>,
+    mut rocks: Query<
+        (&mut Transform, &mut Velocity),
+        (With<CelestialBody>, Without<KnockVelocity>),
+    >,
+    mut knocked: Query<(&mut Transform, &mut KnockVelocity), Without<CelestialBody>>,
+) {
+    let dt = time.delta_secs();
+    for (mut transform, mut velocity) in rocks.iter_mut() {
+        if velocity.0.length_squared() < 1.0 {
+            continue;
+        }
+        transform.translation += (velocity.0 * dt).extend(0.0);
+        velocity.0 *= (0.5_f32).powf(dt / 22.0);
+        if velocity.0.length_squared() < 1.0 {
+            velocity.0 = Vec2::ZERO;
+        }
+    }
+    for (mut transform, mut knock) in knocked.iter_mut() {
+        if knock.0.length_squared() < 4.0 {
+            continue;
+        }
+        transform.translation += (knock.0 * dt).extend(0.0);
+        knock.0 *= (0.5_f32).powf(dt / 1.0);
+        if knock.0.length_squared() < 4.0 {
+            knock.0 = Vec2::ZERO;
+        }
+    }
+}
+
 pub fn rebuild_collider_grid(
     mut grid: ResMut<ColliderGrid>,
     colliders: Query<(Entity, &Transform, &Collider)>,
@@ -214,23 +295,42 @@ pub fn rebuild_collider_grid(
     }
 }
 
+fn effective_velocity(vel: Option<&Velocity>, knock: Option<&KnockVelocity>) -> Vec2 {
+    vel.map(|v| v.0).unwrap_or(Vec2::ZERO) + knock.map(|k| k.0).unwrap_or(Vec2::ZERO)
+}
+
+/// Whether this body scans for collisions this frame (see Collider::awake).
+fn initiates(collider: &Collider, vel: Option<&Velocity>, knock: Option<&KnockVelocity>) -> bool {
+    collider.awake || effective_velocity(vel, knock).length_squared() > WAKE_SPEED_SQ
+}
+
 /// Finds overlapping pairs (broad phase via the grid) and resolves each with
-/// a positional push plus an impulse along the contact normal, split by mass.
-/// Static obstacles just don't move (infinite mass); everything shares the
-/// same math.
+/// a positional push plus a momentum exchange along the contact normal, split
+/// by mass. AI ships take their impulse on the knock channel so their
+/// steering can't overwrite it. Crashes above DAMAGE_MIN_SPEED hurt both
+/// hulls through the same damage events weapons use.
 pub fn resolve_collisions(
     grid: Res<ColliderGrid>,
-    mut bodies: Query<(Entity, &mut Transform, Option<&mut Velocity>, &Collider)>,
+    mut bodies: Query<(
+        Entity,
+        &mut Transform,
+        Option<&mut Velocity>,
+        Option<&mut KnockVelocity>,
+        &Collider,
+    )>,
     player: Query<(), With<Ship>>,
+    ai: Query<(), With<AiShip>>,
     mut camera: ResMut<CameraState>,
+    mut ship_damage: MessageWriter<ShipDamaged>,
+    mut ai_damage: MessageWriter<AiShipDamaged>,
     mut commands: Commands,
 ) {
-    // Pass 1 (read-only): collect candidate pairs. Only dynamic bodies (ones
-    // with a Velocity) initiate; dynamic-dynamic pairs are deduped by entity
-    // order so each is resolved once.
+    // Pass 1 (read-only): collect candidate pairs. Ships always scan;
+    // asteroids only while moving; statics never. Pairs where both sides
+    // scan are deduped by entity order so each is resolved once.
     let mut contacts: Vec<(Entity, Entity)> = Vec::new();
-    for (entity, transform, velocity, collider) in bodies.iter() {
-        if velocity.is_none() {
+    for (entity, transform, velocity, knock, collider) in bodies.iter() {
+        if !initiates(collider, velocity, knock) {
             continue;
         }
         let center = world_point(transform, collider.bound_center);
@@ -243,10 +343,12 @@ pub fn resolve_collisions(
             if other == entity {
                 continue;
             }
-            let Ok((_, other_transform, other_velocity, other_collider)) = bodies.get(other) else {
+            let Ok((_, other_transform, other_vel, other_knock, other_collider)) =
+                bodies.get(other)
+            else {
                 continue;
             };
-            if other_velocity.is_some() && other < entity {
+            if initiates(other_collider, other_vel, other_knock) && other < entity {
                 continue;
             }
             let other_center = world_point(other_transform, other_collider.bound_center);
@@ -259,7 +361,9 @@ pub fn resolve_collisions(
     // Pass 2: resolve. Overlaps are recomputed from current transforms so a
     // chain of contacts in one frame doesn't act on stale positions.
     for (a, b) in contacts {
-        let Ok([(_, mut ta, va, ca), (_, mut tb, vb, cb)]) = bodies.get_many_mut([a, b]) else {
+        let Ok([(_, mut ta, mut va, mut ka, ca), (_, mut tb, mut vb, mut kb, cb)]) =
+            bodies.get_many_mut([a, b])
+        else {
             continue;
         };
 
@@ -285,17 +389,23 @@ pub fn resolve_collisions(
             continue;
         }
 
-        // Impulse: kill approach speed along the normal, keep a small bounce.
-        let vel_a = va.as_ref().map(|v| v.0).unwrap_or(Vec2::ZERO);
-        let vel_b = vb.as_ref().map(|v| v.0).unwrap_or(Vec2::ZERO);
+        // Momentum exchange: kill approach speed along the normal, keep some
+        // bounce. AI ships take the change on their knock channel.
+        let vel_a = effective_velocity(va.as_deref(), ka.as_deref());
+        let vel_b = effective_velocity(vb.as_deref(), kb.as_deref());
         let approach = (vel_a - vel_b).dot(normal);
         if approach > 0.0 {
             let impulse = (1.0 + RESTITUTION) * approach / total_inv;
-            if let Some(mut v) = va {
-                v.0 -= normal * impulse * inv_a;
+            let (dv_a, dv_b) = (-normal * impulse * inv_a, normal * impulse * inv_b);
+            match (&mut ka, &mut va) {
+                (Some(k), _) => k.0 += dv_a,
+                (None, Some(v)) => v.0 += dv_a,
+                _ => {}
             }
-            if let Some(mut v) = vb {
-                v.0 += normal * impulse * inv_b;
+            match (&mut kb, &mut vb) {
+                (Some(k), _) => k.0 += dv_b,
+                (None, Some(v)) => v.0 += dv_b,
+                _ => {}
             }
         }
 
@@ -304,9 +414,47 @@ pub fn resolve_collisions(
         ta.translation -= (normal * push * (inv_a / total_inv)).extend(0.0);
         tb.translation += (normal * push * (inv_b / total_inv)).extend(0.0);
 
-        // Hard hits get a small scrape flash; the player also feels a kick.
+        let contact = wa + normal * (radius_a - pen * 0.5);
+
+        // Crash damage: speed beyond the threshold hurts, split by mass —
+        // the lighter body takes the bigger share, an immovable wall deals
+        // all of it to you. Both hulls go through the regular damage events
+        // (block damage, breaches, death attribution, HUD arrows).
+        if approach > DAMAGE_MIN_SPEED {
+            let energy = ((approach - DAMAGE_MIN_SPEED) * DAMAGE_SCALE).min(DAMAGE_CAP);
+            for (entity, other, share, into) in [
+                (a, b, inv_a / total_inv, -normal),
+                (b, a, inv_b / total_inv, normal),
+            ] {
+                let amount = energy * share;
+                if amount < 1.0 {
+                    continue;
+                }
+                if player.contains(entity) {
+                    ship_damage.write(ShipDamaged {
+                        source: DamageSource::Collision,
+                        amount,
+                        position: Some(contact),
+                        direction: Some(into),
+                    });
+                } else if ai.contains(entity) {
+                    ai_damage.write(AiShipDamaged {
+                        target: entity,
+                        source: DamageSource::Collision,
+                        amount,
+                        position: Some(contact),
+                        direction: Some(into),
+                        // Rams aggro: the other ship is the attacker if it
+                        // IS a ship (player or AI root), not scenery.
+                        attacker: (player.contains(other) || ai.contains(other))
+                            .then_some(other),
+                    });
+                }
+            }
+        }
+
+        // Hard hits get a scrape flash; the player also feels a kick.
         if approach > IMPACT_FX_SPEED {
-            let contact = wa + normal * (radius_a - pen * 0.5);
             crate::combat::spawn_hit_effect(
                 &mut commands,
                 contact,
