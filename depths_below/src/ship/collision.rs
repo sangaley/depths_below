@@ -34,14 +34,14 @@ const CORRECTION: f32 = 0.45;
 /// a planet slides it to the surface over a few frames instead of teleporting.
 const MAX_PUSH: f32 = 350.0;
 /// Relative approach speed above which an impact sparks and kicks the camera.
-const IMPACT_FX_SPEED: f32 = 250.0;
-/// Approach speed above which a crash starts damaging hulls...
-const DAMAGE_MIN_SPEED: f32 = 320.0;
-/// ...damage per unit of speed beyond that, split by mass (the lighter body
-/// takes the bigger share; an immovable wall deals all of it to you).
-const DAMAGE_SCALE: f32 = 0.12;
+const IMPACT_FX_SPEED: f32 = 180.0;
+/// Approach speed above which a crash starts damaging hulls. Close-quarters
+/// ram speeds are ~200-500; the original 320 was above most real impacts.
+const DAMAGE_MIN_SPEED: f32 = 200.0;
+/// ...damage per unit of speed beyond that (scaled by reduced mass below).
+const DAMAGE_SCALE: f32 = 0.15;
 /// Cap per contact so an extreme-speed clip can't one-shot a hull.
-const DAMAGE_CAP: f32 = 120.0;
+const DAMAGE_CAP: f32 = 130.0;
 /// Covers a block's corners from its center (33 * sqrt2) plus a little skin.
 const BLOCK_SLACK: f32 = 48.0;
 /// AI ships have no ShipPhysics; estimate mass from block count. Tuned so a
@@ -562,7 +562,14 @@ pub fn resolve_collisions(
         // all of it to you. Both hulls go through the regular damage events
         // (block damage, breaches, death attribution, HUD arrows).
         if approach > DAMAGE_MIN_SPEED {
-            let energy = ((approach - DAMAGE_MIN_SPEED) * DAMAGE_SCALE).min(DAMAGE_CAP);
+            // Severity scales with the pair's reduced mass: an immovable
+            // wall (reduced mass = your own mass) or a heavy ship hits far
+            // harder than a light chunk at the same speed — debris pings
+            // off you for ~nothing, a planet crumples your bow.
+            let reduced_mass = 1.0 / total_inv;
+            let mass_factor = (reduced_mass / 500.0).clamp(0.2, 2.0);
+            let energy =
+                ((approach - DAMAGE_MIN_SPEED) * DAMAGE_SCALE * mass_factor).min(DAMAGE_CAP);
             // Ram identity: (damage dealt mult, damage taken mult) per
             // faction. Rust Swarm hulls ARE battering rams — they hit way
             // harder and shrug most of it off; Pressure Kings ram heavy too.
@@ -571,9 +578,15 @@ pub fn resolve_collisions(
                 Ok(AiShipType::PressureKing) => (1.8, 0.7),
                 _ => (1.0, 1.0),
             };
+            // Split by sqrt-softened inverse mass: the lighter body still
+            // takes the bigger share, but the raw inv-mass split let a heavy
+            // ship shrug rams to near-zero (1200 vs a 240-mass raider gave
+            // the player 17% of already-small damage — invisible in play).
+            let (weight_a, weight_b) = (inv_a.sqrt(), inv_b.sqrt());
+            let total_weight = weight_a + weight_b;
             for (entity, other, share, into) in [
-                (a, b, inv_a / total_inv, -normal),
-                (b, a, inv_b / total_inv, normal),
+                (a, b, weight_a / total_weight, -normal),
+                (b, a, weight_b / total_weight, normal),
             ] {
                 let amount =
                     (energy * share * ram_profile(other).0 * ram_profile(entity).1).min(150.0);
