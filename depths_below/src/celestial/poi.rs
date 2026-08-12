@@ -136,7 +136,7 @@ pub fn mining_system(
     time: Res<Time>,
     ship_query: Query<&Transform, With<Ship>>,
     drill_query: Query<&Module, Without<DestroyedModule>>,
-    mut resource_query: Query<(&Transform, &mut MineableResource, &mut SpacePoi), Without<Ship>>,
+    mut resource_query: Query<(&Transform, &mut MineableResource, &mut SpacePoi, Option<&CelestialBody>), Without<Ship>>,
     mut inventory: ResMut<Inventory>,
     mut notifications: MessageWriter<ShowNotification>,
     mut last_notify: Local<f32>,
@@ -152,11 +152,15 @@ pub fn mining_system(
 
     *last_notify += dt;
 
-    for (res_transform, mut resource, mut poi) in resource_query.iter_mut() {
+    for (res_transform, mut resource, mut poi, body) in resource_query.iter_mut() {
         let dist = ship_pos.distance(res_transform.translation.truncate());
 
-        // Mining range
-        if dist > 500.0 || resource.resource_remaining <= 0.0 { continue; }
+        // Mining range, measured ship root to asteroid center. Rocks are
+        // solid now, so the reachable minimum is the rock's radius plus most
+        // of the ship's own length — scale the range with the rock so big
+        // asteroids stay mineable.
+        let range = 700.0 + body.map(|b| b.radius).unwrap_or(0.0);
+        if dist > range || resource.resource_remaining <= 0.0 { continue; }
 
         let extracted = resource.extraction_rate * dt;
         resource.resource_remaining -= extracted;
@@ -213,7 +217,9 @@ pub fn loot_derelict_system(
         if !matches!(poi.poi_type, SpacePoiType::DerelictShip | SpacePoiType::Anomaly) { continue; }
 
         let dist = ship_pos.distance(poi_transform.translation.truncate());
-        if dist > 300.0 { continue; }
+        // Root-to-center; derelicts are solid now, so leave room for the
+        // ship's own hull between root and contact point.
+        if dist > 800.0 { continue; }
 
         poi.looted = true;
         currency.credits += poi.loot_value;

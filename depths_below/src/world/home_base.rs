@@ -52,8 +52,12 @@ pub struct BaseArrow;
 /// update_depth clamps the ship to y <= 0, so anything above the origin line
 /// is unreachable.
 pub const STATION_POS: Vec2 = Vec2::new(-700.0, -450.0);
-const DOCK_RANGE: f32 = 400.0;
-const OUTPOST_RANGE: f32 = 350.0;
+// Measured from the SHIP ROOT to the station center. Stations and hulls are
+// solid now (see ship::collision), and the root of a big ship can sit ~800
+// units behind its own nose — the old 400/350 ranges were physically
+// unreachable with a large hull parked against the station.
+const DOCK_RANGE: f32 = 1000.0;
+const OUTPOST_RANGE: f32 = 900.0;
 
 /// Nearest station within docking/resupply range, as a contract-board index
 /// (0 = Haven, 1..=N = OUTPOST_POSITIONS in order). None if the ship isn't

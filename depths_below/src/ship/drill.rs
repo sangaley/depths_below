@@ -91,17 +91,22 @@ pub fn wreck_drill_system(
 
         let drill_pos = drill_gt.translation().truncate();
 
+        // Hulls are solid now (see ship::collision), which holds a skin gap
+        // between ship and wreck — pad the registry's contact range so the
+        // drill still reaches across that gap when parked against the hulk.
+        let reach = salvage.range + 150.0;
+
         // Validate the current target, else acquire the nearest wreck
         // block in reach (wreck blocks only — never live ships).
         let mut target = rig.target.filter(|&t| {
             block_query.get(t).is_ok_and(|(_, gt, _, block_parent)| {
                 wreck_query.get(block_parent.parent()).is_ok()
-                    && gt.translation().truncate().distance(drill_pos) <= salvage.range
+                    && gt.translation().truncate().distance(drill_pos) <= reach
             })
         });
         if target.is_none() {
             rig.progress = 0.0;
-            let mut best_dist = salvage.range;
+            let mut best_dist = reach;
             for (block_entity, gt, _, block_parent) in block_query.iter() {
                 if wreck_query.get(block_parent.parent()).is_err() {
                     continue;

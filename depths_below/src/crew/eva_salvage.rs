@@ -23,7 +23,10 @@ use crate::ai_ship::components::AiShipWreck;
 /// How close the ship must be to a wreck's NEAREST BLOCK to dispatch a
 /// detail — root-origin distance made big hulks (whose origin sits far
 /// from their rim) demand parking inside the wreck.
-const ORDER_RANGE: f32 = 500.0;
+// Ship root to nearest wreck block. Hulls are solid now (see ship::collision),
+// so a big ship parked against a wreck can still have its root ~500+ units
+// from the contact point — 500 made dispatch unreachable nose-on.
+const ORDER_RANGE: f32 = 800.0;
 /// Ship drifting further than this from the worksite recalls the detail.
 const BREAK_RANGE: f32 = 900.0;
 /// Crew stranded further than this from the ship emergency-board instantly.

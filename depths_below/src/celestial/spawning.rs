@@ -185,13 +185,25 @@ pub fn spawn_asteroid_field(
     // rolls the same asteroid count/size/type/position every time).
     depletion_mult: f32,
 ) {
+    // Rocks are solid now (see ship::collision) — nudge overlapping rolls
+    // apart so a field doesn't generate asteroids fused into each other.
+    // Still deterministic: same seed, same draw sequence, same layout.
+    let mut placed: Vec<(Vec2, f32)> = Vec::new();
     for i in 0..count {
-        let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-        let dist = rng.gen_range(0.0..spread);
-        let pos = center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
-
         let size = rng.gen_range(200.0..800.0);
         let mass = size * 0.5;
+        let radius = size * 0.5;
+
+        let mut pos = center;
+        for _attempt in 0..8 {
+            let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+            let dist = rng.gen_range(0.0..spread);
+            pos = center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
+            if placed.iter().all(|(p, r)| pos.distance(*p) > (radius + r) * 1.1 + 40.0) {
+                break;
+            }
+        }
+        placed.push((pos, radius));
 
         let resource_type = match rng.gen_range(0..4) {
             0 => ResourceNodeType::MetalOre,

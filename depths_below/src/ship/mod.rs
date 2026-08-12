@@ -16,6 +16,7 @@ mod heat;
 mod logistics;
 pub mod drill;
 pub mod rebuild;
+pub mod collision;
 
 pub use movement::*;
 pub use systems::*;
@@ -42,6 +43,22 @@ impl Plugin for ShipPlugin {
         app
             // Breaker Drill: contact wreck salvage (see drill.rs)
             .add_systems(Update, drill::wreck_drill_system.run_if(in_state(GameState::Exploring)))
+            // Physical collision (ships/stations/asteroids/planets). PostUpdate,
+            // before transform propagation: runs after every mover (player, AI,
+            // orbits, warp) has written positions for the frame, and its pushes
+            // still land in this frame's GlobalTransforms.
+            .init_resource::<collision::ColliderGrid>()
+            .add_systems(
+                PostUpdate,
+                (
+                    collision::attach_static_colliders,
+                    collision::refresh_ship_colliders,
+                    collision::rebuild_collider_grid.run_if(in_state(GameState::Exploring)),
+                    collision::resolve_collisions.run_if(in_state(GameState::Exploring)),
+                )
+                    .chain()
+                    .before(bevy::transform::TransformSystems::Propagate),
+            )
             // Resources
             .init_resource::<DepthState>()
             .init_resource::<PowerState>()
