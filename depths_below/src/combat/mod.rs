@@ -182,9 +182,12 @@ impl Plugin for CombatPlugin {
             .init_resource::<recoil::RecoilAccumulator>()
             .configure_sets(Update, CombatSet::WeaponFire.after(SpatialSet::Update).run_if(in_state(GameState::Exploring)))
             .configure_sets(Update, CombatSet::Cleanup.after(CombatSet::WeaponFire).run_if(in_state(GameState::Exploring)))
-            // Target selection + fire groups (always during exploring)
+            // Target selection + fire groups (always during exploring).
+            // cycle_target (Tab) intentionally NOT registered — Tab is the
+            // radar key, and having it also lock onto the nearest enemy was
+            // an unwanted side effect. Guns free-aim at the cursor by default;
+            // middle-click still opt-in locks a target for auto-aim + bracket.
             .add_systems(Update, (
-                targeting::cycle_target,
                 targeting::click_select_target,
                 targeting::draw_target_bracket,
                 targeting::fire_group_input,
@@ -193,6 +196,7 @@ impl Plugin for CombatPlugin {
             .add_systems(Update, (
                 shields::attach_player_shield,
                 shields::refresh_player_shield_skin,
+                shields::refresh_player_shield_capacity.before(shields::update_shields),
                 shields::attach_ai_shields,
                 shields::toggle_player_shield,
                 shields::update_shields,

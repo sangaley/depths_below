@@ -126,6 +126,75 @@ pub fn update_power_system(
     }
 }
 
+// ============================================================================
+// POWER ROUTING — split the reactor's output across Weapons/Shields/Engines
+// ============================================================================
+
+/// Reactor watts one channel draws to run at ×1.0 ("nominal"). This is FIXED
+/// and absolute — it does NOT scale with reactor count — which is what makes
+/// total generation a real budget: build/staff more reactors and you can drive
+/// more channels harder before browning out.
+///
+/// Calibration (a fully-staffed Standard Reactor makes 500):
+/// - 1 reactor (~500): funds ~2.5 channels at ×1.0 — balanced (600) browns out
+///   slightly (~×0.83). One reactor isn't quite enough for full combat.
+/// - 2 reactors / the starter (~1000): balanced uses 60%; you can max any ONE
+///   channel cleanly, but maxing two/all browns out (~×1.67). A real tradeoff.
+/// - 3+ reactors (~1500): enough to push everything toward ×2.
+/// Understaffed or damaged reactors drop live generation, tightening the budget
+/// exactly as if you'd lost a reactor — that's the teeth of a hard budget.
+/// Public so the routing window can show each channel's watt draw.
+pub const POWER_PER_MULT: f32 = 200.0;
+
+/// Highest performance multiplier a fully-fed channel can reach (a channel
+/// slider pinned to 100% while the reactor can supply it → ×2.0).
+const CHANNEL_MAX_MULT: f32 = 2.0;
+
+/// Recomputes the per-channel power multipliers from the player's allocation
+/// and the reactor's current TOTAL generation (all reactors pooled, after
+/// staffing/damage). Each slider sets a target multiplier that costs real
+/// watts; when the three channels together ask for more than the reactors
+/// make, everyone is served the same fraction — a brownout that sags guns,
+/// shields, and engines together until the player reroutes, staffs/repairs a
+/// reactor, or builds more power. A dead grid (0 generation) zeroes every
+/// channel. Consumers: `ship_movement` (thrust), `update_shields` (recharge),
+/// `apply_weapon_power_scaling` (reload).
+pub fn update_power_allocation(
+    alloc: Res<PowerAllocation>,
+    power_state: Res<PowerState>,
+    mut channels: ResMut<PowerChannels>,
+) {
+    // Pooled output of every reactor on the ship (staffing + damage already
+    // applied by update_power_system) — this is the whole routing budget.
+    let supply = power_state.total_power_generation.max(0.0);
+
+    // Slider → target multiplier: 50% = ×1.0, 100% = ×2.0, 0% = offline. Each
+    // point of multiplier costs POWER_PER_MULT watts.
+    let target = |slider: f32| slider / 50.0;
+    let (tw, ts, te) = (
+        target(alloc.weapons),
+        target(alloc.shields),
+        target(alloc.engines),
+    );
+    let demand = (tw + ts + te) * POWER_PER_MULT;
+
+    // Brownout: generation can't meet total draw → serve everyone the same
+    // fraction of their target.
+    let serve = if demand > supply && demand > 0.0 {
+        supply / demand
+    } else {
+        1.0
+    };
+
+    let mult = |target_m: f32| (target_m * serve).min(CHANNEL_MAX_MULT);
+    channels.weapons_mult = mult(tw);
+    channels.shields_mult = mult(ts);
+    channels.engines_mult = mult(te);
+    channels.demand = demand;
+    channels.supply = supply;
+    channels.brownout = serve < 0.999;
+}
+
 /// Heat fraction a shut-down reactor must cool back below before it
 /// auto-restarts (see the `!module.is_active` branch below). Below 100% so
 /// it doesn't immediately re-trip the moment it dips under the shutdown

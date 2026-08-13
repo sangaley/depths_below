@@ -2076,10 +2076,6 @@ pub struct DockingMenuSelection(pub usize, pub usize);
 #[derive(Component)]
 pub struct DockingServiceItem(pub usize);
 
-/// Marker for upgrade shop overlay
-#[derive(Component)]
-pub struct UpgradeShopOverlay;
-
 // ============================================================================
 // ABYSSAL HORROR COMPONENTS
 // ============================================================================
@@ -2111,14 +2107,6 @@ pub struct TimeGlitchFrozen {
     pub duration: Timer,
     pub saved_velocity: Vec2,
 }
-
-/// Currently selected item in the upgrade shop
-#[derive(Component)]
-pub struct UpgradeShopSelection(pub usize);
-
-/// Individual upgrade row in the shop
-#[derive(Component)]
-pub struct UpgradeShopItem(pub usize);
 
 #[cfg(test)]
 mod tests {

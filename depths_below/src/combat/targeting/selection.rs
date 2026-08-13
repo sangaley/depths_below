@@ -32,7 +32,10 @@ pub struct TargetBracket;
 #[derive(Component)]
 pub struct TargetInfoText;
 
-/// System: Tab cycles through valid targets (closest first)
+/// System: Tab cycles through valid targets (closest first).
+/// NOT registered — disabled per user request (Tab is the radar key; the
+/// enemy target-lock riding on it was unwanted). Kept for easy re-enable.
+#[allow(dead_code)]
 pub fn cycle_target(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut selection: ResMut<TargetSelection>,

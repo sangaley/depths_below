@@ -8,6 +8,8 @@ use crate::contracts::{ContractObjective, ContractState};
 use crate::world::home_base::{OUTPOST_POSITIONS, STATION_POS};
 use crate::celestial::resources::{GalaxyMap, SystemStreamingManager, SystemDiscovery};
 use crate::celestial::galaxy::GALAXY_SCAN_RANGE;
+use crate::camera::MainCamera;
+use std::collections::HashMap;
 
 /// Marker for the radar radar display UI
 #[derive(Component)]
@@ -17,6 +19,30 @@ pub struct RadarDisplay;
 #[derive(Component)]
 pub struct RadarBlip {
     pub lifetime: Timer,
+}
+
+/// A persistent radar dot bound to one AI ship entity. Unlike RadarBlip (a
+/// transient sweep-spawned dot), this one is created once per ship and moved
+/// every frame to track it, so a ship reads as a single sliding dot instead of
+/// a smear of stale blips as the player moves.
+#[derive(Component)]
+pub struct RadarShipDot(pub Entity);
+
+/// Radar dot color by disposition toward the player.
+/// Red = hostile, white = neutral. Blue (ally) is reserved — the game has no
+/// player-allied ships yet. GlassEye is the one faction that never attacks.
+fn radar_ship_color(faction: AiShipType) -> Color {
+    match faction {
+        AiShipType::GlassEye => Color::srgb(0.90, 0.90, 0.95), // neutral
+        _ => Color::srgb(1.0, 0.25, 0.25),                     // hostile
+    }
+}
+
+fn radar_ship_size(faction: AiShipType) -> f32 {
+    match faction {
+        AiShipType::VoidTitan | AiShipType::Dreadnought => 12.0, // bosses stand out
+        _ => 8.0,
+    }
 }
 
 /// Radar sweep line angle
@@ -149,10 +175,12 @@ pub fn update_radar(
     ship_query: Query<&Transform, With<Ship>>,
     creature_query: Query<(&Transform, &Creature, Option<&RadarRevealed>), Without<Ship>>,
     poi_query: Query<(&Transform, &PointOfInterest), Without<Ship>>,
-    ai_ship_query: Query<(&Transform, &AiShipType, Option<&AiShipRadarContact>), With<AiShip>>,
+    ai_ship_query: Query<(Entity, &Transform, &AiShipType), With<AiShip>>,
+    mut radar_ship_dot_query: Query<(Entity, &mut Node, &mut BackgroundColor, &RadarShipDot)>,
     contract_state: Res<ContractState>,
     sim: Res<WorldSimulation>,
     bounty_ship_query: Query<(&Transform, &BountyTarget), With<AiShip>>,
+    camera_query: Query<&Projection, With<MainCamera>>,
     mut commands: Commands,
 ) {
     if !sweep_state.display_visible {
@@ -163,12 +191,24 @@ pub fn update_radar(
     let Ok(ship_transform) = ship_query.single() else { return };
     let ship_pos = ship_transform.translation.truncate();
 
-    // Get radar range
-    let radar_range = radar_query.iter()
+    // Get radar range from the best equipped module...
+    let module_range = radar_query.iter()
         .filter(|(_, m)| m.is_active)
         .map(|(s, _)| s.range)
         .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .unwrap_or(500.0);
+    // ...but the scope must ALWAYS out-reach what the player can see, or you
+    // spot ships with your eyes before they blip. The visible area scales with
+    // camera zoom, so a fixed range loses the instant you zoom out — take the
+    // on-screen half-diagonal (center→corner) and lead it by RADAR_VISUAL_LEAD.
+    const RADAR_VISUAL_LEAD: f32 = 1.5;
+    let visible_lead = camera_query.single().ok()
+        .and_then(|proj| match proj {
+            Projection::Orthographic(o) => Some(o.area.size().length() * 0.5 * RADAR_VISUAL_LEAD),
+            _ => None,
+        })
+        .unwrap_or(0.0);
+    let radar_range = module_range.max(visible_lead);
 
     let radar_size = 180.0;
     let radar_half = radar_size / 2.0;
@@ -353,55 +393,50 @@ pub fn update_radar(
         )).insert(ChildOf(radar_entity));
     }
 
-    // Check AI ships — show as colored blips (blue=Cargo, red=Military, yellow=Salvager)
-    for (ai_transform, ai_ship_type, radar_contact) in ai_ship_query.iter() {
-        let ai_pos = ai_transform.translation.truncate();
-        let offset = ai_pos - ship_pos;
-        let dist = offset.length();
-
-        if dist > radar_range {
+    // AI ships — one PERSISTENT dot per ship, repositioned and recolored every
+    // frame so each ship reads as a single dot sliding with it, instead of the
+    // trail of stale sweep-blips the old per-frame spawn left as the player
+    // moved. Colored by disposition (red hostile / white neutral; blue ally is
+    // reserved — no player-allied ships exist yet).
+    let mut desired: HashMap<Entity, (f32, f32, Color, f32)> = HashMap::new();
+    for (ai_entity, ai_transform, ai_ship_type) in ai_ship_query.iter() {
+        let offset = ai_transform.translation.truncate() - ship_pos;
+        if offset.length() > radar_range {
             continue;
         }
-
-        let entity_angle = offset.y.atan2(offset.x);
-        let angle_diff = (entity_angle - sweep_state.angle).abs();
-        let angle_diff = angle_diff.min(std::f32::consts::TAU - angle_diff);
-
-        if angle_diff < sweep_tolerance || radar_contact.is_some() {
-            let radar_x = (offset.x / radar_range) * radar_half + radar_half;
-            let radar_y = radar_half - (offset.y / radar_range) * radar_half;
-
-            let blip_color = match ai_ship_type {
-                AiShipType::VoidTitan => Color::srgb(1.0, 0.85, 0.1),   // gold — unmistakable
-                AiShipType::Dreadnought => Color::srgb(0.8, 0.05, 0.05), // deep crimson
-                AiShipType::Leviathan => Color::srgb(0.2, 0.7, 0.6),
-                AiShipType::AbyssalCult => Color::srgb(0.6, 0.2, 0.8),
-                AiShipType::Drowned => Color::srgb(0.4, 0.5, 0.4),
-                AiShipType::PressureKing => Color::srgb(0.3, 0.2, 0.5),
-                AiShipType::GlassEye => Color::srgb(0.8, 0.85, 0.9),
-                AiShipType::IronTide => Color::srgb(1.0, 0.2, 0.2),
-                AiShipType::Blackwater => Color::srgb(0.3, 0.3, 0.4),
-                AiShipType::RustSwarm => Color::srgb(0.9, 0.5, 0.2),
-            };
-            let blip_size = match ai_ship_type {
-                AiShipType::VoidTitan | AiShipType::Dreadnought => 13.0, // bosses stand out
-                _ => 8.0,
-            };
-
-            commands.spawn((
-                (Node {
-                        position_type: PositionType::Absolute,
-                        left: Val::Px(radar_x - blip_size / 2.0),
-                        top: Val::Px(radar_y - blip_size / 2.0),
-                        width: Val::Px(blip_size),
-                        height: Val::Px(blip_size),
-                        ..default()
-                    }, BackgroundColor(blip_color), ZIndex(51)),
-                RadarBlip {
-                    lifetime: Timer::from_seconds(4.0, TimerMode::Once),
-                },
-            )).insert(ChildOf(radar_entity));
+        let radar_x = (offset.x / radar_range) * radar_half + radar_half;
+        let radar_y = radar_half - (offset.y / radar_range) * radar_half;
+        desired.insert(
+            ai_entity,
+            (radar_x, radar_y, radar_ship_color(*ai_ship_type), radar_ship_size(*ai_ship_type)),
+        );
+    }
+    // Move existing dots to their ship's current spot; drop dots whose ship left
+    // range or despawned.
+    for (dot_entity, mut node, mut bg, dot) in radar_ship_dot_query.iter_mut() {
+        if let Some((x, y, color, size)) = desired.remove(&dot.0) {
+            node.left = Val::Px(x - size / 2.0);
+            node.top = Val::Px(y - size / 2.0);
+            node.width = Val::Px(size);
+            node.height = Val::Px(size);
+            *bg = color.into();
+        } else {
+            commands.entity(dot_entity).despawn();
         }
+    }
+    // Spawn a dot for any ship that doesn't have one yet.
+    for (ship, (x, y, color, size)) in desired {
+        commands.spawn((
+            (Node {
+                    position_type: PositionType::Absolute,
+                    left: Val::Px(x - size / 2.0),
+                    top: Val::Px(y - size / 2.0),
+                    width: Val::Px(size),
+                    height: Val::Px(size),
+                    ..default()
+                }, BackgroundColor(color), ZIndex(51)),
+            RadarShipDot(ship),
+        )).insert(ChildOf(radar_entity));
     }
 }
 

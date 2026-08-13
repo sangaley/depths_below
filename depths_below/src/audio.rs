@@ -8,6 +8,7 @@ use crate::events::*;
 use crate::resources::InputState;
 use crate::states::GameState;
 use crate::celestial::events::WarpJumpStarted;
+use crate::ui::menu_buttons::GameSettings;
 
 // ============================================================================
 // AUDIO PLUGIN
@@ -44,6 +45,7 @@ impl Plugin for GameAudioPlugin {
                 alarm_audio,
                 warp_audio,
                 engine_loop_volume,
+                update_ambient_volume,
                 hull_creak_ticker,
             ).run_if(in_state(GameState::Exploring)))
             .add_systems(Update, (
@@ -183,6 +185,7 @@ fn min_interval(weapon: ModuleType) -> f64 {
 fn weapon_fired_audio(
     mut events: MessageReader<WeaponFired>,
     audio: Option<Res<GameAudio>>,
+    settings: Res<GameSettings>,
     ship_query: Query<&Transform, With<Ship>>,
     time: Res<Time>,
     mut last_played: Local<HashMap<ModuleType, f64>>,
@@ -216,7 +219,7 @@ fn weapon_fired_audio(
         };
 
         let dist = if ev.from_player { 0.0 } else { ev.position.distance(ppos) };
-        let vol = attenuate(base_vol * SFX_VOL, dist);
+        let vol = attenuate(base_vol * SFX_VOL * settings.sfx_volume, dist);
         if vol < 0.01 { continue; }
 
         last_played.insert(ev.weapon_type, now);
@@ -234,6 +237,7 @@ fn explosion_audio(
     mut ai_destroyed: MessageReader<AiShipDestroyed>,
     mut hull_destroyed: MessageReader<HullSegmentDestroyed>,
     audio: Option<Res<GameAudio>>,
+    settings: Res<GameSettings>,
     ship_query: Query<&Transform, With<Ship>>,
     time: Res<Time>,
     mut last_hull_crunch: Local<f64>,
@@ -242,28 +246,29 @@ fn explosion_audio(
     let Some(audio) = audio else { return };
     let mut rng = rand::thread_rng();
     let ppos = player_pos(&ship_query);
+    let sfx = SFX_VOL * settings.sfx_volume;
 
     // Module detonations happen on the player's own ship — full volume.
     for _ in module_exploded.read() {
-        play_oneshot(&mut commands, pick(&mut rng, &audio.explosions).clone(), 0.8 * SFX_VOL);
-        play_oneshot(&mut commands, audio.explosion_deep.clone(), 0.7 * SFX_VOL);
+        play_oneshot(&mut commands, pick(&mut rng, &audio.explosions).clone(), 0.8 * sfx);
+        play_oneshot(&mut commands, audio.explosion_deep.clone(), 0.7 * sfx);
     }
 
     // Module cook-offs on AI ships — crunch attenuated by distance, with the
     // deep layer reserved for bigger blasts (reactors, full ammo bays).
     for ev in ai_module_exploded.read() {
         let dist = ev.position.distance(ppos);
-        play_oneshot(&mut commands, pick(&mut rng, &audio.explosions).clone(), attenuate(0.7 * SFX_VOL, dist));
+        play_oneshot(&mut commands, pick(&mut rng, &audio.explosions).clone(), attenuate(0.7 * sfx, dist));
         if ev.blast_damage >= 50.0 {
-            play_oneshot(&mut commands, audio.explosion_deep.clone(), attenuate(0.5 * SFX_VOL, dist));
+            play_oneshot(&mut commands, audio.explosion_deep.clone(), attenuate(0.5 * sfx, dist));
         }
     }
 
     // A ship dying is the big payoff — layered boom + low rumble, attenuated.
     for ev in ai_destroyed.read() {
         let dist = ev.position.distance(ppos);
-        play_oneshot(&mut commands, audio.explosion_large.clone(), attenuate(0.9 * SFX_VOL, dist));
-        play_oneshot(&mut commands, audio.explosion_deep.clone(), attenuate(0.8 * SFX_VOL, dist));
+        play_oneshot(&mut commands, audio.explosion_large.clone(), attenuate(0.9 * sfx, dist));
+        play_oneshot(&mut commands, audio.explosion_deep.clone(), attenuate(0.8 * sfx, dist));
     }
 
     // Individual hull blocks popping — quiet crunch, rate-limited so a
@@ -272,7 +277,7 @@ fn explosion_audio(
     for _ in hull_destroyed.read() {
         if now - *last_hull_crunch < 0.3 { continue; }
         *last_hull_crunch = now;
-        play_oneshot(&mut commands, pick(&mut rng, &audio.explosions).clone(), 0.35 * SFX_VOL);
+        play_oneshot(&mut commands, pick(&mut rng, &audio.explosions).clone(), 0.35 * sfx);
     }
 }
 
@@ -294,6 +299,7 @@ fn alarm_audio(
     mut state: ResMut<AlarmState>,
     time: Res<Time>,
     audio: Option<Res<GameAudio>>,
+    settings: Res<GameSettings>,
     alarm_query: Query<Entity, With<AlarmLoopAudio>>,
     mut commands: Commands,
 ) {
@@ -308,7 +314,7 @@ fn alarm_audio(
         if alarm_query.is_empty() {
             commands.spawn((
                 AudioPlayer(audio.alarm_loop.clone()),
-                PlaybackSettings::LOOP.with_volume(Volume::Linear(ALARM_VOL)),
+                PlaybackSettings::LOOP.with_volume(Volume::Linear(ALARM_VOL * settings.sfx_volume)),
                 AlarmLoopAudio,
             ));
         }
@@ -324,12 +330,13 @@ fn alarm_audio(
 fn warp_audio(
     mut jumps: MessageReader<WarpJumpStarted>,
     audio: Option<Res<GameAudio>>,
+    settings: Res<GameSettings>,
     mut commands: Commands,
 ) {
     let Some(audio) = audio else { return };
     let mut rng = rand::thread_rng();
     for _ in jumps.read() {
-        play_oneshot(&mut commands, pick(&mut rng, &audio.warps).clone(), 0.7 * SFX_VOL);
+        play_oneshot(&mut commands, pick(&mut rng, &audio.warps).clone(), 0.7 * SFX_VOL * settings.sfx_volume);
     }
 }
 
@@ -343,7 +350,11 @@ struct EngineLoopAudio;
 #[derive(Component)]
 struct AmbientLoopAudio;
 
-fn start_flight_loops(audio: Option<Res<GameAudio>>, mut commands: Commands) {
+fn start_flight_loops(
+    audio: Option<Res<GameAudio>>,
+    settings: Res<GameSettings>,
+    mut commands: Commands,
+) {
     let Some(audio) = audio else { return };
     // Engine starts silent; engine_loop_volume drives it from throttle.
     commands.spawn((
@@ -353,9 +364,22 @@ fn start_flight_loops(audio: Option<Res<GameAudio>>, mut commands: Commands) {
     ));
     commands.spawn((
         AudioPlayer(audio.space_drone.clone()),
-        PlaybackSettings::LOOP.with_volume(Volume::Linear(AMBIENT_VOL)),
+        PlaybackSettings::LOOP.with_volume(Volume::Linear(AMBIENT_VOL * settings.music_volume)),
         AmbientLoopAudio,
     ));
+}
+
+/// Keep the ambient drone in sync with the MUSIC bus while it changes live.
+fn update_ambient_volume(
+    settings: Res<GameSettings>,
+    mut sink_query: Query<&mut AudioSink, With<AmbientLoopAudio>>,
+) {
+    if !settings.is_changed() {
+        return;
+    }
+    if let Ok(mut sink) = sink_query.single_mut() {
+        sink.set_volume(Volume::Linear(AMBIENT_VOL * settings.music_volume));
+    }
 }
 
 fn stop_flight_loops(
@@ -371,6 +395,7 @@ fn stop_flight_loops(
 
 fn engine_loop_volume(
     input: Res<InputState>,
+    settings: Res<GameSettings>,
     ship_query: Query<&ShipPhysics, With<Ship>>,
     mut sink_query: Query<&mut AudioSink, With<EngineLoopAudio>>,
     time: Res<Time>,
@@ -384,7 +409,7 @@ fn engine_loop_volume(
         .max(if input.brake { 0.4 } else { 0.0 });
 
     // Ease toward the target so thrust taps don't click the loop on/off.
-    let target = intensity.clamp(0.0, 1.0) * ENGINE_MAX_VOL;
+    let target = intensity.clamp(0.0, 1.0) * ENGINE_MAX_VOL * settings.sfx_volume;
     let rate = if target > *current { 6.0 } else { 2.5 };
     *current += (target - *current) * (rate * time.delta_secs()).min(1.0);
     sink.set_volume(Volume::Linear(*current));
@@ -397,6 +422,7 @@ fn engine_loop_volume(
 fn hull_creak_ticker(
     time: Res<Time>,
     audio: Option<Res<GameAudio>>,
+    settings: Res<GameSettings>,
     mut timer: Local<Option<Timer>>,
     mut commands: Commands,
 ) {
@@ -408,7 +434,7 @@ fn hull_creak_ticker(
     });
     t.tick(time.delta());
     if t.is_finished() {
-        play_oneshot(&mut commands, pick(&mut rng, &audio.hull_creaks).clone(), 0.22);
+        play_oneshot(&mut commands, pick(&mut rng, &audio.hull_creaks).clone(), 0.22 * settings.sfx_volume);
         *timer = Some(Timer::from_seconds(rng.gen_range(25.0..70.0), TimerMode::Once));
     }
 }
@@ -420,13 +446,14 @@ fn hull_creak_ticker(
 fn ui_click_audio(
     interactions: Query<&Interaction, (Changed<Interaction>, With<Button>)>,
     audio: Option<Res<GameAudio>>,
+    settings: Res<GameSettings>,
     mut commands: Commands,
 ) {
     let Some(audio) = audio else { return };
     let mut rng = rand::thread_rng();
     for interaction in interactions.iter() {
         if *interaction == Interaction::Pressed {
-            play_oneshot(&mut commands, pick(&mut rng, &audio.ui_select).clone(), UI_VOL);
+            play_oneshot(&mut commands, pick(&mut rng, &audio.ui_select).clone(), UI_VOL * settings.ui_volume);
         }
     }
 }
@@ -434,6 +461,7 @@ fn ui_click_audio(
 fn notification_audio(
     mut notifications: MessageReader<ShowNotification>,
     audio: Option<Res<GameAudio>>,
+    settings: Res<GameSettings>,
     time: Res<Time>,
     mut last: Local<f64>,
     mut commands: Commands,
@@ -449,7 +477,7 @@ fn notification_audio(
             NotificationType::Warning => audio.ui_beeps[0].clone(),
             NotificationType::Danger => audio.ui_beeps[1].clone(),
         };
-        play_oneshot(&mut commands, handle, UI_VOL);
+        play_oneshot(&mut commands, handle, UI_VOL * settings.ui_volume);
     }
 }
 
@@ -457,24 +485,26 @@ fn build_audio(
     mut placed: MessageReader<ModulePlaced>,
     mut removed: MessageReader<ModuleRemoved>,
     audio: Option<Res<GameAudio>>,
+    settings: Res<GameSettings>,
     mut commands: Commands,
 ) {
     let Some(audio) = audio else { return };
     for _ in placed.read() {
-        play_oneshot(&mut commands, audio.ui_terminal[2].clone(), UI_VOL);
+        play_oneshot(&mut commands, audio.ui_terminal[2].clone(), UI_VOL * settings.ui_volume);
     }
     for _ in removed.read() {
-        play_oneshot(&mut commands, audio.ui_beeps[0].clone(), UI_VOL * 0.8);
+        play_oneshot(&mut commands, audio.ui_beeps[0].clone(), UI_VOL * 0.8 * settings.ui_volume);
     }
 }
 
 fn docking_audio(
     mut docked: MessageReader<DockingCompleted>,
     audio: Option<Res<GameAudio>>,
+    settings: Res<GameSettings>,
     mut commands: Commands,
 ) {
     let Some(audio) = audio else { return };
     for _ in docked.read() {
-        play_oneshot(&mut commands, audio.ui_terminal[1].clone(), UI_VOL);
+        play_oneshot(&mut commands, audio.ui_terminal[1].clone(), UI_VOL * settings.ui_volume);
     }
 }

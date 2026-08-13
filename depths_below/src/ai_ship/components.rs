@@ -42,6 +42,18 @@ pub struct AiShipState {
     /// another AI ship's crossfire fights back against THAT ship, not
     /// reflexively the player.
     pub last_attacker: Option<Entity>,
+    /// Reinforcement aggro: when a same-faction ally within earshot calls for
+    /// backup (ai_distress_system), this is set to whoever THEY'RE fighting
+    /// and alert_timer counts down. The brain treats a live alert as a
+    /// high-priority reason to converge and engage that target even for a
+    /// ship that wouldn't have picked the fight on its own — that's how a
+    /// whole patrol/nest piles onto the player once one of them is in a
+    /// scrap. Decays so summoned ships eventually return to their patrol.
+    pub alert_target: Option<Entity>,
+    pub alert_timer: f32,
+    /// Seconds until this ship can broadcast another distress call — keeps a
+    /// ship mid-fight from screaming for help every single frame.
+    pub distress_cooldown: f32,
 }
 
 impl Default for AiShipState {
@@ -55,6 +67,9 @@ impl Default for AiShipState {
             is_destroyed: false,
             last_hit_timer: 999.0,
             last_attacker: None,
+            alert_target: None,
+            alert_timer: 0.0,
+            distress_cooldown: 0.0,
         }
     }
 }
@@ -112,6 +127,14 @@ impl Default for AiShipNav {
 pub struct AiShipTarget {
     pub entity: Option<Entity>,
     pub position: Vec2,
+    /// The specific enemy module this ship is trying to shoot OUT — a weapon,
+    /// engine, or reactor, chosen by faction doctrine (ai_ship::combat's
+    /// aim_priority). Weapons aim at this block's live world position instead
+    /// of the hull centroid, so a tactical faction can methodically disable
+    /// your guns / strand your drive rather than just grinding the hull.
+    /// Cleared when the target entity changes (ai_brain) and re-picked lazily
+    /// (ai_weapon_fire_system) when the current pick is destroyed.
+    pub subsystem: Option<Entity>,
 }
 
 /// Timer for AI decision ticks (0.25s)
@@ -468,6 +491,15 @@ pub fn power_output_multiplier(faction: AiShipType) -> f32 {
         AiShipType::GlassEye => 0.85,
         _ => 1.0,
     }
+}
+
+/// Whether a faction actually engages in ship-to-ship combat. GlassEye never
+/// attacks (silent stalkers); Leviathan riders flee rather than fight. Every
+/// other faction does. Used to gate distress broadcast/response so a
+/// non-combatant never answers — or issues — a call for backup it would never
+/// act on anyway.
+pub fn faction_fights(faction: AiShipType) -> bool {
+    !matches!(faction, AiShipType::GlassEye | AiShipType::Leviathan)
 }
 
 /// Returns whether two factions are hostile to each other

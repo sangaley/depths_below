@@ -25,6 +25,7 @@ mod demo;
 mod audio;
 mod debug;
 mod gamepad;
+mod tutorial;
 
 use states::GameState;
 use events::EventsPlugin;
@@ -50,6 +51,7 @@ use demo::DemoPlugin;
 use audio::GameAudioPlugin;
 use debug::DebugPlugin;
 use gamepad::GamepadPlugin;
+use tutorial::TutorialPlugin;
 
 fn main() {
     App::new()
@@ -101,6 +103,7 @@ fn main() {
         .add_plugins(DebugPlugin)
         .add_plugins(GameAudioPlugin)
         .add_plugins(GamepadPlugin)
+        .add_plugins(TutorialPlugin)
 
         .run();
 }

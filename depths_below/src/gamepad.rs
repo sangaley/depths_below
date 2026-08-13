@@ -32,9 +32,9 @@ use crate::states::ShipSet;
 /// Radial deadzone for the movement stick. Inside it the keyboard keeps
 /// full control; outside, input rescales so the usable range starts at 0.
 const MOVE_DEADZONE: f32 = 0.15;
-/// Aim stick deadzone — deliberately larger than movement so a slightly
-/// worn stick doesn't wrestle the nose away from the mouse.
-const AIM_DEADZONE: f32 = 0.35;
+// Aim-stick deadzone is player-tunable (Settings → Controls, default 35%),
+// deliberately larger than movement so a slightly worn stick doesn't wrestle
+// the nose away from the mouse. See `GameSettings::aim_deadzone`.
 /// Cursor travel (logical px) that hands aim control back to the mouse.
 const MOUSE_RECLAIM_PX: f32 = 4.0;
 
@@ -125,10 +125,13 @@ fn bridge_gamepad_buttons(
 /// and reclaims aim.
 fn gamepad_flight(
     gamepads: Query<&Gamepad>,
+    settings: Res<crate::ui::menu_buttons::GameSettings>,
     mut input_state: ResMut<InputState>,
     windows: Query<&Window>,
     mut last_cursor: Local<Option<Vec2>>,
 ) {
+    // Player-tuned aim deadzone (Settings → Controls, default 35%).
+    let aim_deadzone = settings.aim_deadzone.clamp(0.05, 0.9);
     for gamepad in gamepads.iter() {
         let stick = gamepad.left_stick();
         let len = stick.length();
@@ -137,8 +140,11 @@ fn gamepad_flight(
             input_state.movement = stick / len * scaled;
         }
 
-        let aim = gamepad.right_stick();
-        if aim.length() > AIM_DEADZONE {
+        let mut aim = gamepad.right_stick();
+        if settings.invert_aim_y {
+            aim.y = -aim.y;
+        }
+        if aim.length() > aim_deadzone {
             input_state.gamepad_aim = Some(aim.normalize());
         }
     }

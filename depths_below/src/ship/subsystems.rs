@@ -180,6 +180,47 @@ pub fn apply_torpedo_loader_bonus(
 }
 
 // ============================================================================
+// WEAPON POWER ROUTING — routed power scales player reload speed
+// ============================================================================
+
+/// Scales the player's weapon reload speed by the routed weapons power. It
+/// nudges each cooldown timer by the extra (or missing) fraction of a frame,
+/// so effective fire rate ≈ base × weapons_mult: route power to guns and they
+/// cycle up to 2× faster; starve them and reloads crawl until they're
+/// effectively silent. Mirrors `apply_torpedo_loader_bonus`'s timer-advance
+/// trick and runs once per weapon per frame, so the net effect is stable
+/// regardless of ordering against the firing systems.
+pub fn apply_weapon_power_scaling(
+    time: Res<Time>,
+    channels: Res<crate::resources::PowerChannels>,
+    ship_query: Query<Entity, With<Ship>>,
+    mut weapon_query: Query<(&mut WeaponCooldown, &ChildOf), Without<DestroyedModule>>,
+) {
+    let mult = channels.weapons_mult;
+    // Nominal power → leave timers untouched.
+    if (mult - 1.0).abs() < 0.01 {
+        return;
+    }
+    let Ok(player) = ship_query.single() else { return };
+    let dt = time.delta_secs();
+    // >0 speeds the reload up, <0 slows it down.
+    let adjust = (mult - 1.0) * dt;
+
+    for (mut cooldown, parent) in weapon_query.iter_mut() {
+        if parent.parent() != player {
+            continue;
+        }
+        // A ready weapon has nothing to reload.
+        if cooldown.timer.is_finished() {
+            continue;
+        }
+        let duration = cooldown.timer.duration().as_secs_f32();
+        let elapsed = (cooldown.timer.elapsed_secs() + adjust).clamp(0.0, duration);
+        cooldown.timer.set_elapsed(std::time::Duration::from_secs_f32(elapsed));
+    }
+}
+
+// ============================================================================
 // TARGETING COMPUTER — boosts weapon accuracy
 // ============================================================================
 

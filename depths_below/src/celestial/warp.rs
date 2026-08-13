@@ -249,6 +249,23 @@ pub fn execute_warp_jump(
             crate::ai_ship::simulation::ensure_system_population(&mut sim, &galaxy_map, warm_id);
         }
 
+        // Land the player IN the fight. Factions field only 1-5 ships scattered
+        // across a 15-80k-radius territory, so the cluster-relative arrival above
+        // almost never falls within the 10k render distance of any of them — you'd
+        // warp into empty space. Re-drop a short hop from an actual faction ship of
+        // the system we just loaded so at least one enemy is in range immediately.
+        if let Some(new_id) = streaming.loaded_system {
+            if let Some(target) = sim.ships.iter()
+                .find(|s| s.system_id == new_id && s.behavior != crate::ai_ship::components::SimBehavior::Dead)
+                .map(|s| s.position)
+            {
+                let a = rand::random::<f32>() * std::f32::consts::TAU;
+                let arrival = target + Vec2::new(a.cos(), a.sin()) * 5_000.0;
+                ship_transform.translation.x = arrival.x;
+                ship_transform.translation.y = arrival.y;
+            }
+        }
+
         completed_events.write(WarpJumpCompleted { system_id: streaming.loaded_system });
 
         notifications.write(ShowNotification {

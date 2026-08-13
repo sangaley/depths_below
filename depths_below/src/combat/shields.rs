@@ -15,7 +15,13 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 #[derive(Component)]
 pub struct ShipShield {
     pub current: f32,
+    /// Effective capacity. For the player this is `base_max` scaled by routed
+    /// shield power each frame (see update_shields); for AI ships it stays at
+    /// base_max.
     pub max: f32,
+    /// Capacity at nominal power — the emitter-derived value set at spawn.
+    /// Power routing scales `max` around this; it never changes after spawn.
+    pub base_max: f32,
     pub recharge_rate: f32,
     /// Seconds without taking a hit before recharge begins
     pub recharge_delay: f32,
@@ -227,12 +233,13 @@ pub fn attach_player_shield(
     let module_count = module_query.iter().filter(|(_, p)| p.parent() == ship).count();
     if module_count == 0 { return; }
 
-    let max = 40.0 + emitters * 40.0;
+    let max = SHIELD_BASE_HP + emitters * SHIELD_HP_PER_EMITTER;
     let (center, radius) = ship_extent(ship, &transform_query);
 
     commands.entity(ship).insert(ShipShield {
         current: max,
         max,
+        base_max: max,
         recharge_rate: 12.0,
         recharge_delay: 4.0,
         since_hit: 999.0,
@@ -322,6 +329,7 @@ pub fn attach_ai_shields(
         commands.entity(entity).insert(ShipShield {
             current: max,
             max,
+            base_max: max,
             recharge_rate: 8.0,
             recharge_delay: 5.0,
             since_hit: 999.0,
@@ -343,6 +351,28 @@ pub fn attach_ai_shields(
 /// power balance negative, which collapses the shield AND silences weapons.
 pub const SHIELD_UPKEEP_POWER: f32 = 10.0;
 
+/// Below this routed-power multiplier the player's shield is considered
+/// browned out: it stops recharging and slowly bleeds, so cutting shield
+/// power visibly drops the bubble (see update_shields / PowerChannels).
+const SHIELD_BROWNOUT_MULT: f32 = 0.35;
+/// How fast a browned-out shield bleeds charge (per second).
+const SHIELD_BROWNOUT_BLEED: f32 = 6.0;
+
+/// How much routed shield power flexes the bubble's max capacity, relative to
+/// the channel's ×0..×2 power range. At full shield power (×2) capacity rises
+/// by this fraction; at zero power it drops by it. Deliberately gentler than
+/// the raw power multiplier — routing power mostly buys faster recharge, with
+/// a modest capacity bump on top. 0.35 → up to +35% / −35% HP.
+const SHIELD_HP_POWER_BONUS: f32 = 0.35;
+
+/// Player bubble capacity with zero emitters, and the HP each live Shield
+/// Emitter module adds. Used both to size the shield at attach and to keep it
+/// tracking the emitter count as blocks are built or destroyed. Nudged up ~25%
+/// from the original 40/40 for a bit more overall bubble, on top of the routed
+/// power flex.
+const SHIELD_BASE_HP: f32 = 50.0;
+const SHIELD_HP_PER_EMITTER: f32 = 50.0;
+
 /// Toggle the player's shield with R. Dropping it saves power; raising it
 /// again starts from whatever charge remains.
 pub fn toggle_player_shield(
@@ -360,25 +390,70 @@ pub fn toggle_player_shield(
     });
 }
 
+/// Keeps the player's shield capacity in step with its live Shield Emitter
+/// count, so building an emitter at the dock grows the bubble and losing one in
+/// a fight shrinks it — instead of the capacity being frozen at first-launch.
+/// Only `base_max` is touched here; update_shields then applies the routed
+/// power HP flex on top and re-clamps `current`. AI shields keep their fixed
+/// faction capacity (this only runs for the Ship-marked player shield).
+pub fn refresh_player_shield_capacity(
+    module_query: Query<(&Module, &ChildOf)>,
+    mut shield_query: Query<(Entity, &mut ShipShield), With<Ship>>,
+) {
+    let Ok((ship, mut shield)) = shield_query.single_mut() else { return };
+    let emitters = module_query
+        .iter()
+        .filter(|(m, p)| {
+            p.parent() == ship && m.module_type == ModuleType::ShieldEmitter && m.health > 0.0
+        })
+        .count() as f32;
+    let new_base = SHIELD_BASE_HP + emitters * SHIELD_HP_PER_EMITTER;
+    if (shield.base_max - new_base).abs() > f32::EPSILON {
+        shield.base_max = new_base;
+        // Capacity may have dropped (emitter destroyed) — don't leave current
+        // above it. The routed HP flex re-clamps against the scaled max too.
+        shield.current = shield.current.min(shield.base_max);
+    }
+}
+
 /// Recharge shields after a quiet period; decay hit-flash; drive bubble alpha.
 /// The shield is a plain health pool — its only tie to the power grid is the
 /// flat upkeep drawn while raised (see update_power_system).
 pub fn update_shields(
     time: Res<Time>,
-    mut shield_query: Query<(&mut ShipShield, &Children)>,
+    channels: Res<crate::resources::PowerChannels>,
+    player_query: Query<Entity, With<Ship>>,
+    mut shield_query: Query<(Entity, &mut ShipShield, &Children)>,
     mut bubble_query: Query<&mut Sprite, With<ShieldBubble>>,
 ) {
     let dt = time.delta_secs();
+    let player = player_query.single().ok();
 
-    for (mut shield, children) in shield_query.iter_mut() {
+    for (entity, mut shield, children) in shield_query.iter_mut() {
         shield.since_hit += dt;
         shield.flash = (shield.flash - dt * 3.0).max(0.0);
 
-        if shield.enabled
+        // Only the player's shield answers to power routing; AI shields run at
+        // their fixed rate.
+        let power_mult = if Some(entity) == player { channels.shields_mult } else { 1.0 };
+
+        // Routed power gently flexes the player's max capacity around base_max
+        // (a ×2 power channel → only ~+35% HP), then clamp current to it.
+        if Some(entity) == player {
+            let hp_factor = 1.0 + (power_mult - 1.0) * SHIELD_HP_POWER_BONUS;
+            shield.max = shield.base_max * hp_factor;
+            shield.current = shield.current.min(shield.max);
+        }
+
+        if power_mult < SHIELD_BROWNOUT_MULT {
+            // Starved: the bubble can't hold — no recharge, and it bleeds down.
+            shield.current = (shield.current - SHIELD_BROWNOUT_BLEED * dt).max(0.0);
+        } else if shield.enabled
             && shield.since_hit > shield.recharge_delay
             && shield.current < shield.max
         {
-            shield.current = (shield.current + shield.recharge_rate * dt).min(shield.max);
+            shield.current =
+                (shield.current + shield.recharge_rate * power_mult * dt).min(shield.max);
         }
 
         // Bubble opacity: proportional to charge, spikes on hit, gone when down

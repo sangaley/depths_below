@@ -905,7 +905,7 @@ fn spawn_item_slots(
                 ("BLK", Color::srgb(0.5, 0.4, 0.3)),   // Bulkhead
             ];
             for (i, (label, color)) in hull_items.iter().enumerate() {
-                spawn_single_slot(parent, i, label, *color);
+                spawn_single_slot(parent, i, label, *color, 0);
             }
         }
         BuildCategory::Custom => {
@@ -918,7 +918,7 @@ fn spawn_item_slots(
                     let def = registry.get(*mt);
                     // Use first 3 chars of name as label
                     let label: String = def.name.chars().take(4).collect();
-                    spawn_single_slot(parent, i, &label, def.color);
+                    spawn_single_slot(parent, i, &label, def.color, def.cost);
                 }
             }
         }
@@ -930,14 +930,17 @@ fn spawn_single_slot(
     index: usize,
     label: &str,
     color: Color,
+    cost: u32,
 ) {
     parent.spawn((
         (Node {
-                width: Val::Px(58.0),
-                height: Val::Px(58.0),
-                min_width: Val::Px(58.0),
+                width: Val::Px(60.0),
+                height: Val::Px(60.0),
+                min_width: Val::Px(60.0),
+                flex_direction: FlexDirection::Column,
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
+                row_gap: Val::Px(3.0),
                 border: UiRect::all(Val::Px(2.0)),
                 ..default()
             }, BackgroundColor(color), BorderColor::all(Color::srgba(0.0, 0.0, 0.0, 0.0))),
@@ -947,6 +950,10 @@ fn spawn_single_slot(
     ))
     .with_children(|slot| {
         slot.spawn((Text::new(label), TextFont { font_size: FontSize::Px(11.0), ..default() }, TextColor(Color::WHITE)));
+        if cost > 0 {
+            // Build cost — the mockup's "◆ cost" tag on each module.
+            slot.spawn((Text::new(format!("\u{25c6}{}", cost)), TextFont { font_size: FontSize::Px(9.0), ..default() }, TextColor(Color::srgb(0.95, 0.85, 0.4))));
+        }
     });
 }
 
@@ -1218,7 +1225,9 @@ pub fn update_controls_help(
     // the docked hints ("Enter: Launch") for the whole run, so nobody could
     // discover the brake or the shield toggle.
     if *game_state.get() == crate::states::GameState::Exploring {
-        text.0 = "Mouse: Aim | WASD: Move | Shift: Brake | Space: Fire | Z: Radar | R: Shield | T: Look | F: Dock | B: Build | C: Crew | M: Map | N: Minimap | L: Log".to_string();
+        // Flight controls only — no B: Build (docked-only), and Map/Sys/Radar/
+        // Crew live on the clickable toolbar now, so they're dropped from here.
+        text.0 = "Mouse: Aim | WASD: Move | Shift: Brake | Space: Fire | Z: Ping | R: Shield | T: Look | F: Dock | K: Guns | L: Log".to_string();
         return;
     }
 

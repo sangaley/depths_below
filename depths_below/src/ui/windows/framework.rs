@@ -142,7 +142,9 @@ pub fn spawn_floating_window(
             }),
     ).id();
 
-    // Collapse button (—)
+    // Collapse button (—). Needs its own `Interaction` — without it the classic
+    // ui_focus_system never marks it Pressed, so window_collapse_system can't see
+    // the click and it silently falls through to the title bar behind it.
     let collapse_btn = commands.spawn((
         (Node {
                 width: Val::Px(20.0),
@@ -152,13 +154,17 @@ pub fn spawn_floating_window(
                 ..default()
             }, BackgroundColor(Color::NONE)),
         WindowCollapseButton { window_id: id_str.clone() },
+        Interaction::None,
     )).id();
 
     let collapse_text = commands.spawn(
         (Text::new("—"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(WindowStyle::COLLAPSE_COLOR)),
     ).id();
 
-    // Close button (×)
+    // Close button (×). Same as the collapse button: it needs its own
+    // `Interaction` or window_close_system never receives the click (this was
+    // why floating windows without a toggle-key — e.g. the deep customization
+    // window — couldn't be closed at all).
     let close_btn = commands.spawn((
         (Node {
                 width: Val::Px(20.0),
@@ -168,6 +174,7 @@ pub fn spawn_floating_window(
                 ..default()
             }, BackgroundColor(Color::NONE)),
         WindowCloseButton { window_id: id_str.clone() },
+        Interaction::None,
     )).id();
 
     let close_text = commands.spawn(

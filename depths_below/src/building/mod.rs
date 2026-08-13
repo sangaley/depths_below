@@ -345,7 +345,7 @@ fn handle_build_input(
         }
         if !found {
             notifications.write(ShowNotification {
-                message: "No other hull materials unlocked. Buy upgrades at the shop (U key at surface).".into(),
+                message: "No other hull materials unlocked yet.".into(),
                 notification_type: NotificationType::Warning,
                 duration: 3.0,
             });

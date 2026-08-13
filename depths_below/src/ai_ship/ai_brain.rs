@@ -101,15 +101,12 @@ pub fn ai_brain_system(
         let depth = (-pos.y / 10.0).max(0.0);
 
         // Detection/engagement range for the "should I start fighting" checks
-        // below — must stay comfortably above movement.rs's standoff distance
-        // (now also weapon-based, at 0.85x max range) or a long-range-armed
-        // ship would want to hold a standoff its own brain never lets it
-        // reach: ai_brain decides "not in range, don't engage" using a
-        // smaller number than movement.rs's "hold at my weapon's range" once
-        // it IS engaging, so the ship would never start fighting from its
-        // actual weapon range in the first place. 1.05x keeps a safety
-        // margin above the 0.85x standoff so the two systems don't fight
-        // each other into an engage/disengage oscillation.
+        // below. It must stay above movement.rs's standoff distance (~0.55x
+        // max weapon range, capped at 3000) so a ship engages from farther out
+        // than it wants to hold, then closes in — otherwise it would never
+        // start the fight from its own weapon range. 1.05x max range clears the
+        // standoff comfortably, so the two systems don't oscillate between
+        // engage and disengage.
         let max_weapon_range = children.iter()
             .filter_map(|c| weapon_query.get(c).ok())
             .filter(|(_, module, _)| module.is_active && module.health > 0.0)
@@ -192,6 +189,43 @@ pub fn ai_brain_system(
         }
 
         let mut actions: Vec<ScoredAction> = Vec::with_capacity(12);
+
+        // ====================================================================
+        // DISTRESS RESPONSE — faction-agnostic, evaluated before the per-
+        // faction trees. A same-faction ally within earshot called for backup
+        // (ai_distress_system set alert_target/alert_timer); converge on and
+        // engage whoever they're fighting. This is what makes a whole patrol
+        // pile onto the player once one of them is scrapping, without spawning
+        // any ships out of thin air. Non-combatants (GlassEye, Leviathan)
+        // never answer. Scored at 93 — above a faction's ordinary engage
+        // (78-90) but below its own critical-flee/kamikaze (95-100), so
+        // self-preservation and each faction's signature move still win.
+        // Target position is resolved from the same snapshots best_target
+        // uses; if the caller's target has died or left range, the alert
+        // simply can't be acted on this tick and the ship falls through to
+        // its normal behavior.
+        // ====================================================================
+        // hull_pct gate: a ship that's already hurt keeps its own self-
+        // preservation (flee/kamikaze) instead of charging back in to help —
+        // you don't answer a call for backup when you're the one about to die.
+        if state.alert_timer > 0.0 && faction_fights(*ship_type) && hull_pct > 0.35 {
+            let resolved = state.alert_target.and_then(|at| {
+                player_snapshot
+                    .filter(|(e, _, _)| *e == at)
+                    .map(|(_, p, _)| (at, p))
+                    .or_else(|| {
+                        ai_snapshot.iter().find(|(e, _, _)| *e == at).map(|&(_, p, _)| (at, p))
+                    })
+            });
+            if let Some((at, apos)) = resolved {
+                actions.push(ScoredAction {
+                    score: 93.0,
+                    behavior: AiShipBehavior::Engaging,
+                    destination: Some(apos),
+                    target: Some((at, apos)),
+                });
+            }
+        }
 
         // ====================================================================
         // Per-faction unique decision trees
@@ -793,7 +827,14 @@ pub fn ai_brain_system(
             // nav.destination (see AiShipTarget's doc comment for why).
             // Non-Engaging actions carry target: None, which correctly
             // clears any stale target once the ship disengages.
-            ai_target.entity = best.target.map(|(e, _)| e);
+            let new_target = best.target.map(|(e, _)| e);
+            // A changed target invalidates the aimed subsystem — force
+            // ai_weapon_fire_system to re-pick one on the new ship rather than
+            // keep aiming at a module that belonged to the old target.
+            if ai_target.entity != new_target {
+                ai_target.subsystem = None;
+            }
+            ai_target.entity = new_target;
             ai_target.position = best.target.map(|(_, p)| p).unwrap_or(pos);
         }
 

@@ -56,6 +56,11 @@ pub fn ship_input(
 /// few seconds of burn away while keeping engine count meaningful.
 const THRUST_SCALE: f32 = 180.0;
 
+/// Lowest fraction of thrust a fully power-starved engine channel still puts
+/// out. Routing power away from engines slows the ship, but never strands it —
+/// you can always crawl home. See `ship_movement` / `update_power_allocation`.
+const ENGINE_POWER_FLOOR: f32 = 0.25;
+
 /// Max yaw rate at full deflection (rad/s). ~49°/s — a heavy warship, not a
 /// fighter. Deliberately slow: the turrets aim independently now, so the hull
 /// turns for positioning/thrust, not to point the guns.
@@ -93,12 +98,17 @@ pub fn ship_movement(
     windows_query: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::MainCamera>>,
     debug_tuning: Res<crate::debug::DebugTuning>,
+    power_channels: Res<crate::resources::PowerChannels>,
 ) {
     let Ok((mut transform, mut velocity, mut physics, mut thruster_state)) = ship_query.single_mut() else {
         return;
     };
 
     let dt = time.delta_secs();
+
+    // Routed engine power scales thrust. Floored so a starved (or reactor-down)
+    // ship can always limp instead of getting stranded dead in space.
+    let engine_power = power_channels.engines_mult.max(ENGINE_POWER_FLOOR);
 
     // Calculate total thrust from active engines
     let total_thrust: f32 = engine_query
@@ -108,7 +118,7 @@ pub fn ship_movement(
             let efficiency = effective_efficiency(module, eff);
             get_engine_thrust(calculated_stats, engine) * efficiency
         })
-        .sum::<f32>() * debug_tuning.speed_mult;
+        .sum::<f32>() * debug_tuning.speed_mult * engine_power;
 
     // --- FACING: nose follows the aim source ---
     // Controller right stick when it has aim (see InputState.gamepad_aim),

@@ -33,9 +33,14 @@ pub struct FireGroupState {
 pub fn fire_group_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
+    interactions: Query<&Interaction>,
     mut state: ResMut<FireGroupState>,
 ) {
-    let fire_all = keyboard.pressed(KeyCode::Space) || mouse.pressed(MouseButton::Left);
+    // A left-click that lands on interactive UI (the HUD toolbar, panels, window
+    // chrome) shouldn't also fire the guns — suppress mouse-fire while the cursor
+    // is over any hovered/pressed UI element. Space still fires unconditionally.
+    let over_ui = interactions.iter().any(|i| !matches!(i, Interaction::None));
+    let fire_all = keyboard.pressed(KeyCode::Space) || (mouse.pressed(MouseButton::Left) && !over_ui);
     state.firing[0] = keyboard.pressed(KeyCode::Digit1) || fire_all;
     state.firing[1] = keyboard.pressed(KeyCode::Digit2) || fire_all;
     state.firing[2] = keyboard.pressed(KeyCode::Digit3) || fire_all;

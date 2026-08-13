@@ -33,7 +33,7 @@ pub use fire::*;
 pub use atmosphere::*;
 
 use crate::states::{GameState, ShipSet};
-use crate::resources::{DepthState, PowerState, OxygenState, HullState, NoiseState, GameConfig, FuelState, VictoryState, DeathCause, ExploringSessionTimer, PowerGraph, HeatNetworkState, ResearchState, AutopilotState, TargetingBonus};
+use crate::resources::{DepthState, PowerState, PowerAllocation, PowerChannels, OxygenState, HullState, NoiseState, GameConfig, FuelState, VictoryState, DeathCause, ExploringSessionTimer, PowerGraph, HeatNetworkState, ResearchState, AutopilotState, TargetingBonus};
 use crate::crew::spawn_starter_crew;
 
 pub struct ShipPlugin;
@@ -65,6 +65,8 @@ impl Plugin for ShipPlugin {
             // Resources
             .init_resource::<DepthState>()
             .init_resource::<PowerState>()
+            .init_resource::<PowerAllocation>()
+            .init_resource::<PowerChannels>()
             .init_resource::<OxygenState>()
             .init_resource::<HullState>()
             .init_resource::<NoiseState>()
@@ -117,6 +119,7 @@ impl Plugin for ShipPlugin {
                     // check_radiation_damage removed — radiation mechanic disabled per request.
                     build_power_graph.in_set(ShipSet::Power),
                     update_power_system.after(build_power_graph).in_set(ShipSet::Power),
+                    update_power_allocation.after(update_power_system).in_set(ShipSet::Power),
                     update_reactor_heat.after(update_power_system).in_set(ShipSet::Power),
                     update_fuel_consumption.after(update_power_system).in_set(ShipSet::Power),
                     update_oxygen_system.in_set(ShipSet::Oxygen),
@@ -210,6 +213,7 @@ impl Plugin for ShipPlugin {
                     subsystems::update_radiation_shielding,
                     subsystems::update_drone_bays,
                     subsystems::apply_torpedo_loader_bonus,
+                    subsystems::apply_weapon_power_scaling,
                     subsystems::apply_targeting_computer_bonus,
                     subsystems::update_ai_combat_core,
                     subsystems::update_research_lab,

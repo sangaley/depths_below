@@ -44,6 +44,7 @@ impl Plugin for AiShipPlugin {
                     movement::ai_fuel_system,
                     power::update_ai_power,
                     combat::ai_weapon_fire_system.after(power::update_ai_power),
+                    combat::ai_distress_system,
                     combat::process_ai_ship_damage_system,
                     combat::check_ai_reactor_destruction,
                     noise::ai_ship_noise_system,

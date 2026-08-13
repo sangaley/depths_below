@@ -45,6 +45,128 @@ pub struct PowerGraph {
     pub powered_tiles: HashSet<IVec2>,
 }
 
+// ============================================================================
+// POWER ROUTING — player-controlled reactor allocation (Weapons/Shields/Engines)
+// ============================================================================
+
+/// The three combat systems the player can route reactor power between.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum PowerChannel {
+    Weapons,
+    Shields,
+    Engines,
+}
+
+impl PowerChannel {
+    pub const ALL: [PowerChannel; 3] =
+        [PowerChannel::Weapons, PowerChannel::Shields, PowerChannel::Engines];
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            PowerChannel::Weapons => "WEAPONS",
+            PowerChannel::Shields => "SHIELDS",
+            PowerChannel::Engines => "ENGINES",
+        }
+    }
+}
+
+/// Player-set routing of reactor output across the three combat channels.
+/// Each value is a 0..=100 "power level" and the three do NOT have to sum to
+/// 100 — asking for more than the reactor can supply browns the channels out
+/// (see [`PowerChannels`] / `update_power_allocation`). A balanced 50/50/50
+/// spends the whole reactor at nominal (×1.0) performance everywhere.
+#[derive(Resource, Clone, Copy)]
+pub struct PowerAllocation {
+    pub weapons: f32,
+    pub shields: f32,
+    pub engines: f32,
+}
+
+impl Default for PowerAllocation {
+    fn default() -> Self {
+        Self { weapons: 50.0, shields: 50.0, engines: 50.0 }
+    }
+}
+
+impl PowerAllocation {
+    pub const MIN: f32 = 0.0;
+    pub const MAX: f32 = 100.0;
+    pub const STEP: f32 = 10.0;
+
+    pub fn get(&self, ch: PowerChannel) -> f32 {
+        match ch {
+            PowerChannel::Weapons => self.weapons,
+            PowerChannel::Shields => self.shields,
+            PowerChannel::Engines => self.engines,
+        }
+    }
+
+    /// Set one channel to an exact level, clamped to [MIN, MAX]. Used by the
+    /// draggable sliders for arbitrary (non-stepped) allocations.
+    pub fn set(&mut self, ch: PowerChannel, value: f32) {
+        let v = value.clamp(Self::MIN, Self::MAX);
+        match ch {
+            PowerChannel::Weapons => self.weapons = v,
+            PowerChannel::Shields => self.shields = v,
+            PowerChannel::Engines => self.engines = v,
+        }
+    }
+
+    /// Nudge one channel by `delta`, clamped to [MIN, MAX]. Channels are
+    /// independent — raising one does not lower the others (over-commit is
+    /// allowed and surfaces as a brownout).
+    pub fn adjust(&mut self, ch: PowerChannel, delta: f32) {
+        let v = (self.get(ch) + delta).clamp(Self::MIN, Self::MAX);
+        match ch {
+            PowerChannel::Weapons => self.weapons = v,
+            PowerChannel::Shields => self.shields = v,
+            PowerChannel::Engines => self.engines = v,
+        }
+    }
+}
+
+/// Live per-channel result of routing, recomputed every frame from
+/// [`PowerAllocation`] + the reactor's current generation. `*_mult` is the
+/// performance multiplier each gameplay system reads (1.0 = nominal, capped
+/// at 2.0, ~0.0 = browned out / offline). `brownout` is true when the trio's
+/// total demand exceeds what the reactor can supply.
+#[derive(Resource, Clone, Copy)]
+pub struct PowerChannels {
+    pub weapons_mult: f32,
+    pub shields_mult: f32,
+    pub engines_mult: f32,
+    /// Total power the three channels requested this frame.
+    pub demand: f32,
+    /// Reactor power available to the trio this frame (= total generation).
+    pub supply: f32,
+    pub brownout: bool,
+}
+
+impl Default for PowerChannels {
+    fn default() -> Self {
+        // Nominal until the first compute — systems behave as before when the
+        // routing layer hasn't run yet (e.g. while docked).
+        Self {
+            weapons_mult: 1.0,
+            shields_mult: 1.0,
+            engines_mult: 1.0,
+            demand: 0.0,
+            supply: 0.0,
+            brownout: false,
+        }
+    }
+}
+
+impl PowerChannels {
+    pub fn mult(&self, ch: PowerChannel) -> f32 {
+        match ch {
+            PowerChannel::Weapons => self.weapons_mult,
+            PowerChannel::Shields => self.shields_mult,
+            PowerChannel::Engines => self.engines_mult,
+        }
+    }
+}
+
 /// Double-buffered heat map for heat diffusion calculations
 #[derive(Resource, Default)]
 pub struct HeatNetworkState {
@@ -509,7 +631,6 @@ impl Default for Currency {
 pub struct Unlocks {
     pub modules: Vec<String>,
     pub hull_types: Vec<String>,
-    pub upgrades: Vec<String>,
     pub blueprints_found: Vec<String>,
 }
 
@@ -521,7 +642,6 @@ impl Default for Unlocks {
                 "oxygen".into(), "thruster".into(), "light".into(),
             ],
             hull_types: vec!["standard".into()],
-            upgrades: Vec::new(),
             blueprints_found: Vec::new(),
         }
     }

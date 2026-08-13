@@ -130,14 +130,22 @@ pub fn ai_ship_movement_system(
                 .map(|(weapon, _, _)| weapon.range)
                 .fold(0.0_f32, f32::max);
 
+            // A CLOSE standoff. The old 0.85×(weapon range) parked long-range
+            // factions 6000-7000u out, where their slow shells never landed
+            // and any approach just made them kite backwards forever — the
+            // "they look at me, then run away, and never hit me" report.
+            // Fights now happen at ~half weapon range, hard-capped at 3000 so
+            // even a railgun ship closes to a distance where its rounds
+            // actually connect and you can plainly see you're being shot at.
+            // RustSwarm still rams point-blank (that IS their identity).
             let standoff = if *behavior == AiShipBehavior::Engaging {
                 match ship_type {
                     AiShipType::RustSwarm => 0.0,
-                    _ if max_weapon_range > 0.0 => max_weapon_range * 0.85,
-                    AiShipType::VoidTitan | AiShipType::Dreadnought => 8000.0,
-                    AiShipType::IronTide | AiShipType::PressureKing => 6000.0,
-                    AiShipType::Blackwater => 4400.0,
-                    _ => 3600.0,
+                    _ if max_weapon_range > 0.0 => (max_weapon_range * 0.55).clamp(900.0, 3000.0),
+                    AiShipType::VoidTitan | AiShipType::Dreadnought => 3000.0,
+                    AiShipType::IronTide | AiShipType::PressureKing => 2600.0,
+                    AiShipType::Blackwater => 2200.0,
+                    _ => 1800.0,
                 }
             } else {
                 0.0
@@ -146,12 +154,16 @@ pub fn ai_ship_movement_system(
             if standoff > 0.0 && dist < standoff * 1.15 && dist > 1.0 {
                 let direction = to_dest / dist;
                 let tangent = Vec2::new(-direction.y, direction.x);
-                let desired_vel = if dist < standoff * 0.85 {
-                    // Too close — back away while keeping some lateral motion
-                    -direction * max_speed * 0.6 + tangent * max_speed * 0.3
+                let desired_vel = if dist < standoff * 0.5 {
+                    // Genuinely on top of the target — ease outward GENTLY
+                    // (0.25×) while still orbiting, so a ship can't kite a
+                    // chasing player across the map; it drifts back to its
+                    // ring and keeps firing instead of fleeing.
+                    -direction * max_speed * 0.25 + tangent * max_speed * 0.55
                 } else {
-                    // In the band — strafe an orbit around the target
-                    tangent * max_speed * 0.55
+                    // In the band — orbit at constant radius (no radial
+                    // retreat), holding the fight rather than backing off.
+                    tangent * max_speed * 0.6
                 };
                 velocity.0 = velocity.0.lerp(desired_vel, vel_blend);
 
