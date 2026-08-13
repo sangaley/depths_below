@@ -37,6 +37,11 @@ pub struct ShipShield {
     pub enabled: bool,
     /// Recent-hit power surge — extra power drain that decays over time
     pub surge: f32,
+    /// Directional coverage: the shield only absorbs hits within this many
+    /// radians of the ship's nose (to either side). PI = full 360° bubble
+    /// (AI ships); the player's is a front arc so the rear is exposed. See
+    /// `covers` and the player hit path in projectiles.rs.
+    pub front_arc_half: f32,
 }
 
 impl ShipShield {
@@ -47,6 +52,19 @@ impl ShipShield {
     }
     pub fn is_up(&self) -> bool {
         self.enabled && self.current > 0.0
+    }
+    /// Whether the shield covers a hit arriving from `hit_dir` (world-space
+    /// direction from the bubble centre to the impact point), given the ship's
+    /// `forward` (nose) direction. Full shields (front_arc_half >= PI) always
+    /// cover; the player's front arc leaves the rear exposed, so a shot from
+    /// outside the arc slips past the bubble and strikes the hull.
+    pub fn covers(&self, forward: Vec2, hit_dir: Vec2) -> bool {
+        let f = forward.normalize_or_zero();
+        let h = hit_dir.normalize_or_zero();
+        if f == Vec2::ZERO || h == Vec2::ZERO {
+            return true;
+        }
+        f.dot(h) >= self.front_arc_half.cos()
     }
     /// World-space center of the bubble for hit tests
     pub fn world_center(&self, transform: &Transform) -> Vec2 {
@@ -248,6 +266,7 @@ pub fn attach_player_shield(
         flash: 0.0,
         enabled: true,
         surge: 0.0,
+        front_arc_half: PLAYER_SHIELD_ARC_HALF,
     });
     // The silhouette-hugging skin itself is built (and kept up to date as blocks
     // change) by refresh_player_shield_skin. Collision stays radius-based via
@@ -338,6 +357,7 @@ pub fn attach_ai_shields(
             flash: 0.0,
             enabled: true,
             surge: 0.0,
+            front_arc_half: std::f32::consts::PI, // AI shields stay omnidirectional
         });
         // Same silhouette skin as the player (built once — AI ships don't get
         // rebuilt in a hangar; a destroyed one just leaves its skin slightly wide).
@@ -364,6 +384,12 @@ const SHIELD_BROWNOUT_BLEED: f32 = 6.0;
 /// the raw power multiplier — routing power mostly buys faster recharge, with
 /// a modest capacity bump on top. 0.35 → up to +35% / −35% HP.
 const SHIELD_HP_POWER_BONUS: f32 = 0.35;
+
+/// SAMPLE (directional shields): the player's shield only covers a front arc
+/// this many radians to each side of the nose. PI/2 → the whole front
+/// hemisphere is shielded and the rear half is exposed — a first taste of
+/// "keep your nose to the threat." AI ships stay omnidirectional (PI).
+const PLAYER_SHIELD_ARC_HALF: f32 = std::f32::consts::FRAC_PI_2;
 
 /// Player bubble capacity with zero emitters, and the HP each live Shield
 /// Emitter module adds. Used both to size the shield at attach and to keep it

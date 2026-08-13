@@ -212,8 +212,15 @@ pub(super) fn projectile_collision(
 
                 if let Some(mut shield) = shield {
                     // Bubble is centered on the blocks' centroid, not the root
-                    dist = proj_pos.distance(shield.world_center(ship_transform));
-                    if shield.is_up() && dist < shield.radius {
+                    let center = shield.world_center(ship_transform);
+                    dist = proj_pos.distance(center);
+                    // SAMPLE directional shield: only absorb if the impact is
+                    // within the front arc. Ship's nose = local +X rotated by
+                    // the hull's transform. Out-of-arc shots fall through to
+                    // the hull check below (shield bypassed from the rear).
+                    let forward = (ship_transform.rotation * Vec3::X).truncate();
+                    let hit_dir = proj_pos - center;
+                    if shield.is_up() && dist < shield.radius && shield.covers(forward, hit_dir) {
                         shield.absorb(projectile.damage);
                         spawn_hit_effect(&mut commands, proj_pos, Color::srgb(0.5, 0.8, 1.0), 16.0);
                         commands.entity(proj_entity).despawn();
