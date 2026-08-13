@@ -37,34 +37,37 @@ pub struct ShipShield {
     pub enabled: bool,
     /// Recent-hit power surge — extra power drain that decays over time
     pub surge: f32,
-    /// Directional coverage: the shield only absorbs hits within this many
-    /// radians of the ship's nose (to either side). PI = full 360° bubble
-    /// (AI ships); the player's is a front arc so the rear is exposed. See
-    /// `covers` and the player hit path in projectiles.rs.
-    pub front_arc_half: f32,
 }
 
 impl ShipShield {
     pub fn absorb(&mut self, damage: f32) {
         self.current = (self.current - damage).max(0.0);
         self.since_hit = 0.0;
-        self.flash = 1.0;
+        self.flash = (self.flash + damage * SHIELD_FLASH_PER_DAMAGE).min(SHIELD_FLASH_MAX);
     }
     pub fn is_up(&self) -> bool {
         self.enabled && self.current > 0.0
     }
-    /// Whether the shield covers a hit arriving from `hit_dir` (world-space
-    /// direction from the bubble centre to the impact point), given the ship's
-    /// `forward` (nose) direction. Full shields (front_arc_half >= PI) always
-    /// cover; the player's front arc leaves the rear exposed, so a shot from
-    /// outside the arc slips past the bubble and strikes the hull.
-    pub fn covers(&self, forward: Vec2, hit_dir: Vec2) -> bool {
+    /// Pool-drain multiplier for a hit arriving from `hit_dir` (world-space
+    /// direction from the bubble centre to the impact), given the ship's
+    /// `forward` (nose). Front hits are cheap (the nose tanks), rear hits
+    /// expensive (the back folds fast); the sides sit in between. This is full
+    /// 360° coverage — nothing bypasses, the rear just burns the pool faster.
+    fn directional_cost(&self, forward: Vec2, hit_dir: Vec2) -> f32 {
         let f = forward.normalize_or_zero();
         let h = hit_dir.normalize_or_zero();
         if f == Vec2::ZERO || h == Vec2::ZERO {
-            return true;
+            return 1.0;
         }
-        f.dot(h) >= self.front_arc_half.cos()
+        let t = (f.dot(h) + 1.0) * 0.5; // 0 = rear, 1 = front
+        SHIELD_REAR_COST + (SHIELD_FRONT_COST - SHIELD_REAR_COST) * t
+    }
+    /// Player absorb: directional pool drain + damage-scaled glow.
+    pub fn absorb_directional(&mut self, damage: f32, forward: Vec2, hit_dir: Vec2) {
+        let cost = damage * self.directional_cost(forward, hit_dir);
+        self.current = (self.current - cost).max(0.0);
+        self.since_hit = 0.0;
+        self.flash = (self.flash + damage * SHIELD_FLASH_PER_DAMAGE).min(SHIELD_FLASH_MAX);
     }
     /// World-space center of the bubble for hit tests
     pub fn world_center(&self, transform: &Transform) -> Vec2 {
@@ -266,7 +269,6 @@ pub fn attach_player_shield(
         flash: 0.0,
         enabled: true,
         surge: 0.0,
-        front_arc_half: PLAYER_SHIELD_ARC_HALF,
     });
     // The silhouette-hugging skin itself is built (and kept up to date as blocks
     // change) by refresh_player_shield_skin. Collision stays radius-based via
@@ -357,7 +359,6 @@ pub fn attach_ai_shields(
             flash: 0.0,
             enabled: true,
             surge: 0.0,
-            front_arc_half: std::f32::consts::PI, // AI shields stay omnidirectional
         });
         // Same silhouette skin as the player (built once — AI ships don't get
         // rebuilt in a hangar; a destroyed one just leaves its skin slightly wide).
@@ -385,11 +386,19 @@ const SHIELD_BROWNOUT_BLEED: f32 = 6.0;
 /// a modest capacity bump on top. 0.35 → up to +35% / −35% HP.
 const SHIELD_HP_POWER_BONUS: f32 = 0.35;
 
-/// SAMPLE (directional shields): the player's shield only covers a front arc
-/// this many radians to each side of the nose. PI/2 → the whole front
-/// hemisphere is shielded and the rear half is exposed — a first taste of
-/// "keep your nose to the threat." AI ships stay omnidirectional (PI).
-const PLAYER_SHIELD_ARC_HALF: f32 = std::f32::consts::FRAC_PI_2;
+/// SAMPLE (directional strength): the player's shield covers all 360°, but a
+/// hit's drain on the pool scales with the angle it arrives from — cheap
+/// head-on (the nose tanks), expensive from behind (the rear folds fast). No
+/// aiming; it just falls out of where the shot comes from vs. your heading.
+const SHIELD_FRONT_COST: f32 = 0.5; // front hits drain half — tough
+const SHIELD_REAR_COST: f32 = 2.0; // rear hits drain double — soft
+
+/// Bubble look: next-to-invisible at rest, glowing on impact and brighter the
+/// more damage the hit dealt (flash accumulates in absorb, decays each frame).
+const SHIELD_BASE_ALPHA: f32 = 0.04;
+const SHIELD_FLASH_ALPHA: f32 = 0.55;
+const SHIELD_FLASH_PER_DAMAGE: f32 = 0.03; // ~30 dmg → a strong flash
+const SHIELD_FLASH_MAX: f32 = 1.6;
 
 /// Player bubble capacity with zero emitters, and the HP each live Shield
 /// Emitter module adds. Used both to size the shield at attach and to keep it
@@ -482,15 +491,13 @@ pub fn update_shields(
                 (shield.current + shield.recharge_rate * power_mult * dt).min(shield.max);
         }
 
-        // Bubble opacity: proportional to charge, spikes on hit, gone when down
+        // Bubble is next-to-invisible at rest and glows on impact, brighter the
+        // more damage the hit dealt (flash accumulates in absorb, decays above).
         for child in children.iter() {
             if let Ok(mut sprite) = bubble_query.get_mut(child) {
-                let alpha = if shield.is_up() {
-                    0.10 + 0.20 * (shield.current / shield.max) + shield.flash * 0.5
-                } else {
-                    0.0
-                };
-                sprite.color = Color::srgba(0.5, 0.8, 1.0, alpha.min(0.85));
+                let base = if shield.is_up() { SHIELD_BASE_ALPHA } else { 0.0 };
+                let alpha = (base + shield.flash * SHIELD_FLASH_ALPHA).min(0.9);
+                sprite.color = Color::srgba(0.5, 0.8, 1.0, alpha);
             }
         }
     }
