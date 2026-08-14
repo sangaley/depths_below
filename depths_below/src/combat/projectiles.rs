@@ -215,17 +215,10 @@ pub(super) fn projectile_collision(
                     let center = shield.world_center(ship_transform);
                     dist = proj_pos.distance(center);
                     if shield.is_up() && dist < shield.radius {
-                        // SAMPLE omni arc: absorb only if the arc currently
-                        // covers this angle; otherwise the shot slips past to
-                        // the hull below (the arc is low-coverage and has to
-                        // swing to face threats).
-                        let hit_dir = proj_pos - center;
-                        if shield.covers_arc(hit_dir) {
-                            shield.absorb(projectile.damage);
-                            spawn_hit_effect(&mut commands, proj_pos, Color::srgb(0.5, 0.8, 1.0), 16.0);
-                            commands.entity(proj_entity).despawn();
-                            continue;
-                        }
+                        shield.absorb(projectile.damage);
+                        spawn_hit_effect(&mut commands, proj_pos, Color::srgb(0.5, 0.8, 1.0), 16.0);
+                        commands.entity(proj_entity).despawn();
+                        continue;
                     }
                     hull_hit_radius = hull_hit_radius.max(shield.radius);
                 }

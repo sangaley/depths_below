@@ -210,7 +210,7 @@ fn build_shield_skin(cells: &HashSet<IVec2>) -> Option<(Image, Vec2, Vec2)> {
     const HALF: f32 = 33.0;
     const TPU: f32 = 0.25;          // texels per world unit (1 texel = 4 units)
     const SMOOTH: f32 = 76.0;       // blur radius in world units → smoothness + gap
-    const THRESH: f32 = 0.22;       // coverage iso-value the glow sits on (lower = further out)
+    const THRESH: f32 = 0.18;       // coverage iso-value the glow sits on (lower = further out)
     const BANDW: f32 = 0.085;       // glow width in coverage space (smaller = thinner)
     if cells.is_empty() { return None; }
     let centers: Vec<Vec2> = cells.iter()
@@ -447,9 +447,8 @@ const SHIELD_ARC_TRAVERSE: f32 = 8.0; // rad/s — fast, not instant
 const SHIELD_ARC_THREAT_RANGE: f32 = 1200.0; // incoming fire within this is tracked
 const SHIELD_ARC_ENEMY_RANGE: f32 = 2500.0; // fallback: face nearest hostile in this range
 
-/// Bubble look: next-to-invisible at rest, glowing on impact and brighter the
-/// more damage the hit dealt (flash accumulates in absorb, decays each frame).
-const SHIELD_BASE_ALPHA: f32 = 0.04;
+/// Hit glow: the outline flares on impact, brighter the more damage the hit
+/// dealt (flash accumulates in absorb, decays each frame).
 const SHIELD_FLASH_ALPHA: f32 = 0.55;
 const SHIELD_FLASH_PER_DAMAGE: f32 = 0.03; // ~30 dmg → a strong flash
 const SHIELD_FLASH_MAX: f32 = 1.6;
@@ -657,17 +656,16 @@ pub fn update_shields(
                 (shield.current + shield.recharge_rate * power_mult * dt).min(shield.max);
         }
 
-        // The player's full-silhouette bubble is hidden — its omni-arc cap
-        // (update_player_shield_arc) is the visual instead. AI keep the
-        // near-invisible-glows-on-hit bubble.
-        let is_player = Some(entity) == player;
+        // Ship-outline skin: visible while up (scaled by charge) and it glows
+        // brighter on impact the more damage the hit dealt (flash accumulates
+        // in absorb, decays above). Player and AI alike.
         for child in children.iter() {
             if let Ok(mut sprite) = bubble_query.get_mut(child) {
-                let alpha = if is_player {
-                    0.0
+                let alpha = if shield.is_up() {
+                    let charge = if shield.max > 0.0 { shield.current / shield.max } else { 0.0 };
+                    (0.12 + 0.18 * charge + shield.flash * SHIELD_FLASH_ALPHA).min(0.9)
                 } else {
-                    let base = if shield.is_up() { SHIELD_BASE_ALPHA } else { 0.0 };
-                    (base + shield.flash * SHIELD_FLASH_ALPHA).min(0.9)
+                    0.0
                 };
                 sprite.color = Color::srgba(0.5, 0.8, 1.0, alpha);
             }
