@@ -77,6 +77,55 @@ impl ShipShield {
 #[derive(Component)]
 pub struct ShieldBubble;
 
+/// Marker for the player's omni-arc glow sprite — a short shield cap that hugs
+/// the hull and swings to face the tracked threat. Distinct from the
+/// full-silhouette ShieldBubble (which is hidden on the player).
+#[derive(Component)]
+pub struct ShieldArcVisual;
+
+/// Build a short, soft glowing arc cap pointing +X (local), sitting at `radius`
+/// and spanning ±`half` radians — same soft-glow feel as the ship shield skin,
+/// just a small segment. Returned with the sprite's world size. The sprite is
+/// rotated to the arc facing and tinted blue at draw time.
+fn build_arc_glow(radius: f32, half: f32) -> (Image, f32) {
+    const BAND: f32 = 15.0; // glow band half-thickness (world units)
+    const PAD: f32 = 10.0;
+    const TPU: f32 = 0.5; // texels per world unit
+    const ANG_SOFT: f32 = 0.14; // angular edge softness (radians)
+    let s = 2.0 * (radius + BAND + PAD); // world square side
+    let n = ((s * TPU).ceil() as usize).max(8);
+    let c = s * 0.5;
+    let mut data = vec![0u8; n * n * 4];
+    for ty in 0..n {
+        for tx in 0..n {
+            // texel centre -> world, centred at (0,0), y up
+            let wx = (tx as f32 + 0.5) / TPU - c;
+            let wy = c - (ty as f32 + 0.5) / TPU;
+            let r = (wx * wx + wy * wy).sqrt();
+            let theta = wy.atan2(wx);
+            let over = theta.abs() - half;
+            let ang = if over <= 0.0 { 1.0 } else { (-(over / ANG_SOFT).powi(2)).exp() };
+            let rad = (-((r - radius) / BAND).powi(2)).exp();
+            let cov = (ang * rad).clamp(0.0, 1.0);
+            if cov > 0.02 {
+                let i = (ty * n + tx) * 4;
+                data[i] = 255;
+                data[i + 1] = 255;
+                data[i + 2] = 255;
+                data[i + 3] = (cov * 255.0) as u8;
+            }
+        }
+    }
+    let img = Image::new(
+        Extent3d { width: n as u32, height: n as u32, depth_or_array_layers: 1 },
+        TextureDimension::D2,
+        data,
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    );
+    (img, s)
+}
+
 /// Bubble geometry that actually wraps the ship: centered on the blocks'
 /// centroid (the root is often at one end of the layout), radius = farthest
 /// block from that centroid plus margin. Root-centered fixed radii produced
@@ -463,9 +512,11 @@ pub fn refresh_player_shield_capacity(
 /// up. Rendered as a faint blue arc that flares brighter on impact.
 pub fn update_player_shield_arc(
     time: Res<Time>,
-    mut gizmos: Gizmos,
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
     mut ship_query: Query<(&Transform, &mut ShipShield), With<Ship>>,
     projectiles: Query<(&Transform, &Projectile)>,
+    mut arc_vis: Query<(&mut Transform, &mut Sprite), (With<ShieldArcVisual>, Without<Ship>)>,
 ) {
     let dt = time.delta_secs();
     let Ok((ship_transform, mut shield)) = ship_query.single_mut() else { return };
@@ -513,20 +564,32 @@ pub fn update_player_shield_arc(
         }
     }
 
-    // Draw the arc: faint at rest, brighter on hit.
-    if shield.is_up() {
-        let color = Color::srgba(0.5, 0.8, 1.0, (0.14 + shield.flash * 0.5).min(0.85));
-        let r = shield.radius;
-        let segs = 24;
-        let start = shield.arc_facing - shield.arc_half;
-        let sweep = shield.arc_half * 2.0;
-        let mut prev = center + Vec2::from_angle(start) * r;
-        for i in 1..=segs {
-            let a = start + sweep * (i as f32 / segs as f32);
-            let p = center + Vec2::from_angle(a) * r;
-            gizmos.line_2d(prev, p, color);
-            prev = p;
-        }
+    // Drive the glow-cap sprite (spawn it lazily the first time the shield's up).
+    if let Ok((mut tf, mut sprite)) = arc_vis.single_mut() {
+        tf.translation = center.extend(1.5);
+        tf.rotation = Quat::from_rotation_z(shield.arc_facing);
+        let charge = if shield.max > 0.0 { shield.current / shield.max } else { 0.0 };
+        let alpha = if shield.is_up() {
+            (0.12 + 0.14 * charge + shield.flash * 0.5).min(0.9)
+        } else {
+            0.0
+        };
+        sprite.color = Color::srgba(0.5, 0.8, 1.0, alpha);
+    } else if shield.is_up() {
+        // Cap hugs the hull (just outside it), short and soft.
+        let vis_radius = (shield.radius - 50.0).max(40.0);
+        let (img, size) = build_arc_glow(vis_radius, shield.arc_half);
+        let handle = images.add(img);
+        commands.spawn((
+            Sprite {
+                image: handle,
+                color: Color::srgba(0.5, 0.8, 1.0, 0.0),
+                custom_size: Some(Vec2::splat(size)),
+                ..default()
+            },
+            Transform::from_xyz(center.x, center.y, 1.5),
+            ShieldArcVisual,
+        ));
     }
 }
 
@@ -570,12 +633,18 @@ pub fn update_shields(
                 (shield.current + shield.recharge_rate * power_mult * dt).min(shield.max);
         }
 
-        // Bubble is next-to-invisible at rest and glows on impact, brighter the
-        // more damage the hit dealt (flash accumulates in absorb, decays above).
+        // The player's full-silhouette bubble is hidden — its omni-arc cap
+        // (update_player_shield_arc) is the visual instead. AI keep the
+        // near-invisible-glows-on-hit bubble.
+        let is_player = Some(entity) == player;
         for child in children.iter() {
             if let Ok(mut sprite) = bubble_query.get_mut(child) {
-                let base = if shield.is_up() { SHIELD_BASE_ALPHA } else { 0.0 };
-                let alpha = (base + shield.flash * SHIELD_FLASH_ALPHA).min(0.9);
+                let alpha = if is_player {
+                    0.0
+                } else {
+                    let base = if shield.is_up() { SHIELD_BASE_ALPHA } else { 0.0 };
+                    (base + shield.flash * SHIELD_FLASH_ALPHA).min(0.9)
+                };
                 sprite.color = Color::srgba(0.5, 0.8, 1.0, alpha);
             }
         }
