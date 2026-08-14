@@ -100,8 +100,16 @@ pub fn update_ai_power(
             }
         }
 
-        commands.entity(ai_root).try_insert(AiPowerState {
-            power_balance: total_generation - total_consumption,
-        });
+        // Guarantee every enemy ship is adequately powered: its balance is
+        // never allowed to go negative, so an undercrewed reactor or one
+        // taking fire can't brown out the whole ship and silence EVERY weapon
+        // at once (the hard power gate in ai_ship/combat.rs). Power is no
+        // longer a reason an enemy suddenly stops shooting — its utilities,
+        // life support, and guns always have what they need. A genuine surplus
+        // still shows through as a positive value; only real deficits are
+        // clamped away. (This makes the weak-faction power_output_multiplier
+        // derate purely cosmetic now — it thins surplus but can't dark a gun.)
+        let power_balance = (total_generation - total_consumption).max(0.0);
+        commands.entity(ai_root).try_insert(AiPowerState { power_balance });
     }
 }

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::components::{Ship, Module, ModuleType, HullSegment};
+use crate::components::{Ship, Module, ModuleType, HullSegment, Projectile};
 use crate::ai_ship::components::{AiShip, AiShipType};
 use std::collections::HashSet;
 use bevy::asset::RenderAssetUsages;
@@ -37,6 +37,13 @@ pub struct ShipShield {
     pub enabled: bool,
     /// Recent-hit power surge — extra power drain that decays over time
     pub surge: f32,
+    /// SAMPLE omni arc: world-angle the low-coverage arc currently points at.
+    /// Auto-swings toward the biggest incoming threat (update_player_shield_arc).
+    pub arc_facing: f32,
+    /// Half-width of the arc, radians. Player: low coverage. AI: PI (unused).
+    pub arc_half: f32,
+    /// Max swing speed of the arc, rad/s — fast but not instant.
+    pub arc_traverse: f32,
 }
 
 impl ShipShield {
@@ -48,26 +55,16 @@ impl ShipShield {
     pub fn is_up(&self) -> bool {
         self.enabled && self.current > 0.0
     }
-    /// Pool-drain multiplier for a hit arriving from `hit_dir` (world-space
-    /// direction from the bubble centre to the impact), given the ship's
-    /// `forward` (nose). Front hits are cheap (the nose tanks), rear hits
-    /// expensive (the back folds fast); the sides sit in between. This is full
-    /// 360° coverage — nothing bypasses, the rear just burns the pool faster.
-    fn directional_cost(&self, forward: Vec2, hit_dir: Vec2) -> f32 {
-        let f = forward.normalize_or_zero();
+    /// Whether the omni arc currently covers a hit arriving from `hit_dir`
+    /// (world-space direction from the bubble centre to the impact). Outside
+    /// the arc the shot slips past to the hull — coverage is low, so the arc
+    /// has to swing to face threats (see update_player_shield_arc).
+    pub fn covers_arc(&self, hit_dir: Vec2) -> bool {
         let h = hit_dir.normalize_or_zero();
-        if f == Vec2::ZERO || h == Vec2::ZERO {
-            return 1.0;
+        if h == Vec2::ZERO {
+            return true;
         }
-        let t = (f.dot(h) + 1.0) * 0.5; // 0 = rear, 1 = front
-        SHIELD_REAR_COST + (SHIELD_FRONT_COST - SHIELD_REAR_COST) * t
-    }
-    /// Player absorb: directional pool drain + damage-scaled glow.
-    pub fn absorb_directional(&mut self, damage: f32, forward: Vec2, hit_dir: Vec2) {
-        let cost = damage * self.directional_cost(forward, hit_dir);
-        self.current = (self.current - cost).max(0.0);
-        self.since_hit = 0.0;
-        self.flash = (self.flash + damage * SHIELD_FLASH_PER_DAMAGE).min(SHIELD_FLASH_MAX);
+        Vec2::from_angle(self.arc_facing).dot(h) >= self.arc_half.cos()
     }
     /// World-space center of the bubble for hit tests
     pub fn world_center(&self, transform: &Transform) -> Vec2 {
@@ -269,6 +266,9 @@ pub fn attach_player_shield(
         flash: 0.0,
         enabled: true,
         surge: 0.0,
+        arc_facing: 0.0,
+        arc_half: SHIELD_ARC_HALF,
+        arc_traverse: SHIELD_ARC_TRAVERSE,
     });
     // The silhouette-hugging skin itself is built (and kept up to date as blocks
     // change) by refresh_player_shield_skin. Collision stays radius-based via
@@ -359,6 +359,9 @@ pub fn attach_ai_shields(
             flash: 0.0,
             enabled: true,
             surge: 0.0,
+            arc_facing: 0.0,
+            arc_half: std::f32::consts::PI, // AI: full coverage, arc unused
+            arc_traverse: 0.0,
         });
         // Same silhouette skin as the player (built once — AI ships don't get
         // rebuilt in a hangar; a destroyed one just leaves its skin slightly wide).
@@ -386,12 +389,13 @@ const SHIELD_BROWNOUT_BLEED: f32 = 6.0;
 /// a modest capacity bump on top. 0.35 → up to +35% / −35% HP.
 const SHIELD_HP_POWER_BONUS: f32 = 0.35;
 
-/// SAMPLE (directional strength): the player's shield covers all 360°, but a
-/// hit's drain on the pool scales with the angle it arrives from — cheap
-/// head-on (the nose tanks), expensive from behind (the rear folds fast). No
-/// aiming; it just falls out of where the shot comes from vs. your heading.
-const SHIELD_FRONT_COST: f32 = 0.5; // front hits drain half — tough
-const SHIELD_REAR_COST: f32 = 2.0; // rear hits drain double — soft
+/// SAMPLE omni arc: a low-coverage but tanky shield patch that auto-swings to
+/// block the most damaging incoming shot. Half-width → ~110° of coverage; it
+/// can rotate fast (but not instantly), so simultaneous fire from other angles
+/// slips past to the hull until the arc catches up.
+const SHIELD_ARC_HALF: f32 = 0.96; // ~55° half → ~110° total coverage
+const SHIELD_ARC_TRAVERSE: f32 = 8.0; // rad/s — fast, not instant
+const SHIELD_ARC_THREAT_RANGE: f32 = 700.0; // hostile fire within this is tracked
 
 /// Bubble look: next-to-invisible at rest, glowing on impact and brighter the
 /// more damage the hit dealt (flash accumulates in absorb, decays each frame).
@@ -448,6 +452,81 @@ pub fn refresh_player_shield_capacity(
         // Capacity may have dropped (emitter destroyed) — don't leave current
         // above it. The routed HP flex re-clamps against the scaled max too.
         shield.current = shield.current.min(shield.base_max);
+    }
+}
+
+/// SAMPLE: swing the player's low-coverage omni arc toward the most dangerous
+/// incoming shot (capped by a traverse rate) and draw it. Scans hostile
+/// projectiles heading at the ship within range, points at the highest-damage
+/// one (nearest on a tie), and rotates there at `arc_traverse` rad/s — fast but
+/// not instant, so fire from other angles gets through until the arc catches
+/// up. Rendered as a faint blue arc that flares brighter on impact.
+pub fn update_player_shield_arc(
+    time: Res<Time>,
+    mut gizmos: Gizmos,
+    mut ship_query: Query<(&Transform, &mut ShipShield), With<Ship>>,
+    projectiles: Query<(&Transform, &Projectile)>,
+) {
+    let dt = time.delta_secs();
+    let Ok((ship_transform, mut shield)) = ship_query.single_mut() else { return };
+    let center = shield.world_center(ship_transform);
+
+    // Most dangerous hostile shot that's actually incoming and in range.
+    let mut best: Option<(f32, f32, Vec2)> = None; // (damage, dist, pos)
+    for (t, proj) in projectiles.iter() {
+        if proj.owner.is_player() {
+            continue;
+        }
+        let p = t.translation.truncate();
+        let to_ship = center - p;
+        let dist = to_ship.length();
+        if dist > SHIELD_ARC_THREAT_RANGE {
+            continue;
+        }
+        // Only fire heading toward us counts (skip shots already past).
+        if proj.direction.dot(to_ship.normalize_or_zero()) <= 0.0 {
+            continue;
+        }
+        let better = match best {
+            None => true,
+            Some((bd, bdist, _)) => proj.damage > bd || (proj.damage == bd && dist < bdist),
+        };
+        if better {
+            best = Some((proj.damage, dist, p));
+        }
+    }
+
+    // Swing toward the threat, shortest path, rate-limited.
+    if let Some((_, _, pos)) = best {
+        let dir = pos - center;
+        if dir.length_squared() > 1.0 {
+            let target = dir.y.atan2(dir.x);
+            let mut diff = target - shield.arc_facing;
+            while diff > std::f32::consts::PI {
+                diff -= std::f32::consts::TAU;
+            }
+            while diff < -std::f32::consts::PI {
+                diff += std::f32::consts::TAU;
+            }
+            let max_step = shield.arc_traverse * dt;
+            shield.arc_facing += diff.clamp(-max_step, max_step);
+        }
+    }
+
+    // Draw the arc: faint at rest, brighter on hit.
+    if shield.is_up() {
+        let color = Color::srgba(0.5, 0.8, 1.0, (0.14 + shield.flash * 0.5).min(0.85));
+        let r = shield.radius;
+        let segs = 24;
+        let start = shield.arc_facing - shield.arc_half;
+        let sweep = shield.arc_half * 2.0;
+        let mut prev = center + Vec2::from_angle(start) * r;
+        for i in 1..=segs {
+            let a = start + sweep * (i as f32 / segs as f32);
+            let p = center + Vec2::from_angle(a) * r;
+            gizmos.line_2d(prev, p, color);
+            prev = p;
+        }
     }
 }
 
