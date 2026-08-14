@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::components::{Ship, Module, ModuleType, HullSegment, Projectile};
+use crate::components::{Ship, Module, ModuleType, HullSegment, Projectile, Creature};
 use crate::ai_ship::components::{AiShip, AiShipType};
 use std::collections::HashSet;
 use bevy::asset::RenderAssetUsages;
@@ -444,7 +444,8 @@ const SHIELD_HP_POWER_BONUS: f32 = 0.35;
 /// slips past to the hull until the arc catches up.
 const SHIELD_ARC_HALF: f32 = 0.96; // ~55° half → ~110° total coverage
 const SHIELD_ARC_TRAVERSE: f32 = 8.0; // rad/s — fast, not instant
-const SHIELD_ARC_THREAT_RANGE: f32 = 700.0; // hostile fire within this is tracked
+const SHIELD_ARC_THREAT_RANGE: f32 = 1200.0; // incoming fire within this is tracked
+const SHIELD_ARC_ENEMY_RANGE: f32 = 2500.0; // fallback: face nearest hostile in this range
 
 /// Bubble look: next-to-invisible at rest, glowing on impact and brighter the
 /// more damage the hit dealt (flash accumulates in absorb, decays each frame).
@@ -515,7 +516,12 @@ pub fn update_player_shield_arc(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut ship_query: Query<(&Transform, &mut ShipShield), With<Ship>>,
-    projectiles: Query<(&Transform, &Projectile)>,
+    // Without<ShieldArcVisual>: this reads &Transform while arc_vis writes it —
+    // the exclusion proves to Bevy the two queries can't touch the same entity
+    // (projectiles never carry the arc marker), avoiding a query-conflict panic.
+    projectiles: Query<(&Transform, &Projectile), Without<ShieldArcVisual>>,
+    enemies_ai: Query<&Transform, (With<AiShip>, Without<Ship>, Without<ShieldArcVisual>)>,
+    enemies_creature: Query<&Transform, (With<Creature>, Without<Ship>, Without<ShieldArcVisual>)>,
     mut arc_vis: Query<(&mut Transform, &mut Sprite), (With<ShieldArcVisual>, Without<Ship>)>,
 ) {
     let dt = time.delta_secs();
@@ -547,12 +553,30 @@ pub fn update_player_shield_arc(
         }
     }
 
-    // Swing toward the threat, shortest path, rate-limited.
-    if let Some((_, _, pos)) = best {
+    // Target: the incoming shot if any, else the nearest hostile so the arc
+    // keeps facing the fight between volleys — this is what makes it visibly
+    // track, and it works even against enemies whose fire the projectile scan
+    // above doesn't catch (missiles/lasers).
+    let target: Option<Vec2> = if let Some((_, _, pos)) = best {
+        Some(pos)
+    } else {
+        let mut nearest: Option<(f32, Vec2)> = None;
+        for t in enemies_ai.iter().chain(enemies_creature.iter()) {
+            let p = t.translation.truncate();
+            let d = p.distance(center);
+            if d <= SHIELD_ARC_ENEMY_RANGE && nearest.map_or(true, |(nd, _)| d < nd) {
+                nearest = Some((d, p));
+            }
+        }
+        nearest.map(|(_, p)| p)
+    };
+
+    // Swing toward the target, shortest path, rate-limited.
+    if let Some(pos) = target {
         let dir = pos - center;
         if dir.length_squared() > 1.0 {
-            let target = dir.y.atan2(dir.x);
-            let mut diff = target - shield.arc_facing;
+            let ta = dir.y.atan2(dir.x);
+            let mut diff = ta - shield.arc_facing;
             while diff > std::f32::consts::PI {
                 diff -= std::f32::consts::TAU;
             }
@@ -577,7 +601,7 @@ pub fn update_player_shield_arc(
         sprite.color = Color::srgba(0.5, 0.8, 1.0, alpha);
     } else if shield.is_up() {
         // Cap hugs the hull (just outside it), short and soft.
-        let vis_radius = (shield.radius - 50.0).max(40.0);
+        let vis_radius = (shield.radius - 75.0).max(35.0);
         let (img, size) = build_arc_glow(vis_radius, shield.arc_half);
         let handle = images.add(img);
         commands.spawn((
