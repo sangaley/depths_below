@@ -176,8 +176,22 @@ fn camera_zoom_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     mut camera_state: ResMut<CameraState>,
+    // The build panel's item strip scrolls on the wheel too (see
+    // build_ui::scroll_item_slots). Checked here rather than via a flag
+    // resource so it can't depend on which system happens to run first.
+    build_panel: Query<(&ComputedNode, &bevy::ui::UiGlobalTransform), With<crate::ui::build_ui::BuildPanelRoot>>,
+    windows: Query<&Window>,
 ) {
+    let cursor = windows.single().ok()
+        .and_then(|w| w.cursor_position().map(|p| p * w.scale_factor()));
+    let over_build_panel = build_panel.iter().any(|(node, transform)| {
+        cursor
+            .and_then(|c| node.normalize_point(*transform, c))
+            .is_some_and(|n| n.x.abs() <= 0.5 && n.y.abs() <= 0.5)
+    });
+
     for event in scroll_events.read() {
+        if over_build_panel { continue; }
         let zoom_delta = -event.y * 0.1;
         camera_state.zoom = (camera_state.zoom + zoom_delta)
             .clamp(camera_state.min_zoom, camera_state.max_zoom);

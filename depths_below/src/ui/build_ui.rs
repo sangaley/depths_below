@@ -740,6 +740,12 @@ fn category_short_name(cat: BuildCategory) -> &'static str {
     }
 }
 
+/// Item-strip geometry. Shared by the slot spawner and the scroll system —
+/// scrolling a slot into view has to know the pitch it's scrolling by.
+const SLOT_SIZE: f32 = 60.0;
+const SLOT_GAP: f32 = 6.0;
+const SLOT_PAD: f32 = 8.0;
+
 pub fn spawn_build_panel(
     mut commands: Commands,
     registry: Res<ModuleRegistry>,
@@ -813,18 +819,22 @@ pub fn spawn_build_panel(
                     ..default()
                 }, BackgroundColor(Color::srgba(0.03, 0.04, 0.09, 0.94))))
             .with_children(|content| {
-                // LEFT: Item slots (scrollable row)
+                // LEFT: Item slots — a horizontal strip that actually scrolls.
+                // Categories like Weapons hold more 60px slots than 60% of any
+                // window can show, and with plain clip() everything past the
+                // right edge was unreachable by mouse (see scroll_item_slots).
                 content.spawn((
                     (Node {
                             width: Val::Percent(60.0),
                             height: Val::Percent(100.0),
                             flex_direction: FlexDirection::Row,
                             align_items: AlignItems::Center,
-                            padding: UiRect::horizontal(Val::Px(8.0)),
-                            column_gap: Val::Px(6.0),
-                            overflow: Overflow::clip(),
+                            padding: UiRect::horizontal(Val::Px(SLOT_PAD)),
+                            column_gap: Val::Px(SLOT_GAP),
+                            overflow: Overflow::scroll_x(),
                             ..default()
                         }),
+                    ScrollPosition::default(),
                     ItemSlotsContainer,
                 ))
                 .with_children(|items_area| {
@@ -934,9 +944,9 @@ fn spawn_single_slot(
 ) {
     parent.spawn((
         (Node {
-                width: Val::Px(60.0),
-                height: Val::Px(60.0),
-                min_width: Val::Px(60.0),
+                width: Val::Px(SLOT_SIZE),
+                height: Val::Px(SLOT_SIZE),
+                min_width: Val::Px(SLOT_SIZE),
                 flex_direction: FlexDirection::Column,
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
@@ -955,6 +965,70 @@ fn spawn_single_slot(
             slot.spawn((Text::new(format!("\u{25c6}{}", cost)), TextFont { font_size: FontSize::Px(9.0), ..default() }, TextColor(Color::srgb(0.95, 0.85, 0.4))));
         }
     });
+}
+
+/// Horizontal scrolling for the item strip. Categories hold more slots than
+/// fit (Weapons is the worst offender), and everything past the right edge
+/// used to be simply unreachable — the strip was clipped, not scrolled.
+/// Mouse wheel over the strip scrolls it; cycling with [ / ] (or clicking a
+/// tab) drags the selected slot back into view so keyboard users never end up
+/// pointed at a slot they can't see.
+pub fn scroll_item_slots(
+    mut wheel: MessageReader<bevy::input::mouse::MouseWheel>,
+    windows: Query<&Window>,
+    build_state: Res<BuildingState>,
+    mut container: Query<(&ComputedNode, &bevy::ui::UiGlobalTransform, &mut ScrollPosition), With<ItemSlotsContainer>>,
+    // The selection is tracked by hand rather than with BuildingState::
+    // is_changed(): update_ghost_preview writes the ghost position into that
+    // same resource nearly every frame, so change detection would fire
+    // constantly and yank the strip back from wherever the wheel put it.
+    mut last_selection: Local<Option<(usize, usize)>>,
+) {
+    use bevy::input::mouse::MouseScrollUnit;
+
+    let Ok((node, transform, mut scroll)) = container.single_mut() else { return };
+
+    // ComputedNode is physical pixels; ScrollPosition is logical.
+    let inv = node.inverse_scale_factor;
+    let view_w = node.size.x * inv;
+    let content_w = node.content_size.x * inv;
+    let max_scroll = (content_w - view_w).max(0.0);
+
+    let cursor = windows.single().ok()
+        .and_then(|w| w.cursor_position().map(|p| p * w.scale_factor()));
+    let over_strip = cursor
+        .and_then(|c| node.normalize_point(*transform, c))
+        .is_some_and(|n| n.x.abs() <= 0.5 && n.y.abs() <= 0.5);
+
+    let mut target = scroll.0.x;
+    for event in wheel.read() {
+        if !over_strip { continue; }
+        let step = match event.unit {
+            MouseScrollUnit::Line => SLOT_SIZE + SLOT_GAP,
+            MouseScrollUnit::Pixel => 1.0,
+        };
+        // Either axis scrolls the strip — a plain wheel only reports y, while
+        // a trackpad's horizontal swipe reports x.
+        target -= (event.y + event.x) * step;
+    }
+
+    // Keep the selected slot visible when the selection moves under the strip.
+    let selection = (build_state.category_index, build_state.selected_index);
+    if *last_selection != Some(selection) {
+        *last_selection = Some(selection);
+        let left = build_state.selected_index as f32 * (SLOT_SIZE + SLOT_GAP);
+        let right = left + SLOT_SIZE + 2.0 * SLOT_PAD;
+        if left < target {
+            target = left;
+        } else if right > target + view_w {
+            target = right - view_w;
+        }
+    }
+
+    let target = target.clamp(0.0, max_scroll);
+    if (target - scroll.0.x).abs() > 0.5 {
+        scroll.0.x = target;
+    }
 }
 
 pub fn despawn_build_panel(

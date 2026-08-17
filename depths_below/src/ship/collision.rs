@@ -10,7 +10,7 @@ use crate::combat::severance::DetachedSection;
 use crate::components::{HullSegment, Module, Projectile as LegacyProjectile, Ship, ShipPhysics, Velocity};
 use crate::events::{AiShipDamaged, DamageSource, ShipDamaged};
 use crate::spatial::SpatialGrid;
-use crate::world::home_base::{HomeStation, ResupplyOutpost};
+use crate::world::home_base::{HomeStation, Station};
 
 /// "Terrain" for weapons fire and AI steering: solid scenery, not ships and
 /// not battle debris (shots pass through drifting chunks; only real obstacles
@@ -255,8 +255,7 @@ pub fn shots_hit_terrain(
 pub fn attach_static_colliders(
     mut commands: Commands,
     celestial: Query<(Entity, &CelestialBody), Added<CelestialBody>>,
-    haven: Query<Entity, Added<HomeStation>>,
-    outposts: Query<Entity, Added<ResupplyOutpost>>,
+    stations: Query<(Entity, Option<&HomeStation>), Added<Station>>,
     pois: Query<(Entity, &SpacePoi), (Added<SpacePoi>, Without<CelestialBody>)>,
 ) {
     for (entity, body) in celestial.iter() {
@@ -281,13 +280,12 @@ pub fn attach_static_colliders(
             CelestialBodyType::BlackHole | CelestialBodyType::Debris => {}
         }
     }
-    // Haven: circle hugging the hub — the four arm tips poke out rather than
-    // walling off the empty diagonals of the full cross shape.
-    for entity in haven.iter() {
-        commands.entity(entity).try_insert(Collider::circle(140.0, f32::INFINITY));
-    }
-    for entity in outposts.iter() {
-        commands.entity(entity).try_insert(Collider::circle(85.0, f32::INFINITY));
+    // Stations: circle hugging the hub — the four arm tips poke out rather
+    // than walling off the empty diagonals of the full cross shape. Haven is
+    // drawn at full size, every other station at 0.8.
+    for (entity, is_haven) in stations.iter() {
+        let radius = if is_haven.is_some() { 140.0 } else { 112.0 };
+        commands.entity(entity).try_insert(Collider::circle(radius, f32::INFINITY));
     }
     for (entity, poi) in pois.iter() {
         let radius = match poi.poi_type {

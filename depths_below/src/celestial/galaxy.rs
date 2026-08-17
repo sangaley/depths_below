@@ -43,6 +43,12 @@ const AMBIENT_DEPLETION_PER_SECOND: f32 = 0.0005;
 /// "hundreds" doesn't require touching this module's logic.
 pub const SYSTEM_COUNT: usize = 30;
 
+/// Haven's local-space center. A constant because world::home_base needs it
+/// before the galaxy has been generated: the game opens docked at Haven, a
+/// couple of frames before OnEnter(Exploring) rolls the galaxy, and Haven's
+/// station has to exist for that whole time.
+pub const HAVEN_LOCAL_CENTER: Vec2 = Vec2::new(200_000.0, -450_000.0);
+
 /// Abstract galaxy-map radius (NOT a real Transform coordinate — see
 /// StarSystemDef::galaxy_pos doc comment).
 pub const GALAXY_RADIUS: f32 = 5_000_000.0;
@@ -108,7 +114,7 @@ pub fn generate_galaxy_map(galaxy_seed: u64) -> GalaxyMap {
         name: "Haven".to_string(),
         galaxy_pos: Vec2::ZERO,
         // Matches today's spawn_initial_system center exactly.
-        local_center: Vec2::new(200_000.0, -450_000.0),
+        local_center: HAVEN_LOCAL_CENTER,
         seed: 42,
         faction: None,
         danger_tier: 0.0,
@@ -127,7 +133,7 @@ pub fn generate_galaxy_map(galaxy_seed: u64) -> GalaxyMap {
     // before the player ever actually travels there. Rejection-sample with
     // a wide separation margin (well beyond RENDER_DISTANCE/DESPAWN_DISTANCE,
     // ai_ship/simulation.rs) to rule that out.
-    let mut local_centers: Vec<Vec2> = vec![Vec2::new(200_000.0, -450_000.0)]; // Haven's
+    let mut local_centers: Vec<Vec2> = vec![HAVEN_LOCAL_CENTER];
     const LOCAL_MIN_SEPARATION: f32 = 200_000.0;
     const LOCAL_RANGE: f32 = 1_500_000.0;
 

@@ -4,7 +4,6 @@ use rand::Rng;
 use crate::components::*;
 use crate::events::*;
 use crate::resources::*;
-use crate::states::GameState;
 use crate::world::home_base;
 use crate::ui::theme::{ThemeColors, ThemeFonts, ThemeSpacing};
 
@@ -78,7 +77,7 @@ pub fn toggle_hiring_board(
     mut pool: ResMut<HiringPool>,
     mut selection: ResMut<HiringSelection>,
     existing: Query<Entity, With<HiringPanel>>,
-    game_state: Res<State<GameState>>,
+    stations: Res<home_base::SystemStations>,
     ship_query: Query<&Transform, With<Ship>>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
@@ -94,14 +93,10 @@ pub fn toggle_hiring_board(
         return;
     }
 
-    // Same reach rule as the mission board: docked at Haven = station 0,
-    // otherwise whichever station is in range.
-    let station = if *game_state.get() == GameState::StationDocked {
-        Some(0)
-    } else {
-        ship_query.single().ok()
-            .and_then(|t| home_base::nearest_station_index(t.translation.truncate()))
-    };
+    // Same reach rule as the mission board: whichever station the ship is
+    // parked at or flying near.
+    let station = ship_query.single().ok()
+        .and_then(|t| stations.nearest_index(t.translation.truncate()));
     let Some(station) = station else {
         notifications.write(ShowNotification {
             message: "No station in range — recruits wait at stations.".into(),

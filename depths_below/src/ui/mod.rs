@@ -256,6 +256,10 @@ impl Plugin for UiPlugin {
                         in_state(BuildState::Placing)
                             .or_else(in_state(BuildState::Deleting)),
                     ),
+                    build_ui::scroll_item_slots.run_if(
+                        in_state(BuildState::Placing)
+                            .or_else(in_state(BuildState::Deleting)),
+                    ),
                     build_ui::update_build_info.run_if(
                         in_state(BuildState::Placing)
                             .or_else(in_state(BuildState::Deleting)),
@@ -1895,6 +1899,7 @@ struct MapWorldData<'w, 's> {
     contract_state: Res<'w, crate::contracts::ContractState>,
     streaming: Res<'w, crate::celestial::resources::SystemStreamingManager>,
     galaxy_map: Res<'w, crate::celestial::resources::GalaxyMap>,
+    stations: Res<'w, crate::world::home_base::SystemStations>,
 }
 
 /// Plain-data snapshot of everything the map needs to render — decoupled
@@ -1909,12 +1914,11 @@ struct MapSnapshot {
     map_center: Vec2,
     pending_target: Option<Vec2>,
     current_fuel: f32,
-    // Haven's station/outpost icons are fixed world positions unrelated to
-    // which star system is actually loaded — only meaningful to show while
-    // physically in Haven's system (id 0). Without this, warping elsewhere
-    // would still show Haven's furniture plastered on a totally unrelated
-    // system's local map.
-    in_haven: bool,
+    /// This system's stations — position, name and accent color. Every
+    /// system has its own (see world::home_base::station_sites), so unlike
+    /// the old fixed Haven-only list these are always the right ones for
+    /// wherever the player actually is.
+    stations: Vec<(Vec2, String, Color)>,
     stars: Vec<Vec2>,
     planets: Vec<Vec2>,
     hostiles: Vec<Vec2>,
@@ -1925,6 +1929,11 @@ struct MapSnapshot {
     inventory_items: Vec<(String, u32)>,
     inventory_weight: (f32, f32),
     logs_found: Vec<String>,
+    /// Name of the system being shown, for the map header.
+    system_name: String,
+    /// Nearest station name + range, so the header answers "where am I?"
+    /// without hunting for the green dot.
+    nearest_station: Option<(String, f32)>,
 }
 
 fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
@@ -1943,13 +1952,55 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
             }, BackgroundColor(theme::ThemeColors::BG_VOID), ZIndex(50)),
         MapOverlay,
     )).with_children(|parent| {
-        // Left column: map panel + legend stacked underneath it.
+        // Left column: header, map panel, legend.
         parent.spawn(Node {
             flex_direction: FlexDirection::Column,
-            row_gap: Val::Px(8.0),
+            row_gap: Val::Px(theme::ThemeSpacing::MD),
             flex_shrink: 0.0,
             ..default()
         }).with_children(|col| {
+        // Header strip: which system this is, plus where the nearest station
+        // sits. The map used to open with no title at all — nothing on screen
+        // said which of thirty systems you were looking at.
+        col.spawn((
+            Node {
+                width: Val::Px(panel_size),
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::SpaceBetween,
+                padding: UiRect::axes(Val::Px(theme::ThemeSpacing::LG), Val::Px(theme::ThemeSpacing::MD)),
+                border: UiRect::bottom(Val::Px(1.0)),
+                ..default()
+            },
+            BackgroundColor(theme::ThemeColors::BG_PANEL),
+            BorderColor::all(theme::ThemeColors::BORDER_DEFAULT),
+        )).with_children(|head| {
+            head.spawn(Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(theme::ThemeSpacing::XS),
+                ..default()
+            }).with_children(|left| {
+                left.spawn((
+                    Text::new(format!("LOCAL MAP — {}", snap.system_name.to_uppercase())),
+                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() },
+                    TextColor(theme::ThemeColors::TEXT_TITLE),
+                ));
+                let sub = match &snap.nearest_station {
+                    Some((name, dist)) => format!("Nearest station: {} · {}", name, format_range_km(*dist)),
+                    None => "No station in this system".to_string(),
+                };
+                left.spawn((
+                    Text::new(sub),
+                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                    TextColor(theme::ThemeColors::TEXT_SECONDARY),
+                ));
+            });
+            head.spawn((
+                Text::new("TAB: GALAXY VIEW   ·   CLICK: SET WARP TARGET   ·   M: CLOSE"),
+                TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                TextColor(theme::ThemeColors::TEXT_MUTED),
+            ));
+        });
         // Solar system map: fixed world-anchored frame (not recentered on
         // the player) so position relative to the whole map is legible.
         // Clickable — click anywhere to set a warp destination (see
@@ -1962,9 +2013,11 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
                 position_type: PositionType::Relative,
                 overflow: Overflow::clip(),
                 flex_shrink: 0.0,
+                border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
             BackgroundColor(theme::ThemeColors::HUD_BG),
+            BorderColor::all(theme::ThemeColors::BORDER_DEFAULT),
             Interaction::None,
             MapPanel,
         )).with_children(|map| {
@@ -1998,26 +2051,35 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
                     BackgroundColor(Color::srgb(0.5, 0.6, 0.8)),
                 ));
             }
-            // Stations: Haven + resupply outposts — fixed world positions
-            // that only exist/matter in Haven's own system (see
-            // MapSnapshot::in_haven doc comment).
-            if snap.in_haven {
-                for station_pos in std::iter::once(crate::world::home_base::STATION_POS)
-                    .chain(crate::world::home_base::OUTPOST_POSITIONS.iter().copied())
-                {
-                    let (x, y) = world_to_map_px(station_pos, snap.map_center, panel_size);
-                    map.spawn((
-                        Node {
-                            position_type: PositionType::Absolute,
-                            left: Val::Px(x - 4.0),
-                            top: Val::Px(y - 4.0),
-                            width: Val::Px(8.0),
-                            height: Val::Px(8.0),
-                            ..default()
-                        },
-                        BackgroundColor(Color::srgb(0.25, 1.0, 0.35)),
-                    ));
-                }
+            // Stations of the system currently loaded — labelled, since two
+            // per system means each one is a distinct destination worth
+            // recognising rather than an anonymous green dot.
+            for (station_pos, name, accent) in &snap.stations {
+                let (x, y) = world_to_map_px(*station_pos, snap.map_center, panel_size);
+                map.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(x - 5.0),
+                        top: Val::Px(y - 5.0),
+                        width: Val::Px(10.0),
+                        height: Val::Px(10.0),
+                        border: UiRect::all(Val::Px(2.0)),
+                        ..default()
+                    },
+                    BackgroundColor(*accent),
+                    BorderColor::all(Color::srgba(0.9, 1.0, 0.95, 0.85)),
+                ));
+                map.spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Px(x + 9.0),
+                        top: Val::Px(y - 7.0),
+                        ..default()
+                    },
+                    Text::new(name.clone()),
+                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::TINY), ..default() },
+                    TextColor(Color::srgba(0.75, 0.95, 0.8, 0.9)),
+                ));
             }
             // Hostiles: real (in render range) + still-off-screen simulated
             for hostile_pos in &snap.hostiles {
@@ -2130,27 +2192,25 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
         });
         });
 
-        // Sidebar: inventory / discovered locations / logs
+        // Sidebar: warp plan, cargo hold, survey log. Rebuilt around cards
+        // with real hierarchy — it used to be one flat run of text lines
+        // where the warp cost, the cargo list and the log entries all looked
+        // exactly alike.
         parent.spawn((
             Node {
                 flex_direction: FlexDirection::Column,
-                width: Val::Px(300.0),
-                height: Val::Percent(90.0),
-                padding: UiRect::all(Val::Px(10.0)),
-                row_gap: Val::Px(6.0),
+                width: Val::Px(360.0),
+                height: Val::Percent(92.0),
+                padding: UiRect::all(Val::Px(theme::ThemeSpacing::LG)),
+                row_gap: Val::Px(theme::ThemeSpacing::MD),
                 overflow: Overflow::clip_y(),
                 flex_shrink: 0.0,
+                border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
             BackgroundColor(theme::ThemeColors::BG_PANEL),
+            BorderColor::all(theme::ThemeColors::BORDER_DEFAULT),
         )).with_children(|parent| {
-            parent.spawn((Text::new("MAP & INVENTORY"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() }, TextColor(theme::ThemeColors::TEXT_TITLE)));
-
-            // Section headers below are all styled identically (uppercase
-            // CAPTION/TEXT_MUTED, same treatment theme::spawn_section_header
-            // uses elsewhere) instead of each picking its own accent color —
-            // four different header colors read as inconsistent, not as
-            // useful category coding.
             let section_header = |parent: &mut ChildSpawnerCommands, label: &str| {
                 parent.spawn((
                     Text::new(label.to_uppercase()),
@@ -2160,30 +2220,128 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
                 ));
             };
 
-            // Warp dash: destination + projected cost
-            section_header(parent, "Warp Dash");
-            if let Some(target) = snap.pending_target {
+            // ---- WARP PLAN ----
+            section_header(parent, "Warp Plan");
+            parent.spawn((
+                Node {
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(theme::ThemeSpacing::XS),
+                    padding: UiRect::all(Val::Px(theme::ThemeSpacing::MD)),
+                    border: UiRect::left(Val::Px(2.0)),
+                    ..default()
+                },
+                BackgroundColor(theme::ThemeColors::BG_CARD),
+                BorderColor::all(if snap.pending_target.is_some() {
+                    theme::ThemeColors::ACCENT_YELLOW
+                } else {
+                    theme::ThemeColors::BORDER_SUBTLE
+                }),
+            )).with_children(|card| {
+                let Some(target) = snap.pending_target else {
+                    card.spawn((
+                        Text::new("No destination set"),
+                        TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() },
+                        TextColor(theme::ThemeColors::TEXT_SECONDARY),
+                    ));
+                    card.spawn((
+                        Text::new("Click anywhere on the map to plot a jump."),
+                        TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() },
+                        TextColor(theme::ThemeColors::TEXT_MUTED),
+                    ));
+                    return;
+                };
+
                 let dist = snap.player_pos.distance(target);
                 let fuel_cost = warp_dash_fuel_cost((dist - WARP_DASH_ARRIVAL_BUFFER).max(0.0));
                 let charge_time = warp_dash_charge_time((dist - WARP_DASH_ARRIVAL_BUFFER).max(0.0));
                 let can_afford = snap.current_fuel >= fuel_cost;
-                let cost_color = if can_afford { Color::srgb(0.7, 0.9, 1.0) } else { Color::srgb(1.0, 0.4, 0.4) };
-                parent.spawn((Text::new(format!("Target: {:.0} units away", dist)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_PRIMARY)));
-                parent.spawn((Text::new(format!("Cost: {:.0} fuel ({:.0} available)", fuel_cost, snap.current_fuel)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(cost_color)));
-                parent.spawn((Text::new(format!("Charge time: {:.0}s", charge_time)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(Color::srgb(0.7, 0.9, 1.0))));
-                parent.spawn((Text::new("Close map (M), hold G to charge and jump."), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() }, TextColor(Color::srgb(0.6, 0.9, 0.6))));
+
+                card.spawn((
+                    Text::new(format_range_km(dist)),
+                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() },
+                    TextColor(theme::ThemeColors::TEXT_PRIMARY),
+                ));
+
+                let mut stat = |card: &mut ChildSpawnerCommands, label: &str, value: String, color: Color| {
+                    card.spawn(Node {
+                        flex_direction: FlexDirection::Row,
+                        justify_content: JustifyContent::SpaceBetween,
+                        ..default()
+                    }).with_children(|row| {
+                        row.spawn((
+                            Text::new(label),
+                            TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() },
+                            TextColor(theme::ThemeColors::TEXT_SECONDARY),
+                        ));
+                        row.spawn((
+                            Text::new(value),
+                            TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() },
+                            TextColor(color),
+                        ));
+                    });
+                };
+                stat(card, "Fuel", format!("{:.0} / {:.0}", fuel_cost, snap.current_fuel),
+                    if can_afford { theme::ThemeColors::TEXT_PRIMARY } else { theme::ThemeColors::ACCENT_RED });
+                stat(card, "Charge", format!("{:.0}s", charge_time), theme::ThemeColors::TEXT_PRIMARY);
+
+                card.spawn((
+                    Text::new(if can_afford {
+                        "Close the map (M), then hold G to jump."
+                    } else {
+                        "Not enough fuel for this jump."
+                    }),
+                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() },
+                    TextColor(if can_afford { theme::ThemeColors::ACCENT_GREEN } else { theme::ThemeColors::ACCENT_RED }),
+                    Node { margin: UiRect::top(Val::Px(theme::ThemeSpacing::XS)), ..default() },
+                ));
+            });
+
+            // ---- CARGO ----
+            section_header(parent, "Cargo Hold");
+            let (weight, capacity) = snap.inventory_weight;
+            let fill = if capacity > 0.0 { (weight / capacity).clamp(0.0, 1.0) } else { 0.0 };
+            let fill_color = if fill > 0.9 {
+                theme::ThemeColors::ACCENT_RED
+            } else if fill > 0.7 {
+                theme::ThemeColors::ACCENT_ORANGE
             } else {
-                parent.spawn((Text::new("Click the map to set a destination."), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
-            }
+                theme::ThemeColors::ACCENT_CYAN
+            };
+            parent.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                ..default()
+            }).with_children(|row| {
+                row.spawn((
+                    Text::new(format!("{:.0} / {:.0}", weight, capacity)),
+                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() },
+                    TextColor(theme::ThemeColors::TEXT_PRIMARY),
+                ));
+                row.spawn((
+                    Text::new(format!("{:.0}% full", fill * 100.0)),
+                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                    TextColor(theme::ThemeColors::TEXT_SECONDARY),
+                ));
+            });
+            // Capacity bar — the old sidebar printed the raw weight numbers
+            // and nothing else, so "nearly full" never registered until a
+            // pickup silently failed.
+            parent.spawn((
+                Node { width: Val::Percent(100.0), height: Val::Px(6.0), ..default() },
+                BackgroundColor(theme::ThemeColors::BG_INPUT),
+            )).with_children(|track| {
+                track.spawn((
+                    Node { width: Val::Percent(fill * 100.0), height: Val::Percent(100.0), ..default() },
+                    BackgroundColor(fill_color),
+                ));
+            });
 
-            // Discovered locations
-            section_header(parent, "Discovered");
-            parent.spawn((Text::new(format!("Wrecks {}   Caves {}   Settlements {}", snap.wrecks_found, snap.caves_found, snap.settlements_found)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_PRIMARY)));
-
-            // Inventory — same card-row treatment as the crew/module/hiring lists
-            section_header(parent, "Inventory");
             if snap.inventory_items.is_empty() {
-                parent.spawn((Text::new("(empty)"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
+                parent.spawn((
+                    Text::new("Hold is empty"),
+                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() },
+                    TextColor(theme::ThemeColors::TEXT_MUTED),
+                ));
             } else {
                 parent.spawn(Node {
                     flex_direction: FlexDirection::Column,
@@ -2196,29 +2354,77 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
                             Node {
                                 flex_direction: FlexDirection::Row,
                                 justify_content: JustifyContent::SpaceBetween,
-                                padding: UiRect::new(Val::Px(theme::ThemeSpacing::SM), Val::Px(theme::ThemeSpacing::SM), Val::Px(theme::ThemeSpacing::XS), Val::Px(theme::ThemeSpacing::XS)),
+                                align_items: AlignItems::Center,
+                                padding: UiRect::axes(Val::Px(theme::ThemeSpacing::MD), Val::Px(theme::ThemeSpacing::SM)),
                                 ..default()
                             },
                             BackgroundColor(theme::ThemeColors::BG_CARD),
                         )).with_children(|row| {
-                            row.spawn((Text::new(name.clone()), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_PRIMARY)));
-                            row.spawn((Text::new(format!("x{}", count)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_SECONDARY)));
+                            row.spawn((
+                                Text::new(name.clone()),
+                                TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() },
+                                TextColor(theme::ThemeColors::TEXT_PRIMARY),
+                            ));
+                            row.spawn((
+                                Text::new(format!("{}", count)),
+                                TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() },
+                                TextColor(theme::ThemeColors::ACCENT_CYAN),
+                            ));
                         });
                     }
                 });
             }
 
-            parent.spawn((Text::new(format!("Weight: {:.0}/{:.0}", snap.inventory_weight.0, snap.inventory_weight.1)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
+            // ---- SURVEY ----
+            section_header(parent, "Survey");
+            parent.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(theme::ThemeSpacing::MD),
+                ..default()
+            }).with_children(|row| {
+                let tiles = [
+                    ("WRECKS", snap.wrecks_found),
+                    ("CAVES", snap.caves_found),
+                    ("SETTLEMENTS", snap.settlements_found),
+                ];
+                for (label, count) in tiles {
+                    row.spawn((
+                        Node {
+                            flex_grow: 1.0,
+                            flex_direction: FlexDirection::Column,
+                            align_items: AlignItems::Center,
+                            row_gap: Val::Px(theme::ThemeSpacing::XS),
+                            padding: UiRect::axes(Val::Px(theme::ThemeSpacing::SM), Val::Px(theme::ThemeSpacing::MD)),
+                            ..default()
+                        },
+                        BackgroundColor(theme::ThemeColors::BG_CARD),
+                    )).with_children(|tile| {
+                        tile.spawn((
+                            Text::new(format!("{}", count)),
+                            TextFont { font_size: FontSize::Px(theme::ThemeFonts::H3), ..default() },
+                            TextColor(theme::ThemeColors::TEXT_PRIMARY),
+                        ));
+                        tile.spawn((
+                            Text::new(label),
+                            TextFont { font_size: FontSize::Px(theme::ThemeFonts::TINY), ..default() },
+                            TextColor(theme::ThemeColors::TEXT_MUTED),
+                        ));
+                    });
+                }
+            });
 
-            // Logs found
+            // ---- LOGS ----
             if !snap.logs_found.is_empty() {
-                section_header(parent, "Logs");
+                section_header(parent, "Recovered Logs");
                 for log in &snap.logs_found {
-                    parent.spawn((Text::new(log.clone()), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_SECONDARY)));
+                    parent.spawn((
+                        Text::new(log.clone()),
+                        TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() },
+                        TextColor(theme::ThemeColors::TEXT_SECONDARY),
+                    ));
                 }
             }
 
-            parent.spawn((Text::new("Press M to close"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
         });
     });
 }
@@ -2275,7 +2481,9 @@ fn build_map_snapshot(
         map_center,
         pending_target,
         current_fuel: fuel_state.current_fuel,
-        in_haven: current_system == Some(0),
+        stations: world_data.stations.sites.iter()
+            .map(|s| (s.pos, s.name.clone(), crate::world::home_base::station_accent(s.kind)))
+            .collect(),
         stars: world_data.star_query.iter().map(|t| t.translation.truncate()).collect(),
         planets: world_data.planet_query.iter().map(|t| t.translation.truncate()).collect(),
         hostiles,
@@ -2286,6 +2494,12 @@ fn build_map_snapshot(
         inventory_items: inventory.items.iter().map(|(item_type, count)| (item_type.name().to_string(), *count)).collect(),
         inventory_weight: (inventory.current_weight, inventory.max_capacity),
         logs_found: statistics.logs_found.clone(),
+        system_name: current_system
+            .and_then(|id| world_data.galaxy_map.systems.iter().find(|s| s.id == id))
+            .map(|s| s.name.clone())
+            .unwrap_or_else(|| "Uncharted space".to_string()),
+        nearest_station: world_data.stations.closest(player_pos)
+            .map(|s| (s.name.clone(), player_pos.distance(s.pos))),
     }
 }
 
@@ -3599,10 +3813,11 @@ fn spawn_docking_menu(
     staffing_state: Res<StaffingState>,
     ship_query: Query<&Transform, With<Ship>>,
     market: Res<MarketEvents>,
+    stations: Res<crate::world::home_base::SystemStations>,
 ) {
     let crew_count = crew_query.iter().count();
     let station_idx = ship_query.single().ok()
-        .and_then(|t| crate::world::home_base::nearest_station_index(t.translation.truncate()))
+        .and_then(|t| stations.nearest_index(t.translation.truncate()))
         .unwrap_or(0);
     let services = get_docking_services(&hull_state, &oxygen_state, &fuel_state, &weapon_query, crew_count, staffing_state.total_berths, &inventory, station_idx, &market);
 
@@ -3619,16 +3834,12 @@ fn spawn_docking_menu(
         DockingOverlay,
         DockingMenuSelection(0, 0),
     )).with_children(|parent| {
-        let title = if station_idx == 0 {
-            "HAVEN STATION — SHIPYARD".to_string()
-        } else {
-            let s_type = crate::world::station_types::station_type(station_idx);
-            format!(
-                "OUTPOST {} — {}",
-                station_idx,
-                crate::world::station_types::station_type_name(s_type).to_uppercase()
-            )
-        };
+        let s_type = crate::world::station_types::station_type(station_idx);
+        let title = format!(
+            "{} — {}",
+            crate::world::home_base::station_display_name(station_idx).to_uppercase(),
+            crate::world::station_types::station_type_name(s_type).to_uppercase()
+        );
         parent.spawn((Text::new(title), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H1), ..default() }, TextColor(theme::ThemeColors::ACCENT_CYAN)));
 
         // Station identity subtitle — discounts were already silently baked
@@ -3768,12 +3979,13 @@ fn docking_menu_input(
     mut module_query: Query<&mut Module>,
     ship_query: Query<&Transform, With<Ship>>,
     market: Res<MarketEvents>,
+    stations: Res<crate::world::home_base::SystemStations>,
 ) {
     let (mut hull_state, mut oxygen_state, mut fuel_state, mut currency, mut inventory) = econ_state;
     let Ok(mut selection) = menu_query.single_mut() else { return };
 
     let station_idx = ship_query.single().ok()
-        .and_then(|t| crate::world::home_base::nearest_station_index(t.translation.truncate()))
+        .and_then(|t| stations.nearest_index(t.translation.truncate()))
         .unwrap_or(0);
     // Must match the multipliers used for the displayed costs in
     // get_docking_services / the refresh block below.

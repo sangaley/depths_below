@@ -4,7 +4,6 @@ use crate::ai_ship::components::WorldSimulation;
 use crate::components::Ship;
 use crate::events::*;
 use crate::resources::Currency;
-use crate::states::GameState;
 use crate::world::home_base;
 use super::generation;
 use super::{
@@ -12,9 +11,9 @@ use super::{
     ViewingStation,
 };
 
-/// Display name for a station index (0 = Haven, 1..=N = outposts).
+/// Display name for a global station index (see world::home_base).
 fn station_name(station: usize) -> String {
-    if station == 0 { "Haven Station".to_string() } else { format!("Outpost {}", station) }
+    home_base::station_display_name(station)
 }
 
 // ============================================================================
@@ -59,7 +58,7 @@ pub fn toggle_mission_board(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut board_open: ResMut<MissionBoardOpen>,
     existing: Query<Entity, With<MissionBoardPanel>>,
-    game_state: Res<State<GameState>>,
+    stations: Res<home_base::SystemStations>,
     ship_query: Query<&Transform, With<Ship>>,
     mut viewing: ResMut<ViewingStation>,
     mut contract_state: ResMut<ContractState>,
@@ -80,16 +79,12 @@ pub fn toggle_mission_board(
         return;
     }
 
-    // Docked at Haven, you're always at station 0. Otherwise (flying near an
-    // outpost, or near Haven before actually docking) the board shown is
-    // whichever station the ship is currently in range of — every station
-    // offers its own bounties.
-    let station = if *game_state.get() == GameState::StationDocked {
-        Some(0)
-    } else {
-        ship_query.single().ok()
-            .and_then(|t| home_base::nearest_station_index(t.translation.truncate()))
-    };
+    // The board shown is whichever station the ship is parked at or flying
+    // near — every station offers its own bounties, and since docking now
+    // parks the ship at that station's own berth, the same position lookup
+    // covers being docked (it used to assume docked always meant Haven).
+    let station = ship_query.single().ok()
+        .and_then(|t| stations.nearest_index(t.translation.truncate()));
 
     let Some(station) = station else {
         notifications.write(ShowNotification {

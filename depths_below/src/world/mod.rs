@@ -24,8 +24,19 @@ impl Plugin for WorldPlugin {
             .init_resource::<ChunkManager>()
             .init_resource::<DiscoveredLocations>()
             .init_resource::<MarketEvents>()
-            // Home station structure exists from the very first (docked) state
-            .add_systems(OnEnter(GameState::StationDocked), home_base::spawn_home_station)
+            .init_resource::<home_base::SystemStations>()
+            // Stations follow whichever system is streamed in, and have to
+            // exist while docked too — the game opens docked at Haven.
+            .add_systems(OnEnter(GameState::StationDocked), home_base::spawn_base_arrow)
+            .add_systems(
+                Update,
+                (
+                    home_base::refresh_system_stations,
+                    home_base::sync_station_entities,
+                )
+                    .chain()
+                    .run_if(in_state(GameState::Exploring).or_else(in_state(GameState::StationDocked))),
+            )
             .add_systems(
                 Update,
                 (
@@ -35,8 +46,7 @@ impl Plugin for WorldPlugin {
                     check_poi_discovery,
                     tick_market_events,
                     check_docking_proximity,
-                    home_base::home_station_docking,
-                    home_base::outpost_docking,
+                    home_base::station_docking,
                     home_base::update_base_arrow,
                     discover_log_entries,
                     apply_hazard_damage,

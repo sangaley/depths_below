@@ -138,9 +138,10 @@ impl Contract {
 // RESOURCES
 // ============================================================================
 
-/// Number of contract boards: Haven Station (index 0) plus one per resupply
-/// outpost, in world::home_base::OUTPOST_POSITIONS order.
-pub const STATION_COUNT: usize = 1 + crate::world::home_base::OUTPOST_POSITIONS.len();
+/// Number of contract boards — one per station slot in the galaxy (every
+/// system carries world::home_base::STATIONS_PER_SYSTEM of them). Boards are
+/// generated lazily on first visit, so unvisited slots cost an empty Vec.
+pub const STATION_COUNT: usize = crate::world::home_base::TOTAL_STATION_SLOTS;
 
 #[derive(Resource, Serialize, Deserialize, Clone, Default)]
 pub struct ContractState {

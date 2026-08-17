@@ -3,7 +3,7 @@ use crate::ai_ship::components::{AiShip, BountyTarget, WorldSimulation};
 use crate::components::Ship;
 use crate::celestial::components::*;
 use crate::contracts::{ContractObjective, ContractState};
-use crate::world::home_base::{OUTPOST_POSITIONS, STATION_POS};
+use crate::world::home_base::SystemStations;
 use crate::ui::theme::ThemeColors;
 use super::framework::*;
 
@@ -52,6 +52,7 @@ pub fn toggle_minimap(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
     existing: Query<Entity, With<MinimapWindow>>,
+    stations: Res<SystemStations>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyN) {
         return;
@@ -119,9 +120,15 @@ pub fn toggle_minimap(
         commands.entity(canvas).add_child(dot);
     };
 
-    station_dot(STATION_POS, 8.0, Color::srgb(0.25, 1.0, 0.35));
-    for outpost_pos in OUTPOST_POSITIONS {
-        station_dot(outpost_pos, 5.0, Color::srgb(0.2, 0.75, 0.3));
+    // This system's stations. Haven (index 0) gets the bigger dot; every
+    // other station is a full station too, just not home.
+    for site in stations.sites.iter() {
+        let (size, color) = if site.index == 0 {
+            (8.0, Color::srgb(0.25, 1.0, 0.35))
+        } else {
+            (6.0, Color::srgb(0.2, 0.85, 0.35))
+        };
+        station_dot(site.pos, size, color);
     }
 
     commands.entity(content).add_child(canvas);

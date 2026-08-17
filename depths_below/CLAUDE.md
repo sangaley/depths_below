@@ -77,6 +77,14 @@ Bevy 0.11 ECS **space survival game**. 2D, sprite-based, grid-based building sys
 - WASD: ship movement (W/S throttle, A/D strafe — the top-bar THRS meter reads the W/S throttle), Space: fire weapons, Z: radar ping. Q/E are unbound: the old vertical thrusters were a submarine holdover that pushed along world Y regardless of facing.
 - J: mission board (docked, or flying near any station), Shift+J: show/hide the top-right contract tracker (`contracts::ui::ContractHudVisible`)
 - The HUD "HAVEN" readout is radial distance from the origin in km — `ui::format_range_km` formats every range readout; internals still call it `depth` (`DepthState::current_depth`)
+- F: dock at any station (see Stations below), U: shop, H: hiring, G: hold to warp-dash
+
+### Stations
+
+`world/home_base.rs` owns every station. Each star system carries `STATIONS_PER_SYSTEM` (2) **full** stations — dock with F and you get build mode, shop, bounty board and hiring at all of them (Haven is no longer special apart from its fixed position and name). Placement is derived, not stored: `station_sites(system_id, local_center)` spreads them on a golden-angle ring 180k-420k out from the system center, so a system's stations never share a screen. Haven is system 0 slot 0 at the fixed `STATION_POS`, beside the spawn berth.
+
+- `SystemStations` (resource) holds the loaded system's sites; `refresh_system_stations` follows `SystemStreamingManager::loaded_system` and `sync_station_entities` spawns/despawns the structures to match. Everything downstream (docking, radar, minimap, M map, contract boards, shop prices) reads that one resource.
+- Global station index = `system_id * STATIONS_PER_SYSTEM + slot`; that index keys contract boards (`ContractState::available_by_station`), `station_types::station_type` pricing and `station_display_name`.
 - B: toggle build mode, Tab: cycle build categories, [/]: cycle items, R: rotate, M: cycle hull material, X: delete mode
 - Build QoL: hull placement supports click-drag painting; delete mode supports drag; hull segments are deletable (75% refund); Ctrl+Z undoes the last paid placement; Ctrl+Click select → Ctrl+C/V copy/paste (R rotates pending paste); Escape backs out paste → selection → build mode → pause
 - C: crew menu, M: map/inventory overlay, P: module panel (while paused), ESC: pause, Enter: start/launch

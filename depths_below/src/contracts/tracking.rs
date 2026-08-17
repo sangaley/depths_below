@@ -240,6 +240,7 @@ pub fn turn_in_contracts(
 /// wherever a bounty happened to be posted to collect it.
 pub fn turn_in_at_station_proximity(
     keyboard: Res<ButtonInput<KeyCode>>,
+    stations: Res<home_base::SystemStations>,
     ship_query: Query<&Transform, With<Ship>>,
     mut state: ResMut<ContractState>,
     mut rep: ResMut<FactionReputation>,
@@ -252,7 +253,7 @@ pub fn turn_in_at_station_proximity(
 
     let Ok(transform) = ship_query.single() else { return };
     let pos = transform.translation.truncate();
-    if home_base::nearest_station_index(pos).is_none() { return; }
+    if stations.nearest_index(pos).is_none() { return; }
 
     turn_in_active(&mut state, &mut rep, &mut currency, &mut turned_in_events, &mut notifications);
 }

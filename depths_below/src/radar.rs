@@ -5,7 +5,7 @@ use crate::events::*;
 use crate::states::{GameState, RadarSet};
 use crate::ai_ship::components::{AiShip, AiShipType, AiShipRadarContact, BountyTarget, WorldSimulation};
 use crate::contracts::{ContractObjective, ContractState};
-use crate::world::home_base::{OUTPOST_POSITIONS, STATION_POS};
+use crate::world::home_base::SystemStations;
 use crate::celestial::resources::{GalaxyMap, SystemStreamingManager, SystemDiscovery};
 use crate::celestial::galaxy::GALAXY_SCAN_RANGE;
 use crate::camera::MainCamera;
@@ -181,6 +181,7 @@ pub fn update_radar(
     sim: Res<WorldSimulation>,
     bounty_ship_query: Query<(&Transform, &BountyTarget), With<AiShip>>,
     camera_query: Query<&Projection, With<MainCamera>>,
+    stations: Res<SystemStations>,
     mut commands: Commands,
 ) {
     if !sweep_state.display_visible {
@@ -309,11 +310,11 @@ pub fn update_radar(
         }
     }
 
-    // Check stations (Haven Station + resupply outposts) — green beacons,
+    // Check this system's stations — green beacons,
     // revealed by the sweep line like POIs (not every frame — that would
     // spam a fresh blip entity per station every frame instead of the
     // periodic sweep-triggered trickle every other blip type uses).
-    for station_pos in std::iter::once(STATION_POS).chain(OUTPOST_POSITIONS.iter().copied()) {
+    for station_pos in stations.positions() {
         let offset = station_pos - ship_pos;
         let dist = offset.length();
 
