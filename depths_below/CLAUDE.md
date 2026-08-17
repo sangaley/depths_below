@@ -74,7 +74,9 @@ Bevy 0.11 ECS **space survival game**. 2D, sprite-based, grid-based building sys
 
 ### Game Controls
 
-- WASD: ship movement, Q/E: vertical thrusters, Space: fire weapons, Z: radar ping
+- WASD: ship movement (W/S throttle, A/D strafe — the top-bar THRS meter reads the W/S throttle), Space: fire weapons, Z: radar ping. Q/E are unbound: the old vertical thrusters were a submarine holdover that pushed along world Y regardless of facing.
+- J: mission board (docked, or flying near any station), Shift+J: show/hide the top-right contract tracker (`contracts::ui::ContractHudVisible`)
+- The HUD "HAVEN" readout is radial distance from the origin in km — `ui::format_range_km` formats every range readout; internals still call it `depth` (`DepthState::current_depth`)
 - B: toggle build mode, Tab: cycle build categories, [/]: cycle items, R: rotate, M: cycle hull material, X: delete mode
 - Build QoL: hull placement supports click-drag painting; delete mode supports drag; hull segments are deletable (75% refund); Ctrl+Z undoes the last paid placement; Ctrl+Click select → Ctrl+C/V copy/paste (R rotates pending paste); Escape backs out paste → selection → build mode → pause
 - C: crew menu, M: map/inventory overlay, P: module panel (while paused), ESC: pause, Enter: start/launch

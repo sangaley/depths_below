@@ -18,7 +18,6 @@ pub fn ship_input(
     mut input_state: ResMut<InputState>,
 ) {
     let mut movement = Vec2::ZERO;
-    let mut thruster_input = 0.0;
 
     // W/S: throttle forward/reverse
     if keyboard.pressed(KeyCode::KeyW) || keyboard.pressed(KeyCode::ArrowUp) {
@@ -36,16 +35,11 @@ pub fn ship_input(
         movement.x += 1.0;
     }
 
-    // Q/E: vertical thrusters (ascend/descend)
-    if keyboard.pressed(KeyCode::KeyQ) {
-        thruster_input = 1.0; // thrust up
-    }
-    if keyboard.pressed(KeyCode::KeyE) {
-        thruster_input = -1.0; // thrust down
-    }
+    // Q/E used to drive "vertical thrusters" — a submarine-era holdover that
+    // shoved the ship along world +Y/-Y regardless of facing, duplicating the
+    // A/D strafe. Gone: WASD is the whole translation control now.
 
     input_state.movement = movement;
-    input_state.thruster_input = thruster_input;
     // Shift: brake — retro-thrust against whatever direction we're drifting
     input_state.brake = keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
 }
@@ -93,14 +87,13 @@ pub fn ship_movement(
     // any AI ship has crew (same class of leak the projectile-ownership and
     // staffing-HUD work already had to guard against elsewhere).
     engine_query: Query<(&Engine, &Module, Option<&CalculatedStats>, Option<&ModuleEfficiency>), Without<crate::ai_ship::components::OwnedByAiShip>>,
-    thruster_query: Query<(&mut Thruster, &Module)>,
-    mut ship_query: Query<(&mut Transform, &mut Velocity, &mut ShipPhysics, &mut ThrusterState), With<Ship>>,
+    mut ship_query: Query<(&mut Transform, &mut Velocity, &mut ShipPhysics), With<Ship>>,
     windows_query: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::MainCamera>>,
     debug_tuning: Res<crate::debug::DebugTuning>,
     power_channels: Res<crate::resources::PowerChannels>,
 ) {
-    let Ok((mut transform, mut velocity, mut physics, mut thruster_state)) = ship_query.single_mut() else {
+    let Ok((mut transform, mut velocity, mut physics)) = ship_query.single_mut() else {
         return;
     };
 
@@ -189,21 +182,9 @@ pub fn ship_movement(
         Vec2::ZERO
     };
 
-    // --- VERTICAL THRUSTERS ---
-    let thruster_effect: f32 = thruster_query
-        .iter()
-        .filter(|(_, module)| module.is_active)
-        .map(|(thruster, _)| thruster.current_output * thruster.thrust_power)
-        .sum();
-
-    // Thruster input directly applies vertical force (scaled to match main thrust)
-    let vertical_thrust = input_state.thruster_input * 400.0 * THRUST_SCALE / 4.0
-        + thruster_effect * thruster_state.base_drift * 30.0;
-    let thruster_force = Vec2::new(0.0, vertical_thrust);
-    thruster_state.current = input_state.thruster_input;
-
     // --- NET FORCE ---
-    let net_force = thrust_force + drag_force + thruster_force;
+    // (No vertical-thruster term any more — see ship_input: Q/E is gone.)
+    let net_force = thrust_force + drag_force;
     let acceleration = net_force / physics.mass;
 
     // Update velocity
@@ -250,24 +231,14 @@ pub fn ship_movement(
     transform.scale.x = transform.scale.x.abs();
 }
 
-/// Updates ship position tracking based on Y position
+/// Tracks how far the ship is from Haven Station (the origin). Displayed in km
+/// on the HUD; also drives zone progression, radiation and spawn tables.
 pub fn update_depth(
-    time: Res<Time>,
-    input_state: Res<InputState>,
-    mut thruster_query: Query<(&mut Thruster, &Module)>,
     mut ship_query: Query<(&Transform, &mut Depth), With<Ship>>,
 ) {
     let Ok((transform, mut depth)) = ship_query.single_mut() else {
         return;
     };
-
-    // Update thrusters based on Q/E input
-    for (mut thruster, module) in thruster_query.iter_mut() {
-        if module.is_active {
-            let response_rate = 0.3 * time.delta_secs();
-            thruster.current_output = (thruster.current_output + input_state.thruster_input * response_rate).clamp(0.0, 1.0);
-        }
-    }
 
     // Distance from home (origin) drives zone/danger progression — radial,
     // so danger grows in every direction. The old code clamped the ship

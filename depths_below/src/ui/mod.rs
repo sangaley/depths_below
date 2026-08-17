@@ -632,8 +632,8 @@ fn setup_ui(mut commands: Commands) {
                     g.spawn((Text::new("System-0"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::TEXT_TITLE), SystemInfoText));
                     g.spawn((Text::new("Station Orbit"), TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() }, TextColor(ThemeColors::TEXT_SECONDARY), DepthZoneText));
                 });
-                spawn_stack(c, "DEPTH", false, |g| {
-                    g.spawn((Text::new("0"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::TEXT_PRIMARY), DepthText));
+                spawn_stack(c, "HAVEN", false, |g| {
+                    g.spawn((Text::new("0.0 km"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::TEXT_PRIMARY), DepthText));
                     g.spawn((Text::new(""), TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() }, TextColor(ThemeColors::TEXT_SECONDARY), GravityIndicatorText));
                 });
                 spawn_stack(c, "NOISE", false, |g| {
@@ -1074,6 +1074,16 @@ pub fn update_celestial_hud(
     }
 }
 
+/// Formats a world-unit range as kilometres. Every "depth" number in this game
+/// is really the ship's radial distance from Haven Station (see
+/// movement::update_depth) — it's a space game, not a submarine one, so the
+/// readouts say how far out you are, in km. One decimal close in, where 100m
+/// of drift still matters; whole km once you're far enough out that it doesn't.
+pub fn format_range_km(units: f32) -> String {
+    let km = units / 1000.0;
+    if km < 10.0 { format!("{:.1} km", km) } else { format!("{:.0} km", km) }
+}
+
 /// Returns the space zone name for a given distance
 // Thresholds must match world::depth_to_zone (radial distance rings)
 fn depth_zone_name(depth: f32) -> &'static str {
@@ -1097,9 +1107,9 @@ pub fn update_hud(
     mut hull_query: Query<(&mut Text, &mut TextColor), (With<HullText>, Without<DepthText>, Without<PowerText>, Without<OxygenText>, Without<DepthZoneText>)>,
     mut bar_query: Query<(&HudBar, &mut Node, &mut BackgroundColor)>,
 ) {
-    // Depth
+    // Range from Haven Station
     if let Ok((mut text, mut text_color)) = depth_query.single_mut() {
-        text.0 = format!("{:.0}m", depth_state.current_depth);
+        text.0 = format_range_km(depth_state.current_depth);
         text_color.0 = if depth_state.current_depth > 1000.0 {
             Color::srgb(1.0, 0.4, 0.4)
         } else if depth_state.current_depth > 500.0 {
@@ -1172,8 +1182,7 @@ pub fn update_hud_secondary(
     currency: Res<Currency>,
     staffing_state: Res<StaffingState>,
     time: Res<Time>,
-    ship_query: Query<Entity, With<Ship>>,
-    thruster_query: Query<(&Thruster, &ChildOf)>,
+    ship_query: Query<(Entity, &ShipPhysics), With<Ship>>,
     weapon_query: Query<(&Weapon, &Module, &ChildOf)>,
     mut fuel_query: Query<(&mut Text, &mut TextColor), (With<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>,
     mut thruster_text_query: Query<(&mut Text, &mut TextColor), (With<ThrusterText>, Without<FuelText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>,
@@ -1193,7 +1202,7 @@ pub fn update_hud_secondary(
 ) {
     let (ammo_container_query, ammo_line_query, mut commands, mut last_ammo_snapshot) = ammo_ui;
     let (inventory, mut cargo_query) = cargo_ui;
-    let Ok(player_ship) = ship_query.single() else { return };
+    let Ok((player_ship, physics)) = ship_query.single() else { return };
 
     // Fuel
     let fuel_pct = if fuel_state.max_fuel > 0.0 {
@@ -1212,14 +1221,12 @@ pub fn update_hud_secondary(
         }
     }
 
-    // Average thruster output on the player's ship (for the thrust meter + text).
-    let thrust_avg = {
-        let outs: Vec<f32> = thruster_query.iter()
-            .filter(|(_, parent)| parent.parent() == player_ship)
-            .map(|(t, _)| t.current_output)
-            .collect();
-        if outs.is_empty() { 0.0 } else { outs.iter().sum::<f32>() / outs.len() as f32 }
-    };
+    // Main-drive throttle for the THRS meter + text. This used to read the
+    // Q/E vertical thrusters, which are gone — so it sat at 0% (or "N/A") all
+    // game. Now it's the W/S throttle the ship actually flies on: -1 full
+    // reverse .. +1 full ahead, eased by ship_movement.
+    let throttle = physics.throttle.clamp(-1.0, 1.0);
+    let thrust_avg = throttle.abs();
 
     // Update fuel + thrust meter bars
     for (bar, mut style, mut bg) in bar_query.iter_mut() {
@@ -1230,24 +1237,20 @@ pub fn update_hud_secondary(
             }
             HudBarKind::Thrust => {
                 style.width = Val::Percent((thrust_avg * 100.0).clamp(0.0, 100.0));
-                *bg = Color::srgb(0.3, 0.5, 1.0).into();
+                // Amber while backing down, so reverse reads at a glance.
+                *bg = if throttle < -0.02 { Color::srgb(1.0, 0.6, 0.2) } else { Color::srgb(0.3, 0.5, 1.0) }.into();
             }
             _ => {}
         }
     }
 
-    // Thrusters
+    // Throttle
     if let Ok((mut text, mut text_color)) = thruster_text_query.single_mut() {
-        let outputs: Vec<f32> = thruster_query.iter()
-            .filter(|(_, parent)| parent.parent() == player_ship)
-            .map(|(t, _)| t.current_output)
-            .collect();
-        if outputs.is_empty() {
-            text.0 = "N/A".to_string();
-            text_color.0 = Color::srgb(0.5, 0.5, 0.5);
+        let pct = (thrust_avg * 100.0).round() as i32;
+        if throttle < -0.02 {
+            text.0 = format!("{}% REV", pct);
+            text_color.0 = Color::srgb(1.0, 0.6, 0.2);
         } else {
-            let avg = outputs.iter().sum::<f32>() / outputs.len() as f32;
-            let pct = (avg * 100.0) as i32;
             text.0 = format!("{}%", pct);
             text_color.0 = Color::srgb(0.3, 0.5, 1.0);
         }
@@ -2899,7 +2902,7 @@ fn spawn_main_menu(mut commands: Commands) {
                     let key = if *slot == 99 { "L+0" } else { match slot { 0 => "L+1", 1 => "L+2", 2 => "L+3", _ => "L+?" } };
                     let time_min = (info.play_time / 60.0) as i32;
                     let time_sec = (info.play_time % 60.0) as i32;
-                    let label = format!("LOAD — {} ({:.0}m · {}:{:02})", name, info.depth, time_min, time_sec);
+                    let label = format!("LOAD — {} ({} · {}:{:02})", name, format_range_km(info.depth), time_min, time_sec);
                     spawn_menu_button(actions, &label, Some(key), ThemeColors::ACCENT_GREEN, MenuAction::LoadSlot(*slot));
                 }
             }
@@ -2986,7 +2989,7 @@ fn spawn_game_over_screen(
             let time_sec = (statistics.play_time_seconds % 60.0) as i32;
 
             let stat_items = [
-                (format!("Max Distance     {:.0}", statistics.max_depth_reached), ThemeColors::ACCENT_BLUE),
+                (format!("Max Distance     {}", format_range_km(statistics.max_depth_reached)), ThemeColors::ACCENT_BLUE),
                 (format!("Time Survived    {}:{:02}", time_min, time_sec), ThemeColors::TEXT_PRIMARY),
                 (format!("Creatures Slain  {}", statistics.creatures_killed), ThemeColors::ACCENT_ORANGE),
                 (format!("Crew Lost        {}", statistics.crew_lost), ThemeColors::ACCENT_RED),
@@ -3079,8 +3082,8 @@ fn spawn_pause_menu(
         // Vitals line
         let hull_pct = (hull_state.hull_integrity * 100.0) as i32;
         parent.spawn((Text::new(format!(
-                "Distance: {:.0}m  Hull: {}%  Power: {:.0}/{:.0}",
-                depth_state.current_depth, hull_pct,
+                "Haven: {}  Hull: {}%  Power: {:.0}/{:.0}",
+                format_range_km(depth_state.current_depth), hull_pct,
                 power_state.total_power_generation, power_state.total_power_consumption,
             )), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(0.8, 0.8, 0.8))));
 

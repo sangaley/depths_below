@@ -405,7 +405,6 @@ fn engine_loop_volume(
     let throttle = ship_query.single().map(|p| p.throttle.abs()).unwrap_or(0.0);
     let intensity = throttle
         .max(input.movement.x.abs() * 0.5)
-        .max(input.thruster_input.abs() * 0.5)
         .max(if input.brake { 0.4 } else { 0.0 });
 
     // Ease toward the target so thrust taps don't click the loop on/off.

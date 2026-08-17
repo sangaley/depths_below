@@ -1227,7 +1227,7 @@ pub fn update_controls_help(
     if *game_state.get() == crate::states::GameState::Exploring {
         // Flight controls only — no B: Build (docked-only), and Map/Sys/Radar/
         // Crew live on the clickable toolbar now, so they're dropped from here.
-        text.0 = "Mouse: Aim | WASD: Move | Shift: Brake | Space: Fire | Z: Ping | R: Shield | T: Look | F: Dock | K: Guns | L: Log".to_string();
+        text.0 = "Mouse: Aim | WASD: Move | Shift: Brake | Space: Fire | Z: Ping | R: Shield | T: Look | F: Dock | K: Guns | L: Log | Shift+J: Contracts".to_string();
         return;
     }
 

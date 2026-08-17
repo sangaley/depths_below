@@ -243,10 +243,11 @@ fn generate_single_contract(
         ContractType::ReachDepth => {
             let (lo, hi) = depth_range_for_star(star);
             let target = rng.gen_range(lo..=hi);
-            let target = (target / 50.0).round() * 50.0; // round to nearest 50
+            // Round to 100 units (0.1 km) so the km figure reads cleanly.
+            let target = (target / 100.0).round().max(1.0) * 100.0;
             (
-                format!("Reach {}m depth", target as u32),
-                format!("Descend to at least {}m depth.", target as u32),
+                format!("Reach {} out", crate::ui::format_range_km(target)),
+                format!("Travel at least {} out from Haven Station.", crate::ui::format_range_km(target)),
                 ContractObjective::ReachDepth { target_depth: target, reached: false },
             )
         }

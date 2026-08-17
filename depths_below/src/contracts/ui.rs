@@ -39,6 +39,17 @@ pub struct ContractHudRoot;
 #[derive(Component)]
 pub struct ContractHudText;
 
+/// Whether the top-right active-contract tracker is drawn. Toggled with
+/// Shift+J (plain J opens the mission board). With several bounties running at
+/// once the list owns the corner of the screen for the whole trip, so it can be
+/// tucked away without abandoning anything — the contracts still track.
+#[derive(Resource)]
+pub struct ContractHudVisible(pub bool);
+
+impl Default for ContractHudVisible {
+    fn default() -> Self { Self(true) }
+}
+
 // ============================================================================
 // MISSION BOARD: TOGGLE
 // ============================================================================
@@ -58,6 +69,8 @@ pub fn toggle_mission_board(
     streaming: Res<crate::celestial::resources::SystemStreamingManager>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyJ) { return; }
+    // Shift+J belongs to the HUD tracker toggle (see toggle_contract_hud).
+    if keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight) { return; }
 
     if board_open.0 {
         board_open.0 = false;
@@ -379,13 +392,47 @@ pub fn despawn_contract_hud(
     }
 }
 
+/// Shift+J hides/shows the contract tracker. Plain J is the mission board.
+pub fn toggle_contract_hud(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut visible: ResMut<ContractHudVisible>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    let shift = keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
+    if !shift || !keyboard.just_pressed(KeyCode::KeyJ) { return; }
+
+    visible.0 = !visible.0;
+    notifications.write(ShowNotification {
+        message: if visible.0 {
+            "Contract tracker shown (Shift+J)".into()
+        } else {
+            "Contract tracker hidden — Shift+J to bring it back".into()
+        },
+        notification_type: NotificationType::Info,
+        duration: 2.5,
+    });
+}
+
 pub fn update_contract_hud(
     state: Res<ContractState>,
+    visible: Res<ContractHudVisible>,
+    mut root_query: Query<&mut Node, With<ContractHudRoot>>,
     mut text_query: Query<&mut Text, With<ContractHudText>>,
 ) {
+    // Hide the whole panel — not just its text — when it's toggled off or
+    // there's nothing to track, so its background box doesn't sit empty in the
+    // corner.
+    let show = visible.0 && !state.active_contracts.is_empty();
+    if let Ok(mut node) = root_query.single_mut() {
+        let want = if show { Display::Flex } else { Display::None };
+        if node.display != want {
+            node.display = want;
+        }
+    }
+
     let Ok(mut text) = text_query.single_mut() else { return; };
 
-    if state.active_contracts.is_empty() {
+    if !show {
         text.0 = String::new();
         return;
     }

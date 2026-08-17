@@ -239,6 +239,7 @@ impl Plugin for ContractsPlugin {
             .init_resource::<MissionBoardOpen>()
             .init_resource::<ViewingStation>()
             .init_resource::<ui::MissionBoardSelection>()
+            .init_resource::<ui::ContractHudVisible>()
             // Turn in completed contracts on docking at Haven
             .add_systems(OnEnter(GameState::StationDocked), tracking::turn_in_contracts)
             // Tracking + claim-anywhere during exploration
@@ -263,7 +264,7 @@ impl Plugin for ContractsPlugin {
             // Contract HUD during exploration
             .add_systems(OnEnter(GameState::Exploring), (ui::spawn_contract_hud, bounty_nav::spawn_bounty_arrow))
             .add_systems(OnExit(GameState::Exploring), ui::despawn_contract_hud)
-            .add_systems(Update, ui::update_contract_hud
+            .add_systems(Update, (ui::toggle_contract_hud, ui::update_contract_hud).chain()
                 .run_if(in_state(GameState::Exploring)))
             // Bounty navigation: HUD arrow toward the nearest active target,
             // plus a floating label over the specific tagged ship once it's

@@ -564,8 +564,10 @@ fn horror_instrument_glitch(
             1 => {
                 // Subtle: depth flickers
                 if let Ok((mut text, _)) = depth_query.single_mut() {
+                    // Must match the real readout's format (km) or the glitch
+                    // reads as a UI bug instead of a haunted instrument.
                     let fake_depth = rng.gen_range(100.0..3000.0);
-                    text.0 = format!("Dist: {:.0}m", fake_depth);
+                    text.0 = crate::ui::format_range_km(fake_depth);
                 }
             }
             2 => {
@@ -578,7 +580,7 @@ fn horror_instrument_glitch(
                 }
                 if let Ok((mut text, _)) = depth_query.single_mut() {
                     let fake = rng.gen_range(0.0..5000.0);
-                    text.0 = format!("Dist: {:.0}m", fake);
+                    text.0 = crate::ui::format_range_km(fake);
                 }
                 if let Ok((mut text, mut text_color)) = noise_query.single_mut() {
                     text.0 = "Noise: MAX".to_string();
@@ -589,7 +591,7 @@ fn horror_instrument_glitch(
                 // Severe: all instruments scramble
                 let glitch_strings = ["???", "ERR", "---", "NaN", "∞", "0.0̸̡"];
                 if let Ok((mut text, mut text_color)) = depth_query.single_mut() {
-                    text.0 = format!("Dist: {}", glitch_strings[rng.gen_range(0..glitch_strings.len())]);
+                    text.0 = glitch_strings[rng.gen_range(0..glitch_strings.len())].to_string();
                     text_color.0 = Color::srgba(1.0, 0.3, 0.3, 0.8);
                 }
                 if let Ok((mut text, mut text_color)) = hull_query.single_mut() {

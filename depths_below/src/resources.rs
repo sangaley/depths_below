@@ -736,7 +736,6 @@ pub struct InputState {
     pub depth_input: f32,       // -1 rise, +1 sink
     pub mouse_world_pos: Vec2,
     pub mouse_grid_pos: IVec2,
-    pub thruster_input: f32,    // Q/E for vertical thruster control
     pub brake: bool,            // Shift — retro-thrust against current velocity
     /// Right-stick aim direction (ship-facing + dumb-fire weapons). Persists
     /// after the stick releases so the nose holds heading; cleared when the
