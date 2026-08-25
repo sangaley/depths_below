@@ -79,6 +79,17 @@ Bevy 0.11 ECS **space survival game**. 2D, sprite-based, grid-based building sys
 - The HUD "HAVEN" readout is radial distance from the origin in km — `ui::format_range_km` formats every range readout; internals still call it `depth` (`DepthState::current_depth`)
 - F: dock at any station (see Stations below), U: shop, H: hiring, G: hold to warp-dash
 
+### Combat model
+
+Fights are decided by **subsystems**, not by grinding hull pools (an Iron Tide is 160 tiles x 500 HP — minutes of held fire). Four rules carry it:
+
+- **Defeat is a systems condition.** `combat::check_ai_cripple` — once a ship's guns AND engines are both under 25%, the crew strikes colors and it becomes an intact, salvage-rich derelict. `AiShipDestroyed::cause` (`ShipDeathCause::Struck` / `Meltdown` / `Gutted`) shapes the wreck and its loot.
+- **Reactor kills are a phase, not a frame.** Breaching the last live reactor starts `ReactorMeltdown` (8s): shield down for good, ship goes berserk on whoever cracked it, then detonates and guts half the remaining blocks. A spare reactor absorbs the breach — that's why bosses last longer.
+- **Armour covers what's behind it.** In `new_projectiles.rs`, a module under live plating only takes `ammo_types::armor_pass_through` of the round (APFSDS 0.9 … flak 0, unspecialised/beams 0.15); the rest hits the plate. Once the plate is gone the module is exposed and takes everything.
+- **Anti-drag valves.** Enemy magazines/fuel cook off (`combat::ai_chain_reactions`), and fighters withdraw at ≤35% guns rather than waiting to be finished.
+
+Player-side aiming: right-click any enemy block to lock the battery onto it (`combat::targeting::aim_lock`) — kinetics, beams and turret barrels all converge there, it auto-fires inside max weapon range, walks to the neighbouring block when the locked one dies, and right-clicking empty space releases everything back to manual fire.
+
 ### Stations
 
 `world/home_base.rs` owns every station. Each star system carries `STATIONS_PER_SYSTEM` (2) **full** stations — dock with F and you get build mode, shop, bounty board and hiring at all of them (Haven is no longer special apart from its fixed position and name). Placement is derived, not stored: `station_sites(system_id, local_center)` spreads them on a golden-angle ring 180k-420k out from the system center, so a system's stations never share a screen. Haven is system 0 slot 0 at the fixed `STATION_POS`, beside the spawn berth.
