@@ -415,6 +415,24 @@ pub struct AiShipDestroyed {
     /// — lets contract tracking complete the specific bounty instead of any
     /// ship of the same faction.
     pub bounty_id: Option<u32>,
+    /// How the ship went out of the fight. A ship is "defeated" when it can
+    /// no longer fight, not when every hull tile is ground to zero — see
+    /// ai_ship::combat::check_ai_cripple.
+    pub cause: ShipDeathCause,
+}
+
+/// The three ways a ship leaves a fight, which shape the wreck it leaves.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum ShipDeathCause {
+    /// Hull ground to nothing — the old, slow way. Little left to salvage.
+    #[default]
+    Gutted,
+    /// Guns and engines both shot out: the crew strikes colors and the ship
+    /// drifts as an intact derelict. The cleanest kill, and the best salvage.
+    Struck,
+    /// Last reactor breached and the containment let go. Big detonation,
+    /// shattered hulk.
+    Meltdown,
 }
 
 // ============================================================================

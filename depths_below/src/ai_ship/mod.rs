@@ -59,6 +59,18 @@ impl Plugin for AiShipPlugin {
                 )
                     .after(SpatialSet::Update)
                     .run_if(in_state(GameState::Exploring)),
+            )
+            // Defeat conditions. Separate block only because the list above is
+            // at Bevy's 20-system tuple ceiling.
+            .add_systems(
+                Update,
+                (
+                    // Runs after damage so a killing blow on the last gun is
+                    // read the same frame it lands.
+                    combat::check_ai_cripple.after(combat::process_ai_ship_damage_system),
+                    combat::tick_reactor_meltdown,
+                )
+                    .run_if(in_state(GameState::Exploring)),
             );
     }
 }

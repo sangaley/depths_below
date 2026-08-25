@@ -147,6 +147,26 @@ pub fn ai_ship_death_system(
             AiShipType::RustSwarm => 2,    // junk
         };
 
+        // A meltdown takes the ship apart on the way out: the blast guts a
+        // share of whatever was still intact, so cracking the core buys a
+        // fast kill and pays for it in salvage. Striking colors leaves the
+        // hull as-is, which is why it's the best wreck in the game.
+        if event.cause == ShipDeathCause::Meltdown {
+            if let Ok(children) = children_query.get(event.entity) {
+                for (i, child) in children.iter().enumerate() {
+                    // Every other block: a shattered hulk, not vapour.
+                    if i % 2 != 0 { continue; }
+                    if let Ok((mut module, _, is_destroyed)) = module_query.get_mut(child) {
+                        if !is_destroyed {
+                            module.health = 0.0;
+                            let original_type = module.module_type;
+                            commands.entity(child).try_insert(DestroyedModule { original_type });
+                        }
+                    }
+                }
+            }
+        }
+
         // Power off and darken every block — dead reactor, no power,
         // nothing left running. No instant credit payout here anymore:
         // wreck value is whatever the salvage detail physically carries
@@ -228,8 +248,13 @@ pub fn ai_ship_death_system(
             AiShipType::RustSwarm => "Rust Swarm",
         };
 
+        let headline = match event.cause {
+            ShipDeathCause::Struck => format!("{} vessel struck colors — crew abandoned it", type_name),
+            ShipDeathCause::Meltdown => format!("{} vessel lost containment — core detonation", type_name),
+            ShipDeathCause::Gutted => format!("{} vessel destroyed!", type_name),
+        };
         notifications.write(ShowNotification {
-            message: format!("{} vessel destroyed! {} (F: salvage detail)", type_name, condition),
+            message: format!("{} {} (F: salvage detail)", headline, condition),
             notification_type: NotificationType::Success,
             duration: 4.0,
         });

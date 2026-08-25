@@ -488,6 +488,7 @@ fn debug_actions(
                         ship_type,
                         position: gt.translation().truncate(),
                         bounty_id: None,
+                        cause: ShipDeathCause::Gutted,
                     });
                     cleared += 1;
                 }
@@ -618,6 +619,7 @@ fn debug_kill_flagged(
                 ship_type: *ship_type,
                 position: transform.translation.truncate(),
                 bounty_id: None,
+                cause: ShipDeathCause::Gutted,
             });
         }
         commands.entity(entity).try_remove::<DebugKillNextFrame>();

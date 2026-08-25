@@ -506,41 +506,211 @@ pub fn process_ai_ship_damage_system(
                     ship_type: *ai_ship_type,
                     position: ai_transform.translation.truncate(),
                     bounty_id: bounty.map(|b| b.0),
+                    cause: ShipDeathCause::Gutted,
                 });
             }
         }
     }
 }
 
-/// The reactor is the ship's core: destroying it kills the ship outright via
-/// a chain-reaction explosion, rather than requiring every single hull tile
-/// on the ship to be ground down first (that took minutes even on the
-/// smallest ship in the roster — no real "kill it here" moment).
-pub fn check_ai_reactor_destruction(
-    mut commands: Commands,
-    destroyed_reactors: Query<(&Module, &OwnedByAiShip), Added<DestroyedModule>>,
-    mut ai_ships: Query<(&mut AiShipState, &Transform, &AiShipType, Option<&BountyTarget>)>,
-    mut destroyed_events: MessageWriter<AiShipDestroyed>,
-) {
-    for (module, owned) in destroyed_reactors.iter() {
-        if !matches!(module.module_type,
-            ModuleType::SmallReactor | ModuleType::StandardReactor
-            | ModuleType::LargeReactor | ModuleType::FusionReactor
-        ) {
-            continue;
+/// Fraction of a subsystem class still alive below which it counts as shot
+/// out. Not zero: the last gun on a battleship shouldn't keep a 160-tile
+/// hulk "in the fight" for another three minutes of grinding.
+const CRIPPLE_THRESHOLD: f32 = 0.25;
+
+/// Seconds between a reactor breach and detonation. The ship is at its most
+/// dangerous here — see tick_reactor_meltdown.
+pub const MELTDOWN_SECONDS: f32 = 8.0;
+
+/// Counts a class of modules on one AI ship as (alive, total). Destroyed
+/// modules keep their entity (they're marked, not despawned), so the totals
+/// are the ship's original loadout without storing anything at spawn.
+fn subsystem_tally(
+    root: Entity,
+    children: &Children,
+    module_query: &Query<(&Module, &OwnedByAiShip)>,
+    matches_class: impl Fn(&Module) -> bool,
+) -> (u32, u32) {
+    let mut alive = 0;
+    let mut total = 0;
+    for child in children.iter() {
+        let Ok((module, owned)) = module_query.get(child) else { continue };
+        if owned.root != root || !matches_class(module) { continue; }
+        total += 1;
+        if module.health > 0.0 {
+            alive += 1;
         }
-        let Ok((mut state, transform, ship_type, bounty)) = ai_ships.get_mut(owned.root) else { continue };
+    }
+    (alive, total)
+}
+
+fn is_weapon_module(module: &Module) -> bool {
+    ModuleCategory::Weapons.module_types().contains(&module.module_type)
+}
+
+fn is_engine_module(module: &Module) -> bool {
+    ModuleCategory::Propulsion.module_types().contains(&module.module_type)
+}
+
+/// A ship is DEFEATED when it can no longer fight, not when its last hull
+/// tile is ground off. Shoot out the guns and the engines and the crew
+/// strikes colors: the ship stops fighting and drifts as an intact derelict.
+///
+/// This is the anti-grind valve. An Iron Tide is 160 tiles x 500 HP — eighty
+/// thousand hull HP, minutes of held fire — so before this the only kill
+/// anyone ever went for was sniping the reactor, and everything in between
+/// was a slog. Now a fight ends when you've taken the ship apart in the
+/// places that matter, and the wreck you're left with is the best salvage in
+/// the game (wreck.rs scores loot by how intact the hull still is).
+pub fn check_ai_cripple(
+    mut ai_ships: Query<
+        (Entity, &Transform, &AiShipType, &Children, &mut AiShipState, Option<&BountyTarget>),
+        (With<AiShip>, Without<ReactorMeltdown>),
+    >,
+    module_query: Query<(&Module, &OwnedByAiShip)>,
+    mut destroyed_events: MessageWriter<AiShipDestroyed>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    for (entity, transform, ship_type, children, mut state, bounty) in ai_ships.iter_mut() {
         if state.is_destroyed { continue; }
 
+        let (guns_alive, guns_total) = subsystem_tally(entity, children, &module_query, is_weapon_module);
+        let (engines_alive, engines_total) = subsystem_tally(entity, children, &module_query, is_engine_module);
+
+        // An unarmed hull (GlassEye) is toothless by construction; an
+        // engineless one is already adrift. Either way the ratio for a class
+        // it never had must not read as "still fine".
+        let toothless = guns_total == 0
+            || (guns_alive as f32 / guns_total as f32) <= CRIPPLE_THRESHOLD;
+        let immobile = engines_total == 0
+            || (engines_alive as f32 / engines_total as f32) <= CRIPPLE_THRESHOLD;
+        if !(toothless && immobile) { continue; }
+
         state.is_destroyed = true;
-        state.hull_integrity = 0.0;
         let pos = transform.translation.truncate();
-        spawn_hit_effect(&mut commands, pos, Color::srgb(1.0, 0.6, 0.1), 120.0);
+        notifications.write(ShowNotification {
+            message: format!("{:?} strikes colors — derelict adrift, ripe for salvage.", ship_type),
+            notification_type: NotificationType::Success,
+            duration: 4.0,
+        });
         destroyed_events.write(AiShipDestroyed {
-            entity: owned.root,
+            entity,
             ship_type: *ship_type,
             position: pos,
             bounty_id: bounty.map(|b| b.0),
+            cause: ShipDeathCause::Struck,
+        });
+    }
+}
+
+/// A breached reactor no longer kills the ship on the spot. Popping the core
+/// used to be an instant win, which made every fight a race to dig one hole
+/// — now it starts a countdown, and the dying ship spends it berserk (see
+/// tick_reactor_meltdown). Ships with a second live reactor just lose that
+/// one: redundancy is why a Dreadnought takes longer than a raider, instead
+/// of raw hit points.
+pub fn check_ai_reactor_destruction(
+    mut commands: Commands,
+    destroyed_reactors: Query<(&Module, &OwnedByAiShip), Added<DestroyedModule>>,
+    ai_ships: Query<(&AiShipState, &Children, Option<&ReactorMeltdown>)>,
+    module_query: Query<(&Module, &OwnedByAiShip)>,
+    mut shield_query: Query<&mut crate::combat::shields::ShipShield>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    for (module, owned) in destroyed_reactors.iter() {
+        if !is_reactor(module.module_type) { continue; }
+
+        let Ok((state, children, melting)) = ai_ships.get(owned.root) else { continue };
+        if state.is_destroyed || melting.is_some() { continue; }
+
+        // Any other reactor still running? Then the ship just browns out a
+        // little and fights on.
+        let (reactors_alive, _) = subsystem_tally(
+            owned.root, children, &module_query, |m| is_reactor(m.module_type),
+        );
+        if reactors_alive > 0 { continue; }
+
+        // Containment is gone: the bubble drops now, the ship goes later.
+        if let Ok(mut shield) = shield_query.get_mut(owned.root) {
+            shield.enabled = false;
+            shield.current = 0.0;
+        }
+        commands.entity(owned.root).try_insert(ReactorMeltdown { remaining: MELTDOWN_SECONDS });
+        notifications.write(ShowNotification {
+            message: format!("REACTOR BREACH — detonation in {:.0}s. Get clear.", MELTDOWN_SECONDS),
+            notification_type: NotificationType::Danger,
+            duration: 4.0,
+        });
+    }
+}
+
+fn is_reactor(module_type: ModuleType) -> bool {
+    matches!(module_type,
+        ModuleType::SmallReactor | ModuleType::StandardReactor
+        | ModuleType::LargeReactor | ModuleType::FusionReactor
+    )
+}
+
+/// Runs the breach countdown. The ship keeps its shield down and burns what's
+/// left in the capacitors: it fights to the last second rather than sitting
+/// there waiting to be a kill notification, so the payoff for cracking a core
+/// is a scramble to get clear, not a free win.
+pub fn tick_reactor_meltdown(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut ai_ships: Query<(
+        Entity,
+        &Transform,
+        &AiShipType,
+        &mut AiShipState,
+        &mut ReactorMeltdown,
+        Option<&BountyTarget>,
+    )>,
+    mut shield_query: Query<&mut crate::combat::shields::ShipShield>,
+    mut destroyed_events: MessageWriter<AiShipDestroyed>,
+) {
+    let dt = time.delta_secs();
+    for (entity, transform, ship_type, mut state, mut meltdown, bounty) in ai_ships.iter_mut() {
+        if state.is_destroyed {
+            commands.entity(entity).remove::<ReactorMeltdown>();
+            continue;
+        }
+
+        // Hold the bubble down for the whole countdown — update_shields would
+        // otherwise recharge it after a few quiet seconds.
+        if let Ok(mut shield) = shield_query.get_mut(entity) {
+            shield.enabled = false;
+            shield.current = 0.0;
+        }
+
+        let was = meltdown.remaining;
+        meltdown.remaining -= dt;
+        let pos = transform.translation.truncate();
+
+        // One flare per remaining second, brightening as it goes.
+        if was.ceil() != meltdown.remaining.ceil() && meltdown.remaining > 0.0 {
+            let heat = 1.0 - (meltdown.remaining / MELTDOWN_SECONDS);
+            spawn_hit_effect(
+                &mut commands,
+                pos,
+                Color::srgb(1.0, 0.6 - 0.4 * heat, 0.1),
+                40.0 + 60.0 * heat,
+            );
+        }
+
+        if meltdown.remaining > 0.0 { continue; }
+
+        state.is_destroyed = true;
+        state.hull_integrity = 0.0;
+        commands.entity(entity).remove::<ReactorMeltdown>();
+        spawn_hit_effect(&mut commands, pos, Color::srgb(1.0, 0.85, 0.4), 260.0);
+        spawn_hit_effect(&mut commands, pos, Color::srgb(1.0, 0.5, 0.1), 180.0);
+        destroyed_events.write(AiShipDestroyed {
+            entity,
+            ship_type: *ship_type,
+            position: pos,
+            bounty_id: bounty.map(|b| b.0),
+            cause: ShipDeathCause::Meltdown,
         });
     }
 }

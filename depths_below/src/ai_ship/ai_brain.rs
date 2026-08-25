@@ -51,6 +51,8 @@ pub fn ai_brain_system(
     wreck_query: Query<(Entity, &Transform, &AiShipWreck)>,
     weapon_query: Query<(&Weapon, &Module, &OwnedByAiShip), Without<Engine>>,
     creature_grid: Res<CreatureGrid>,
+    // Ships riding out a reactor breach — see the BERSERK arm below.
+    melting_down: Query<Entity, With<ReactorMeltdown>>,
 ) {
     // --- Pre-pass: snapshot every living ship's position + "threat value"
     // (block count + 2x active weapon damage — cheap proxies for size and
@@ -95,6 +97,19 @@ pub fn ai_brain_system(
         }
 
         let pos = transform.translation.truncate();
+
+        // BERSERK: a ship with a breached core has seconds to live and knows
+        // it. It stops evaluating anything — no fleeing, no patrol — and
+        // spends the countdown on whoever cracked it. Cracking a reactor buys
+        // a kill, but the last eight seconds are the dangerous ones.
+        if melting_down.contains(entity) {
+            *behavior = AiShipBehavior::Engaging;
+            if ai_target.entity.is_none() {
+                ai_target.entity = state.last_attacker.or(player_snapshot.map(|(e, _, _)| e));
+            }
+            continue;
+        }
+
         let under_fire = state.last_hit_timer < 5.0;
         let hull_pct = state.hull_integrity;
         let fuel_pct = state.fuel / state.max_fuel.max(1.0);

@@ -533,3 +533,11 @@ pub fn factions_hostile(a: AiShipType, b: AiShipType) -> bool {
         _ => false,
     }
 }
+
+/// A ship whose last reactor has been breached. It has MELTDOWN_SECONDS
+/// (ai_ship::combat) left: shield down, guns still hot off the capacitors,
+/// then it detonates. See combat::tick_reactor_meltdown.
+#[derive(Component)]
+pub struct ReactorMeltdown {
+    pub remaining: f32,
+}
