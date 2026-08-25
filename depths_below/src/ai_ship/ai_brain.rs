@@ -129,6 +129,21 @@ pub fn ai_brain_system(
             .fold(0.0_f32, f32::max);
         let engage_range = if max_weapon_range > 0.0 { max_weapon_range * 1.05 } else { 4400.0 };
 
+        // How much of the battery is still shooting. A ship that has been
+        // disarmed doesn't heroically hold station waiting to be finished —
+        // it runs, which is what keeps a won fight from turning into two
+        // minutes of chasing a toothless hull around. Catch it or let it go.
+        let guns_left = {
+            let mut alive = 0.0_f32;
+            let mut total = 0.0_f32;
+            for child in children.iter() {
+                let Ok((_, module, _)) = weapon_query.get(child) else { continue };
+                total += 1.0;
+                if module.health > 0.0 { alive += 1.0; }
+            }
+            if total > 0.0 { alive / total } else { 1.0 }
+        };
+
         // Perception
         let player_info = player_snapshot.map(|(e, p, _)| (e, p, pos.distance(p)));
 
@@ -471,12 +486,16 @@ pub fn ai_brain_system(
                         }
                     }
 
-                    // Only retreat if almost destroyed
-                    if hull_pct < 0.10 {
+                    // Retreat when nearly dead OR shot toothless — a fighter
+                    // with a third of its guns left has nothing to win by
+                    // staying, and hull_pct alone almost never trips now that
+                    // fights are decided by subsystems rather than by grinding
+                    // plating (see combat::check_ai_cripple).
+                    if hull_pct < 0.10 || guns_left <= 0.35 {
                         actions.push(ScoredAction {
                             score: 98.0,
                             behavior: AiShipBehavior::Fleeing,
-                            destination: Some(pos + Vec2::new(0.0, -800.0)), // flee DEEPER
+                            destination: Some(pos + (pos - player_info.map(|(_, p, _)| p).unwrap_or(pos)).normalize_or_zero() * 900.0),
                             target: None,
                         });
                     }

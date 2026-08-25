@@ -714,3 +714,70 @@ pub fn tick_reactor_meltdown(
         });
     }
 }
+
+/// Blast radius of a cooking-off magazine or fuel bunker, in world units
+/// (blocks are 66 across, so this reaches the ring of blocks around it).
+const COOKOFF_RADIUS: f32 = 100.0;
+
+/// AMMO COOK-OFF / FUEL FIRE on enemy ships. Player ships have had this since
+/// chain_reactions.rs, but AI ships never did — so the one shot that should
+/// end a fight outright, straight into the magazine, did exactly as much as a
+/// shot into a corridor. Now a destroyed ammo bay or fuel tank takes its
+/// neighbours with it, which is what makes a lucky (or aimed) hit on a
+/// magazine the fastest kill in the game.
+pub fn ai_chain_reactions(
+    mut commands: Commands,
+    // ParamSet because the "what just blew up" query and the "damage the
+    // neighbours" query both touch Module — one shared, one mutable.
+    mut modules: ParamSet<(
+        Query<(&Module, &GlobalTransform, &OwnedByAiShip), Added<DestroyedModule>>,
+        Query<(&mut Module, &GlobalTransform, &OwnedByAiShip), Without<HullSegment>>,
+    )>,
+    mut hull_query: Query<(&mut HullSegment, &GlobalTransform, &OwnedByAiShip), Without<Module>>,
+    mut damage_events: MessageWriter<AiShipDamaged>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    let blasts: Vec<(Entity, Vec2, f32)> = modules.p0().iter()
+        .filter_map(|(module, gt, owned)| {
+            let blast = match module.module_type {
+                ModuleType::WarheadBay => 90.0,
+                ModuleType::AmmoFeedUnit | ModuleType::AmmoBay => 55.0,
+                ModuleType::FuelTank | ModuleType::FuelProcessor => 40.0,
+                _ => return None,
+            };
+            Some((owned.root, gt.translation().truncate(), blast))
+        })
+        .collect();
+
+    for (root, pos, blast) in blasts {
+        for (mut hull, hull_gt, hull_owned) in hull_query.iter_mut() {
+            if hull_owned.root != root { continue; }
+            if hull_gt.translation().truncate().distance(pos) > COOKOFF_RADIUS { continue; }
+            hull.health = (hull.health - blast).max(0.0);
+        }
+        for (mut neighbour, mod_gt, mod_owned) in modules.p1().iter_mut() {
+            if mod_owned.root != root { continue; }
+            if neighbour.health <= 0.0 { continue; }
+            if mod_gt.translation().truncate().distance(pos) > COOKOFF_RADIUS { continue; }
+            neighbour.health = (neighbour.health - blast).max(0.0);
+        }
+
+        spawn_hit_effect(&mut commands, pos, Color::srgb(1.0, 0.7, 0.2), 140.0);
+        notifications.write(ShowNotification {
+            message: "Magazine cook-off aboard the target!".into(),
+            notification_type: NotificationType::Success,
+            duration: 2.5,
+        });
+
+        // Bookkeeping only — the damage above is already applied; this makes
+        // the ship recompute its hull integrity (and remember it was hit).
+        damage_events.write(AiShipDamaged {
+            target: root,
+            source: DamageSource::Explosion,
+            amount: 0.0,
+            position: Some(pos),
+            direction: None,
+            attacker: None,
+        });
+    }
+}

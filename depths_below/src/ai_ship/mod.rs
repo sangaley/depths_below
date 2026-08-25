@@ -69,6 +69,7 @@ impl Plugin for AiShipPlugin {
                     // read the same frame it lands.
                     combat::check_ai_cripple.after(combat::process_ai_ship_damage_system),
                     combat::tick_reactor_meltdown,
+                    combat::ai_chain_reactions,
                 )
                     .run_if(in_state(GameState::Exploring)),
             );
