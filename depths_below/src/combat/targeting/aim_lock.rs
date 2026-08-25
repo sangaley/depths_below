@@ -229,6 +229,7 @@ pub fn draw_aim_lock(
     mut commands: Commands,
     lock: Res<AimLock>,
     existing: Query<Entity, With<AimLockMarker>>,
+    blocks: Query<(Option<&Module>, Option<&HullSegment>)>,
 ) {
     for entity in existing.iter() {
         commands.entity(entity).despawn();
@@ -253,4 +254,39 @@ pub fn draw_aim_lock(
             AimLockMarker,
         ));
     }
+
+    // Condition of the block under fire, as a thin bar below the reticle —
+    // without it there's no way to tell whether the plate is nearly off or
+    // you've been chewing a fresh one for ten seconds.
+    let frac = lock.block
+        .and_then(|b| blocks.get(b).ok())
+        .and_then(|(module, hull)| match (module, hull) {
+            (Some(m), _) if m.max_health > 0.0 => Some((m.health / m.max_health).clamp(0.0, 1.0)),
+            (_, Some(h)) if h.max_health > 0.0 => Some((h.health / h.max_health).clamp(0.0, 1.0)),
+            _ => None,
+        });
+    let Some(frac) = frac else { return };
+
+    const BAR_W: f32 = 44.0;
+    const BAR_H: f32 = 3.0;
+    let bar_y = point.y - HALF - 7.0;
+    commands.spawn((
+        Sprite { color: Color::srgba(0.0, 0.0, 0.0, 0.55), custom_size: Some(Vec2::new(BAR_W, BAR_H)), ..default() },
+        Transform::from_xyz(point.x, bar_y, 6.0),
+        AimLockMarker,
+    ));
+    let fill = BAR_W * frac;
+    commands.spawn((
+        Sprite {
+            color: if frac > 0.5 {
+                Color::srgb(0.9, 0.75, 0.3)
+            } else {
+                Color::srgb(1.0, 0.4, 0.25)
+            },
+            custom_size: Some(Vec2::new(fill.max(1.0), BAR_H)),
+            ..default()
+        },
+        Transform::from_xyz(point.x - (BAR_W - fill) * 0.5, bar_y, 6.01),
+        AimLockMarker,
+    ));
 }

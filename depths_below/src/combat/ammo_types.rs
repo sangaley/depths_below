@@ -119,6 +119,15 @@ impl KineticAmmoType {
         }
     }
 
+    /// Fraction of a round's damage that reaches a module still covered by
+    /// live hull, the rest being spent on the armour itself. This is what
+    /// makes ammo choice a decision: a dart goes almost straight through to
+    /// the engine you aimed at, while flak can't touch an internal until the
+    /// plating over it is gone. See armor_pass_through for the None case.
+    pub fn pass_through(&self) -> f32 {
+        (self.penetration() / 100.0).clamp(0.0, 0.9)
+    }
+
     /// Direct damage on hit
     pub fn damage_mult(&self) -> f32 {
         match self {
@@ -336,4 +345,14 @@ pub fn default_magazines() -> Vec<(&'static str, Vec<KineticAmmoType>, &'static 
         ("Sabot Dart", vec![KineticAmmoType::APFSDS], "Ultra-fast. Goes through everything. Expensive."),
         ("Kitchen Sink", vec![KineticAmmoType::AP, KineticAmmoType::HEFrag, KineticAmmoType::Incendiary, KineticAmmoType::APHE], "A bit of everything."),
     ]
+}
+
+/// Pass-through for a hit whose round has no ammo profile — an unspecialised
+/// shell, a beam, a ram. Armour stops most of it; a little always bleeds
+/// through to whatever is bolted behind the plate.
+pub fn armor_pass_through(ammo: Option<KineticAmmoType>) -> f32 {
+    match ammo {
+        Some(a) => a.pass_through(),
+        None => 0.15,
+    }
 }

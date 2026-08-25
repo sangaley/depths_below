@@ -516,11 +516,49 @@ pub fn check_projectile_hits(
                 // Primary hit: damage the struck block, remember where.
                 let primary: Option<(Entity, Vec2)> = if hit_module {
                     let target = best_module.unwrap().0;
+                    // ARMOUR EXPOSURE — a module still under live plating only
+                    // takes the share of the round its ammo can drive through;
+                    // the rest is spent on the plate. Modules used to eat full
+                    // damage through intact armour purely because their sprite
+                    // centre happened to be a hair nearer the projectile, which
+                    // made hull thickness and ammo choice both meaningless.
+                    let module_pos = ai_module_query.get(target).ok()
+                        .map(|(_, gt)| gt.translation().truncate());
+                    let cover: Option<Entity> = module_pos.and_then(|mpos| {
+                        children.iter().find(|child| {
+                            ai_hull_query.get(*child).ok().is_some_and(|(hull, gt)| {
+                                hull.health > 0.0
+                                    && gt.translation().truncate().distance(mpos) < 33.0
+                            })
+                        })
+                    });
+
+                    let pass = match cover {
+                        Some(_) => crate::combat::ammo_types::armor_pass_through(proj.ammo),
+                        // Plate already gone (or the module is an external
+                        // mount): fully exposed, takes everything.
+                        None => 1.0,
+                    };
+                    let to_module = proj.damage * pass;
+                    let to_plate = proj.damage - to_module;
+
+                    if let (Some(plate), true) = (cover, to_plate > 0.0) {
+                        if let Ok((mut hull, gt)) = ai_hull_query.get_mut(plate) {
+                            hull.health = (hull.health - to_plate).max(0.0);
+                            spawn_floating_damage(
+                                &mut commands,
+                                gt.translation().truncate(),
+                                to_plate,
+                                Color::srgb(1.0, 0.3, 0.3),
+                            );
+                        }
+                    }
+
                     ai_module_query.get_mut(target).ok().map(|(mut module, gt)| {
-                        module.health = (module.health - proj.damage).max(0.0);
+                        module.health = (module.health - to_module).max(0.0);
                         let hit_pos = gt.translation().truncate();
                         spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.6, 0.2), 12.0);
-                        spawn_floating_damage(&mut commands, hit_pos, proj.damage, Color::srgb(1.0, 0.8, 0.3));
+                        spawn_floating_damage(&mut commands, hit_pos, to_module, Color::srgb(1.0, 0.8, 0.3));
                         (target, hit_pos)
                     })
                 } else if let Some((hull_entity, _)) = best_hull {
