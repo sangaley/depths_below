@@ -35,12 +35,30 @@ pub fn fire_group_input(
     mouse: Res<ButtonInput<MouseButton>>,
     interactions: Query<&Interaction>,
     mut state: ResMut<FireGroupState>,
+    // A right-click lock fires the battery for you (see aim_lock) — the point
+    // of picking a block is to keep working it while you fly, not to hold
+    // Space at it. Manual fire still works, locked or not.
+    lock: Res<super::aim_lock::AimLock>,
+    player_ship: Query<(&Transform, &Children), With<Ship>>,
+    player_weapons: Query<(&Weapon, &Module), Without<crate::ai_ship::components::OwnedByAiShip>>,
 ) {
     // A left-click that lands on interactive UI (the HUD toolbar, panels, window
     // chrome) shouldn't also fire the guns — suppress mouse-fire while the cursor
     // is over any hovered/pressed UI element. Space still fires unconditionally.
     let over_ui = interactions.iter().any(|i| !matches!(i, Interaction::None));
-    let fire_all = keyboard.pressed(KeyCode::Space) || (mouse.pressed(MouseButton::Left) && !over_ui);
+    // Longest live gun aboard sets how far the auto-fire lock reaches.
+    let auto = player_ship.single().ok().is_some_and(|(transform, children)| {
+        let max_range = children.iter()
+            .filter_map(|c| player_weapons.get(c).ok())
+            .filter(|(_, module)| module.is_active && module.health > 0.0)
+            .map(|(weapon, _)| weapon.range)
+            .fold(0.0_f32, f32::max);
+        super::aim_lock::auto_fire_engaged(&lock, transform.translation.truncate(), max_range)
+    });
+
+    let fire_all = auto
+        || keyboard.pressed(KeyCode::Space)
+        || (mouse.pressed(MouseButton::Left) && !over_ui);
     state.firing[0] = keyboard.pressed(KeyCode::Digit1) || fire_all;
     state.firing[1] = keyboard.pressed(KeyCode::Digit2) || fire_all;
     state.firing[2] = keyboard.pressed(KeyCode::Digit3) || fire_all;

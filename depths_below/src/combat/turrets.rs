@@ -23,6 +23,7 @@ pub fn aim_turrets(
     player_ship: Query<&GlobalTransform, With<Ship>>,
     mut turrets: Query<(&GlobalTransform, &mut Turret, &ChildOf, Option<&crate::building::customization::tuning::WeaponTuning>)>,
     mut barrels: Query<(&ChildOf, &mut Transform), With<TurretBarrel>>,
+    aim_lock: Res<crate::combat::targeting::AimLock>,
 ) {
     let dt = time.delta_secs();
 
@@ -34,7 +35,9 @@ pub fn aim_turrets(
     // 1) ease each turret's WORLD heading toward its target
     for (mod_gt, mut turret, ship_parent, tuning) in turrets.iter_mut() {
         let is_player = ships.get(ship_parent.parent()).is_ok();
-        let target = if is_player { cursor_world } else { player_pos };
+        // Locked guns look where they shoot — the barrels swinging onto the
+        // locked block is most of what sells the lock as real.
+        let target = if is_player { aim_lock.aim_point().or(cursor_world) } else { player_pos };
         let Some(target) = target else { continue };
         let mod_pos = mod_gt.translation().truncate();
         let dir = target - mod_pos;

@@ -31,7 +31,8 @@ pub struct LaserBeamVisual;
 pub fn fire_laser_system(
     time: Res<Time>,
     fire_state: Res<FireGroupState>,
-    selection: Res<TargetSelection>,
+    // Bundled: this system is at Bevy's 16-parameter ceiling.
+    targeting: (Res<TargetSelection>, Res<crate::combat::targeting::AimLock>),
     ship_query: Query<(Entity, &Transform, &ShipPhysics), With<Ship>>,
     weapon_query: Query<(
         Entity, &Module, &Weapon, &FireGroup, &GlobalTransform, &WeaponMount, &ChildOf,
@@ -74,6 +75,7 @@ pub fn fire_laser_system(
     // through one spot. Cleared once that block is destroyed.
     mut laser_locks: Local<std::collections::HashMap<Entity, Entity>>,
 ) {
+    let (selection, aim_lock) = targeting;
     let dt = time.delta_secs();
 
     // Despawn old beam visuals
@@ -110,8 +112,11 @@ pub fn fire_laser_system(
         let weapon_pos = global_transform.translation().truncate();
         let mut beam_range = weapon.range;
 
-        // Aim at selected target or straight ahead
-        let beam_dir = if let Some(target) = selection.target {
+        // Aim at the right-click lock first (a named block), then the
+        // ship-level selection, then straight ahead.
+        let beam_dir = if let Some(point) = aim_lock.aim_point() {
+            (point - weapon_pos).normalize_or_zero()
+        } else if let Some(target) = selection.target {
             if let Ok(target_transform) = target_query.get(target) {
                 (target_transform.translation.truncate() - weapon_pos).normalize_or_zero()
             } else {

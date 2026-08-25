@@ -101,6 +101,7 @@ pub fn fire_weapons_system(
     windows_query: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::MainCamera>>,
     input_state: Res<crate::resources::InputState>,
+    aim_lock: Res<crate::combat::targeting::AimLock>,
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
     mut commands: Commands,
     debug_tuning: Res<crate::debug::DebugTuning>,
@@ -184,7 +185,22 @@ pub fn fire_weapons_system(
         // the cursor. Never silently skip on range — an out-of-range target
         // just means the shot is capped at max range and falls short, which
         // is visible feedback instead of a gun that refuses to fire.
-        let (target_pos, target_vel) = if let Some(target_entity) = selection.target {
+        // A right-click lock names a specific BLOCK — that's the aim point,
+        // capped to range like any other. Falls through to the ship-level
+        // selection and then the cursor when nothing is locked.
+        let (target_pos, target_vel) = if let Some(point) = aim_lock.aim_point() {
+            let to_point = point - weapon_pos;
+            let aim = if to_point.length() > weapon.range {
+                weapon_pos + to_point.normalize_or_zero() * weapon.range
+            } else {
+                point
+            };
+            let vel = aim_lock.ship
+                .and_then(|e| target_velocity_query.get(e).ok())
+                .map(|v| v.0)
+                .unwrap_or(Vec2::ZERO);
+            (aim, vel)
+        } else if let Some(target_entity) = selection.target {
             let Ok(target_transform) = target_transform_query.get(target_entity) else { continue };
             let mut target_pos = target_transform.translation.truncate();
             let to_target = target_pos - weapon_pos;

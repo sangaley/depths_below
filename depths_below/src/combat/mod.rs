@@ -178,6 +178,7 @@ impl Plugin for CombatPlugin {
     fn build(&self, app: &mut App) {
         app
             .init_resource::<targeting::TargetSelection>()
+            .init_resource::<targeting::AimLock>()
             .init_resource::<targeting::FireGroupState>()
             .init_resource::<recoil::RecoilAccumulator>()
             .configure_sets(Update, CombatSet::WeaponFire.after(SpatialSet::Update).run_if(in_state(GameState::Exploring)))
@@ -190,7 +191,14 @@ impl Plugin for CombatPlugin {
             .add_systems(Update, (
                 targeting::click_select_target,
                 targeting::draw_target_bracket,
-                targeting::fire_group_input,
+                // Lock input runs before the radial menu can claim the click,
+                // and before fire_group_input so a lock made this frame fires
+                // this frame.
+                targeting::aim_lock_input
+                    .before(crate::ui::windows::radial_menu::spawn_radial_on_right_click),
+                targeting::maintain_aim_lock.after(targeting::aim_lock_input),
+                targeting::draw_aim_lock.after(targeting::maintain_aim_lock),
+                targeting::fire_group_input.after(targeting::maintain_aim_lock),
             ).run_if(in_state(GameState::Exploring)))
             // Shields: attach to player + AI ships, recharge, drive bubble visuals
             .add_systems(Update, (

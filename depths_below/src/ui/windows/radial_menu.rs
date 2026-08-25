@@ -182,8 +182,13 @@ pub fn spawn_radial_on_right_click(
         With<crate::components::CrewStation>,
     >,
     mut notifications: MessageWriter<crate::events::ShowNotification>,
+    // Right-click is the weapons lock first and a menu second — see
+    // combat::targeting::aim_lock. If the click went to the guns, it isn't
+    // ours this frame.
+    aim_lock: Res<crate::combat::targeting::AimLock>,
 ) {
     if !mouse.just_pressed(MouseButton::Right) { return; }
+    if aim_lock.click_consumed { return; }
 
     // Close existing menu if one is open
     for entity in existing.iter() {
