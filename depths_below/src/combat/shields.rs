@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::components::{Ship, Module, ModuleType, HullSegment, Projectile, Creature};
+use crate::components::{Ship, Module, ModuleType, HullSegment, Projectile};
 use crate::ai_ship::components::{AiShip, AiShipType};
 use std::collections::HashSet;
 use bevy::asset::RenderAssetUsages;
@@ -44,6 +44,9 @@ pub struct ShipShield {
     pub arc_half: f32,
     /// Max swing speed of the arc, rad/s — fast but not instant.
     pub arc_traverse: f32,
+    /// True when a shot is about to hit: the segment is lit and blocking.
+    /// Between/without incoming fire it's off (the outline goes dark).
+    pub arc_active: bool,
 }
 
 impl ShipShield {
@@ -77,53 +80,19 @@ impl ShipShield {
 #[derive(Component)]
 pub struct ShieldBubble;
 
-/// Marker for the player's omni-arc glow sprite — a short shield cap that hugs
-/// the hull and swings to face the tracked threat. Distinct from the
-/// full-silhouette ShieldBubble (which is hidden on the player).
+/// On the player's ShieldBubble sprite: the unmasked full-outline glow, so
+/// `update_shield_segment` can light only the chunk facing an incoming shot
+/// (a moving piece of the silhouette). AI ships have no ShieldSegment — their
+/// bubble shows whole.
 #[derive(Component)]
-pub struct ShieldArcVisual;
-
-/// Build a short, soft glowing arc cap pointing +X (local), sitting at `radius`
-/// and spanning ±`half` radians — same soft-glow feel as the ship shield skin,
-/// just a small segment. Returned with the sprite's world size. The sprite is
-/// rotated to the arc facing and tinted blue at draw time.
-fn build_arc_glow(radius: f32, half: f32) -> (Image, f32) {
-    const BAND: f32 = 15.0; // glow band half-thickness (world units)
-    const PAD: f32 = 10.0;
-    const TPU: f32 = 0.5; // texels per world unit
-    const ANG_SOFT: f32 = 0.14; // angular edge softness (radians)
-    let s = 2.0 * (radius + BAND + PAD); // world square side
-    let n = ((s * TPU).ceil() as usize).max(8);
-    let c = s * 0.5;
-    let mut data = vec![0u8; n * n * 4];
-    for ty in 0..n {
-        for tx in 0..n {
-            // texel centre -> world, centred at (0,0), y up
-            let wx = (tx as f32 + 0.5) / TPU - c;
-            let wy = c - (ty as f32 + 0.5) / TPU;
-            let r = (wx * wx + wy * wy).sqrt();
-            let theta = wy.atan2(wx);
-            let over = theta.abs() - half;
-            let ang = if over <= 0.0 { 1.0 } else { (-(over / ANG_SOFT).powi(2)).exp() };
-            let rad = (-((r - radius) / BAND).powi(2)).exp();
-            let cov = (ang * rad).clamp(0.0, 1.0);
-            if cov > 0.02 {
-                let i = (ty * n + tx) * 4;
-                data[i] = 255;
-                data[i + 1] = 255;
-                data[i + 2] = 255;
-                data[i + 3] = (cov * 255.0) as u8;
-            }
-        }
-    }
-    let img = Image::new(
-        Extent3d { width: n as u32, height: n as u32, depth_or_array_layers: 1 },
-        TextureDimension::D2,
-        data,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::default(),
-    );
-    (img, s)
+pub(crate) struct ShieldSegment {
+    /// Base outline-glow alpha, one byte per texel (row-major, w*h).
+    base_a: Vec<u8>,
+    w: usize,
+    h: usize,
+    /// The sprite's local centre and world size — for texel↔local mapping.
+    center: Vec2,
+    size: Vec2,
 }
 
 /// Bubble geometry that actually wraps the ship: centered on the blocks'
@@ -205,7 +174,7 @@ fn box_blur(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
 /// clean smooth shape hugging the hull — no grid steps, no 90° angles. The gap
 /// off the hull just falls out of the blur amount. Returns (texture, local
 /// centre, local size).
-fn build_shield_skin(cells: &HashSet<IVec2>) -> Option<(Image, Vec2, Vec2)> {
+fn build_shield_skin(cells: &HashSet<IVec2>) -> Option<(Image, Vec2, Vec2, Vec<u8>, usize, usize)> {
     const CELL: f32 = 66.0;
     const HALF: f32 = 33.0;
     const TPU: f32 = 0.25;          // texels per world unit (1 texel = 4 units)
@@ -253,11 +222,13 @@ fn build_shield_skin(cells: &HashSet<IVec2>) -> Option<(Image, Vec2, Vec2)> {
             data[i * 4 + 3] = (k * 255.0) as u8;   // white; sprite.color tints it
         }
     }
+    // Keep the unmasked alpha so the player's segment mask can rebuild from it.
+    let base_a: Vec<u8> = (0..w * h).map(|i| data[i * 4 + 3]).collect();
     let img = Image::new(
         Extent3d { width: w as u32, height: h as u32, depth_or_array_layers: 1 },
         TextureDimension::D2, data, TextureFormat::Rgba8UnormSrgb, RenderAssetUsages::default(),
     );
-    Some((img, (tmin + tmax) * 0.5, world))
+    Some((img, (tmin + tmax) * 0.5, world, base_a, w, h))
 }
 
 /// Spawn the shield skin as a single child sprite carrying the generated
@@ -268,19 +239,25 @@ fn spawn_shield_skin(
     images: &mut Assets<Image>,
     owner: Entity,
     cells: &HashSet<IVec2>,
+    is_player: bool,
 ) {
-    let Some((img, center, size)) = build_shield_skin(cells) else { return };
+    let Some((img, center, size, base_a, w, h)) = build_shield_skin(cells) else { return };
     let handle = images.add(img);
-    let skin = commands.spawn((
+    let mut e = commands.spawn((
         Sprite {
             image: handle,
-            color: Color::srgba(0.5, 0.8, 1.0, 0.0), // alpha driven by update_shields
+            color: Color::srgba(0.5, 0.8, 1.0, 0.0), // alpha driven by update_shields / update_shield_segment
             custom_size: Some(size),
             ..default()
         },
         Transform::from_xyz(center.x, center.y, 0.9),
         ShieldBubble,
-    )).id();
+    ));
+    // The player's bubble is masked into a moving segment; store the base glow.
+    if is_player {
+        e.insert(ShieldSegment { base_a, w, h, center, size });
+    }
+    let skin = e.id();
     commands.entity(owner).add_child(skin);
 }
 
@@ -318,6 +295,7 @@ pub fn attach_player_shield(
         arc_facing: 0.0,
         arc_half: SHIELD_ARC_HALF,
         arc_traverse: SHIELD_ARC_TRAVERSE,
+        arc_active: false,
     });
     // The silhouette-hugging skin itself is built (and kept up to date as blocks
     // change) by refresh_player_shield_skin. Collision stays radius-based via
@@ -354,7 +332,7 @@ pub fn refresh_player_shield_skin(
     for (e, p) in skin_query.iter() {
         if p.parent() == ship { commands.entity(e).despawn(); }
     }
-    spawn_shield_skin(&mut commands, &mut images, ship, &cells);
+    spawn_shield_skin(&mut commands, &mut images, ship, &cells, true);
 }
 
 /// Attach shields to AI ships as they spawn, sized by faction.
@@ -411,11 +389,12 @@ pub fn attach_ai_shields(
             arc_facing: 0.0,
             arc_half: std::f32::consts::PI, // AI: full coverage, arc unused
             arc_traverse: 0.0,
+            arc_active: false,
         });
         // Same silhouette skin as the player (built once — AI ships don't get
         // rebuilt in a hangar; a destroyed one just leaves its skin slightly wide).
         let cells = ship_cells(entity, &module_query, &hull_query);
-        spawn_shield_skin(&mut commands, &mut images, entity, &cells);
+        spawn_shield_skin(&mut commands, &mut images, entity, &cells, false);
     }
 }
 
@@ -442,10 +421,11 @@ const SHIELD_HP_POWER_BONUS: f32 = 0.35;
 /// block the most damaging incoming shot. Half-width → ~110° of coverage; it
 /// can rotate fast (but not instantly), so simultaneous fire from other angles
 /// slips past to the hull until the arc catches up.
-const SHIELD_ARC_HALF: f32 = 0.96; // ~55° half → ~110° total coverage
-const SHIELD_ARC_TRAVERSE: f32 = 8.0; // rad/s — fast, not instant
-const SHIELD_ARC_THREAT_RANGE: f32 = 1200.0; // incoming fire within this is tracked
-const SHIELD_ARC_ENEMY_RANGE: f32 = 2500.0; // fallback: face nearest hostile in this range
+const SHIELD_ARC_HALF: f32 = 0.7; // ~40° half → ~80° lit "patch"
+const SHIELD_ARC_SOFT: f32 = 0.22; // angular fade at the segment ends (radians)
+const SHIELD_ARC_TRAVERSE: f32 = 11.0; // rad/s — fast, so it reaches the shot in time
+const SHIELD_ARC_TRACK_RANGE: f32 = 1400.0; // pre-aim at incoming fire this far out
+const SHIELD_ARC_ACTIVE_RANGE: f32 = 650.0; // segment lights up when a shot is this close
 
 /// Hit glow: the outline flares on impact, brighter the more damage the hit
 /// dealt (flash accumulates in absorb, decays each frame).
@@ -504,30 +484,22 @@ pub fn refresh_player_shield_capacity(
     }
 }
 
-/// SAMPLE: swing the player's low-coverage omni arc toward the most dangerous
-/// incoming shot (capped by a traverse rate) and draw it. Scans hostile
-/// projectiles heading at the ship within range, points at the highest-damage
-/// one (nearest on a tie), and rotates there at `arc_traverse` rad/s — fast but
-/// not instant, so fire from other angles gets through until the arc catches
-/// up. Rendered as a faint blue arc that flares brighter on impact.
+/// Pre-aims the player's shield segment at the most dangerous incoming shot and
+/// flags it `arc_active` only when a shot is about to hit. The arc keeps
+/// tracking (invisibly) out to TRACK_RANGE so it's already in position, then
+/// lights up (via update_shield_segment) once the shot crosses ACTIVE_RANGE —
+/// so it "pops on right where the bullet lands." Facing is world-space; the
+/// mask converts it into the (rotating) hull frame.
 pub fn update_player_shield_arc(
     time: Res<Time>,
-    mut commands: Commands,
-    mut images: ResMut<Assets<Image>>,
     mut ship_query: Query<(&Transform, &mut ShipShield), With<Ship>>,
-    // Without<ShieldArcVisual>: this reads &Transform while arc_vis writes it —
-    // the exclusion proves to Bevy the two queries can't touch the same entity
-    // (projectiles never carry the arc marker), avoiding a query-conflict panic.
-    projectiles: Query<(&Transform, &Projectile), Without<ShieldArcVisual>>,
-    enemies_ai: Query<&Transform, (With<AiShip>, Without<Ship>, Without<ShieldArcVisual>)>,
-    enemies_creature: Query<&Transform, (With<Creature>, Without<Ship>, Without<ShieldArcVisual>)>,
-    mut arc_vis: Query<(&mut Transform, &mut Sprite), (With<ShieldArcVisual>, Without<Ship>)>,
+    projectiles: Query<(&Transform, &Projectile)>,
 ) {
     let dt = time.delta_secs();
     let Ok((ship_transform, mut shield)) = ship_query.single_mut() else { return };
     let center = shield.world_center(ship_transform);
 
-    // Most dangerous hostile shot that's actually incoming and in range.
+    // Most dangerous hostile shot heading at us; remember how close it is.
     let mut best: Option<(f32, f32, Vec2)> = None; // (damage, dist, pos)
     for (t, proj) in projectiles.iter() {
         if proj.owner.is_player() {
@@ -536,12 +508,11 @@ pub fn update_player_shield_arc(
         let p = t.translation.truncate();
         let to_ship = center - p;
         let dist = to_ship.length();
-        if dist > SHIELD_ARC_THREAT_RANGE {
+        if dist > SHIELD_ARC_TRACK_RANGE {
             continue;
         }
-        // Only fire heading toward us counts (skip shots already past).
         if proj.direction.dot(to_ship.normalize_or_zero()) <= 0.0 {
-            continue;
+            continue; // already flying past us
         }
         let better = match best {
             None => true,
@@ -552,26 +523,11 @@ pub fn update_player_shield_arc(
         }
     }
 
-    // Target: the incoming shot if any, else the nearest hostile so the arc
-    // keeps facing the fight between volleys — this is what makes it visibly
-    // track, and it works even against enemies whose fire the projectile scan
-    // above doesn't catch (missiles/lasers).
-    let target: Option<Vec2> = if let Some((_, _, pos)) = best {
-        Some(pos)
-    } else {
-        let mut nearest: Option<(f32, Vec2)> = None;
-        for t in enemies_ai.iter().chain(enemies_creature.iter()) {
-            let p = t.translation.truncate();
-            let d = p.distance(center);
-            if d <= SHIELD_ARC_ENEMY_RANGE && nearest.map_or(true, |(nd, _)| d < nd) {
-                nearest = Some((d, p));
-            }
-        }
-        nearest.map(|(_, p)| p)
-    };
-
-    // Swing toward the target, shortest path, rate-limited.
-    if let Some(pos) = target {
+    // Swing toward it (rate-limited), and light up once it's about to land.
+    // A brief flash-driven linger keeps the segment on through the impact.
+    let mut incoming_close = false;
+    if let Some((_, dist, pos)) = best {
+        incoming_close = dist <= SHIELD_ARC_ACTIVE_RANGE;
         let dir = pos - center;
         if dir.length_squared() > 1.0 {
             let ta = dir.y.atan2(dir.x);
@@ -586,33 +542,69 @@ pub fn update_player_shield_arc(
             shield.arc_facing += diff.clamp(-max_step, max_step);
         }
     }
+    shield.arc_active = incoming_close || shield.flash > 0.05;
+}
 
-    // Drive the glow-cap sprite (spawn it lazily the first time the shield's up).
-    if let Ok((mut tf, mut sprite)) = arc_vis.single_mut() {
-        tf.translation = center.extend(1.5);
-        tf.rotation = Quat::from_rotation_z(shield.arc_facing);
+/// Lights only the chunk of the player's outline glow facing the tracked shot —
+/// a moving piece of the silhouette rather than the whole ring. Rewrites the
+/// bubble texture's alpha to the base glow masked by the active angular window
+/// (converted into the hull's rotating frame), and only while `arc_active`;
+/// otherwise the bubble is hidden. AI bubbles are untouched (no ShieldSegment).
+pub fn update_shield_segment(
+    mut images: ResMut<Assets<Image>>,
+    ship_query: Query<(Entity, &Transform, &ShipShield), With<Ship>>,
+    mut seg_query: Query<(&mut Sprite, &ShieldSegment, &ChildOf)>,
+) {
+    let Ok((player, ship_transform, shield)) = ship_query.single() else { return };
+
+    for (mut sprite, seg, parent) in seg_query.iter_mut() {
+        if parent.parent() != player {
+            continue;
+        }
+        // Off unless a shot's about to hit.
+        if !shield.is_up() || !shield.arc_active {
+            sprite.color = Color::srgba(0.5, 0.8, 1.0, 0.0);
+            continue;
+        }
+        let Some(mut image) = images.get_mut(&sprite.image) else { continue };
+        let Some(buf) = image.data.as_mut() else { continue };
+
+        // World facing → local (the sprite rotates with the hull).
+        let ship_rot = ship_transform.rotation.to_euler(EulerRot::ZYX).0;
+        let local_facing = shield.arc_facing - ship_rot;
+        let pivot = shield.center_offset; // block centroid, in ship-local space
+        let tmin = seg.center - seg.size * 0.5;
+        let texel_w = seg.size.x / seg.w as f32;
+        let texel_h = seg.size.y / seg.h as f32;
+        let half = shield.arc_half;
+        let soft = SHIELD_ARC_SOFT;
+
+        for ty in 0..seg.h {
+            let ly = tmin.y + seg.size.y - (ty as f32 + 0.5) * texel_h;
+            for tx in 0..seg.w {
+                let i = ty * seg.w + tx;
+                let lx = tmin.x + (tx as f32 + 0.5) * texel_w;
+                let ang = (ly - pivot.y).atan2(lx - pivot.x);
+                let mut d = (ang - local_facing).abs();
+                if d > std::f32::consts::PI {
+                    d = std::f32::consts::TAU - d;
+                }
+                let mask = if d <= half {
+                    1.0
+                } else if d >= half + soft {
+                    0.0
+                } else {
+                    let t = (d - half) / soft;
+                    1.0 - t * t
+                };
+                buf[i * 4 + 3] = (seg.base_a[i] as f32 * mask) as u8;
+            }
+        }
+
+        // Overall brightness: visible while active, flaring on impact.
         let charge = if shield.max > 0.0 { shield.current / shield.max } else { 0.0 };
-        let alpha = if shield.is_up() {
-            (0.12 + 0.14 * charge + shield.flash * 0.5).min(0.9)
-        } else {
-            0.0
-        };
-        sprite.color = Color::srgba(0.5, 0.8, 1.0, alpha);
-    } else if shield.is_up() {
-        // Cap hugs the hull (just outside it), short and soft.
-        let vis_radius = (shield.radius - 75.0).max(35.0);
-        let (img, size) = build_arc_glow(vis_radius, shield.arc_half);
-        let handle = images.add(img);
-        commands.spawn((
-            Sprite {
-                image: handle,
-                color: Color::srgba(0.5, 0.8, 1.0, 0.0),
-                custom_size: Some(Vec2::splat(size)),
-                ..default()
-            },
-            Transform::from_xyz(center.x, center.y, 1.5),
-            ShieldArcVisual,
-        ));
+        let alpha = (0.35 + 0.2 * charge + shield.flash * SHIELD_FLASH_ALPHA).min(0.95);
+        sprite.color = Color::srgba(0.5, 0.85, 1.0, alpha);
     }
 }
 
@@ -624,7 +616,9 @@ pub fn update_shields(
     channels: Res<crate::resources::PowerChannels>,
     player_query: Query<Entity, With<Ship>>,
     mut shield_query: Query<(Entity, &mut ShipShield, &Children)>,
-    mut bubble_query: Query<&mut Sprite, With<ShieldBubble>>,
+    // The player's bubble carries ShieldSegment and is driven by
+    // update_shield_segment instead — exclude it here so we only paint AI bubbles.
+    mut bubble_query: Query<&mut Sprite, (With<ShieldBubble>, Without<ShieldSegment>)>,
 ) {
     let dt = time.delta_secs();
     let player = player_query.single().ok();

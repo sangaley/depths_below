@@ -215,10 +215,16 @@ pub(super) fn projectile_collision(
                     let center = shield.world_center(ship_transform);
                     dist = proj_pos.distance(center);
                     if shield.is_up() && dist < shield.radius {
-                        shield.absorb(projectile.damage);
-                        spawn_hit_effect(&mut commands, proj_pos, Color::srgb(0.5, 0.8, 1.0), 16.0);
-                        commands.entity(proj_entity).despawn();
-                        continue;
+                        // Directional: only the lit segment blocks. A shot from
+                        // an angle the segment isn't covering slips past to the
+                        // hull (the segment tracks the most dangerous shot).
+                        let hit_dir = proj_pos - center;
+                        if shield.covers_arc(hit_dir) {
+                            shield.absorb(projectile.damage);
+                            spawn_hit_effect(&mut commands, proj_pos, Color::srgb(0.5, 0.8, 1.0), 16.0);
+                            commands.entity(proj_entity).despawn();
+                            continue;
+                        }
                     }
                     hull_hit_radius = hull_hit_radius.max(shield.radius);
                 }
