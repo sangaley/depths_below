@@ -467,8 +467,8 @@ pub fn check_projectile_hits(
             let center = shield.world_center(ai_transform);
             let dist_to_ship = proj_pos.distance(center);
 
-            // Shield bubble intercepts anything crossing its radius
-            if shield.is_up() && dist_to_ship < shield.radius {
+            // Directional shield: only the facing arc intercepts; flank/rear slips past.
+            if shield.is_up() && dist_to_ship < shield.radius && shield.covers_arc(proj_pos - center) {
                 shield.absorb(proj.damage);
                 spawn_hit_effect(&mut commands, proj_pos, Color::srgb(0.5, 0.8, 1.0), 14.0);
                 commands.entity(proj_entity).despawn();

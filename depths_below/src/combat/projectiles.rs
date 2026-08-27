@@ -160,7 +160,9 @@ pub(super) fn projectile_collision(
                         // Shield absorbs first — this used to skip straight
                         // to hull/module damage regardless of shield state.
                         if let Some(shield) = shield.as_deref_mut() {
-                            if shield.is_up() {
+                            // Directional: only the facing arc blocks; a shot to
+                            // the flank/rear slips past to the hull below.
+                            if shield.is_up() && shield.covers_arc(proj_pos - ai_pos) {
                                 shield.absorb(projectile.damage);
                                 hit_any = true;
                                 spawn_hit_effect(&mut commands, proj_pos, Color::srgb(0.5, 0.8, 1.0), 16.0);

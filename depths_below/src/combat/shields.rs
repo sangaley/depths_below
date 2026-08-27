@@ -360,7 +360,7 @@ pub fn attach_ai_shields(
         // Deliberately weak: the shield is a brief opener, the real fight is
         // carving up the hull block by block.
         let max = if no_shield_hp { 0.0 } else {
-            match ship_type {
+            let base = match ship_type {
                 AiShipType::VoidTitan => 140.0,    // the hardest kill in the game
                 AiShipType::Dreadnought => 100.0,  // mega-battleship
                 AiShipType::IronTide => 40.0,      // tanky battleship
@@ -371,7 +371,8 @@ pub fn attach_ai_shields(
                 AiShipType::GlassEye => 12.0,
                 AiShipType::Drowned => 6.0,        // half-dead ghost ships
                 AiShipType::RustSwarm => 4.0,      // junk ships, paper shields
-            }
+            };
+            base * AI_SHIELD_HP_MULT
         };
         let (center, radius) = ship_extent(entity, &transform_query);
         commands.entity(entity).insert(ShipShield {
@@ -387,8 +388,8 @@ pub fn attach_ai_shields(
             enabled: true,
             surge: 0.0,
             arc_facing: 0.0,
-            arc_half: std::f32::consts::PI, // AI: full coverage, arc unused
-            arc_traverse: 0.0,
+            arc_half: AI_ARC_HALF, // directional: faces the player, flanks are open
+            arc_traverse: AI_ARC_TRAVERSE,
             arc_active: false,
         });
         // Same silhouette skin as the player (built once — AI ships don't get
@@ -426,6 +427,16 @@ const SHIELD_ARC_SOFT: f32 = 0.22; // angular fade at the segment ends (radians)
 const SHIELD_ARC_TRAVERSE: f32 = 11.0; // rad/s — fast, so it reaches the shot in time
 const SHIELD_ARC_TRACK_RANGE: f32 = 1400.0; // pre-aim at incoming fire this far out
 const SHIELD_ARC_ACTIVE_RANGE: f32 = 650.0; // segment lights up when a shot is this close
+
+// --- Enemy (flanking) shields ---
+/// Enemy shields are directional too — they face the player but swing slowly,
+/// so their front is a wall and their flanks/rear are open. Maneuver around to
+/// land real hits.
+const AI_ARC_HALF: f32 = 1.15; // ~66° half → ~132° of front coverage
+const AI_ARC_TRAVERSE: f32 = 2.6; // rad/s — slow enough to out-orbit
+/// Bump enemy shield HP so the covered front is worth flanking (thin shields
+/// made the front/flank difference invisible). Tunable.
+const AI_SHIELD_HP_MULT: f32 = 2.2;
 
 /// Hit glow: the outline flares on impact, brighter the more damage the hit
 /// dealt (flash accumulates in absorb, decays each frame).
@@ -543,6 +554,55 @@ pub fn update_player_shield_arc(
         }
     }
     shield.arc_active = incoming_close || shield.flash > 0.05;
+}
+
+/// Enemy shields are directional: they slowly swing to face the player, so the
+/// front is covered but the flanks and rear are open — maneuver around to land
+/// real hits. Draws a faint arc marking each enemy's protected facing so you
+/// can read where to flank.
+pub fn update_ai_shield_arcs(
+    time: Res<Time>,
+    mut gizmos: Gizmos,
+    player: Query<&Transform, (With<Ship>, Without<AiShip>)>,
+    mut ai: Query<(&Transform, &mut ShipShield), (With<AiShip>, Without<Ship>)>,
+) {
+    let dt = time.delta_secs();
+    let Ok(player_tf) = player.single() else { return };
+    let player_pos = player_tf.translation.truncate();
+
+    for (tf, mut shield) in ai.iter_mut() {
+        let center = shield.world_center(tf);
+        let dir = player_pos - center;
+        if dir.length_squared() > 1.0 {
+            let target = dir.y.atan2(dir.x);
+            let mut diff = target - shield.arc_facing;
+            while diff > std::f32::consts::PI {
+                diff -= std::f32::consts::TAU;
+            }
+            while diff < -std::f32::consts::PI {
+                diff += std::f32::consts::TAU;
+            }
+            let step = (AI_ARC_TRAVERSE * dt).min(diff.abs()) * diff.signum();
+            shield.arc_facing += step;
+        }
+
+        // Faint arc showing the protected facing, brighter just after a block.
+        if shield.is_up() {
+            let alpha = (0.12 + shield.flash * 0.5).min(0.8);
+            let color = Color::srgba(0.5, 0.8, 1.0, alpha);
+            let r = shield.radius;
+            let start = shield.arc_facing - shield.arc_half;
+            let sweep = shield.arc_half * 2.0;
+            let segs = 20;
+            let mut prev = center + Vec2::from_angle(start) * r;
+            for i in 1..=segs {
+                let a = start + sweep * (i as f32 / segs as f32);
+                let p = center + Vec2::from_angle(a) * r;
+                gizmos.line_2d(prev, p, color);
+                prev = p;
+            }
+        }
+    }
 }
 
 /// Lights only the chunk of the player's outline glow facing the tracked shot —

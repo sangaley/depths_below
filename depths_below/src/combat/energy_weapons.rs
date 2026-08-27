@@ -188,7 +188,7 @@ pub fn fire_laser_system(
             let closest_point = weapon_pos + beam_dir * projection;
             let perpendicular_dist = center.distance(closest_point);
 
-            if shield.is_up() && perpendicular_dist < shield.radius {
+            if shield.is_up() && perpendicular_dist < shield.radius && shield.covers_arc(closest_point - center) {
                 let damage = weapon.damage * dt;
                 shield.absorb(damage);
                 total_damage_dealt += damage;

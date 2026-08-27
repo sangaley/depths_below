@@ -327,7 +327,7 @@ pub fn check_missile_hits(
             let center = shield.world_center(ai_transform);
             let dist_to_ship = missile_pos.distance(center);
 
-            if shield.is_up() && dist_to_ship < shield.radius {
+            if shield.is_up() && dist_to_ship < shield.radius && shield.covers_arc(missile_pos - center) {
                 shield.absorb(missile.damage);
                 spawn_hit_effect(&mut commands, missile_pos, Color::srgb(0.5, 0.8, 1.0), missile.blast_radius);
                 commands.entity(missile_entity).despawn();

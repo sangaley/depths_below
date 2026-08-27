@@ -208,6 +208,7 @@ impl Plugin for CombatPlugin {
                 shields::attach_ai_shields,
                 shields::toggle_player_shield,
                 shields::update_player_shield_arc,
+                shields::update_ai_shield_arcs,
                 shields::update_shield_segment,
                 shields::update_shields,
                 turrets::aim_turrets,
