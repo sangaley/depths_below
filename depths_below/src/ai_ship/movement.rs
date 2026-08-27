@@ -153,28 +153,37 @@ pub fn ai_ship_movement_system(
 
             if standoff > 0.0 && dist < standoff * 1.15 && dist > 1.0 {
                 let direction = to_dest / dist;
-                let tangent = Vec2::new(-direction.y, direction.x);
+                // Per-ship variety so they don't all circle in lockstep facing
+                // the same way: half orbit CW, half CCW, each with its own slow
+                // in/out "breathing" phase so the ring wanders instead of being
+                // a rigid fixed-radius circle.
+                let bits = _entity.to_bits();
+                let orbit_sign = if bits & 1 == 0 { 1.0 } else { -1.0 };
+                let phase = (bits % 211) as f32;
+                let breathe = (time.elapsed_secs() * 0.5 + phase).sin(); // slow, -1..1
+                let tangent = Vec2::new(-direction.y, direction.x) * orbit_sign;
                 let desired_vel = if dist < standoff * 0.5 {
                     // Genuinely on top of the target — ease outward GENTLY
-                    // (0.25×) while still orbiting, so a ship can't kite a
-                    // chasing player across the map; it drifts back to its
-                    // ring and keeps firing instead of fleeing.
+                    // while still circling so it can't be kited across the map.
                     -direction * max_speed * 0.25 + tangent * max_speed * 0.55
                 } else {
-                    // In the band — orbit at constant radius (no radial
-                    // retreat), holding the fight rather than backing off.
-                    tangent * max_speed * 0.6
+                    // Circle, drifting in and out with the breathing (+in / -out)
+                    // so the radius wanders — no rigid ring.
+                    tangent * max_speed * 0.6 + direction * max_speed * 0.25 * breathe
                 };
                 velocity.0 = velocity.0.lerp(desired_vel, vel_blend);
 
-                // Face the target while holding the ring. Slerp between
-                // quaternions directly rather than decomposing to a Z euler
-                // angle and reconstructing — the decompose/rebuild round trip
-                // is exact for a pure Z rotation, but slerp is the standard,
-                // robust way to ease rotation and sidesteps it entirely.
-                let target_angle = direction.y.atan2(direction.x);
-                let target_rotation = Quat::from_rotation_z(target_angle);
-                transform.rotation = transform.rotation.slerp(target_rotation, turn_blend);
+                // Face where it's actually GOING, not at the player. AI guns aim
+                // independently of hull facing (see ai_ship::combat), so nose-
+                // locking you did nothing but read as robotic — every ship
+                // staring the same way. Bank along the flight path like a real
+                // vessel instead. (Keep the current heading when nearly stopped
+                // so it doesn't jitter.)
+                if desired_vel.length_squared() > 100.0 {
+                    let heading = desired_vel.y.atan2(desired_vel.x);
+                    let target_rotation = Quat::from_rotation_z(heading);
+                    transform.rotation = transform.rotation.slerp(target_rotation, turn_blend);
+                }
             } else if dist > 5.0 {
                 // Bend the heading around any terrain blocking the way.
                 let own_radius = collider.map(|c| c.bound_radius).unwrap_or(300.0);
