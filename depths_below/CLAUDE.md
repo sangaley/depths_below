@@ -10,19 +10,22 @@ cargo run                # Run the game
 cargo build --release    # Release build (LTO enabled, single codegen unit)
 cargo check              # Fast type-check without full build
 cargo clippy             # Lint (if clippy installed)
+cargo test               # Unit tests (in-file `#[cfg(test)]` modules)
 ```
 
-No test suite exists yet. No CI/CD pipeline.
+No CI/CD pipeline. Tests are sparse and cover mostly pure logic — registry
+integrity, material tiers, stat calculation, inventory, grid indexing. Most
+systems are verified by playtesting, not by tests.
 
 ## Architecture
 
-Bevy 0.11 ECS **space survival game**. 2D, sprite-based, grid-based building system (66.0 unit cells). Originally a ship game, fully converted to space theme.
+Bevy 0.19 ECS **space survival game**. 2D, sprite-based, grid-based building system (66.0 unit cells). Originally a ship game, fully converted to space theme.
 
 ### Plugin Structure (registered in `main.rs`)
 
 | Plugin | Location | Responsibility |
 |---|---|---|
-| **EventsPlugin** | `events.rs` | Registers all game events (30+ event types) |
+| **EventsPlugin** | `events.rs` | Registers all game events |
 | **ShipPlugin** | `ship/` | Ship movement, physics, power, oxygen, radiation, hull, combat, decompression, radar |
 | **WorldPlugin** | `world/` | Chunk management, biomes, POI discovery, zone transitions, procedural generation |
 | **CreaturePlugin** | `creatures/` | Hostile creature AI/spawning, ambient life (space motes, pulsing spores, cosmic whales) |
@@ -33,7 +36,7 @@ Bevy 0.11 ECS **space survival game**. 2D, sprite-based, grid-based building sys
 
 ### Core Data Flow
 
-1. **Components** (`components.rs`): All ECS components live here. Central types: `Module`, `ModuleType` (42 variants), `ModuleCategory` (9 categories), `Rotation`, `HullSegment`, `HullMaterial`, `Creature`, `CrewMember`.
+1. **Components** (`components.rs`): All ECS components live here. Central types: `Module`, `ModuleType`, `ModuleCategory`, `Rotation`, `HullSegment`, `HullMaterial`, `Creature`, `CrewMember`.
 
 2. **Resources** (`resources.rs`): Global state. Key resources: `ShipState`, `BuildingState`, `GameConfig`, `WorldState`, `ChunkManager`, `Inventory`, `Unlocks`, `Statistics`.
 
@@ -43,25 +46,36 @@ Bevy 0.11 ECS **space survival game**. 2D, sprite-based, grid-based building sys
 
 ### Space Theme Key Systems
 
-- **Radiation damage** (`ship/pressure.rs`): Replaces old pressure system. Radiation intensity scales with distance from safe zones. Hull segments have `radiation_shielding` ratings per material tier.
-- **Decompression** (`ship/flooding.rs`): Hull breaches cause air to escape (rooms have `air_level` 1.0→0.0). Drains oxygen. Crew seal breaches to restore air. Fire is extinguished by vacuum (low air).
-- **Thrusters** (`ship/movement.rs`): Q/E controls vertical thrusters instead of thruster. Space physics with minimal drag.
+- **Radiation damage** (`ship/radiation.rs`): Replaces old pressure system. Radiation intensity scales with distance from safe zones. Hull segments have `radiation_shielding` ratings per material tier.
+- **Decompression** (`ship/decompression.rs`): Hull breaches cause air to escape (rooms have `air_level` 1.0→0.0). Drains oxygen. Crew seal breaches to restore air. Fire is extinguished by vacuum (low air).
+- **Thrusters** (`ship/movement.rs`): Space physics with minimal drag — momentum is forever, you must thrust to stop. See Game Controls for the bindings.
 - **Zones**: NearOrbit → AsteroidBelt → DeepSpace → Nebula → BlackHole
 - **Biomes**: OpenVoid, AsteroidField, CrystalFormation, VoidRift, ThermalVents, IceShells, DeadZone, AncientRuins
 
 ### Module Registry System
 
-`building/registry.rs` defines `ModuleRegistry` — a data-driven HashMap<ModuleType, ModuleDef> with stats, size, color, and `CompanionData` for each of the 42 modules. `ship/spawner.rs::spawn_module()` reads the registry to spawn entities with the correct `Module` component plus companion components (Reactor, Engine, Weapon+WeaponCooldown+WeaponMount+TargetingSystem+AmmoStorage, Radar, etc.).
+`building/registry.rs` defines `ModuleRegistry` — a data-driven HashMap<ModuleType, ModuleDef> with stats, size, color, and `CompanionData` for every module type. `ship/spawner.rs::spawn_module()` reads the registry to spawn entities with the correct `Module` component plus companion components (Reactor, Engine, Weapon+WeaponCooldown+WeaponMount+TargetingSystem+AmmoStorage, Radar, etc.).
 
 **To add a new module**: Add variant to `ModuleType` enum, add it to the relevant `ModuleCategory::module_types()` list, add `ModuleDef` entry in `build_registry()`, and if needed add a new `CompanionData` variant + handling in `spawn_module()`.
 
 ### Grid & Building System
 
 - Grid cell size: 66.0 world units
-- `GridOccupancy` (HashMap<IVec2, Entity>) tracks occupied cells, rebuilt each frame
+- Two grid indexes, both `HashMap<IVec2, Entity>` keyed by ship-LOCAL cell:
+  - `GridOccupancy` (resource) — the **player's** blocks, rebuilt only while
+    `StationDocked`. Drives build-mode placement, ghosts, clipboard, inspection.
+    Goes stale on launch, which is fine for what reads it.
+  - `ShipGrid` (component, one per ship) — **live** blocks only (destroyed ones
+    drop out), maintained in flight as well as at dock. Grid coordinates are
+    ship-local, so one global map can only ever describe one ship; this is that
+    index without the restriction. Combat/hit resolution reads this one.
+  - Migration in progress: `GridOccupancy` and its ~30 call sites are untouched
+    so far. `cells_for` lives on `ShipGrid`, with `GridOccupancy` delegating.
 - Multi-cell modules supported via `ModuleDef.size` (e.g., LargeReactor is 2x1)
 - Placement validation: no overlap + adjacency required + positional rules (propulsion at rear, crew not near power)
-- Building only active in `GameState::StationDocked`
+- Build mode input/UI is `StationDocked` only, but the placement and removal
+  event processors also run while `Exploring` — `ship::rebuild` respawns shot-off
+  blocks in flight through the same `PlaceHullRequest`/`PlaceModuleRequest` events
 - Build flow: input -> `PlaceModuleRequest`/`PlaceHullRequest` event -> process system -> `ModulePlaced` event
 
 ### Key Conventions
