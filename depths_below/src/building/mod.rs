@@ -200,6 +200,40 @@ pub struct ShipGrid {
     pub cells: HashMap<IVec2, Entity>,
 }
 
+/// Per-block hit-resolution data, ADDITIVE alongside Module/HullSegment
+/// (same pattern as ShipGrid). `ShipGrid` answers "which block is at this
+/// cell"; `Block` answers "what does a round meet when it gets there".
+/// Health deliberately stays on Module/HullSegment — two sources of truth
+/// is worse than one awkward query.
+///
+/// `thickness` is in the same units as ammo penetration (0-90): hull seeds
+/// from HullMaterial::damage_absorption() (15/30/50/80), modules are
+/// unarmoured internals at 0. `slope` (0 = flat plate) is reserved for
+/// angled armour — nothing reads it yet.
+#[derive(Component, Clone, Copy, Debug, PartialEq)]
+pub struct Block {
+    pub cell: IVec2,
+    pub kind: BlockKind,
+    pub thickness: f32,
+    pub slope: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlockKind {
+    Hull,
+    Module,
+}
+
+impl Block {
+    pub fn hull(cell: IVec2, material: HullMaterial) -> Self {
+        Self { cell, kind: BlockKind::Hull, thickness: material.damage_absorption(), slope: 0.0 }
+    }
+
+    pub fn module(cell: IVec2) -> Self {
+        Self { cell, kind: BlockKind::Module, thickness: 0.0, slope: 0.0 }
+    }
+}
+
 impl ShipGrid {
     /// Live block occupying a cell, if any.
     pub fn get(&self, cell: IVec2) -> Option<Entity> {
@@ -975,6 +1009,7 @@ fn process_hull_placement(
                 grid_position: grid_pos,
                 ..default()
             },
+            Block::hull(grid_pos, material),
         )).insert(ChildOf(ship)).id();
 
         let layer_name = match event.layer {
@@ -1299,5 +1334,28 @@ mod ship_grid_tests {
         for cell in cells {
             assert!(grid.contains(cell), "hull at {cell:?} did not land in its own cell");
         }
+    }
+}
+
+#[cfg(test)]
+mod block_tests {
+    use super::*;
+
+    #[test]
+    fn hull_thickness_seeds_from_material_absorption() {
+        for material in [HullMaterial::Steel, HullMaterial::Titanium, HullMaterial::Composite, HullMaterial::AbyssalAlloy] {
+            let block = Block::hull(IVec2::new(2, -1), material);
+            assert_eq!(block.thickness, material.damage_absorption());
+            assert_eq!(block.kind, BlockKind::Hull);
+            assert_eq!(block.cell, IVec2::new(2, -1));
+            assert_eq!(block.slope, 0.0);
+        }
+    }
+
+    #[test]
+    fn modules_are_unarmoured() {
+        let block = Block::module(IVec2::ZERO);
+        assert_eq!(block.kind, BlockKind::Module);
+        assert_eq!(block.thickness, 0.0);
     }
 }

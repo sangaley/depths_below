@@ -331,6 +331,7 @@ fn spawn_ai_hull(
                 material: cell.material,
                 grid_position: cell.grid_pos,
             },
+            crate::building::Block::hull(cell.grid_pos, cell.material),
             OwnedByAiShip { root: parent },
         )).id();
 

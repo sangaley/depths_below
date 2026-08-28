@@ -539,6 +539,7 @@ pub fn spawn_ship_from_design(
                 grid_position: cell.grid_pos,
                 ..default()
             },
+            crate::building::Block::hull(cell.grid_pos, cell.material),
             ChildOf(ship),
         ));
     }
