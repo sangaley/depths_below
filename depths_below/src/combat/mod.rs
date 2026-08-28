@@ -24,6 +24,7 @@ pub mod energy_weapons;
 pub mod ammo_types;
 pub mod recoil;
 pub mod limits;
+pub mod impact;
 
 /// Dev switch: no weapon consumes ammunition while true (player and AI).
 /// Ammo economy comes back when the combat loop is tuned.

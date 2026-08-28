@@ -234,7 +234,102 @@ impl Block {
     }
 }
 
+/// One occupied cell met by `ShipGrid::walk`, in path order.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GridStep {
+    pub entity: Entity,
+    pub cell: IVec2,
+    /// Which side of the cell the ray came in through, as the unit offset
+    /// from this cell toward the cell it arrived from (`(-1, 0)` = entered
+    /// through the -x face). `(0, 0)` for the cell the walk started inside.
+    pub entry_face: IVec2,
+    /// Path length through the cell in cell widths — the line-of-sight
+    /// thickness. 1.0 for a straight pass, sqrt(2) corner to corner. This is
+    /// the number armour math should use directly; don't rebuild it as
+    /// T / cos(theta).
+    pub span: f32,
+}
+
+/// Bound on cells visited per walk. Exhaustion is a miss: a degenerate
+/// direction must not loop, and nothing the game fires crosses 24 cells
+/// (1,584 units) between two frames.
+pub const MAX_WALK_STEPS: usize = 24;
+
 impl ShipGrid {
+    /// Swept walk from `from` to `to` (ship-local CELL coordinates — block
+    /// centres sit on integers, cell (gx, gy) spans gx±0.5) yielding every
+    /// live block the segment passes through, nearest first.
+    ///
+    /// Amanatides-Woo DDA, not Bresenham: Bresenham visits one cell per
+    /// column and skips the diagonal corner cell, so a shell at the right
+    /// angle would pass through solid armour. Consecutive steps through the
+    /// same entity (multi-cell modules) are merged into one step whose span
+    /// is the total path through that block.
+    pub fn walk(&self, from: Vec2, to: Vec2) -> SmallVec<[GridStep; 8]> {
+        let mut out = SmallVec::new();
+        let delta = to - from;
+        let len = delta.length();
+        if !len.is_finite() {
+            return out;
+        }
+        // Degenerate segment: a point test of the cell we're standing in.
+        if len < 1e-4 {
+            let cell = IVec2::new(from.x.round() as i32, from.y.round() as i32);
+            if let Some(entity) = self.get(cell) {
+                out.push(GridStep { entity, cell, entry_face: IVec2::ZERO, span: 0.0 });
+            }
+            return out;
+        }
+        let dir = delta / len;
+
+        // Shift by half a cell so boundaries sit on integers.
+        let p = from + Vec2::splat(0.5);
+        let mut cell = IVec2::new(p.x.floor() as i32, p.y.floor() as i32);
+        let step = IVec2::new(dir.x.signum() as i32 * (dir.x != 0.0) as i32,
+                              dir.y.signum() as i32 * (dir.y != 0.0) as i32);
+        let axis_t = |d: f32, pos: f32, c: i32, s: i32| -> (f32, f32) {
+            if s == 0 {
+                (f32::INFINITY, f32::INFINITY)
+            } else {
+                let boundary = if s > 0 { c as f32 + 1.0 } else { c as f32 };
+                ((boundary - pos) / d, 1.0 / d.abs())
+            }
+        };
+        let (mut t_max_x, t_delta_x) = axis_t(dir.x, p.x, cell.x, step.x);
+        let (mut t_max_y, t_delta_y) = axis_t(dir.y, p.y, cell.y, step.y);
+
+        let mut t_enter = 0.0_f32;
+        let mut entry_face = IVec2::ZERO;
+        for _ in 0..MAX_WALK_STEPS {
+            let t_exit = t_max_x.min(t_max_y).min(len);
+            let span = t_exit - t_enter;
+            // A zero-span cell is a corner graze, not a pass-through.
+            if span > 1e-6 {
+                if let Some(entity) = self.get(cell) {
+                    match out.last_mut() {
+                        Some(last) if last.entity == entity => last.span += span,
+                        _ => out.push(GridStep { entity, cell, entry_face, span }),
+                    }
+                }
+            }
+            if t_exit >= len {
+                break;
+            }
+            if t_max_x < t_max_y {
+                cell.x += step.x;
+                t_enter = t_max_x;
+                t_max_x += t_delta_x;
+                entry_face = IVec2::new(-step.x, 0);
+            } else {
+                cell.y += step.y;
+                t_enter = t_max_y;
+                t_max_y += t_delta_y;
+                entry_face = IVec2::new(0, -step.y);
+            }
+        }
+        out
+    }
+
     /// Live block occupying a cell, if any.
     pub fn get(&self, cell: IVec2) -> Option<Entity> {
         self.cells.get(&cell).copied()
@@ -1357,5 +1452,112 @@ mod block_tests {
         let block = Block::module(IVec2::ZERO);
         assert_eq!(block.kind, BlockKind::Module);
         assert_eq!(block.thickness, 0.0);
+    }
+}
+
+#[cfg(test)]
+mod walk_tests {
+    use super::*;
+
+    /// Grid with one distinct entity per listed cell, plus the World that
+    /// owns those entities (dropping it would not invalidate the ids, but
+    /// keeping it makes the intent obvious).
+    fn grid_of(cells: &[IVec2]) -> (World, ShipGrid) {
+        let mut world = World::new();
+        let map = cells.iter().map(|&c| (c, world.spawn_empty().id())).collect();
+        (world, ShipGrid { cells: map })
+    }
+
+    fn cells_hit(steps: &[GridStep]) -> Vec<IVec2> {
+        steps.iter().map(|s| s.cell).collect()
+    }
+
+    #[test]
+    fn straight_pass_visits_each_cell_once_with_unit_span() {
+        let (_w, grid) = grid_of(&[IVec2::new(0, 0), IVec2::new(1, 0), IVec2::new(2, 0)]);
+        let steps = grid.walk(Vec2::new(-1.0, 0.0), Vec2::new(3.0, 0.0));
+        assert_eq!(cells_hit(&steps), vec![IVec2::new(0, 0), IVec2::new(1, 0), IVec2::new(2, 0)]);
+        for s in &steps {
+            assert!((s.span - 1.0).abs() < 1e-4, "span {}", s.span);
+        }
+        assert_eq!(steps[0].entry_face, IVec2::new(-1, 0));
+    }
+
+    #[test]
+    fn a_225_unit_frame_step_still_registers() {
+        // Railgun + APFSDS: 225 units/frame = 3.4 cells. A point test at the
+        // new position skips clean over a one-cell wall; the swept walk
+        // cannot.
+        let (_w, grid) = grid_of(&[IVec2::new(0, 0)]);
+        let before = Vec2::new(-2.0, 0.0);
+        let after = before + Vec2::new(225.0 / 66.0, 0.0);
+        assert!(after.x > 1.0, "the wall is strictly between the two samples");
+        let steps = grid.walk(before, after);
+        assert_eq!(cells_hit(&steps), vec![IVec2::new(0, 0)]);
+    }
+
+    #[test]
+    fn much_faster_than_anything_fired_still_registers() {
+        let (_w, grid) = grid_of(&[IVec2::new(5, 3)]);
+        let steps = grid.walk(Vec2::new(-4.0, 0.0), Vec2::new(14.0, 6.0));
+        assert_eq!(cells_hit(&steps), vec![IVec2::new(5, 3)]);
+    }
+
+    #[test]
+    fn diagonal_visits_corner_cells_bresenham_would_skip() {
+        // Slope 1/2 from (0,0) to (2,1) passes through (1,0) AND (1,1). A
+        // one-cell-per-column stepper picks one of them.
+        for corner in [IVec2::new(1, 0), IVec2::new(1, 1)] {
+            let (_w, grid) = grid_of(&[corner]);
+            let steps = grid.walk(Vec2::ZERO, Vec2::new(2.0, 1.0));
+            assert_eq!(cells_hit(&steps), vec![corner], "corner {corner:?} was skipped");
+        }
+    }
+
+    #[test]
+    fn diagonal_span_is_line_of_sight_thickness() {
+        let (_w, grid) = grid_of(&[IVec2::ZERO]);
+        // Corner to corner of cell (0,0): from (-0.5,-0.5) to (0.5,0.5).
+        let steps = grid.walk(Vec2::new(-1.0, -1.0), Vec2::new(1.0, 1.0));
+        let cell = steps.iter().find(|s| s.cell == IVec2::ZERO).expect("centre cell hit");
+        assert!((cell.span - 2f32.sqrt()).abs() < 1e-3, "span {}", cell.span);
+    }
+
+    #[test]
+    fn multi_cell_module_is_one_step_with_summed_span() {
+        let mut world = World::new();
+        let module = world.spawn_empty().id();
+        let grid = ShipGrid {
+            cells: [(IVec2::new(0, 0), module), (IVec2::new(1, 0), module)].into_iter().collect(),
+        };
+        let steps = grid.walk(Vec2::new(-1.0, 0.0), Vec2::new(2.0, 0.0));
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].entity, module);
+        assert!((steps[0].span - 2.0).abs() < 1e-4, "span {}", steps[0].span);
+    }
+
+    #[test]
+    fn empty_and_missed_walks_yield_nothing() {
+        let (_w, grid) = grid_of(&[IVec2::new(0, 3)]);
+        assert!(grid.walk(Vec2::new(-1.0, 0.0), Vec2::new(3.0, 0.0)).is_empty());
+        let (_w2, empty) = grid_of(&[]);
+        assert!(empty.walk(Vec2::new(-1.0, 0.0), Vec2::new(3.0, 0.0)).is_empty());
+    }
+
+    #[test]
+    fn zero_length_walk_is_a_point_test() {
+        let (_w, grid) = grid_of(&[IVec2::new(2, -1)]);
+        let inside = grid.walk(Vec2::new(2.2, -1.3), Vec2::new(2.2, -1.3));
+        assert_eq!(cells_hit(&inside), vec![IVec2::new(2, -1)]);
+        assert!(grid.walk(Vec2::new(0.0, 0.0), Vec2::new(0.0, 0.0)).is_empty());
+    }
+
+    #[test]
+    fn walk_is_bounded_and_survives_nan() {
+        let (_w, grid) = grid_of(&[IVec2::new(50, 0)]);
+        // 200 cells requested, cap is MAX_WALK_STEPS: exhaustion is a miss.
+        assert!(grid.walk(Vec2::new(-100.0, 0.0), Vec2::new(100.0, 0.0)).is_empty());
+        assert!(grid.walk(Vec2::new(f32::NAN, 0.0), Vec2::new(1.0, 0.0)).is_empty());
+        assert!(grid.walk(Vec2::ZERO, Vec2::new(f32::INFINITY, 0.0)).is_empty());
     }
 }
