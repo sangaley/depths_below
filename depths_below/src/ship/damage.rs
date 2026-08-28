@@ -6,16 +6,12 @@ use crate::building::rooms::RoomMap;
 use crate::building::GridOccupancy;
 use super::hull::{mix_color, DAMAGE_TINT_TARGET};
 
-/// Internal enum for sorting damage targets along an attack ray
-enum DamageTarget {
-    Hull { entity: Entity, grid_pos: IVec2, projection: f32 },
-    Module { entity: Entity, _grid_pos: IVec2, projection: f32 },
-}
-
 /// Consumes ShipDamaged events and applies damage using directional kinetic penetration.
 ///
-/// If direction is available: collect all hull/module tiles, project onto attack ray,
-/// walk outermost-first applying penetration damage.
+/// If direction is available: sweep the shot's line through the player's
+/// ShipGrid from the reported impact point inward, damaging the blocks it
+/// actually passes through, outermost first (armour absorbs by material
+/// rating, the remainder continues — see combat::impact::resolve_impact).
 /// If no direction (radiation, explosion): fall back to random hull segment.
 /// PLAYER SHIP ONLY: hull/module queries are filtered to the player's own
 /// children. Unscoped, the "outermost block first" damage walk collected the
@@ -34,6 +30,8 @@ pub fn process_ship_damage(
     mut notifications: MessageWriter<ShowNotification>,
     mut commands: Commands,
     debug_tuning: Res<crate::debug::DebugTuning>,
+    grid_query: Query<&crate::building::ShipGrid>,
+    block_query: Query<&crate::building::Block>,
 ) {
     let mut rng = rand::thread_rng();
 
@@ -74,102 +72,93 @@ pub fn process_ship_damage(
         });
 
         if let Some(dir) = direction {
-            // === DIRECTIONAL DAMAGE WITH PENETRATION ===
-            let mut targets: Vec<DamageTarget> = Vec::new();
+            // === SWEPT GRID WALK ===
+            // `dir` points from the ship TOWARD the attacker (every writer
+            // agrees on that); the round travels the other way. Start a cell
+            // and a half outside the reported impact point and walk inward
+            // through the player's ShipGrid, so the blocks damaged are the
+            // ones physically on the shot's line. The old code rayed through
+            // the ship's CENTROID, ignored event.position entirely, and
+            // damaged a 3-cell-wide column — a shot into the bow could hurt
+            // the far side of the ship before the plate it actually struck.
+            let travel = -dir;
+            let impact_pos = event.position.unwrap_or(ship_center + dir * 66.0 * 12.0);
+            let start = impact_pos + dir * 66.0 * 1.5;
+            let end = start + travel * 66.0 * crate::building::MAX_WALK_STEPS as f32;
+            let inv = player_gt.affine().inverse();
+            let to_cell = |world: Vec2| {
+                let p = inv.transform_point3(world.extend(0.0)).truncate();
+                Vec2::new(p.x / 66.0, (p.y + 33.0) / 66.0)
+            };
+            let mut steps = grid_query
+                .get(player_ship)
+                .map(|grid| grid.walk(to_cell(start), to_cell(end)))
+                .unwrap_or_default();
 
-            // Collect hull targets (player's own hull only)
-            for (entity, hull, gt, parent) in hull_query.iter() {
-                if parent.parent() != player_ship { continue; }
-                let pos = gt.translation().truncate();
-                let to_tile = pos - ship_center;
-                let projection = to_tile.dot(dir);
-                // Filter: only tiles near the attack ray (within 1.5 grid cells perpendicular)
-                let perp_dist = (to_tile - dir * projection).length();
-                if perp_dist < 1.5 * 66.0 {
-                    targets.push(DamageTarget::Hull {
-                        entity,
-                        grid_pos: hull.grid_position,
-                        projection,
-                    });
+            // Line missed the grid entirely (impact reported off-hull):
+            // the nearest live plate to the impact point takes it.
+            if steps.is_empty() {
+                let nearest = hull_query.iter()
+                    .filter(|(_, _, _, parent)| parent.parent() == player_ship)
+                    .map(|(e, hull, gt, _)| (e, hull.grid_position, gt.translation().truncate().distance_squared(impact_pos)))
+                    .filter(|(_, _, d)| *d < (2.0 * 66.0_f32).powi(2))
+                    .min_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal));
+                if let Some((entity, cell, _)) = nearest {
+                    steps.push(crate::building::GridStep { entity, cell, entry_face: IVec2::ZERO, span: 1.0 });
                 }
             }
-
-            // Collect module targets (player's own modules only)
-            for (entity, module, gt, parent) in module_query.iter() {
-                if parent.parent() != player_ship { continue; }
-                let pos = gt.translation().truncate();
-                let to_tile = pos - ship_center;
-                let projection = to_tile.dot(dir);
-                let perp_dist = (to_tile - dir * projection).length();
-                if perp_dist < 1.5 * 66.0 {
-                    targets.push(DamageTarget::Module {
-                        entity,
-                        _grid_pos: module.grid_position,
-                        projection,
-                    });
-                }
-            }
-
-            // Sort outermost-first (highest projection = closest to attacker)
-            targets.sort_by(|a, b| {
-                let pa = match a { DamageTarget::Hull { projection, .. } | DamageTarget::Module { projection, .. } => *projection };
-                let pb = match b { DamageTarget::Hull { projection, .. } | DamageTarget::Module { projection, .. } => *projection };
-                pb.partial_cmp(&pa).unwrap_or(std::cmp::Ordering::Equal)
-            });
 
             let mut remaining_damage = event.amount;
-
-            for target in &targets {
+            for step in steps {
                 if remaining_damage <= 0.0 {
                     break;
                 }
+                let block = block_query
+                    .get(step.entity)
+                    .copied()
+                    .unwrap_or(crate::building::Block::module(step.cell));
 
-                match target {
-                    DamageTarget::Hull { entity, grid_pos, .. } => {
-                        if let Ok((_, mut hull, _, _)) = hull_query.get_mut(*entity) {
-                            let absorbed = hull.material.damage_absorption().min(remaining_damage);
-                            hull.health = (hull.health - absorbed).max(0.0);
-                            remaining_damage -= absorbed;
+                if let Ok((_, mut hull, _, parent)) = hull_query.get_mut(step.entity) {
+                    if parent.parent() != player_ship { continue; }
+                    let impact = crate::combat::impact::resolve_impact(remaining_damage, &block, step.span, None);
+                    hull.health = (hull.health - impact.to_block).max(0.0);
+                    remaining_damage = impact.through;
 
-                            let health_pct = if hull.max_health > 0.0 {
-                                hull.health / hull.max_health
-                            } else {
-                                0.0
-                            };
+                    let health_pct = if hull.max_health > 0.0 {
+                        hull.health / hull.max_health
+                    } else {
+                        0.0
+                    };
 
-                            // Breach if health drops below 30%
-                            if health_pct < 0.3 && !hull.is_depressurized {
-                                hull.is_depressurized = true;
-                                breach_events.write(HullBreached {
-                                    segment: *entity,
-                                    severity: 1.0 - health_pct,
-                                });
+                    // Breach if health drops below 30%
+                    if health_pct < 0.3 && !hull.is_depressurized {
+                        hull.is_depressurized = true;
+                        breach_events.write(HullBreached {
+                            segment: step.entity,
+                            severity: 1.0 - health_pct,
+                        });
 
-                                // Send RoomDepressurized if this tile is in a room
-                                if let Some(&room_id) = room_map.tile_to_room.get(grid_pos) {
-                                    room_depressurize_events.write(RoomDepressurized {
-                                        room_id,
-                                        severity: 1.0 - health_pct,
-                                    });
-                                }
-
-                                notifications.write(ShowNotification {
-                                    message: "Hull breach! Decompression in progress!".into(),
-                                    notification_type: NotificationType::Danger,
-                                    duration: 3.0,
-                                });
-                            }
+                        // Send RoomDepressurized if this tile is in a room
+                        if let Some(&room_id) = room_map.tile_to_room.get(&hull.grid_position) {
+                            room_depressurize_events.write(RoomDepressurized {
+                                room_id,
+                                severity: 1.0 - health_pct,
+                            });
                         }
+
+                        notifications.write(ShowNotification {
+                            message: "Hull breach! Decompression in progress!".into(),
+                            notification_type: NotificationType::Danger,
+                            duration: 3.0,
+                        });
                     }
-                    DamageTarget::Module { entity, .. } => {
-                        if let Ok((_, mut module, _, _)) = module_query.get_mut(*entity) {
-                            // Modules take 70% of remaining damage as HP damage
-                            let module_damage = remaining_damage * 0.7;
-                            module.health = (module.health - module_damage).max(0.0);
-                            // Absorb 50% of remaining damage
-                            remaining_damage *= 0.5;
-                        }
-                    }
+                } else if let Ok((_, mut module, _, parent)) = module_query.get_mut(step.entity) {
+                    if parent.parent() != player_ship { continue; }
+                    // Modules take 70% of remaining damage as HP damage
+                    let module_damage = remaining_damage * 0.7;
+                    module.health = (module.health - module_damage).max(0.0);
+                    // Absorb 50% of remaining damage
+                    remaining_damage *= 0.5;
                 }
             }
         } else {

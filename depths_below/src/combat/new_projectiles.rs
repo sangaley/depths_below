@@ -479,12 +479,14 @@ pub fn check_projectile_hits(
     mut creature_query: Query<(&Transform, &mut Creature), Without<Ship>>,
     creature_grid: Res<crate::spatial::CreatureGrid>,
     mut ai_ship_query: Query<
-        (Entity, &Transform, &Children, &mut crate::combat::shields::ShipShield),
+        (Entity, &Transform, &GlobalTransform, &Children, &mut crate::combat::shields::ShipShield),
         With<crate::ai_ship::components::AiShip>,
     >,
     mut ai_module_query: Query<(&mut Module, &GlobalTransform), Without<DestroyedModule>>,
     mut ai_hull_query: Query<(&mut HullSegment, &GlobalTransform), Without<crate::components::HullDestroyed>>,
     owner_parent_query: Query<&ChildOf>,
+    grid_query: Query<&crate::building::ShipGrid>,
+    block_query: Query<&crate::building::Block>,
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
     _notifications: MessageWriter<ShowNotification>,
 ) {
@@ -496,7 +498,7 @@ pub fn check_projectile_hits(
         let owner_ship = owner_parent_query.get(proj.owner).ok().map(|p| p.parent());
 
         // === AI SHIPS: shield first, then block-by-block hull damage ===
-        for (ai_entity, ai_transform, children, mut shield) in ai_ship_query.iter_mut() {
+        for (ai_entity, ai_transform, ai_gt, children, mut shield) in ai_ship_query.iter_mut() {
             if Some(ai_entity) == owner_ship { continue; }
             // Bubble is centered on the blocks' centroid, not the root
             let center = shield.world_center(ai_transform);
@@ -522,105 +524,78 @@ pub fn check_projectile_hits(
             // Scan bound follows the ship's real extent (shield radius is
             // computed from it) — a fixed bound left long hulls unhittable.
             if dist_to_ship < shield.radius + 60.0 {
-                // Skip proj.last_hit: a penetrator that just went through a
-                // block is still inside its 45-unit radius next frame.
-// Sweep the whole step, not just where the round ended up.
-                // Ranked by `t` — the block crossed FIRST wins, which is also
-                // the correct answer when a step spans several blocks. The old
-                // "nearest centre to the current position" rank picked
-                // whichever block happened to be closest at the sample point,
-                // which on a long step could be one BEHIND the armour the
-                // round should have struck on the way in.
-                let mut best_module: Option<(Entity, f32, f32)> = None;
-                for child in children.iter() {
-                    if Some(child) == proj.last_hit { continue; }
-                    if let Ok((_, gt)) = ai_module_query.get(child) {
-                        let (d, t) = segment_closest(proj.prev_pos, proj_pos, gt.translation().truncate());
-                        if d < 45.0 && best_module.map(|(_, _, bt)| t < bt).unwrap_or(true) {
-                            best_module = Some((child, d, t));
-                        }
-                    }
-                }
-                let mut best_hull: Option<(Entity, f32, f32)> = None;
-                for child in children.iter() {
-                    if Some(child) == proj.last_hit { continue; }
-                    if let Ok((_, gt)) = ai_hull_query.get(child) {
-                        let (d, t) = segment_closest(proj.prev_pos, proj_pos, gt.translation().truncate());
-                        if d < 45.0 && best_hull.map(|(_, _, bt)| t < bt).unwrap_or(true) {
-                            best_hull = Some((child, d, t));
-                        }
-                    }
-                }
-
-                // Whichever was crossed first. Ties (same t) fall back to the
-                // nearer centre, preserving the old behaviour for the common
-                // case of a short step touching one cell.
-                let hit_module = match (best_module, best_hull) {
-                    (Some((_, md, mt)), Some((_, hd, ht))) => {
-                        if (mt - ht).abs() < 1e-4 { md <= hd } else { mt < ht }
-                    }
-                    (Some(_), None) => true,
-                    _ => false,
+                // NARROW PHASE: the grid IS the hitbox. Sweep the segment
+                // from where the round WAS last frame to where it is now
+                // through this ship's cell space (building::ShipGrid::walk);
+                // the blocks it passed through come back in order, nearest
+                // first. Two bugs die here: fast rounds no longer tunnel
+                // between samples (a railgun/APFSDS step is 2-3 cells), and
+                // occupancy is cell membership — no 45-unit circles over-
+                // covering flat faces and leaking through corner seams.
+                let Ok(grid) = grid_query.get(ai_entity) else { continue };
+                let inv = ai_gt.affine().inverse();
+                let to_cell = |world: Vec2| {
+                    let p = inv.transform_point3(world.extend(0.0)).truncate();
+                    Vec2::new(p.x / 66.0, (p.y + 33.0) / 66.0)
                 };
+                let step = grid
+                    .walk(to_cell(proj.prev_pos), to_cell(proj_pos))
+                    .into_iter()
+                    // A penetrator is still inside the block it just went
+                    // through; keep walking to the one behind it.
+                    .find(|s| Some(s.entity) != proj.last_hit);
+                let Some(step) = step else { continue };
+                let block = block_query
+                    .get(step.entity)
+                    .copied()
+                    .unwrap_or(crate::building::Block::module(step.cell));
 
                 // Primary hit: damage the struck block, remember where.
-                let primary: Option<(Entity, Vec2)> = if hit_module {
-                    let target = best_module.unwrap().0;
-                    // ARMOUR EXPOSURE — a module still under live plating only
-                    // takes the share of the round its ammo can drive through;
-                    // the rest is spent on the plate. Modules used to eat full
-                    // damage through intact armour purely because their sprite
-                    // centre happened to be a hair nearer the projectile, which
-                    // made hull thickness and ammo choice both meaningless.
-                    let module_pos = ai_module_query.get(target).ok()
-                        .map(|(_, gt)| gt.translation().truncate());
-                    let cover: Option<Entity> = module_pos.and_then(|mpos| {
-                        children.iter().find(|child| {
-                            ai_hull_query.get(*child).ok().is_some_and(|(hull, gt)| {
-                                hull.health > 0.0
-                                    && gt.translation().truncate().distance(mpos) < 33.0
-                            })
-                        })
-                    });
-
-                    let pass = match cover {
-                        Some(_) => crate::combat::ammo_types::armor_pass_through(proj.ammo),
-                        // Plate already gone (or the module is an external
-                        // mount): fully exposed, takes everything.
-                        None => 1.0,
-                    };
-                    let to_module = proj.damage * pass;
-                    let to_plate = proj.damage - to_module;
-
-                    if let (Some(plate), true) = (cover, to_plate > 0.0) {
-                        if let Ok((mut hull, gt)) = ai_hull_query.get_mut(plate) {
-                            hull.health = (hull.health - to_plate).max(0.0);
-                            spawn_floating_damage(
-                                &mut commands,
-                                gt.translation().truncate(),
-                                to_plate,
-                                Color::srgb(1.0, 0.3, 0.3),
-                            );
-                        }
-                    }
-
-                    ai_module_query.get_mut(target).ok().map(|(mut module, gt)| {
-                        module.health = (module.health - to_module).max(0.0);
-                        let hit_pos = gt.translation().truncate();
+                let primary: Option<(Entity, Vec2)> = if let Ok((_, gt)) = ai_module_query.get(step.entity) {
+                    // A cell holding armour resolves to the plate (hull wins
+                    // the cell in update_ship_grids), so reaching a module
+                    // means nothing covers it: fully exposed, takes everything.
+                    let hit_pos = gt.translation().truncate();
+                    let impact = crate::combat::impact::resolve_impact(proj.damage, &block, step.span, Some(0.0));
+                    ai_module_query.get_mut(step.entity).ok().map(|(mut module, _)| {
+                        module.health = (module.health - impact.to_block).max(0.0);
                         spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.6, 0.2), 12.0);
-                        spawn_floating_damage(&mut commands, hit_pos, to_module, Color::srgb(1.0, 0.8, 0.3));
-                        (target, hit_pos)
-                    })
-                } else if let Some((hull_entity, _, _)) = best_hull {
-                    ai_hull_query.get_mut(hull_entity).ok().map(|(mut hull, gt)| {
-                        hull.health = (hull.health - proj.damage).max(0.0);
-                        let hit_pos = gt.translation().truncate();
-                        spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.5, 0.2), 16.0);
-                        spawn_floating_damage(&mut commands, hit_pos, proj.damage, Color::srgb(1.0, 0.3, 0.3));
-                        (hull_entity, hit_pos)
+                        spawn_floating_damage(&mut commands, hit_pos, impact.to_block, Color::srgb(1.0, 0.8, 0.3));
+                        (step.entity, hit_pos)
                     })
                 } else {
-                    None
+                    // ARMOUR EXPOSURE — a module still under live plating only
+                    // takes the share of the round its ammo can drive through;
+                    // the plate spends the rest. The walk lands on the plate
+                    // (it owns the cell), so the module beneath is found by
+                    // footprint, not by which sprite centre happened to be a
+                    // hair nearer the round.
+                    let covered = children.iter().find(|child| {
+                        ai_module_query.get(*child).ok().is_some_and(|(module, _)| {
+                            let footprint = crate::building::footprints::footprint_override(module.module_type);
+                            crate::building::ShipGrid::cells_for(module.grid_position, module.size, module.rotation, footprint)
+                                .contains(&step.cell)
+                        })
+                    });
+                    let pass = match covered {
+                        Some(_) => crate::combat::ammo_types::armor_pass_through(proj.ammo),
+                        None => 0.0,
+                    };
+                    let impact = crate::combat::impact::resolve_impact(proj.damage, &block, step.span, Some(pass));
+                    let hull_hit = ai_hull_query.get_mut(step.entity).ok().map(|(mut hull, gt)| {
+                        hull.health = (hull.health - impact.to_block).max(0.0);
+                        let hit_pos = gt.translation().truncate();
+                        spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.5, 0.2), 16.0);
+                        spawn_floating_damage(&mut commands, hit_pos, impact.to_block, Color::srgb(1.0, 0.3, 0.3));
+                        (step.entity, hit_pos)
+                    });
+                    if let (Some(module_entity), true) = (covered, impact.through > 0.0) {
+                        if let Ok((mut module, gt)) = ai_module_query.get_mut(module_entity) {
+                            module.health = (module.health - impact.through).max(0.0);
+                            spawn_floating_damage(&mut commands, gt.translation().truncate(), impact.through, Color::srgb(1.0, 0.8, 0.3));
+                        }
+                    }
+                    hull_hit
                 };
 
                 let Some((hit_entity, hit_pos)) = primary else { continue };

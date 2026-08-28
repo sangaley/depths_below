@@ -609,9 +609,13 @@ pub fn resolve_collisions(
             // the player 17% of already-small damage — invisible in play).
             let (weight_a, weight_b) = (inv_a.sqrt(), inv_b.sqrt());
             let total_weight = weight_a + weight_b;
+            // ShipDamaged/AiShipDamaged `direction` points from the ship
+            // TOWARD the attacker (the convention every other writer uses,
+            // and what process_ship_damage walks inward from). `normal`
+            // runs a -> b, so for a the attacker lies along +normal.
             for (entity, other, share, into) in [
-                (a, b, weight_a / total_weight, -normal),
-                (b, a, weight_b / total_weight, normal),
+                (a, b, weight_a / total_weight, normal),
+                (b, a, weight_b / total_weight, -normal),
             ] {
                 let amount =
                     (energy * share * ram_profile(other).0 * ram_profile(entity).1).min(150.0);
