@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use crate::components::{Ship, Module, ModuleType, HullSegment, Projectile};
+use crate::components::{Ship, Module, ModuleType, HullSegment, Projectile, DestroyedModule, HullDestroyed};
 use crate::ai_ship::components::{AiShip, AiShipType};
 use std::collections::HashSet;
 use bevy::asset::RenderAssetUsages;
@@ -95,12 +95,22 @@ pub(crate) struct ShieldSegment {
     size: Vec2,
 }
 
+/// Live blocks only: a block that has been shot off no longer shapes the
+/// ship, and hull segments count as much as modules — an outer-hull-only
+/// nose was invisible to the extent before, so the bubble (and the hull hit
+/// radius derived from it) stopped short of the real bow.
+pub type LiveBlockFilter = (
+    Or<(With<Module>, With<HullSegment>)>,
+    Without<DestroyedModule>,
+    Without<HullDestroyed>,
+);
+
 /// Bubble geometry that actually wraps the ship: centered on the blocks'
 /// centroid (the root is often at one end of the layout), radius = farthest
 /// block from that centroid plus margin. Root-centered fixed radii produced
 /// huge off-center bubbles with the ship poking out one side.
-fn ship_extent(ship: Entity, modules: &Query<(&Transform, &ChildOf), With<Module>>) -> (Vec2, f32) {
-    let positions: Vec<Vec2> = modules.iter()
+fn ship_extent(ship: Entity, blocks: &Query<(&Transform, &ChildOf), LiveBlockFilter>) -> (Vec2, f32) {
+    let positions: Vec<Vec2> = blocks.iter()
         .filter(|(_, p)| p.parent() == ship)
         .map(|(t, _)| t.translation.truncate())
         .collect();
@@ -112,6 +122,31 @@ fn ship_extent(ship: Entity, modules: &Query<(&Transform, &ChildOf), With<Module
         .map(|p| p.distance(centroid))
         .fold(0.0_f32, f32::max);
     (centroid, (max_dist + 70.0).max(150.0))
+}
+
+/// Keeps every shield's centre/radius tracking the ship's LIVE extent.
+/// Both attach systems computed it once at spawn and never again, so a
+/// ship shot to pieces kept its launch-day hittable radius — the ghost
+/// hitbox that let shots "connect" with empty space where blocks used to
+/// be (combat/projectiles.rs and check_projectile_hits both bound their
+/// hull search on `shield.radius`). Gated on the live block count, same
+/// trick as building::update_ship_grids: a block dying or being marked
+/// destroyed changes the count, an idle frame costs one archetype walk.
+pub fn refresh_shield_extents(
+    blocks: Query<(&Transform, &ChildOf), LiveBlockFilter>,
+    mut shields: Query<(Entity, &mut ShipShield)>,
+    mut last_count: Local<usize>,
+) {
+    let count = blocks.iter().count();
+    if count == *last_count {
+        return;
+    }
+    *last_count = count;
+    for (ship, mut shield) in shields.iter_mut() {
+        let (center, radius) = ship_extent(ship, &blocks);
+        shield.center_offset = center;
+        shield.radius = radius;
+    }
 }
 
 /// The grid cells the ship occupies (module footprints + hull segments). Cell
@@ -266,7 +301,7 @@ pub fn attach_player_shield(
     mut commands: Commands,
     ship_query: Query<Entity, (With<Ship>, Without<ShipShield>)>,
     module_query: Query<(&Module, &ChildOf)>,
-    transform_query: Query<(&Transform, &ChildOf), With<Module>>,
+    transform_query: Query<(&Transform, &ChildOf), LiveBlockFilter>,
 ) {
     let Ok(ship) = ship_query.single() else { return };
 
@@ -340,7 +375,7 @@ pub fn attach_ai_shields(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     ai_query: Query<(Entity, &AiShipType, &Children), (With<AiShip>, Without<ShipShield>)>,
-    transform_query: Query<(&Transform, &ChildOf), With<Module>>,
+    transform_query: Query<(&Transform, &ChildOf), LiveBlockFilter>,
     module_query: Query<(&Module, &ChildOf)>,
     hull_query: Query<(&HullSegment, &ChildOf)>,
 ) {

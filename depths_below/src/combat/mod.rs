@@ -206,6 +206,7 @@ impl Plugin for CombatPlugin {
                 shields::refresh_player_shield_skin,
                 shields::refresh_player_shield_capacity.before(shields::update_shields),
                 shields::attach_ai_shields,
+                shields::refresh_shield_extents.before(shields::update_shields),
                 shields::toggle_player_shield,
                 shields::update_player_shield_arc,
                 shields::update_ai_shield_arcs,
