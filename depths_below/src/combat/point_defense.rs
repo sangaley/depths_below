@@ -132,6 +132,7 @@ pub fn intercept_missiles(
                 ammo: None, // PD rounds have no special on-hit behavior
                 caliber: 0.3,
                 last_hit: None,
+                prev_pos: weapon_pos,
             },
             Velocity(direction * proj_speed),
         ));

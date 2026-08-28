@@ -32,6 +32,35 @@ pub struct Projectile {
     /// block is still inside its hit radius next frame; without this it
     /// would hit the same block twice instead of the one behind it.
     pub last_hit: Option<Entity>,
+    /// Where this round was at the END of the previous frame.
+    ///
+    /// Projectiles don't travel, they teleport: `move_projectiles` adds
+    /// `velocity * dt` once per frame. A railgun does 9000 u/s = 150 units
+    /// per frame at 60fps, and hit detection only looked at the round's
+    /// CURRENT position with a 45-unit radius — a 90-unit window on a
+    /// 150-unit stride. The 60-unit blind spot in between was never tested,
+    /// and blocks are 66 units apart, so fast rounds flew straight through
+    /// solid ships. Worse for APFSDS (x1.5 speed → 225-unit stride) and
+    /// worse again whenever the framerate dropped, i.e. during big fights.
+    ///
+    /// Hit tests sweep `prev_pos -> current` instead, so there is no gap
+    /// left to hide in regardless of speed or frame time.
+    pub prev_pos: Vec2,
+}
+
+/// Closest approach between point `p` and segment `a -> b`.
+/// Returns (distance, t) where t is 0 at `a` and 1 at `b`.
+///
+/// t is what orders hits along the round's path: the block it crossed FIRST
+/// wins, not the one whose centre happens to sit nearest the segment.
+pub fn segment_closest(a: Vec2, b: Vec2, p: Vec2) -> (f32, f32) {
+    let ab = b - a;
+    let len_sq = ab.length_squared();
+    if len_sq < 1e-6 {
+        return (a.distance(p), 0.0);
+    }
+    let t = ((p - a).dot(ab) / len_sq).clamp(0.0, 1.0);
+    (a.lerp(b, t).distance(p), t)
 }
 
 /// A block set on fire by incendiary rounds — ticks damage until it burns out.
@@ -375,6 +404,7 @@ pub fn fire_weapons_system(
                     ammo: selected_ammo.map(|a| a.0),
                     caliber: caliber_scale(module.module_type),
                     last_hit: None,
+                    prev_pos: weapon_pos,
                 },
                 Velocity(vel),
                 GravityAffected { mass: 0.5 }, // Projectiles affected by gravity (slightly)
@@ -409,6 +439,11 @@ pub fn move_projectiles(
     for (entity, mut proj, mut transform, mut velocity, gravity) in proj_query.iter_mut() {
         // Apply gravity to velocity
         velocity.0 += gravity.0 * dt * 0.5; // Projectiles resist gravity more than ships
+
+        // Remember where the round was before this step. check_projectile_hits
+        // runs immediately after this system and sweeps prev_pos -> current,
+        // so nothing can slip through the gap between two frames.
+        proj.prev_pos = transform.translation.truncate();
 
         // Move
         transform.translation.x += velocity.0.x * dt;
@@ -489,29 +524,44 @@ pub fn check_projectile_hits(
             if dist_to_ship < shield.radius + 60.0 {
                 // Skip proj.last_hit: a penetrator that just went through a
                 // block is still inside its 45-unit radius next frame.
-                let mut best_module: Option<(Entity, f32)> = None;
+// Sweep the whole step, not just where the round ended up.
+                // Ranked by `t` — the block crossed FIRST wins, which is also
+                // the correct answer when a step spans several blocks. The old
+                // "nearest centre to the current position" rank picked
+                // whichever block happened to be closest at the sample point,
+                // which on a long step could be one BEHIND the armour the
+                // round should have struck on the way in.
+                let mut best_module: Option<(Entity, f32, f32)> = None;
                 for child in children.iter() {
                     if Some(child) == proj.last_hit { continue; }
                     if let Ok((_, gt)) = ai_module_query.get(child) {
-                        let d = proj_pos.distance(gt.translation().truncate());
-                        if d < 45.0 && best_module.map(|(_, bd)| d < bd).unwrap_or(true) {
-                            best_module = Some((child, d));
+                        let (d, t) = segment_closest(proj.prev_pos, proj_pos, gt.translation().truncate());
+                        if d < 45.0 && best_module.map(|(_, _, bt)| t < bt).unwrap_or(true) {
+                            best_module = Some((child, d, t));
                         }
                     }
                 }
-                let mut best_hull: Option<(Entity, f32)> = None;
+                let mut best_hull: Option<(Entity, f32, f32)> = None;
                 for child in children.iter() {
                     if Some(child) == proj.last_hit { continue; }
                     if let Ok((_, gt)) = ai_hull_query.get(child) {
-                        let d = proj_pos.distance(gt.translation().truncate());
-                        if d < 45.0 && best_hull.map(|(_, bd)| d < bd).unwrap_or(true) {
-                            best_hull = Some((child, d));
+                        let (d, t) = segment_closest(proj.prev_pos, proj_pos, gt.translation().truncate());
+                        if d < 45.0 && best_hull.map(|(_, _, bt)| t < bt).unwrap_or(true) {
+                            best_hull = Some((child, d, t));
                         }
                     }
                 }
 
-                let hit_module = matches!((best_module, best_hull), (Some((_, md)), Some((_, hd))) if md <= hd)
-                    || (best_module.is_some() && best_hull.is_none());
+                // Whichever was crossed first. Ties (same t) fall back to the
+                // nearer centre, preserving the old behaviour for the common
+                // case of a short step touching one cell.
+                let hit_module = match (best_module, best_hull) {
+                    (Some((_, md, mt)), Some((_, hd, ht))) => {
+                        if (mt - ht).abs() < 1e-4 { md <= hd } else { mt < ht }
+                    }
+                    (Some(_), None) => true,
+                    _ => false,
+                };
 
                 // Primary hit: damage the struck block, remember where.
                 let primary: Option<(Entity, Vec2)> = if hit_module {
@@ -561,7 +611,7 @@ pub fn check_projectile_hits(
                         spawn_floating_damage(&mut commands, hit_pos, to_module, Color::srgb(1.0, 0.8, 0.3));
                         (target, hit_pos)
                     })
-                } else if let Some((hull_entity, _)) = best_hull {
+                } else if let Some((hull_entity, _, _)) = best_hull {
                     ai_hull_query.get_mut(hull_entity).ok().map(|(mut hull, gt)| {
                         hull.health = (hull.health - proj.damage).max(0.0);
                         let hit_pos = gt.translation().truncate();
@@ -696,7 +746,15 @@ pub fn check_projectile_hits(
             }
         });
 
-        for (creature_entity, _) in creature_grid.0.nearby(proj_pos, MAX_CREATURE_HIT_RADIUS) {
+// Broad phase has to cover the whole step, not the end of it: the
+        // grid query is centred on the segment's midpoint and widened by half
+        // its length. Small creatures are where the old point test hurt most
+        // — a VoidDrifter's 12-unit radius is a 24-unit window against a
+        // railgun's 150-unit stride, so roughly five shots in six missed a
+        // target they were aimed straight at.
+        let sweep_mid = (proj.prev_pos + proj_pos) * 0.5;
+        let sweep_half = proj.prev_pos.distance(proj_pos) * 0.5;
+        for (creature_entity, _) in creature_grid.0.nearby(sweep_mid, sweep_half + MAX_CREATURE_HIT_RADIUS) {
             let Ok((creature_transform, mut creature)) = creature_query.get_mut(creature_entity) else { continue };
             if creature.health <= 0.0 { continue; }
 
@@ -708,7 +766,7 @@ pub fn check_projectile_hits(
                 CreatureType::VoidDrifter => 12.0,
             };
 
-            let dist = proj_pos.distance(creature_pos);
+            let (dist, _) = segment_closest(proj.prev_pos, proj_pos, creature_pos);
             if dist > hit_radius { continue; }
 
             // HIT!
@@ -817,5 +875,90 @@ pub fn tick_burning_blocks(
         if burning.remaining <= 0.0 {
             commands.entity(entity).remove::<BlockBurning>();
         }
+    }
+}
+
+#[cfg(test)]
+mod sweep_tests {
+    use super::*;
+
+    // Real numbers from the bug: cells are 66 units, the per-block hit radius
+    // is 45.0, and base_projectile_speed puts a Railgun at 9000 u/s — 150
+    // units per frame at 60fps, or 225 with APFSDS's 1.5x multiplier.
+    const HIT_RADIUS: f32 = 45.0;
+    const RAILGUN_STEP: f32 = 150.0;
+    const APFSDS_STEP: f32 = 225.0;
+
+    /// The tunneling case. A block 100 units along a 150-unit step was 100
+    /// away when the frame began and 50 away when it ended — outside the
+    /// 45-unit radius at BOTH sample points, so the old point test never saw
+    /// it and the round flew through solid armour.
+    #[test]
+    fn fast_round_does_not_tunnel_through_a_block() {
+        let (prev, cur) = (Vec2::ZERO, Vec2::new(RAILGUN_STEP, 0.0));
+        let block = Vec2::new(100.0, 0.0);
+
+        // What the old point test saw at each frame boundary: nothing.
+        assert!(prev.distance(block) > HIT_RADIUS);
+        assert!(cur.distance(block) > HIT_RADIUS);
+
+        // What the sweep sees: a dead-centre hit, two thirds along.
+        let (dist, t) = segment_closest(prev, cur, block);
+        assert!(dist < HIT_RADIUS, "swept test still missed the block");
+        assert!((t - 100.0 / RAILGUN_STEP).abs() < 1e-4);
+    }
+
+    /// APFSDS is the worst offender — highest speed, and the round whose whole
+    /// purpose is punching armour. A 225-unit stride leaves a 135-unit blind
+    /// spot, and cells are 66 apart, so consecutive cells could both vanish.
+    #[test]
+    fn apfsds_stride_covers_every_cell_it_crosses() {
+        let (prev, cur) = (Vec2::ZERO, Vec2::new(APFSDS_STEP, 0.0));
+        for block_x in [66.0, 132.0, 198.0] {
+            let (dist, _) = segment_closest(prev, cur, Vec2::new(block_x, 0.0));
+            assert!(dist < HIT_RADIUS, "cell at {block_x} was skipped");
+        }
+    }
+
+    /// Ranked by entry order, not proximity. Over a long step the round should
+    /// strike the outer plate it crossed first; the old "nearest centre to the
+    /// current position" rank could pick a block BEHIND that plate.
+    #[test]
+    fn hits_are_ordered_by_entry_not_proximity() {
+        let (prev, cur) = (Vec2::ZERO, Vec2::new(APFSDS_STEP, 0.0));
+        let plate = Vec2::new(40.0, 10.0);
+        let core = Vec2::new(200.0, 0.0);
+
+        let (_, t_plate) = segment_closest(prev, cur, plate);
+        let (_, t_core) = segment_closest(prev, cur, core);
+        assert!(t_plate < t_core, "outer plate must be struck before the core");
+
+        // ...and the old rank would have chosen the core.
+        assert!(cur.distance(core) < cur.distance(plate));
+    }
+
+    /// A just-spawned round has a zero-length segment. It must degrade to a
+    /// plain point test rather than dividing by zero.
+    #[test]
+    fn zero_length_step_falls_back_to_a_point_test() {
+        let p = Vec2::new(10.0, 20.0);
+        let (dist, t) = segment_closest(p, p, Vec2::new(10.0, 50.0));
+        assert!((dist - 30.0).abs() < 1e-4);
+        assert_eq!(t, 0.0);
+    }
+
+    /// Closest approach is clamped to the segment: a block behind the muzzle or
+    /// beyond this frame's end is not hit by this step.
+    #[test]
+    fn sweep_does_not_extend_past_the_segment() {
+        let (prev, cur) = (Vec2::ZERO, Vec2::new(RAILGUN_STEP, 0.0));
+
+        let (d_behind, t_behind) = segment_closest(prev, cur, Vec2::new(-200.0, 0.0));
+        assert_eq!(t_behind, 0.0);
+        assert!(d_behind > HIT_RADIUS);
+
+        let (d_ahead, t_ahead) = segment_closest(prev, cur, Vec2::new(400.0, 0.0));
+        assert_eq!(t_ahead, 1.0);
+        assert!(d_ahead > HIT_RADIUS);
     }
 }
