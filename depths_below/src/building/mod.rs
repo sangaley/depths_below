@@ -85,6 +85,9 @@ impl Plugin for BuildingPlugin {
                     process_module_placement,
                     process_module_removal,
                     process_hull_removal,
+                    // Last in the chain so the grids reflect this frame's
+                    // placements and removals, not the previous frame's.
+                    update_ship_grids,
                 )
                     .chain()
                     .run_if(in_state(GameState::StationDocked)
@@ -177,7 +180,37 @@ pub struct GridOccupancy {
     pub cells: HashMap<IVec2, Entity>,
 }
 
-impl GridOccupancy {
+/// Per-ship map from ship-local grid cell to the live block sitting in it.
+///
+/// Grid coordinates are ship-local, so a single global map can only ever
+/// describe ONE ship — an AI ship's (1,0) and the player's (1,0) are
+/// different blocks that collide on the same key. That restriction is why
+/// `GridOccupancy` is player-scoped, and why several systems exist twice
+/// (`queue_detonation`/`queue_ai_detonation`,
+/// `trigger_chain_reactions`/`ai_chain_reactions`): the AI copy had to
+/// re-derive in world space what the player copy reads off the grid.
+///
+/// Two deliberate differences from `GridOccupancy`:
+/// - **Live blocks only.** Destroyed modules and hull are dropped, so a
+///   dead plate doesn't keep stopping shells.
+/// - **Maintained in flight,** not just at dock. Blocks get shot off during
+///   combat, and hit resolution walks this map while that's happening.
+#[derive(Component, Default)]
+pub struct ShipGrid {
+    pub cells: HashMap<IVec2, Entity>,
+}
+
+impl ShipGrid {
+    /// Live block occupying a cell, if any.
+    pub fn get(&self, cell: IVec2) -> Option<Entity> {
+        self.cells.get(&cell).copied()
+    }
+
+    /// Whether any live block occupies a cell.
+    pub fn contains(&self, cell: IVec2) -> bool {
+        self.cells.contains_key(&cell)
+    }
+
     /// Get all grid cells a module occupies given origin, size, and rotation.
     /// Uses SmallVec to avoid heap allocation for modules up to 2x2.
     ///
@@ -203,6 +236,15 @@ impl GridOccupancy {
             }
         }
         cells
+    }
+}
+
+impl GridOccupancy {
+    /// Cells a module occupies. Same footprint maths as `ShipGrid::cells_for`
+    /// — kept here so the ~8 static callers still compile while the grid
+    /// migrates to the per-ship component.
+    pub fn cells_for(origin: IVec2, size: IVec2, rotation: Rotation, footprint: Option<&[IVec2]>) -> SmallVec<[IVec2; 4]> {
+        ShipGrid::cells_for(origin, size, rotation, footprint)
     }
 
     /// Check if all cells for a module placement are free
@@ -257,6 +299,64 @@ fn update_grid_occupancy(
         if parent.parent() != player_ship { continue; }
         let grid = rooms::transform_to_grid(transform);
         occupancy.cells.insert(grid, entity);
+    }
+}
+
+/// Rebuilds every ship's `ShipGrid` from its own live blocks.
+///
+/// Runs in flight as well as at dock, unlike `update_grid_occupancy`: hit
+/// resolution walks these maps while blocks are being shot off, and a grid
+/// that only refreshed at a station would send shells into cells whose
+/// block died two fights ago.
+///
+/// Gated on block counts changing. Counting is a cheap archetype iteration
+/// with no hashing; the rebuild underneath it is ~2k HashMap inserts, so
+/// the check pays for itself on every frame nothing is destroyed (which is
+/// nearly all of them).
+pub fn update_ship_grids(
+    mut commands: Commands,
+    ships: Query<Entity, Or<(With<Ship>, With<crate::ai_ship::components::AiShip>)>>,
+    modules: Query<(Entity, &Module, &ChildOf), Without<DestroyedModule>>,
+    hulls: Query<(Entity, &Transform, &ChildOf), (With<HullSegment>, Without<HullDestroyed>)>,
+    mut grids: Query<&mut ShipGrid>,
+    mut last_counts: Local<(usize, usize, usize)>,
+) {
+    let counts = (modules.iter().count(), hulls.iter().count(), ships.iter().count());
+    if counts == *last_counts && !grids.is_empty() {
+        return;
+    }
+    *last_counts = counts;
+
+    // Bucket live blocks by the ship that owns them. Pre-seeding every ship
+    // means a vessel that just lost its last block still gets an empty grid
+    // written rather than keeping a stale one.
+    let mut per_ship: HashMap<Entity, HashMap<IVec2, Entity>> = ships
+        .iter()
+        .map(|ship| (ship, HashMap::new()))
+        .collect();
+
+    for (entity, module, parent) in modules.iter() {
+        let Some(cells) = per_ship.get_mut(&parent.parent()) else { continue };
+        let footprint = footprints::footprint_override(module.module_type);
+        for cell in ShipGrid::cells_for(module.grid_position, module.size, module.rotation, footprint) {
+            cells.insert(cell, entity);
+        }
+    }
+
+    // Hull is always 1x1, and spawns at `grid * 66.0` (y offset -33.0) on
+    // player and AI ships alike, so the transform inverts cleanly. Modules
+    // can't use this path: multi-cell ones are centred on their footprint
+    // centroid, not on their origin cell.
+    for (entity, transform, parent) in hulls.iter() {
+        let Some(cells) = per_ship.get_mut(&parent.parent()) else { continue };
+        cells.insert(rooms::transform_to_grid(transform), entity);
+    }
+
+    for (ship, cells) in per_ship {
+        match grids.get_mut(ship) {
+            Ok(mut grid) => grid.cells = cells,
+            Err(_) => { commands.entity(ship).try_insert(ShipGrid { cells }); }
+        }
     }
 }
 
@@ -1082,6 +1182,122 @@ fn sync_calculated_to_weapon(
         if let Some(ref ws) = calculated.weapon {
             weapon.max_ammo = ws.max_ammo;
             weapon.ammo = weapon.ammo.min(ws.max_ammo);
+        }
+    }
+}
+
+#[cfg(test)]
+mod ship_grid_tests {
+    use super::*;
+    use crate::ai_ship::components::AiShip;
+
+    fn hull_at(grid: IVec2) -> (HullSegment, Transform) {
+        (
+            HullSegment { grid_position: grid, ..default() },
+            // Same placement maths ship/spawner.rs and ai_ship/spawner.rs use.
+            Transform::from_xyz(grid.x as f32 * 66.0, grid.y as f32 * 66.0 - 33.0, 0.1),
+        )
+    }
+
+    fn module_at(grid: IVec2, size: IVec2) -> Module {
+        Module {
+            module_type: ModuleType::AmmoBay,
+            health: 100.0,
+            max_health: 100.0,
+            power_consumption: 0.0,
+            power_generation: 0.0,
+            is_active: true,
+            grid_position: grid,
+            size,
+            rotation: Rotation::North,
+        }
+    }
+
+    fn test_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_systems(Update, update_ship_grids);
+        app
+    }
+
+    /// The whole reason the per-ship grid exists: two ships with blocks at the
+    /// same ship-LOCAL cell. A single global map can only ever hold one of
+    /// them, which is why GridOccupancy is player-scoped.
+    #[test]
+    fn grids_do_not_collide_across_ships() {
+        let mut app = test_app();
+        let player = app.world_mut().spawn(Ship).id();
+        let enemy = app.world_mut().spawn(AiShip).id();
+
+        let cell = IVec2::new(1, 0);
+        let player_block = app.world_mut().spawn(hull_at(cell)).insert(ChildOf(player)).id();
+        let enemy_block = app.world_mut().spawn(hull_at(cell)).insert(ChildOf(enemy)).id();
+
+        app.update();
+
+        assert_eq!(app.world().get::<ShipGrid>(player).unwrap().get(cell), Some(player_block));
+        assert_eq!(app.world().get::<ShipGrid>(enemy).unwrap().get(cell), Some(enemy_block));
+    }
+
+    /// Destroyed blocks leave the grid — a dead plate must not keep stopping
+    /// shells. This is the difference from GridOccupancy that hit resolution
+    /// depends on.
+    #[test]
+    fn destroyed_blocks_leave_the_grid() {
+        let mut app = test_app();
+        let ship = app.world_mut().spawn(Ship).id();
+        let cell = IVec2::new(2, 3);
+        let block = app.world_mut().spawn(hull_at(cell)).insert(ChildOf(ship)).id();
+
+        app.update();
+        assert!(app.world().get::<ShipGrid>(ship).unwrap().contains(cell));
+
+        app.world_mut().entity_mut(block).insert(HullDestroyed);
+        app.update();
+
+        assert!(!app.world().get::<ShipGrid>(ship).unwrap().contains(cell),
+            "a destroyed plate is still occupying its cell");
+    }
+
+    /// A multi-cell module claims every cell of its footprint, so a shell
+    /// crossing any of them finds the same entity.
+    #[test]
+    fn multi_cell_modules_claim_their_whole_footprint() {
+        let mut app = test_app();
+        let ship = app.world_mut().spawn(Ship).id();
+        let origin = IVec2::new(0, 0);
+        let module = app.world_mut()
+            .spawn(module_at(origin, IVec2::new(3, 2)))
+            .insert(ChildOf(ship))
+            .id();
+
+        app.update();
+
+        let grid = app.world().get::<ShipGrid>(ship).unwrap();
+        assert_eq!(grid.cells.len(), 6);
+        for x in 0..3 {
+            for y in 0..2 {
+                assert_eq!(grid.get(origin + IVec2::new(x, y)), Some(module));
+            }
+        }
+    }
+
+    /// Hull spawns at `grid * 66.0` with a -33.0 y offset; the grid has to
+    /// invert that exactly or every block lands one cell off.
+    #[test]
+    fn hull_transforms_round_trip_to_their_cell() {
+        let mut app = test_app();
+        let ship = app.world_mut().spawn(Ship).id();
+        let cells = [IVec2::new(0, 0), IVec2::new(-4, 7), IVec2::new(5, -3)];
+        for cell in cells {
+            app.world_mut().spawn(hull_at(cell)).insert(ChildOf(ship));
+        }
+
+        app.update();
+
+        let grid = app.world().get::<ShipGrid>(ship).unwrap();
+        for cell in cells {
+            assert!(grid.contains(cell), "hull at {cell:?} did not land in its own cell");
         }
     }
 }
