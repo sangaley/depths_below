@@ -133,6 +133,7 @@ pub fn intercept_missiles(
                 caliber: 0.3,
                 last_hit: None,
                 prev_pos: weapon_pos,
+                bounces: 0,
             },
             Velocity(direction * proj_speed),
         ));

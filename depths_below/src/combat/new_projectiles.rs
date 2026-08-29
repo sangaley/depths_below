@@ -46,7 +46,14 @@ pub struct Projectile {
     /// Hit tests sweep `prev_pos -> current` instead, so there is no gap
     /// left to hide in regardless of speed or frame time.
     pub prev_pos: Vec2,
+    /// Ricochets so far. Bounded by MAX_BOUNCES: a round caught in a concave
+    /// notch between two sloped plates would otherwise skip off the same
+    /// corner every frame forever.
+    pub bounces: u8,
 }
+
+/// How many times one round may skip before it's spent.
+pub const MAX_BOUNCES: u8 = 2;
 
 /// Closest approach between point `p` and segment `a -> b`.
 /// Returns (distance, t) where t is 0 at `a` and 1 at `b`.
@@ -405,6 +412,7 @@ pub fn fire_weapons_system(
                     caliber: caliber_scale(module.module_type),
                     last_hit: None,
                     prev_pos: weapon_pos,
+                    bounces: 0,
                 },
                 Velocity(vel),
                 GravityAffected { mass: 0.5 }, // Projectiles affected by gravity (slightly)
@@ -475,7 +483,7 @@ const MAX_CREATURE_HIT_RADIUS: f32 = 90.0;
 /// projectile instead of every creature in the world.
 pub fn check_projectile_hits(
     mut commands: Commands,
-    mut proj_query: Query<(Entity, &mut Projectile, &Transform, &Velocity)>,
+    mut proj_query: Query<(Entity, &mut Projectile, &Transform, &mut Velocity)>,
     mut creature_query: Query<(&Transform, &mut Creature), Without<Ship>>,
     creature_grid: Res<crate::spatial::CreatureGrid>,
     mut ai_ship_query: Query<
@@ -490,7 +498,7 @@ pub fn check_projectile_hits(
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
     _notifications: MessageWriter<ShowNotification>,
 ) {
-    'projectiles: for (proj_entity, mut proj, proj_transform, proj_vel) in proj_query.iter_mut() {
+    'projectiles: for (proj_entity, mut proj, proj_transform, mut proj_vel) in proj_query.iter_mut() {
         let proj_pos = proj_transform.translation.truncate();
         // A weapon's own ship is never a valid target for its own shot,
         // regardless of aim — belt-and-suspenders on top of firing-arc and
@@ -538,8 +546,13 @@ pub fn check_projectile_hits(
                     let p = inv.transform_point3(world.extend(0.0)).truncate();
                     Vec2::new(p.x / 66.0, (p.y + 33.0) / 66.0)
                 };
+                let (cell_from, cell_to) = (to_cell(proj.prev_pos), to_cell(proj_pos));
+                // Direction in the SHIP's own cell space — the hull's heading
+                // is already baked into `inv`, so angling the ship angles
+                // every plate on that side without any new per-block data.
+                let dir_local = (cell_to - cell_from).normalize_or_zero();
                 let step = grid
-                    .walk(to_cell(proj.prev_pos), to_cell(proj_pos))
+                    .walk(cell_from, cell_to)
                     .into_iter()
                     // A penetrator is still inside the block it just went
                     // through; keep walking to the one behind it.
@@ -549,6 +562,9 @@ pub fn check_projectile_hits(
                     .get(step.entity)
                     .copied()
                     .unwrap_or(crate::building::Block::module(step.cell));
+                let obl = crate::combat::impact::obliquity(
+                    step.entry_face, dir_local, &block, proj.ammo, proj.caliber,
+                );
 
                 // Primary hit: damage the struck block, remember where.
                 let primary: Option<(Entity, Vec2)> = if let Ok((_, gt)) = ai_module_query.get(step.entity) {
@@ -556,7 +572,7 @@ pub fn check_projectile_hits(
                     // the cell in update_ship_grids), so reaching a module
                     // means nothing covers it: fully exposed, takes everything.
                     let hit_pos = gt.translation().truncate();
-                    let impact = crate::combat::impact::resolve_impact(proj.damage, &block, step.span, Some(0.0));
+                    let impact = crate::combat::impact::resolve_impact(proj.damage, &block, step.span, obl, Some(0.0));
                     ai_module_query.get_mut(step.entity).ok().map(|(mut module, _)| {
                         module.health = (module.health - impact.to_block).max(0.0);
                         spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.6, 0.2), 12.0);
@@ -581,7 +597,7 @@ pub fn check_projectile_hits(
                         Some(_) => crate::combat::ammo_types::armor_pass_through(proj.ammo),
                         None => 0.0,
                     };
-                    let impact = crate::combat::impact::resolve_impact(proj.damage, &block, step.span, Some(pass));
+                    let impact = crate::combat::impact::resolve_impact(proj.damage, &block, step.span, obl, Some(pass));
                     let hull_hit = ai_hull_query.get_mut(step.entity).ok().map(|(mut hull, gt)| {
                         hull.health = (hull.health - impact.to_block).max(0.0);
                         let hit_pos = gt.translation().truncate();
@@ -599,6 +615,51 @@ pub fn check_projectile_hits(
                 };
 
                 let Some((hit_entity, hit_pos)) = primary else { continue };
+
+                // RICOCHET — the round skipped instead of biting. It's still
+                // flying, so deflect it rather than despawning: a bounce can
+                // find another block on this same ship, which is what makes a
+                // concave hull a shot trap and a convex one shed fire.
+                if obl.ricochet {
+                    proj.bounces += 1;
+                    proj.last_hit = Some(hit_entity);
+                    spawn_hit_effect(&mut commands, hit_pos, Color::srgb(0.95, 0.95, 0.85), 10.0);
+                    if proj.bounces > MAX_BOUNCES {
+                        commands.entity(proj_entity).despawn();
+                        continue 'projectiles;
+                    }
+                    // Plate normal back out into world space — the ship's
+                    // heading is in ai_gt, so this follows the hull as it turns.
+                    let face = Vec2::new(step.entry_face.x as f32, step.entry_face.y as f32);
+                    let n_local = Vec2::from_angle(block.slope).rotate(face.normalize_or_zero());
+                    let n = ai_gt.affine()
+                        .transform_vector3(n_local.extend(0.0))
+                        .truncate()
+                        .normalize_or_zero();
+                    let v = proj_vel.0.normalize_or_zero();
+                    if n != Vec2::ZERO && v != Vec2::ZERO {
+                        // A mirror bounce looks wrong: real ricochets skid
+                        // ALONG the plate and shed energy. Blend mirror toward
+                        // the tangent by how grazing the hit was.
+                        let mirror = v - 2.0 * v.dot(n) * n;
+                        let tangent = (v - v.dot(n) * n).normalize_or_zero();
+                        let skid = 0.35 + 0.45 * (1.0 - obl.cos_impact);
+                        let scatter = (rand::random::<f32>() - 0.5) * 0.17; // ±~5°
+                        let out = Vec2::from_angle(scatter)
+                            .rotate(mirror.lerp(tangent, skid).normalize_or_zero());
+                        proj_vel.0 = out * proj_vel.0.length() * (0.45 + 0.40 * (1.0 - obl.cos_impact));
+                        proj.damage *= 0.10 + 0.30 * (1.0 - obl.cos_impact);
+                    }
+                    ai_damage_events.write(crate::events::AiShipDamaged {
+                        target: ai_entity,
+                        source: crate::events::DamageSource::Explosion,
+                        amount: 0.0,
+                        position: Some(hit_pos),
+                        direction: None,
+                        attacker: owner_ship,
+                    });
+                    continue 'projectiles;
+                }
 
                 // === AMMO ON-HIT BEHAVIOR — finally consumes the
                 // AmmoHitBehavior table that ammo_types.rs has defined all

@@ -108,6 +108,12 @@ pub fn process_ship_damage(
                 }
             }
 
+            // Direction of travel in the PLAYER's own cell space. The hull's
+            // heading is baked into `inv`, so turning the ship off the threat
+            // axis angles every plate on that side — armour you earn by
+            // manoeuvring rather than by building.
+            let dir_local = (to_cell(end) - to_cell(start)).normalize_or_zero();
+
             let mut remaining_damage = event.amount;
             for step in steps {
                 if remaining_damage <= 0.0 {
@@ -117,10 +123,16 @@ pub fn process_ship_damage(
                     .get(step.entity)
                     .copied()
                     .unwrap_or(crate::building::Block::module(step.cell));
+                // No ammo profile on this path: incoming fire arrives as a
+                // ShipDamaged event that doesn't carry what fired it, so the
+                // round is treated as unspecialised (AP-like thresholds).
+                let obl = crate::combat::impact::obliquity(
+                    step.entry_face, dir_local, &block, None, 1.0,
+                );
 
                 if let Ok((_, mut hull, _, parent)) = hull_query.get_mut(step.entity) {
                     if parent.parent() != player_ship { continue; }
-                    let impact = crate::combat::impact::resolve_impact(remaining_damage, &block, step.span, None);
+                    let impact = crate::combat::impact::resolve_impact(remaining_damage, &block, step.span, obl, None);
                     hull.health = (hull.health - impact.to_block).max(0.0);
                     remaining_damage = impact.through;
 
