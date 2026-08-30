@@ -154,8 +154,8 @@ pub fn fire_missiles_system(
         let initial_vel = direction * 100.0; // Slow launch
 
         // Visual size scales with bay count
-        let visual_w = 12.0 + size_mult * 4.0;
-        let visual_h = 5.0 + size_mult * 2.0;
+        let visual_w = 24.0 + size_mult * 8.0;
+        let visual_h = 10.0 + size_mult * 4.0;
         let angle = direction.y.atan2(direction.x);
 
         let volley_count = match module.module_type {

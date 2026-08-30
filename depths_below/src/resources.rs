@@ -812,7 +812,8 @@ impl BuildCategory {
 
     pub fn item_count(&self) -> usize {
         match self {
-            BuildCategory::Hull => 4, // Outer, Inner, Void, BulkheadDoor
+            // Outer, Inner, Void, BulkheadDoor, then the angled plating.
+            BuildCategory::Hull => HULL_LAYERS.len() + HULL_PLATING.len(),
             BuildCategory::Custom => 0, // No saved blueprints yet (will be expanded later)
             other => other.to_module_category()
                 .map(|c| c.module_types().len())
@@ -850,6 +851,15 @@ const HULL_LAYERS: [HullLayer; 4] = [
     HullLayer::BulkheadDoor,
 ];
 
+/// Plating that cycles alongside the hull layers. These are Modules rather
+/// than HullSegments, but they're hull work: you place them while walling a
+/// ship in, not while fitting it out. Keeping them in the Structural module
+/// list meant leaving the hull category mid-wall to find them.
+const HULL_PLATING: [ModuleType; 2] = [
+    ModuleType::AngledArmorPlate,
+    ModuleType::AngledHullPlate,
+];
+
 impl Default for BuildingState {
     fn default() -> Self {
         Self {
@@ -874,8 +884,11 @@ impl BuildingState {
         let cat = self.current_category();
         match cat {
             BuildCategory::Hull => {
-                let idx = self.selected_index % HULL_LAYERS.len();
-                BuildSelection::Hull(HULL_LAYERS[idx])
+                let idx = self.selected_index % (HULL_LAYERS.len() + HULL_PLATING.len());
+                match HULL_LAYERS.get(idx) {
+                    Some(layer) => BuildSelection::Hull(*layer),
+                    None => BuildSelection::Module(HULL_PLATING[idx - HULL_LAYERS.len()]),
+                }
             }
             BuildCategory::Custom => {
                 // For now, return first customizable module (Torpedo)
@@ -1600,12 +1613,34 @@ mod tests {
     #[test]
     fn building_state_item_cycling() {
         let mut state = BuildingState::default();
-        // Hull has 4 items
+        let last = BuildCategory::Hull.item_count() - 1;
         state.next_item();
         assert_eq!(state.selected_index, 1);
         state.prev_item();
         assert_eq!(state.selected_index, 0);
         state.prev_item();
-        assert_eq!(state.selected_index, 3); // wraps around
+        assert_eq!(state.selected_index, last); // wraps around
+    }
+
+    /// The Hull category cycles four layers and then the angled plating, so
+    /// walling a ship in and cornering it are the same trip through `[`/`]`.
+    #[test]
+    fn hull_category_cycles_layers_then_plating() {
+        let mut state = BuildingState::default();
+        assert_eq!(state.current_category(), BuildCategory::Hull);
+
+        let mut seen = Vec::new();
+        for _ in 0..BuildCategory::Hull.item_count() {
+            seen.push(state.current_selection());
+            state.next_item();
+        }
+
+        assert!(matches!(seen[0], BuildSelection::Hull(HullLayer::Outer)));
+        assert!(matches!(seen[3], BuildSelection::Hull(HullLayer::BulkheadDoor)));
+        assert!(matches!(seen[4], BuildSelection::Module(ModuleType::AngledArmorPlate)));
+        assert!(matches!(seen[5], BuildSelection::Module(ModuleType::AngledHullPlate)));
+
+        // Back to the start after a full lap.
+        assert!(matches!(state.current_selection(), BuildSelection::Hull(HullLayer::Outer)));
     }
 }

@@ -113,7 +113,7 @@ pub fn intercept_missiles(
         commands.spawn((
             (Sprite {
                     color: Color::srgb(0.3, 1.0, 0.5), 
-                    custom_size: Some(Vec2::new(6.0, 2.0)),
+                    custom_size: Some(Vec2::new(13.0, 5.0)),
                     ..default()
                 }, Transform {
                     translation: Vec3::new(weapon_pos.x, weapon_pos.y, 0.5),

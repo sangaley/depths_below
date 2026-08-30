@@ -377,11 +377,11 @@ pub fn fire_weapons_system(
             // clearly at gameplay zoom instead of every shot looking like
             // the same small yellow sliver.
             let (size, base_color) = match module.module_type {
-                ModuleType::Railgun => (Vec2::new(50.0, 4.0), Color::srgb(0.2, 0.5, 1.0)),   // long blue streak
-                ModuleType::Cannon => (Vec2::new(20.0, 12.0), Color::srgb(1.0, 0.45, 0.05)), // big orange shell
-                ModuleType::Coilgun => (Vec2::new(12.0, 5.0), Color::srgb(0.6, 0.8, 1.0)),
-                ModuleType::Gatling => (Vec2::new(8.0, 3.0), Color::srgb(1.0, 0.85, 0.2)),
-                _ => (Vec2::new(8.0, 3.0), Color::srgb(0.8, 0.8, 0.4)),
+                ModuleType::Railgun => (Vec2::new(90.0, 9.0), Color::srgb(0.2, 0.5, 1.0)),   // long blue streak
+                ModuleType::Cannon => (Vec2::new(38.0, 22.0), Color::srgb(1.0, 0.45, 0.05)), // big orange shell
+                ModuleType::Coilgun => (Vec2::new(24.0, 10.0), Color::srgb(0.6, 0.8, 1.0)),
+                ModuleType::Gatling => (Vec2::new(17.0, 7.0), Color::srgb(1.0, 0.85, 0.2)),
+                _ => (Vec2::new(17.0, 7.0), Color::srgb(0.8, 0.8, 0.4)),
             };
             // Loaded ammo recolors the round (AP brass, EMP blue, ...) so a
             // mixed loadout reads at a glance; size stays per-weapon.

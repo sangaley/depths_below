@@ -908,11 +908,15 @@ fn spawn_item_slots(
 ) {
     match category {
         BuildCategory::Hull => {
+            // Order must match HULL_LAYERS then HULL_PLATING in resources.rs —
+            // BuildingState::current_selection indexes straight through both.
             let hull_items = [
                 ("OUT", Color::srgb(0.4, 0.4, 0.5)),   // Outer
                 ("INN", Color::srgb(0.3, 0.3, 0.4)),   // Inner
-                ("VOD", Color::srgb(0.15, 0.15, 0.2)),  // Void
+                ("VOD", Color::srgb(0.15, 0.15, 0.2)), // Void
                 ("BLK", Color::srgb(0.5, 0.4, 0.3)),   // Bulkhead
+                ("ANG", Color::srgb(0.52, 0.52, 0.56)), // Angled Armor Plate
+                ("AHP", Color::srgb(0.56, 0.54, 0.48)), // Angled Hull Plate
             ];
             for (i, (label, color)) in hull_items.iter().enumerate() {
                 spawn_single_slot(parent, i, label, *color, 0);

@@ -1216,10 +1216,10 @@ impl AmmoType {
 
     pub fn projectile_size(&self) -> Vec2 {
         match self {
-            AmmoType::Missile => Vec2::new(18.0, 7.0),
-            AmmoType::Bullet  => Vec2::new(10.0, 4.0),
-            AmmoType::Charge  => Vec2::new(22.0, 22.0),
-            AmmoType::Mine    => Vec2::splat(14.0),
+            AmmoType::Missile => Vec2::new(34.0, 14.0),
+            AmmoType::Bullet  => Vec2::new(20.0, 9.0),
+            AmmoType::Charge  => Vec2::new(38.0, 38.0),
+            AmmoType::Mine    => Vec2::splat(22.0),
         }
     }
 
