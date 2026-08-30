@@ -304,8 +304,10 @@ fn build_visual(commands: &mut Commands, e: Entity, mt: ModuleType) {
             s(commands, e, Vec2::new(58.0, 2.0), Color::srgb(0.55, 0.52, 0.48), Vec3::new(16.0, 18.0, 0.02));
         }
         // Angled Hull Plate / Angled Armor Plate: single-cell wedge — a
-        // triangular silhouette instead of a filled square. Visual only for
-        // now (no deflection mechanic yet); rotation picks which corner shows.
+        // triangular silhouette instead of a filled square. The exposed
+        // diagonal is the real armour face (Block::facing): material lies
+        // along the two solid edges and the hypotenuse between them is what
+        // rounds skip off, so the sprite shows which way the plate looks.
         ModuleType::AngledHullPlate => {
             s(commands, e, Vec2::new(46.0, 10.0), Color::srgb(0.42, 0.40, 0.36), Vec3::new(0.0, 16.0, 0.01));
             s(commands, e, Vec2::new(10.0, 46.0), Color::srgb(0.42, 0.40, 0.36), Vec3::new(16.0, 0.0, 0.01));

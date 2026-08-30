@@ -106,9 +106,10 @@ pub fn obliquity(
     let face = Vec2::new(entry_face.x as f32, entry_face.y as f32).normalize();
     let v = dir_local.normalize();
 
-    // The plate's own normal: the cell face, rotated by whatever slope this
-    // block declares. slope == 0 leaves it exactly on the face.
-    let n = Vec2::from_angle(block.slope).rotate(face);
+    // The surface actually met. A plain box has no face of its own, so it's
+    // whichever cell face the round came through; a wedge declares a fixed
+    // diagonal and presents that one from any approach.
+    let n = block.facing.map_or(face, Vec2::from_angle);
 
     let facing = -v.dot(n);
     let cos_face = (-v.dot(face)).abs().max(MIN_COS);
@@ -260,8 +261,10 @@ mod tests {
     /// arriving at the plate's BACK gets no benefit — flanking beats angling.
     #[test]
     fn a_slope_does_nothing_from_behind() {
-        let sloped = Block { slope: 0.9, ..steel() };
-        let from_behind = obliquity(IVec2::new(1, 0), Vec2::X, &sloped, Some(KineticAmmoType::AP), 1.0);
+        // Plate faces west; the round comes from the east travelling west, so
+        // it arrives at the plate's unprotected back.
+        let sloped = Block { facing: Some(std::f32::consts::PI), ..steel() };
+        let from_behind = obliquity(IVec2::new(1, 0), Vec2::NEG_X, &sloped, Some(KineticAmmoType::AP), 1.0);
         assert!(!from_behind.ricochet);
         assert_eq!(from_behind.slope_mult, 1.0);
         assert_eq!(from_behind.cos_impact, 1.0);
@@ -271,9 +274,10 @@ mod tests {
     /// in the way than the span alone accounts for.
     #[test]
     fn declared_slope_thickens_the_plate() {
-        let sloped = Block { slope: 55f32.to_radians(), ..steel() };
+        // A face at 120deg meets a +x round 60deg off its normal: 1/cos(60) = 2x.
+        let sloped = Block { facing: Some(120f32.to_radians()), ..steel() };
         let o = obliquity(WEST_FACE, Vec2::X, &sloped, Some(KineticAmmoType::AP), 1.0);
-        assert!(o.slope_mult > 1.5, "55deg slope should inflate LOS thickness, got {}", o.slope_mult);
+        assert!((o.slope_mult - 2.0).abs() < 0.05, "60deg slope should double LOS thickness, got {}", o.slope_mult);
         let hit = resolve_impact(60.0, &sloped, 1.0, o, None);
         assert!(hit.effective_thickness > steel().thickness);
     }
@@ -338,6 +342,76 @@ mod tests {
     fn no_entry_face_means_no_deflection() {
         let o = obliquity(IVec2::ZERO, Vec2::X, &steel(), Some(KineticAmmoType::AP), 0.45);
         assert_eq!(o, Obliquity::HEAD_ON);
+    }
+
+    /// Machinery armours nothing — an exposed reactor eats the round. The
+    /// plating modules are the exception, which is what makes putting armour
+    /// on the outside a decision rather than a formality.
+    #[test]
+    fn only_plating_modules_carry_armour() {
+        use crate::components::{ModuleType, Rotation};
+        let armoured = |mt| Block::for_module(IVec2::ZERO, mt, Rotation::North).thickness;
+
+        assert!(armoured(ModuleType::AngledArmorPlate) > 0.0);
+        assert!(armoured(ModuleType::StaggeredArmorPlate) > 0.0);
+        assert!(armoured(ModuleType::ArmorPlate) > 0.0);
+        assert_eq!(armoured(ModuleType::SmallReactor), 0.0);
+        assert_eq!(armoured(ModuleType::Cannon), 0.0);
+
+        // A wedge trades material for angle: less steel than a flat plate.
+        assert!(armoured(ModuleType::AngledArmorPlate) < armoured(ModuleType::ArmorPlate));
+    }
+
+    /// Rotating a wedge in build mode carries its face round the four corners.
+    /// `R` has always cycled this; until now it only changed the sprite.
+    #[test]
+    fn rotating_a_wedge_moves_its_face_to_the_next_corner() {
+        use crate::components::{ModuleType, Rotation};
+        use std::f32::consts::FRAC_PI_4;
+
+        let face = |r| Block::for_module(IVec2::ZERO, ModuleType::AngledArmorPlate, r)
+            .facing
+            .expect("a wedge declares a face");
+
+        // Compare directions, not raw radians: Rotation::to_radians runs
+        // 0/-90/180/+90, so consecutive facings are the right corners but
+        // their numeric difference wraps.
+        let d = std::f32::consts::FRAC_1_SQRT_2;
+        for (rotation, expected) in [
+            (Rotation::North, Vec2::new(d, d)),    // north-east
+            (Rotation::East, Vec2::new(d, -d)),    // south-east
+            (Rotation::South, Vec2::new(-d, -d)),  // south-west
+            (Rotation::West, Vec2::new(-d, d)),    // north-west
+        ] {
+            let got = Vec2::from_angle(face(rotation));
+            assert!(got.distance(expected) < 1e-4, "{rotation:?} faced {got:?}, wanted {expected:?}");
+        }
+        assert!((face(Rotation::North) - FRAC_PI_4).abs() < 1e-4);
+
+        // A plain block declares nothing and takes the cell face it was hit on.
+        assert_eq!(
+            Block::for_module(IVec2::ZERO, ModuleType::ArmorPlate, Rotation::North).facing,
+            None
+        );
+    }
+
+    /// The interaction worth having: 40deg off the bow is a solid hit on flat
+    /// plating, and a skip off a wedge turned to meet it. Neither the angle nor
+    /// the block does it alone — manoeuvring and building stack.
+    #[test]
+    fn a_wedge_and_an_angled_hull_stack_into_a_bounce() {
+        use crate::components::{ModuleType, Rotation};
+        let incoming = Vec2::from_angle(40f32.to_radians());
+        let ap = Some(KineticAmmoType::AP);
+
+        let flat = Block::for_module(IVec2::ZERO, ModuleType::ArmorPlate, Rotation::North);
+        assert!(!obliquity(WEST_FACE, incoming, &flat, ap, 0.45).ricochet,
+            "40deg onto flat plating should still bite");
+
+        let wedge = Block::for_module(IVec2::ZERO, ModuleType::AngledArmorPlate, Rotation::West);
+        let skipped = obliquity(WEST_FACE, incoming, &wedge, ap, 0.45);
+        assert!(skipped.ricochet, "the same shot onto a wedge facing it should skip");
+        assert!(skipped.cos_impact < 0.35);
     }
 
     #[test]

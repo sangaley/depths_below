@@ -1676,7 +1676,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::AngledHullPlate, ModuleDef {
         name: "Angled Hull Plate",
-        description: "Structural framing cut to a taper instead of a square face, so a hull doesn't have to read as a stack of boxes. Purely cosmetic for now — rotate it to pick which corner is cut.",
+        description: "Structural framing cut to a taper instead of a square face. Light — it deflects far better than it stops, so it belongs on a corner you want shots to skip off, not in front of anything important. Rotate to pick which corner the face looks out from.",
         category: ModuleCategory::Structural, size: IVec2::new(1, 1), health: 90.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.56, 0.54, 0.48),
         companion: CompanionData::None, customizable: false, cost: 19,
@@ -1685,7 +1685,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::AngledArmorPlate, ModuleDef {
         name: "Angled Armor Plate",
-        description: "Armor cut to a taper instead of a flat face. Purely cosmetic for now — full sloped-deflection customization (pick your own angle, bank shots off it) is planned for later.",
+        description: "Armor cut to a taper instead of a flat face. Less steel than a flat plate and it stops less head-on, but a round arriving off-axis skips away instead of biting. Angle the hull as well and the two stack. Rotate to pick which corner the face looks out from.",
         category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 190.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.52, 0.52, 0.56),
         companion: CompanionData::None, customizable: false, cost: 64,

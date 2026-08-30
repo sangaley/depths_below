@@ -358,7 +358,7 @@ pub fn spawn_module(
             size: def.size,
             rotation,
         },
-        crate::building::Block::module(grid_pos),
+        crate::building::Block::for_module(grid_pos, module_type, rotation),
         Selectable,
     )).id();
 

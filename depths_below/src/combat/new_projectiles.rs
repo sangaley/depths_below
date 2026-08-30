@@ -631,7 +631,8 @@ pub fn check_projectile_hits(
                     // Plate normal back out into world space — the ship's
                     // heading is in ai_gt, so this follows the hull as it turns.
                     let face = Vec2::new(step.entry_face.x as f32, step.entry_face.y as f32);
-                    let n_local = Vec2::from_angle(block.slope).rotate(face.normalize_or_zero());
+                    let n_local = block.facing
+                        .map_or_else(|| face.normalize_or_zero(), Vec2::from_angle);
                     let n = ai_gt.affine()
                         .transform_vector3(n_local.extend(0.0))
                         .truncate()

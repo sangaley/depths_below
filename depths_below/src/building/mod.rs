@@ -215,7 +215,17 @@ pub struct Block {
     pub cell: IVec2,
     pub kind: BlockKind,
     pub thickness: f32,
-    pub slope: f32,
+    /// Outward normal of the block's armoured face, in ship-local radians.
+    ///
+    /// `None` means the block is a plain box: it has no face of its own, so
+    /// hit resolution uses whichever cell face the round arrived through.
+    /// That is the overwhelming majority of blocks, and it's what makes an
+    /// unsloped hull behave exactly as it did before slope existed.
+    ///
+    /// `Some(angle)` is a block whose SHAPE declares a facing — a wedge
+    /// presents the same diagonal slab whichever side you approach from, so
+    /// the normal is fixed in the hull's frame rather than derived per-face.
+    pub facing: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -226,11 +236,59 @@ pub enum BlockKind {
 
 impl Block {
     pub fn hull(cell: IVec2, material: HullMaterial) -> Self {
-        Self { cell, kind: BlockKind::Hull, thickness: material.damage_absorption(), slope: 0.0 }
+        Self { cell, kind: BlockKind::Hull, thickness: material.damage_absorption(), facing: None }
     }
 
+    /// A module with no armour value — machinery, which is what most modules
+    /// are. Also the fallback when a struck block has no Block component.
     pub fn module(cell: IVec2) -> Self {
-        Self { cell, kind: BlockKind::Module, thickness: 0.0, slope: 0.0 }
+        Self { cell, kind: BlockKind::Module, thickness: 0.0, facing: None }
+    }
+
+    /// A module as actually spawned: plating modules carry real armour and
+    /// wedges carry a declared diagonal face.
+    pub fn for_module(cell: IVec2, module_type: ModuleType, rotation: Rotation) -> Self {
+        Self {
+            cell,
+            kind: BlockKind::Module,
+            thickness: module_thickness(module_type),
+            facing: module_facing(module_type, rotation),
+        }
+    }
+}
+
+/// Armour rating of a module, in the same units as
+/// `HullMaterial::damage_absorption` (Steel 15 … Abyssal Alloy 80).
+///
+/// Almost every module is machinery and armours nothing — an exposed reactor
+/// should eat the round. The plating modules are the exception, and they're
+/// deliberately rated BELOW their raw HP suggests: a wedge trades material for
+/// angle, so it deflects better than a flat plate and stops less.
+fn module_thickness(module_type: ModuleType) -> f32 {
+    match module_type {
+        ModuleType::StaggeredArmorPlate => 45.0, // premium, 6 cells, no straight seam
+        ModuleType::ArmorPlate | ModuleType::CornerArmorPlate => 40.0,
+        ModuleType::AblativeArmor => 35.0,       // spends itself instead of the hull
+        ModuleType::AngledArmorPlate => 30.0,    // less steel than a flat plate...
+        ModuleType::HullReinforcePlate => 30.0,
+        ModuleType::AngledHullPlate => 15.0,     // ...and this one is only framing
+        _ => 0.0,
+    }
+}
+
+/// Fixed outward normal for blocks whose shape declares one.
+///
+/// The wedge sprites (`vfx::block_visuals`) put their material along two
+/// adjacent edges and expose the diagonal between them, so at `North` the
+/// face looks out to the north-east — 45°. Each rotation carries it round to
+/// the next corner, which is what `R` in build mode has always been picking;
+/// it just didn't mean anything until now.
+fn module_facing(module_type: ModuleType, rotation: Rotation) -> Option<f32> {
+    match module_type {
+        ModuleType::AngledArmorPlate | ModuleType::AngledHullPlate => {
+            Some(std::f32::consts::FRAC_PI_4 + rotation.to_radians())
+        }
+        _ => None,
     }
 }
 
@@ -1443,7 +1501,7 @@ mod block_tests {
             assert_eq!(block.thickness, material.damage_absorption());
             assert_eq!(block.kind, BlockKind::Hull);
             assert_eq!(block.cell, IVec2::new(2, -1));
-            assert_eq!(block.slope, 0.0);
+            assert_eq!(block.facing, None, "plain hull takes the face it was hit on");
         }
     }
 
