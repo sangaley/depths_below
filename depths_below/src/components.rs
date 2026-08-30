@@ -454,9 +454,17 @@ impl ModuleCategory {
                 ModuleType::MineralExtractor,
                 ModuleType::ResearchLab,
                 ModuleType::DockingHub,
-                ModuleType::AngledArmorPlate,
             ],
             ModuleCategory::Structural => &[
+                // Plating first: it's what you come to this category for, and
+                // the two wedges belong beside each other. AngledArmorPlate
+                // used to be the 19th item in Utility while AngledHullPlate
+                // was the 16th here, which made the pair effectively unfindable.
+                ModuleType::ArmorPlate,
+                ModuleType::AngledArmorPlate,
+                ModuleType::AngledHullPlate,
+                ModuleType::CornerArmorPlate,
+                ModuleType::StaggeredArmorPlate,
                 ModuleType::HullBeam,
                 ModuleType::HullCorner,
                 ModuleType::Bulkhead,
@@ -464,15 +472,11 @@ impl ModuleCategory {
                 ModuleType::AirlockValve,
                 ModuleType::AccessHatch,
                 ModuleType::ViewPort,
-                ModuleType::ArmorPlate,
                 ModuleType::EmergencyBulkhead,
                 ModuleType::FirebreakWall,
                 ModuleType::Corridor,
                 ModuleType::LadderShaft,
                 ModuleType::MaintenanceTunnel,
-                ModuleType::CornerArmorPlate,
-                ModuleType::StaggeredArmorPlate,
-                ModuleType::AngledHullPlate,
             ],
         }
     }
@@ -782,6 +786,7 @@ impl ModuleType {
             ModuleType::StructuralBrace |
             ModuleType::CornerArmorPlate |
             ModuleType::StaggeredArmorPlate |
+            ModuleType::AngledArmorPlate |
             ModuleType::AngledHullPlate => ModuleCategory::Structural,
 
             ModuleType::RadarArray | ModuleType::AdvancedRadar |
@@ -824,7 +829,6 @@ impl ModuleType {
             ModuleType::HullSealer |
             ModuleType::MineralExtractor |
             ModuleType::DockingHub |
-            ModuleType::AngledArmorPlate |
             ModuleType::ResearchLab => ModuleCategory::Utility,
 
             ModuleType::HullBeam | ModuleType::HullCorner |
@@ -1089,6 +1093,10 @@ pub struct Projectile {
     pub lifetime: Timer,
     pub owner: ProjectileOwner,
     pub ammo_type: AmmoType,
+    /// Where this round was at the end of the previous frame. Hit tests sweep
+    /// prev_pos -> current so a fast round can't step over a block between
+    /// two samples — same reason `new_projectiles::Projectile` carries one.
+    pub prev_pos: Vec2,
 }
 
 /// Deployed mine - arms after delay, detonates on creature proximity

@@ -60,6 +60,7 @@ pub(crate) fn spawn_projectile(
             lifetime: Timer::from_seconds(lifetime_secs, TimerMode::Once),
             owner,
             ammo_type,
+            prev_pos: origin,
         },
     ));
 }
@@ -73,6 +74,7 @@ pub(super) fn projectile_movement(
     for (entity, mut projectile, mut transform) in projectile_query.iter_mut() {
         // Move
         let delta = projectile.direction * projectile.speed * time.delta_secs();
+        projectile.prev_pos = transform.translation.truncate();
         transform.translation.x += delta.x;
         transform.translation.y += delta.y;
 
@@ -95,7 +97,13 @@ pub(super) fn projectile_collision(
     // infer From With<Ship>/With<AiShip> alone that these two queries are
     // disjoint — same missing-canceling-pair issue documented on the
     // laser/ion systems in energy_weapons.rs.
-    mut ship_query: Query<(Entity, &Transform, Option<&mut crate::combat::shields::ShipShield>), (With<Ship>, Without<AiShip>)>,
+    mut ship_query: Query<(
+        Entity,
+        &Transform,
+        &GlobalTransform,
+        Option<&mut crate::combat::shields::ShipShield>,
+        Option<&crate::building::ShipGrid>,
+    ), (With<Ship>, Without<AiShip>)>,
     // Every AI ship gets a ShipShield on spawn (attach_ai_shields) sized to
     // its actual hull extent — SUBMARINE_RADIUS below is only the fallback
     // for the brief window before that attaches. Without this, hit
@@ -179,7 +187,7 @@ pub(super) fn projectile_collision(
                             amount: projectile.damage,
                             position: Some(proj_pos),
                             direction: Some(projectile.direction),
-                            attacker: ship_query.single().ok().map(|(e, _, _)| e),
+                            attacker: ship_query.single().ok().map(|(e, ..)| e),
                         });
                         hit_any = true;
 
@@ -203,14 +211,9 @@ pub(super) fn projectile_collision(
             // stage-2 AI-vs-AI check below instead of flying on forever.
             let mut hit_player = false;
 
-            if let Ok((_, ship_transform, shield)) = ship_query.single_mut() {
+            if let Ok((_, ship_transform, ship_gt, shield, grid)) = ship_query.single_mut() {
                 let ship_pos = ship_transform.translation.truncate();
                 let mut dist = proj_pos.distance(ship_pos);
-
-                // Hull hit bound follows the ship's real extent (the shield
-                // radius is computed from it) — the old fixed radius let most
-                // shots sail through the outer hull blocks.
-                let mut hull_hit_radius = PROJECTILE_RADIUS + SUBMARINE_RADIUS;
 
                 if let Some(mut shield) = shield {
                     // Bubble is centered on the blocks' centroid, not the root
@@ -228,14 +231,44 @@ pub(super) fn projectile_collision(
                             continue;
                         }
                     }
-                    hull_hit_radius = hull_hit_radius.max(shield.radius);
                 }
 
-                if dist < hull_hit_radius {
+                // Shield down, or the arc didn't cover this angle: the round
+                // carries on to the hull. It counts as a hit only where it
+                // actually crosses a LIVE BLOCK.
+                //
+                // This used to be `dist < hull_hit_radius`, with
+                // hull_hit_radius raised to the SHIELD radius — a bubble that
+                // stands 70+ units clear of the hull at its narrowest and is
+                // sized from the ship's full extent. So enemy rounds burst in
+                // open space well short of the ship and damaged it anyway,
+                // and because the radius was taken regardless of `is_up()`,
+                // a dead shield went on doing it. The shield looked like it
+                // was still working; it was just the bubble acting as a
+                // hitbox.
+                let block_hit = grid.and_then(|grid| {
+                    let inv = ship_gt.affine().inverse();
+                    let to_cell = |world: Vec2| {
+                        let p = inv.transform_point3(world.extend(0.0)).truncate();
+                        Vec2::new(p.x / 66.0, (p.y + 33.0) / 66.0)
+                    };
+                    grid.walk(to_cell(projectile.prev_pos), to_cell(proj_pos))
+                        .into_iter()
+                        .next()
+                });
+
+                if let Some(step) = block_hit {
+                    // Report the impact at the block the round actually
+                    // reached, so process_ship_damage's own walk starts from
+                    // the right place instead of from the bubble's edge.
+                    let local = Vec2::new(step.cell.x as f32 * 66.0, step.cell.y as f32 * 66.0 - 33.0);
+                    let block_pos = ship_gt.affine()
+                        .transform_point3(local.extend(0.0))
+                        .truncate();
                     damage_events.write(ShipDamaged {
                         source: DamageSource::Creature(Entity::PLACEHOLDER),
                         amount: projectile.damage,
-                        position: Some(proj_pos),
+                        position: Some(block_pos),
                         // process_ship_damage's outermost-first penetration
                         // sort assumes `direction` points from the ship
                         // TOWARD the attacker (every other ShipDamaged
