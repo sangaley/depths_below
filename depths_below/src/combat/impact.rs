@@ -10,10 +10,6 @@ use crate::combat::ammo_types::KineticAmmoType;
 // single home.
 // ============================================================================
 
-/// Floor on cos(impact) when inflating thickness, so a near-grazing hit that
-/// somehow escapes the ricochet test can't divide its way to infinite armour.
-const MIN_COS: f32 = 0.15;
-
 /// Converts a weapon's caliber scale (`caliber_scale`: gatling 0.45 …
 /// railgun 1.25) into the same units as `Block::thickness` (15/30/50/80), for
 /// the overmatch rule. Tuned so a railgun overmatches bare Steel and nothing
@@ -40,19 +36,13 @@ pub struct Obliquity {
     /// cos of the angle between the round and the plate's outward normal,
     /// after normalisation. 1.0 = dead-on, 0.0 = grazing.
     pub cos_impact: f32,
-    /// Extra line-of-sight thickness from the plate being TILTED INSIDE its
-    /// cell. The walk's `span` already covers the angle through the cell
-    /// itself, so this is 1.0 for unsloped armour and only departs from it
-    /// when `Block::slope` is non-zero. Double-counting the two is the easy
-    /// mistake here.
-    pub slope_mult: f32,
     pub ricochet: bool,
 }
 
 impl Obliquity {
     /// Square-on, no deflection. For damage with no geometry behind it —
     /// splash, burn ticks, radiation, a round already inside the block.
-    pub const HEAD_ON: Self = Self { cos_impact: 1.0, slope_mult: 1.0, ricochet: false };
+    pub const HEAD_ON: Self = Self { cos_impact: 1.0, ricochet: false };
 }
 
 /// cos(θ_ric) per round — the round bounces when cos(impact) falls BELOW this,
@@ -84,6 +74,73 @@ fn normalisation(ammo: Option<KineticAmmoType>) -> (f32, f32) {
     (r.cos(), r.sin())
 }
 
+/// Where a round actually met a block, once the block's sub-cell shape is
+/// accounted for.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SurfaceHit {
+    /// Outward normal of the face it met.
+    pub normal: Vec2,
+    /// Path length through real material, in cell widths. For a full block
+    /// that's the walk's own span; for a wedge it's the clipped portion.
+    pub span: f32,
+}
+
+/// Clip one walk step against the block's shape, in ship-local cell space.
+///
+/// The walk answers "which cells, in what order". This answers "and what did
+/// the round actually meet inside this one" — which the block cannot answer
+/// for itself, because a wedge has three faces and which one you get depends
+/// entirely on where you came from.
+///
+/// A full block fills its cell, so nothing changes. A wedge fills only the
+/// half on the facing side of a diagonal through the cell centre, giving
+/// three outcomes:
+///
+/// - crossed the hypotenuse    → the sloped face, the one that deflects
+/// - entered through a flat leg → square-on, the cell face, no help at all
+/// - stayed in the hollow half  → `None`; it never touched the block
+///
+/// That last case is the one a single declared normal could not express: the
+/// block used to claim its diagonal from every direction, so a round crossing
+/// the empty corner still hit it.
+pub fn clip_to_shape(
+    block: &Block,
+    entry_face: IVec2,
+    cell: IVec2,
+    entry: Vec2,
+    exit: Vec2,
+) -> Option<SurfaceHit> {
+    let face = Vec2::new(entry_face.x as f32, entry_face.y as f32).normalize_or_zero();
+    let Some(angle) = block.facing else {
+        return Some(SurfaceHit { normal: face, span: (exit - entry).length() });
+    };
+
+    // Material is the half-cell on the facing side of a diagonal through the
+    // centre: the set of local points with p·n >= 0.
+    let n = Vec2::from_angle(angle);
+    let centre = cell.as_vec2();
+    let (a, b) = (entry - centre, exit - centre);
+    let (da, db) = (a.dot(n), b.dot(n));
+
+    if da < 0.0 && db < 0.0 {
+        return None; // passed through the hollow corner entirely
+    }
+
+    let (start, end) = if da >= 0.0 && db >= 0.0 {
+        (a, b)
+    } else {
+        let cross = a.lerp(b, da / (da - db));
+        if da >= 0.0 { (a, cross) } else { (cross, b) }
+    };
+
+    Some(SurfaceHit {
+        // Started inside the material => came in through a flat leg, so the
+        // surface is the cell face. Otherwise it crossed the hypotenuse.
+        normal: if da >= 0.0 { face } else { n },
+        span: (end - start).length(),
+    })
+}
+
 /// Work out how obliquely a round met a block.
 ///
 /// `entry_face` is the walk's outward normal for the face the round came in
@@ -92,43 +149,25 @@ fn normalisation(ammo: Option<KineticAmmoType>) -> (f32, f32) {
 /// baked in — which is the whole Layer-0 payoff: turning the ship off the
 /// threat axis angles every flat plate on that side, with no new data.
 pub fn obliquity(
-    entry_face: IVec2,
+    surface: Vec2,
     dir_local: Vec2,
     block: &Block,
     ammo: Option<KineticAmmoType>,
     caliber: f32,
 ) -> Obliquity {
-    // No face means the round began this step already inside the cell (it
-    // penetrated last frame). There's no surface left to skip off.
-    if entry_face == IVec2::ZERO || dir_local.length_squared() < 1e-12 {
+    // A zero surface means the round began this step already inside the cell
+    // (it penetrated last frame). There's nothing left to skip off.
+    if surface == Vec2::ZERO || dir_local.length_squared() < 1e-12 {
         return Obliquity::HEAD_ON;
     }
-    let face = Vec2::new(entry_face.x as f32, entry_face.y as f32).normalize();
+    let n = surface.normalize();
     let v = dir_local.normalize();
 
-    // The surface actually met. A plain box has no face of its own, so it's
-    // whichever cell face the round came through; a wedge declares a fixed
-    // diagonal and presents that one from any approach.
-    let n = block.facing.map_or(face, Vec2::from_angle);
-
+    // facing <= 0 means the round reached the BACK of this face. A slope
+    // protects the side it points at and nothing else — flanking defeats it,
+    // and from behind a sloped plate is just a plate.
     let facing = -v.dot(n);
-    let cos_face = (-v.dot(face)).abs().max(MIN_COS);
-
-    // facing <= 0 means the round reached the BACK of this plate. A slope
-    // protects the side it faces and nothing else — flanking defeats it, and
-    // from behind a sloped plate is just a plate.
-    //
-    // Otherwise: `span` already carries the angle through the CELL (measured
-    // against the face), so only the plate's extra tilt WITHIN the cell
-    // belongs in slope_mult. The face term divides back out, which is what
-    // makes slope == 0 come to exactly 1.0 and leave today's balance alone.
-    // Note this uses the RAW angle, not the normalised one — normalisation is
-    // about whether the round bites, not about how much steel is in its way.
-    let (cos_t, slope_mult) = if facing <= 0.0 {
-        (1.0, 1.0)
-    } else {
-        (facing, cos_face / facing.max(MIN_COS))
-    };
+    let cos_t = if facing <= 0.0 { 1.0 } else { facing };
 
     // Normalisation straightens the round TOWARD the normal, but never past
     // it: theta <= delta (i.e. cos_t >= cos_norm) means it's already square
@@ -146,7 +185,7 @@ pub fn obliquity(
     let overmatch = caliber * CALIBER_TO_THICKNESS >= 2.0 * block.thickness;
     let ricochet = block.thickness > 0.0 && !overmatch && cos_eff < ricochet_cos(ammo);
 
-    Obliquity { cos_impact: cos_eff, slope_mult, ricochet }
+    Obliquity { cos_impact: cos_eff, ricochet }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -185,7 +224,7 @@ pub fn resolve_impact(
     obl: Obliquity,
     pass_through: Option<f32>,
 ) -> Impact {
-    let effective_thickness = block.thickness * span.max(0.0) * obl.slope_mult;
+    let effective_thickness = block.thickness * span.max(0.0);
 
     // A skipping round never gets to spend its energy on the plate at all.
     if obl.ricochet {
@@ -220,9 +259,70 @@ mod tests {
     // Entry faces come from the walk as the OUTWARD normal of the face the
     // round came in through: entering through the -x face gives (-1, 0), so a
     // round travelling +x meets it dead-on.
-    const WEST_FACE: IVec2 = IVec2::new(-1, 0);
+    const WEST_FACE: Vec2 = Vec2::new(-1.0, 0.0);
 
     fn steel() -> Block { Block::hull(IVec2::ZERO, HullMaterial::Steel) }
+
+    /// The three things that can happen inside a wedge's cell. This is what
+    /// the block could not answer for itself: which face you meet depends
+    /// entirely on where you came from, so the ROUND has to ask.
+    #[test]
+    fn a_wedge_answers_differently_depending_where_you_come_from() {
+        use crate::components::{ModuleType, Rotation};
+        // North-facing wedge at cell (0,0): material fills the half where
+        // x + y >= 0, hypotenuse running NW to SE.
+        let wedge = Block::for_module(IVec2::ZERO, ModuleType::AngledArmorPlate, Rotation::North);
+        let cell = IVec2::ZERO;
+
+        // 1. Straight through the hollow SW corner: never touches it.
+        let missed = clip_to_shape(&wedge, IVec2::new(-1, 0), cell,
+            Vec2::new(-0.5, -0.3), Vec2::new(-0.2, -0.5));
+        assert_eq!(missed, None, "a round crossing the empty corner must miss");
+
+        // 2. Crossing the hypotenuse: meets the sloped face.
+        let sloped = clip_to_shape(&wedge, IVec2::new(-1, 0), cell,
+            Vec2::new(-0.5, 0.1), Vec2::new(0.5, 0.1)).expect("crosses into material");
+        let n = Vec2::from_angle(std::f32::consts::FRAC_PI_4);
+        assert!(sloped.normal.distance(n) < 1e-4, "should meet the diagonal, got {:?}", sloped.normal);
+        assert!(sloped.span < 1.0, "only part of the cell is material");
+
+        // 3. Entering already inside the material, through a flat leg: the
+        //    cell face, square-on, no help from the angle at all.
+        let flat = clip_to_shape(&wedge, IVec2::new(0, 1), cell,
+            Vec2::new(0.2, 0.5), Vec2::new(0.2, -0.1)).expect("starts in material");
+        assert!(flat.normal.distance(Vec2::Y) < 1e-4, "should meet the flat leg, got {:?}", flat.normal);
+    }
+
+    /// A full block is unaffected: it fills its cell, so the clip hands back
+    /// the walk's own span and the face it was entered through.
+    #[test]
+    fn a_full_block_is_untouched_by_the_shape_clip() {
+        let hit = clip_to_shape(&steel(), IVec2::new(-1, 0), IVec2::ZERO,
+            Vec2::new(-0.5, 0.0), Vec2::new(0.5, 0.0)).expect("full cells always hit");
+        assert!(hit.normal.distance(Vec2::NEG_X) < 1e-4);
+        assert!((hit.span - 1.0).abs() < 1e-4);
+    }
+
+    /// Meeting the sloped face deflects where meeting the flat leg does not —
+    /// same block, same round, different approach.
+    #[test]
+    fn the_same_wedge_bounces_or_bites_by_approach() {
+        use crate::components::{ModuleType, Rotation};
+        let wedge = Block::for_module(IVec2::ZERO, ModuleType::AngledArmorPlate, Rotation::North);
+        let ap = Some(KineticAmmoType::AP);
+        // Face points north-east, so a round that MEETS it is travelling
+        // roughly south-west. 150deg comes in across the face at 75deg.
+        let incoming = Vec2::from_angle(150f32.to_radians());
+
+        let hypotenuse = Vec2::from_angle(std::f32::consts::FRAC_PI_4);
+        assert!(obliquity(hypotenuse, incoming, &wedge, ap, 0.45).ricochet,
+            "a glancing hit on the hypotenuse should skip");
+        // The right angle sits at the NE corner, so the legs face north and
+        // east. The same round meets the east leg 30deg off square: it bites.
+        assert!(!obliquity(Vec2::X, incoming, &wedge, ap, 0.45).ricochet,
+            "the same round onto a flat leg should bite");
+    }
+
 
     /// Dead-on is dead-on: no deflection, and no thickness inflation, because
     /// the walk's span already owns the through-cell geometry.
@@ -231,18 +331,6 @@ mod tests {
         let o = obliquity(WEST_FACE, Vec2::X, &steel(), Some(KineticAmmoType::AP), 1.0);
         assert!(!o.ricochet);
         assert!((o.cos_impact - 1.0).abs() < 1e-3);
-        assert!((o.slope_mult - 1.0).abs() < 1e-3, "unsloped armour must not change balance");
-    }
-
-    /// An UNSLOPED plate struck obliquely still leaves slope_mult at 1.0 —
-    /// double-counting it against the walk's span is the easy mistake here.
-    #[test]
-    fn oblique_hit_on_flat_plate_leaves_thickness_to_the_span() {
-        for degrees in [15.0_f32, 30.0, 45.0, 60.0] {
-            let dir = Vec2::from_angle(degrees.to_radians());
-            let o = obliquity(WEST_FACE, dir, &steel(), Some(KineticAmmoType::AP), 1.0);
-            assert!((o.slope_mult - 1.0).abs() < 1e-3, "slope_mult moved at {degrees}deg");
-        }
     }
 
     /// Layer 0, the payoff that needs no new blocks: because the direction is
@@ -264,22 +352,9 @@ mod tests {
         // Plate faces west; the round comes from the east travelling west, so
         // it arrives at the plate's unprotected back.
         let sloped = Block { facing: Some(std::f32::consts::PI), ..steel() };
-        let from_behind = obliquity(IVec2::new(1, 0), Vec2::NEG_X, &sloped, Some(KineticAmmoType::AP), 1.0);
+        let from_behind = obliquity(Vec2::X, Vec2::NEG_X, &sloped, Some(KineticAmmoType::AP), 1.0);
         assert!(!from_behind.ricochet);
-        assert_eq!(from_behind.slope_mult, 1.0);
         assert_eq!(from_behind.cos_impact, 1.0);
-    }
-
-    /// A declared slope tilts the plate inside its cell, which puts more steel
-    /// in the way than the span alone accounts for.
-    #[test]
-    fn declared_slope_thickens_the_plate() {
-        // A face at 120deg meets a +x round 60deg off its normal: 1/cos(60) = 2x.
-        let sloped = Block { facing: Some(120f32.to_radians()), ..steel() };
-        let o = obliquity(WEST_FACE, Vec2::X, &sloped, Some(KineticAmmoType::AP), 1.0);
-        assert!((o.slope_mult - 2.0).abs() < 0.05, "60deg slope should double LOS thickness, got {}", o.slope_mult);
-        let hit = resolve_impact(60.0, &sloped, 1.0, o, None);
-        assert!(hit.effective_thickness > steel().thickness);
     }
 
     /// Ammo decides what a slope is worth. A dart barely skips, a squash head
@@ -340,7 +415,7 @@ mod tests {
     /// frame; there's no surface left to skip off.
     #[test]
     fn no_entry_face_means_no_deflection() {
-        let o = obliquity(IVec2::ZERO, Vec2::X, &steel(), Some(KineticAmmoType::AP), 0.45);
+        let o = obliquity(Vec2::ZERO, Vec2::X, &steel(), Some(KineticAmmoType::AP), 0.45);
         assert_eq!(o, Obliquity::HEAD_ON);
     }
 
@@ -393,25 +468,6 @@ mod tests {
             Block::for_module(IVec2::ZERO, ModuleType::ArmorPlate, Rotation::North).facing,
             None
         );
-    }
-
-    /// The interaction worth having: 40deg off the bow is a solid hit on flat
-    /// plating, and a skip off a wedge turned to meet it. Neither the angle nor
-    /// the block does it alone — manoeuvring and building stack.
-    #[test]
-    fn a_wedge_and_an_angled_hull_stack_into_a_bounce() {
-        use crate::components::{ModuleType, Rotation};
-        let incoming = Vec2::from_angle(40f32.to_radians());
-        let ap = Some(KineticAmmoType::AP);
-
-        let flat = Block::for_module(IVec2::ZERO, ModuleType::ArmorPlate, Rotation::North);
-        assert!(!obliquity(WEST_FACE, incoming, &flat, ap, 0.45).ricochet,
-            "40deg onto flat plating should still bite");
-
-        let wedge = Block::for_module(IVec2::ZERO, ModuleType::AngledArmorPlate, Rotation::West);
-        let skipped = obliquity(WEST_FACE, incoming, &wedge, ap, 0.45);
-        assert!(skipped.ricochet, "the same shot onto a wedge facing it should skip");
-        assert!(skipped.cos_impact < 0.35);
     }
 
     #[test]

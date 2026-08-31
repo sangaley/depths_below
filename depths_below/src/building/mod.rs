@@ -297,6 +297,10 @@ fn module_facing(module_type: ModuleType, rotation: Rotation) -> Option<f32> {
 pub struct GridStep {
     pub entity: Entity,
     pub cell: IVec2,
+    /// Distance along the walked segment at which the round entered this cell,
+    /// in cell widths. With `span`, this reconstructs the entry and exit
+    /// points — which is what a sub-cell shape test needs to clip against.
+    pub t_enter: f32,
     /// Which side of the cell the ray came in through, as the unit offset
     /// from this cell toward the cell it arrived from (`(-1, 0)` = entered
     /// through the -x face). `(0, 0)` for the cell the walk started inside.
@@ -334,7 +338,7 @@ impl ShipGrid {
         if len < 1e-4 {
             let cell = IVec2::new(from.x.round() as i32, from.y.round() as i32);
             if let Some(entity) = self.get(cell) {
-                out.push(GridStep { entity, cell, entry_face: IVec2::ZERO, span: 0.0 });
+                out.push(GridStep { entity, cell, entry_face: IVec2::ZERO, t_enter: 0.0, span: 0.0 });
             }
             return out;
         }
@@ -366,7 +370,7 @@ impl ShipGrid {
                 if let Some(entity) = self.get(cell) {
                     match out.last_mut() {
                         Some(last) if last.entity == entity => last.span += span,
-                        _ => out.push(GridStep { entity, cell, entry_face, span }),
+                        _ => out.push(GridStep { entity, cell, entry_face, t_enter, span }),
                     }
                 }
             }

@@ -551,19 +551,32 @@ pub fn check_projectile_hits(
                 // is already baked into `inv`, so angling the ship angles
                 // every plate on that side without any new per-block data.
                 let dir_local = (cell_to - cell_from).normalize_or_zero();
-                let step = grid
-                    .walk(cell_from, cell_to)
-                    .into_iter()
+                // Walk the cells, then ask each block's SHAPE what the round
+                // actually met inside it. A wedge fills half its cell, so a
+                // round crossing the hollow corner passes through and the walk
+                // carries on to whatever is behind — the block no longer gets
+                // to claim its diagonal from every direction.
+                let mut found = None;
+                for step in grid.walk(cell_from, cell_to) {
                     // A penetrator is still inside the block it just went
                     // through; keep walking to the one behind it.
-                    .find(|s| Some(s.entity) != proj.last_hit);
-                let Some(step) = step else { continue };
-                let block = block_query
-                    .get(step.entity)
-                    .copied()
-                    .unwrap_or(crate::building::Block::module(step.cell));
+                    if Some(step.entity) == proj.last_hit { continue; }
+                    let block = block_query
+                        .get(step.entity)
+                        .copied()
+                        .unwrap_or(crate::building::Block::module(step.cell));
+                    let entry = cell_from + dir_local * step.t_enter;
+                    let exit = cell_from + dir_local * (step.t_enter + step.span);
+                    if let Some(hit) = crate::combat::impact::clip_to_shape(
+                        &block, step.entry_face, step.cell, entry, exit,
+                    ) {
+                        found = Some((step, block, hit));
+                        break;
+                    }
+                }
+                let Some((step, block, surface)) = found else { continue };
                 let obl = crate::combat::impact::obliquity(
-                    step.entry_face, dir_local, &block, proj.ammo, proj.caliber,
+                    surface.normal, dir_local, &block, proj.ammo, proj.caliber,
                 );
 
                 // Primary hit: damage the struck block, remember where.
@@ -572,7 +585,7 @@ pub fn check_projectile_hits(
                     // the cell in update_ship_grids), so reaching a module
                     // means nothing covers it: fully exposed, takes everything.
                     let hit_pos = gt.translation().truncate();
-                    let impact = crate::combat::impact::resolve_impact(proj.damage, &block, step.span, obl, Some(0.0));
+                    let impact = crate::combat::impact::resolve_impact(proj.damage, &block, surface.span, obl, Some(0.0));
                     ai_module_query.get_mut(step.entity).ok().map(|(mut module, _)| {
                         module.health = (module.health - impact.to_block).max(0.0);
                         spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.6, 0.2), 12.0);
@@ -597,7 +610,7 @@ pub fn check_projectile_hits(
                         Some(_) => crate::combat::ammo_types::armor_pass_through(proj.ammo),
                         None => 0.0,
                     };
-                    let impact = crate::combat::impact::resolve_impact(proj.damage, &block, step.span, obl, Some(pass));
+                    let impact = crate::combat::impact::resolve_impact(proj.damage, &block, surface.span, obl, Some(pass));
                     let hull_hit = ai_hull_query.get_mut(step.entity).ok().map(|(mut hull, gt)| {
                         hull.health = (hull.health - impact.to_block).max(0.0);
                         let hit_pos = gt.translation().truncate();
@@ -630,9 +643,7 @@ pub fn check_projectile_hits(
                     }
                     // Plate normal back out into world space — the ship's
                     // heading is in ai_gt, so this follows the hull as it turns.
-                    let face = Vec2::new(step.entry_face.x as f32, step.entry_face.y as f32);
-                    let n_local = block.facing
-                        .map_or_else(|| face.normalize_or_zero(), Vec2::from_angle);
+                    let n_local = surface.normal.normalize_or_zero();
                     let n = ai_gt.affine()
                         .transform_vector3(n_local.extend(0.0))
                         .truncate()

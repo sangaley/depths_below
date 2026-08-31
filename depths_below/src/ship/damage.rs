@@ -104,7 +104,7 @@ pub fn process_ship_damage(
                     .filter(|(_, _, d)| *d < (2.0 * 66.0_f32).powi(2))
                     .min_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal));
                 if let Some((entity, cell, _)) = nearest {
-                    steps.push(crate::building::GridStep { entity, cell, entry_face: IVec2::ZERO, span: 1.0 });
+                    steps.push(crate::building::GridStep { entity, cell, entry_face: IVec2::ZERO, t_enter: 0.0, span: 1.0 });
                 }
             }
 
@@ -123,16 +123,24 @@ pub fn process_ship_damage(
                     .get(step.entity)
                     .copied()
                     .unwrap_or(crate::building::Block::module(step.cell));
+                // Ask the block's shape what was actually met — a wedge whose
+                // hollow corner the round crossed isn't hit at all.
+                let cell_from = to_cell(start);
+                let entry = cell_from + dir_local * step.t_enter;
+                let exit = cell_from + dir_local * (step.t_enter + step.span);
+                let Some(surface) = crate::combat::impact::clip_to_shape(
+                    &block, step.entry_face, step.cell, entry, exit,
+                ) else { continue };
                 // No ammo profile on this path: incoming fire arrives as a
                 // ShipDamaged event that doesn't carry what fired it, so the
                 // round is treated as unspecialised (AP-like thresholds).
                 let obl = crate::combat::impact::obliquity(
-                    step.entry_face, dir_local, &block, None, 1.0,
+                    surface.normal, dir_local, &block, None, 1.0,
                 );
 
                 if let Ok((_, mut hull, _, parent)) = hull_query.get_mut(step.entity) {
                     if parent.parent() != player_ship { continue; }
-                    let impact = crate::combat::impact::resolve_impact(remaining_damage, &block, step.span, obl, None);
+                    let impact = crate::combat::impact::resolve_impact(remaining_damage, &block, surface.span, obl, None);
                     hull.health = (hull.health - impact.to_block).max(0.0);
                     remaining_damage = impact.through;
 
