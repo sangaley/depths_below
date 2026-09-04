@@ -123,6 +123,73 @@ pub fn get_layout(ship_type: AiShipType) -> AiShipLayout {
     }
 }
 
+/// An angled plate turned so its armoured face looks out along one diagonal.
+///
+/// Rotation maps to the corner the face points at — North=NE, East=SE,
+/// South=SW, West=NW (see `Block::for_module`). Ships point +X, so on a hull
+/// that means: `North` bow-top, `East` bow-bottom, `West` stern-top,
+/// `South` stern-bottom.
+///
+/// Plates sit OUTBOARD of the hull, never on it. Hull wins its own cell in
+/// ShipGrid, so a plate sharing a hull cell would never be the thing a round
+/// meets — it would armour nothing.
+fn wedge(x: i32, y: i32, face: Rotation, plate: ModuleType) -> ModulePlacement {
+    ModulePlacement { module_type: plate, grid_pos: IVec2::new(x, y), rotation: face }
+}
+
+/// Wrap a silhouette's stepped bow and stern in angled plating — one plate per
+/// step of the staircase, each turned so its face looks out along the step it
+/// smooths.
+///
+/// This is why the hull rows below are authored as deliberate STAIRCASES
+/// rather than smooth curves: every step is a facet, and every facet is a
+/// surface a round can skip off. Change a ship's outline and its armour
+/// follows, so the silhouette stays the single source of a ship's shape.
+///
+/// `max_run` caps how many plates one step may spend, so a hull that flares
+/// hard doesn't bury itself in armour it can't carry.
+fn armour_belt(rows: &[(i32, i32, i32)], plate: ModuleType, max_run: i32) -> Vec<ModulePlacement> {
+    let mut out: Vec<ModulePlacement> = Vec::new();
+    // A row narrower than BOTH its neighbours is a step twice over, so the
+    // same cell can be claimed from above and from below. First claim wins.
+    let mut taken: std::collections::HashSet<IVec2> = std::collections::HashSet::new();
+    for pair in rows.windows(2) {
+        let (y_hi, a_hi, b_hi) = pair[0];
+        let (y_lo, a_lo, b_lo) = pair[1];
+        if y_hi - y_lo != 1 { continue; }
+        // Upper half faces up, lower half faces down: the belt has to look
+        // AWAY from the hull, and which way that is flips at the waterline.
+        let (bow, stern) = if y_hi > 0 {
+            (Rotation::North, Rotation::West)
+        } else {
+            (Rotation::East, Rotation::South)
+        };
+        // Bow side: the narrower row's outboard cells are the step.
+        let (narrow_y, wide_b, narrow_b) = if b_hi < b_lo {
+            (y_hi, b_lo, b_hi)
+        } else {
+            (y_lo, b_hi, b_lo)
+        };
+        for x in (narrow_b + 1)..=(narrow_b + (wide_b - narrow_b).min(max_run)) {
+            if taken.insert(IVec2::new(x, narrow_y)) {
+                out.push(wedge(x, narrow_y, bow, plate));
+            }
+        }
+        // Stern side, mirrored.
+        let (narrow_y, wide_a, narrow_a) = if a_hi > a_lo {
+            (y_hi, a_lo, a_hi)
+        } else {
+            (y_lo, a_hi, a_lo)
+        };
+        for x in (narrow_a - (narrow_a - wide_a).min(max_run))..narrow_a {
+            if taken.insert(IVec2::new(x, narrow_y)) {
+                out.push(wedge(x, narrow_y, stern, plate));
+            }
+        }
+    }
+    out
+}
+
 /// Helper: build ship-shaped hull from row definitions (y, x_min, x_max)
 fn build_shaped_hull(rows: &[(i32, i32, i32)], material: HullMaterial) -> Vec<HullCellDef> {
     let mut hull_cells = Vec::new();
@@ -154,17 +221,16 @@ fn hull_size(rows: &[(i32, i32, i32)]) -> Vec2 {
 fn leviathan_layout() -> AiShipLayout {
     let material = HullMaterial::Steel;
     let rows: &[(i32, i32, i32)] = &[
-        ( 3,   4,  7),
-        ( 2,   1,  8),
-        ( 1,  -2,  9),
-        ( 0,  -3, 10),
-        (-1,  -3, 10),
-        (-2,  -2,  9),
-        (-3,   1,  8),
-        (-4,   4,  7),
+        ( 3,   4,  9),
+        ( 2,   0, 11),
+        ( 1,  -3, 10),
+        ( 0,  -4, 11),
+        (-1,  -4, 10),
+        (-2,  -3,  9),
+        (-3,   1,  6),
     ];
     let hull_cells = build_shaped_hull(rows, material);
-    let modules = vec![
+    let mut modules = vec![
         // Small backup engines (main movement is creature-towed)
         ModulePlacement { module_type: ModuleType::SmallEngine, grid_pos: IVec2::new(-3, 1), rotation: Rotation::West },
         ModulePlacement { module_type: ModuleType::SmallEngine, grid_pos: IVec2::new(-3, -1), rotation: Rotation::West },
@@ -189,6 +255,7 @@ fn leviathan_layout() -> AiShipLayout {
     ];
     // Avoids combat entirely (flee-only per ai_brain.rs) — no combat
     // identity to tune, registry defaults on its pair of defensive Gatlings.
+    modules.extend(armour_belt(rows, ModuleType::AngledHullPlate, 2));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts: vec![] }
 }
 
@@ -200,19 +267,18 @@ fn abyssal_cult_layout() -> AiShipLayout {
     let material = HullMaterial::Composite;
     // Organic, bulbous shape
     let rows: &[(i32, i32, i32)] = &[
-        ( 4,   3,  6),
-        ( 3,   0,  9),
-        ( 2,  -2, 10),
-        ( 1,  -4, 10),
-        ( 0,  -5, 10),
-        (-1,  -5, 10),
-        (-2,  -4, 10),
-        (-3,  -2, 10),
-        (-4,   0,  9),
-        (-5,   3,  6),
+        ( 4,   5,  8),
+        ( 3,   2, 10),
+        ( 2,  -1, 11),
+        ( 1,  -3, 10),
+        ( 0,  -4,  9),
+        (-1,  -4,  8),
+        (-2,  -3,  9),
+        (-3,  -1,  9),
+        (-4,   3, 10),
     ];
     let hull_cells = build_shaped_hull(rows, material);
-    let modules = vec![
+    let mut modules = vec![
         // "Creature heart" reactor cluster (standard reactors reflavored)
         ModulePlacement { module_type: ModuleType::StandardReactor, grid_pos: IVec2::new(1, 1), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::StandardReactor, grid_pos: IVec2::new(1, -1), rotation: Rotation::North },
@@ -245,6 +311,7 @@ fn abyssal_cult_layout() -> AiShipLayout {
         wl(IVec2::new(6, 0), 1, 1.0, 1.1, 1.15, None),
         wl(IVec2::new(7, -3), 1, 1.0, 1.1, 1.15, None),
     ];
+    modules.extend(armour_belt(rows, ModuleType::AngledArmorPlate, 2));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
@@ -256,17 +323,17 @@ fn drowned_layout() -> AiShipLayout {
     let material = HullMaterial::Steel;
     // Damaged, asymmetric shape (holes represented by missing cells)
     let rows: &[(i32, i32, i32)] = &[
-        ( 3,   5,  8),
-        ( 2,   1, 10),
-        ( 1,  -3, 11),
-        ( 0,  -5, 12),
-        (-1,  -5, 10),
+        ( 3,   6, 10),
+        ( 2,   2, 12),
+        ( 1,  -2, 12),
+        ( 0,  -3, 12),
+        (-1,  -3, 11),
         (-2,  -2,  9),
-        (-3,   1,  8),
-        (-4,   5,  7),
+        (-3,   2,  9),
+        (-4,   6, 10),
     ];
     let hull_cells = build_shaped_hull(rows, material);
-    let modules = vec![
+    let mut modules = vec![
         // Barely functional engines
         ModulePlacement { module_type: ModuleType::SmallEngine, grid_pos: IVec2::new(-2, 0), rotation: Rotation::West },
         ModulePlacement { module_type: ModuleType::SmallEngine, grid_pos: IVec2::new(-2, -1), rotation: Rotation::West },
@@ -295,6 +362,7 @@ fn drowned_layout() -> AiShipLayout {
         wl(IVec2::new(9, -4), 1, 0.9, 1.0, 0.9, None),
         wl(IVec2::new(8, 1), 1, 0.9, 1.0, 0.9, None),
     ];
+    modules.extend(armour_belt(rows, ModuleType::AngledHullPlate, 2));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
@@ -306,19 +374,19 @@ fn pressure_king_layout() -> AiShipLayout {
     let material = HullMaterial::AbyssalAlloy;
     // Dense, compact diamond shape
     let rows: &[(i32, i32, i32)] = &[
-        ( 4,   4,  7),
-        ( 3,   1,  9),
-        ( 2,  -1, 11),
-        ( 1,  -3, 12),
-        ( 0,  -4, 13),
-        (-1,  -4, 13),
-        (-2,  -3, 12),
-        (-3,  -1, 11),
-        (-4,   1,  9),
-        (-5,   4,  7),
+        ( 4,  -2,  4),
+        ( 3,  -3,  7),
+        ( 2,  -4, 10),
+        ( 1,  -4, 12),
+        ( 0,  -5, 13),
+        (-1,  -5, 13),
+        (-2,  -4, 12),
+        (-3,  -4, 10),
+        (-4,  -3,  7),
+        (-5,  -2,  4),
     ];
     let hull_cells = build_shaped_hull(rows, material);
-    let modules = vec![
+    let mut modules = vec![
         // Powerful engines for ramming
         ModulePlacement { module_type: ModuleType::LargeEngine, grid_pos: IVec2::new(-3, 1), rotation: Rotation::West },
         ModulePlacement { module_type: ModuleType::LargeEngine, grid_pos: IVec2::new(-3, -1), rotation: Rotation::West },
@@ -354,6 +422,7 @@ fn pressure_king_layout() -> AiShipLayout {
         wl(IVec2::new(9, -3), 2, 1.0, 1.0, 1.1, None),
         wl(IVec2::new(11, 0), 3, 1.0, 1.0, 1.0, None),
     ];
+    modules.extend(armour_belt(rows, ModuleType::AngledArmorPlate, 3));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
@@ -365,15 +434,16 @@ fn glass_eye_layout() -> AiShipLayout {
     let material = HullMaterial::Composite;
     // Long, thin needle shape
     let rows: &[(i32, i32, i32)] = &[
-        ( 2,   4, 12),
-        ( 1,  -4, 14),
+        ( 3,   3,  6),
+        ( 2,   2,  8),
+        ( 1,  -5, 14),
         ( 0,  -6, 15),
         (-1,  -6, 15),
-        (-2,  -4, 14),
-        (-3,   4, 12),
+        (-2,   2,  8),
+        (-3,   3,  6),
     ];
     let hull_cells = build_shaped_hull(rows, material);
-    let modules = vec![
+    let mut modules = vec![
         // Silent engines
         ModulePlacement { module_type: ModuleType::SmallEngine, grid_pos: IVec2::new(-4, 1), rotation: Rotation::West },
         ModulePlacement { module_type: ModuleType::SmallEngine, grid_pos: IVec2::new(-4, -1), rotation: Rotation::West },
@@ -397,6 +467,7 @@ fn glass_eye_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::SignalBuoy, grid_pos: IVec2::new(13, 0), rotation: Rotation::East },
     ];
     // Carries zero weapons — nothing to tune.
+    modules.extend(armour_belt(rows, ModuleType::AngledHullPlate, 2));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts: vec![] }
 }
 
@@ -409,21 +480,21 @@ fn iron_tide_layout() -> AiShipLayout {
     let material = HullMaterial::Titanium;
     // Massive wide battleship
     let rows: &[(i32, i32, i32)] = &[
-        ( 5,   7, 10),
-        ( 4,   4, 12),
-        ( 3,   1, 13),
-        ( 2,  -1, 14),
-        ( 1,  -3, 14),
-        ( 0,  -5, 14),
-        (-1,  -5, 14),
-        (-2,  -3, 14),
-        (-3,  -1, 14),
-        (-4,   1, 13),
-        (-5,   4, 12),
-        (-6,   7, 10),
+        ( 5,   5,  9),
+        ( 4,   2, 11),
+        ( 3,   0, 13),
+        ( 2,  -2, 14),
+        ( 1,  -4, 15),
+        ( 0,  -5, 15),
+        (-1,  -5, 15),
+        (-2,  -4, 15),
+        (-3,  -2, 14),
+        (-4,   0, 13),
+        (-5,   2, 11),
+        (-6,   5,  9),
     ];
     let hull_cells = build_shaped_hull(rows, material);
-    let modules = vec![
+    let mut modules = vec![
         // 4 large engines
         ModulePlacement { module_type: ModuleType::LargeEngine, grid_pos: IVec2::new(-4, 1), rotation: Rotation::West },
         ModulePlacement { module_type: ModuleType::LargeEngine, grid_pos: IVec2::new(-4, -1), rotation: Rotation::West },
@@ -473,6 +544,7 @@ fn iron_tide_layout() -> AiShipLayout {
         wl(IVec2::new(12, -2), 3, 1.0, 1.0, 1.1, None),
         wl(IVec2::new(11, 4), 3, 1.0, 1.0, 1.1, None),
     ];
+    modules.extend(armour_belt(rows, ModuleType::AngledArmorPlate, 3));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
@@ -483,17 +555,16 @@ fn iron_tide_layout() -> AiShipLayout {
 fn blackwater_layout() -> AiShipLayout {
     let material = HullMaterial::Titanium;
     let rows: &[(i32, i32, i32)] = &[
-        ( 3,   6, 10),
-        ( 2,   2, 12),
-        ( 1,  -1, 13),
+        ( 3,   1, 11),
+        ( 2,  -2, 13),
+        ( 1,  -3, 14),
         ( 0,  -3, 14),
         (-1,  -3, 14),
-        (-2,  -1, 13),
-        (-3,   2, 12),
-        (-4,   6, 10),
+        (-2,  -2, 13),
+        (-3,   1, 11),
     ];
     let hull_cells = build_shaped_hull(rows, material);
-    let modules = vec![
+    let mut modules = vec![
         // Fast engines
         ModulePlacement { module_type: ModuleType::StandardEngine, grid_pos: IVec2::new(-2, 1), rotation: Rotation::West },
         ModulePlacement { module_type: ModuleType::StandardEngine, grid_pos: IVec2::new(-2, -1), rotation: Rotation::West },
@@ -527,6 +598,7 @@ fn blackwater_layout() -> AiShipLayout {
         wl(IVec2::new(12, -1), 2, 1.0, 1.0, 1.05, None),
         wl(IVec2::new(6, 2), 3, 1.0, 1.0, 1.1, None),
     ];
+    modules.extend(armour_belt(rows, ModuleType::AngledArmorPlate, 2));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
@@ -539,15 +611,14 @@ fn rust_swarm_layout() -> AiShipLayout {
     // Tiny asymmetric junk ship — a bit bigger than before, but still the
     // smallest thing flying. "Tiny and expendable" is the whole point.
     let rows: &[(i32, i32, i32)] = &[
-        ( 2,   2,  5),
+        ( 2,   1,  4),
         ( 1,  -1,  6),
-        ( 0,  -2,  6),
-        (-1,  -2,  6),
-        (-2,  -1,  6),
-        (-3,   2,  5),
+        ( 0,  -2,  7),
+        (-1,  -2,  5),
+        (-2,   0,  3),
     ];
     let hull_cells = build_shaped_hull(rows, material);
-    let modules = vec![
+    let mut modules = vec![
         // One sputtering engine
         ModulePlacement { module_type: ModuleType::SmallEngine, grid_pos: IVec2::new(-1, 0), rotation: Rotation::West },
         // Tiny reactor barely keeping things running
@@ -566,6 +637,7 @@ fn rust_swarm_layout() -> AiShipLayout {
         wl(IVec2::new(4, 1), 0, 1.0, 1.5, 0.7, Some(KineticAmmoType::Flak)),
         wl(IVec2::new(5, 0), 1, 1.0, 1.3, 0.8, None),
     ];
+    modules.extend(armour_belt(rows, ModuleType::AngledHullPlate, 2));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
@@ -578,23 +650,25 @@ fn rust_swarm_layout() -> AiShipLayout {
 fn dreadnought_layout() -> AiShipLayout {
     let material = HullMaterial::Titanium;
     let rows: &[(i32, i32, i32)] = &[
-        ( 6,   9, 13),
-        ( 5,   6, 15),
-        ( 4,   3, 16),
-        ( 3,   0, 17),
-        ( 2,  -3, 17),
-        ( 1,  -6, 17),
-        ( 0,  -8, 17),
-        (-1,  -8, 17),
-        (-2,  -6, 17),
-        (-3,  -3, 17),
-        (-4,   0, 17),
-        (-5,   3, 16),
-        (-6,   6, 15),
-        (-7,   9, 13),
+        ( 7,   8, 12),
+        ( 6,   5, 15),
+        ( 5,   2, 17),
+        ( 4,   0, 18),
+        ( 3,  -3, 18),
+        ( 2,  -5, 18),
+        ( 1,  -7, 18),
+        ( 0,  -8, 18),
+        (-1,  -8, 18),
+        (-2,  -7, 18),
+        (-3,  -5, 18),
+        (-4,  -3, 18),
+        (-5,   0, 18),
+        (-6,   2, 17),
+        (-7,   5, 15),
+        (-8,   8, 12),
     ];
     let hull_cells = build_shaped_hull(rows, material);
-    let modules = vec![
+    let mut modules = vec![
         // Six large engines — this thing is heavy
         ModulePlacement { module_type: ModuleType::LargeEngine, grid_pos: IVec2::new(-6, 1), rotation: Rotation::West },
         ModulePlacement { module_type: ModuleType::LargeEngine, grid_pos: IVec2::new(-6, 0), rotation: Rotation::West },
@@ -666,6 +740,7 @@ fn dreadnought_layout() -> AiShipLayout {
         wl(IVec2::new(13, 4), 3, 1.0, 1.0, 1.15, None),
         wl(IVec2::new(13, -5), 3, 1.0, 1.0, 1.15, None),
     ];
+    modules.extend(armour_belt(rows, ModuleType::AngledArmorPlate, 3));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
@@ -678,27 +753,27 @@ fn dreadnought_layout() -> AiShipLayout {
 fn void_titan_layout() -> AiShipLayout {
     let material = HullMaterial::AbyssalAlloy;
     let rows: &[(i32, i32, i32)] = &[
-        ( 8,  10, 14),
-        ( 7,   6, 18),
-        ( 6,   3, 20),
-        ( 5,   0, 21),
-        ( 4,  -3, 22),
-        ( 3,  -6, 22),
-        ( 2,  -8, 22),
-        ( 1, -10, 22),
-        ( 0, -11, 22),
-        (-1, -11, 22),
-        (-2, -10, 22),
-        (-3,  -8, 22),
-        (-4,  -6, 22),
-        (-5,  -3, 22),
-        (-6,   0, 21),
-        (-7,   3, 20),
-        (-8,   6, 18),
-        (-9,  10, 14),
+        ( 8,  14, 20),
+        ( 7,  10, 21),
+        ( 6,   5, 22),
+        ( 5,   1, 23),
+        ( 4,  -3, 23),
+        ( 3,  -6, 23),
+        ( 2,  -9, 23),
+        ( 1, -11, 23),
+        ( 0, -12, 23),
+        (-1, -12, 23),
+        (-2, -11, 23),
+        (-3,  -9, 23),
+        (-4,  -6, 23),
+        (-5,  -3, 23),
+        (-6,   1, 23),
+        (-7,   5, 22),
+        (-8,  10, 21),
+        (-9,  14, 20),
     ];
     let hull_cells = build_shaped_hull(rows, material);
-    let modules = vec![
+    let mut modules = vec![
         // Massive engine cluster
         ModulePlacement { module_type: ModuleType::LargeEngine, grid_pos: IVec2::new(-9, 2), rotation: Rotation::West },
         ModulePlacement { module_type: ModuleType::LargeEngine, grid_pos: IVec2::new(-9, 0), rotation: Rotation::West },
@@ -769,5 +844,82 @@ fn void_titan_layout() -> AiShipLayout {
         wl(IVec2::new(16, 5), 3, 1.0, 1.05, 1.25, None),
         wl(IVec2::new(16, -6), 3, 1.0, 1.05, 1.25, None),
     ];
+    modules.extend(armour_belt(rows, ModuleType::AngledArmorPlate, 3));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    const ALL: [AiShipType; 10] = [
+        AiShipType::Leviathan, AiShipType::AbyssalCult, AiShipType::Drowned,
+        AiShipType::PressureKing, AiShipType::GlassEye, AiShipType::IronTide,
+        AiShipType::Blackwater, AiShipType::RustSwarm, AiShipType::Dreadnought,
+        AiShipType::VoidTitan,
+    ];
+
+    fn hull_cells(layout: &AiShipLayout) -> HashSet<IVec2> {
+        layout.hull_cells.iter().map(|c| c.grid_pos).collect()
+    }
+
+    fn is_plate(mt: ModuleType) -> bool {
+        matches!(mt, ModuleType::AngledArmorPlate | ModuleType::AngledHullPlate)
+    }
+
+    /// Angled plating must sit OUTBOARD. Hull wins its own cell in ShipGrid, so
+    /// a plate on a hull cell is armour that can never be hit.
+    #[test]
+    fn plates_never_share_a_cell_with_hull() {
+        for ship in ALL {
+            let layout = get_layout(ship);
+            let hull = hull_cells(&layout);
+            for m in layout.modules.iter().filter(|m| is_plate(m.module_type)) {
+                assert!(!hull.contains(&m.grid_pos),
+                    "{ship:?}: plate at {:?} is buried in hull and would never be hit", m.grid_pos);
+            }
+        }
+    }
+
+    /// ...and must still touch the ship, or it's floating in space.
+    #[test]
+    fn plates_are_attached_to_the_hull() {
+        for ship in ALL {
+            let layout = get_layout(ship);
+            let hull = hull_cells(&layout);
+            for m in layout.modules.iter().filter(|m| is_plate(m.module_type)) {
+                let touching = [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y]
+                    .iter().any(|d| hull.contains(&(m.grid_pos + *d)));
+                assert!(touching, "{ship:?}: plate at {:?} is not attached to anything", m.grid_pos);
+            }
+        }
+    }
+
+    /// Every non-plate module sits on hull. Redesigning a silhouette is the
+    /// easy way to strand a reactor in open space.
+    #[test]
+    fn every_module_sits_on_hull() {
+        for ship in ALL {
+            let layout = get_layout(ship);
+            let hull = hull_cells(&layout);
+            for m in layout.modules.iter().filter(|m| !is_plate(m.module_type)) {
+                assert!(hull.contains(&m.grid_pos),
+                    "{ship:?}: {:?} at {:?} is off the hull", m.module_type, m.grid_pos);
+            }
+        }
+    }
+
+    /// Two things must not occupy the same cell.
+    #[test]
+    fn no_two_modules_share_a_cell() {
+        for ship in ALL {
+            let layout = get_layout(ship);
+            let mut seen = HashSet::new();
+            for m in &layout.modules {
+                assert!(seen.insert(m.grid_pos),
+                    "{ship:?}: two modules both at {:?}", m.grid_pos);
+            }
+        }
+    }
 }
