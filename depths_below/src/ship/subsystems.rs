@@ -168,7 +168,12 @@ pub fn apply_torpedo_loader_bonus(
             if dist <= 1.5 {
                 // Speed up the cooldown timer by the reload bonus factor
                 let speedup = 1.0 + loader.reload_bonus;
-                let remaining = cooldown.timer.remaining_secs();
+                // Saturating: a duration shrunk under a running timer would
+                // make Timer::remaining() panic. sync_weapon_cooldowns keeps
+                // elapsed in range, but this reads every frame from a system
+                // that can't afford to be wrong about it.
+                let remaining = cooldown.timer.duration().as_secs_f32()
+                    - cooldown.timer.elapsed_secs().min(cooldown.timer.duration().as_secs_f32());
                 let new_remaining = remaining / speedup;
                 let advance = remaining - new_remaining;
                 let duration_secs = cooldown.timer.duration().as_secs_f32();

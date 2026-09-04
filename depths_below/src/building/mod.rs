@@ -9,6 +9,7 @@ use crate::ship::spawn_module;
 use crate::sprite_map;
 
 pub mod customization;
+pub mod armour;
 pub mod footprints;
 pub mod inspection;
 pub mod multiblock;

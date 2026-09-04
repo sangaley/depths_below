@@ -177,6 +177,15 @@ pub fn sync_weapon_cooldowns(
         let duration = std::time::Duration::from_secs_f32(1.0 / weapon.fire_rate.max(0.05));
         if cooldown.timer.duration() != duration {
             cooldown.timer.set_duration(duration);
+            // set_duration leaves `elapsed` alone, so a fire rate going UP
+            // shortens the duration out from under a timer that may already be
+            // past the new end. Timer::remaining() is `duration - elapsed` and
+            // panics outright on that — "overflow when subtracting durations",
+            // which is a hard crash, not a warning. ship::subsystems' torpedo
+            // autoloader reads remaining_secs() every frame, so it lands there.
+            if cooldown.timer.elapsed() > duration {
+                cooldown.timer.set_elapsed(duration);
+            }
         }
     }
 }

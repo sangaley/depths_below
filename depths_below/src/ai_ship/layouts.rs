@@ -123,97 +123,11 @@ pub fn get_layout(ship_type: AiShipType) -> AiShipLayout {
     }
 }
 
-/// An angled plate turned so its armoured face looks out along one diagonal.
-///
-/// Rotation maps to the corner the face points at — North=NE, East=SE,
-/// South=SW, West=NW (see `Block::for_module`). Ships point +X, so on a hull
-/// that means: `North` bow-top, `East` bow-bottom, `West` stern-top,
-/// `South` stern-bottom.
-///
-/// Plates sit OUTBOARD of the hull, never on it. Hull wins its own cell in
-/// ShipGrid, so a plate sharing a hull cell would never be the thing a round
-/// meets — it would armour nothing.
-fn wedge(x: i32, y: i32, face: Rotation, plate: ModuleType) -> ModulePlacement {
-    ModulePlacement { module_type: plate, grid_pos: IVec2::new(x, y), rotation: face }
-}
-
-/// Wrap a silhouette's stepped bow and stern in angled plating — one plate per
-/// step of the staircase, each turned so its face looks out along the step it
-/// smooths.
-///
-/// This is why the hull rows below are authored as deliberate STAIRCASES
-/// rather than smooth curves: every step is a facet, and every facet is a
-/// surface a round can skip off. Change a ship's outline and its armour
-/// follows, so the silhouette stays the single source of a ship's shape.
-///
-/// `max_run` caps how many plates one step may spend, so a hull that flares
-/// hard doesn't bury itself in armour it can't carry.
-fn armour_belt(rows: &[(i32, i32, i32)], plate: ModuleType, max_run: i32) -> Vec<ModulePlacement> {
-    let mut out: Vec<ModulePlacement> = Vec::new();
-    // A row narrower than BOTH its neighbours is a step twice over, so the
-    // same cell can be claimed from above and from below. First claim wins.
-    let mut taken: std::collections::HashSet<IVec2> = std::collections::HashSet::new();
-    for pair in rows.windows(2) {
-        let (y_hi, a_hi, b_hi) = pair[0];
-        let (y_lo, a_lo, b_lo) = pair[1];
-        if y_hi - y_lo != 1 { continue; }
-        // Upper half faces up, lower half faces down: the belt has to look
-        // AWAY from the hull, and which way that is flips at the waterline.
-        let (bow, stern) = if y_hi > 0 {
-            (Rotation::North, Rotation::West)
-        } else {
-            (Rotation::East, Rotation::South)
-        };
-        // Bow side: the narrower row's outboard cells are the step.
-        let (narrow_y, wide_b, narrow_b) = if b_hi < b_lo {
-            (y_hi, b_lo, b_hi)
-        } else {
-            (y_lo, b_hi, b_lo)
-        };
-        for x in (narrow_b + 1)..=(narrow_b + (wide_b - narrow_b).min(max_run)) {
-            if taken.insert(IVec2::new(x, narrow_y)) {
-                out.push(wedge(x, narrow_y, bow, plate));
-            }
-        }
-        // Stern side, mirrored.
-        let (narrow_y, wide_a, narrow_a) = if a_hi > a_lo {
-            (y_hi, a_lo, a_hi)
-        } else {
-            (y_lo, a_hi, a_lo)
-        };
-        for x in (narrow_a - (narrow_a - wide_a).min(max_run))..narrow_a {
-            if taken.insert(IVec2::new(x, narrow_y)) {
-                out.push(wedge(x, narrow_y, stern, plate));
-            }
-        }
-    }
-    out
-}
-
-/// Cap the dorsal and ventral edges.
-///
-/// `armour_belt` works from the STEP between two rows, so the topmost and
-/// bottommost rows — which have no neighbour beyond them — come out bare. That
-/// left every ship plated at the bow and stern and naked along its back and
-/// belly, which is the half of the outline you actually see side-on.
-///
-/// Plates go one cell outboard of the extreme row, `run` of them in from each
-/// end, turned to look out along the corner they sit on.
-fn armour_caps(rows: &[(i32, i32, i32)], plate: ModuleType, run: i32) -> Vec<ModulePlacement> {
-    let mut out = Vec::new();
-    let Some(top) = rows.iter().max_by_key(|r| r.0) else { return out };
-    let Some(bottom) = rows.iter().min_by_key(|r| r.0) else { return out };
-    for (&(y, a, b), outward, bow, stern) in [
-        (top, 1, Rotation::North, Rotation::West),
-        (bottom, -1, Rotation::East, Rotation::South),
-    ] {
-        let reach = run.min((b - a + 1) / 2);
-        for i in 0..reach {
-            out.push(wedge(b - i, y + outward, bow, plate));
-            out.push(wedge(a + i, y + outward, stern, plate));
-        }
-    }
-    out
+/// Adapt shared armour placements into this file's ModulePlacement.
+fn plates(v: Vec<(IVec2, ModuleType, Rotation)>) -> Vec<ModulePlacement> {
+    v.into_iter()
+        .map(|(grid_pos, module_type, rotation)| ModulePlacement { module_type, grid_pos, rotation })
+        .collect()
 }
 
 /// Helper: build ship-shaped hull from row definitions (y, x_min, x_max)
@@ -281,8 +195,8 @@ fn leviathan_layout() -> AiShipLayout {
     ];
     // Avoids combat entirely (flee-only per ai_brain.rs) — no combat
     // identity to tune, registry defaults on its pair of defensive Gatlings.
-    modules.extend(armour_belt(rows, ModuleType::AngledHullPlate, 3));
-    modules.extend(armour_caps(rows, ModuleType::AngledHullPlate, 2));
+    modules.extend(plates(crate::building::armour::belt(rows, ModuleType::AngledHullPlate, 3)));
+    modules.extend(plates(crate::building::armour::caps(rows, ModuleType::AngledHullPlate, 2)));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts: vec![] }
 }
 
@@ -338,8 +252,8 @@ fn abyssal_cult_layout() -> AiShipLayout {
         wl(IVec2::new(6, 0), 1, 1.0, 1.1, 1.15, None),
         wl(IVec2::new(7, -3), 1, 1.0, 1.1, 1.15, None),
     ];
-    modules.extend(armour_belt(rows, ModuleType::AngledArmorPlate, 3));
-    modules.extend(armour_caps(rows, ModuleType::AngledArmorPlate, 2));
+    modules.extend(plates(crate::building::armour::belt(rows, ModuleType::AngledArmorPlate, 3)));
+    modules.extend(plates(crate::building::armour::caps(rows, ModuleType::AngledArmorPlate, 2)));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
@@ -390,8 +304,8 @@ fn drowned_layout() -> AiShipLayout {
         wl(IVec2::new(9, -4), 1, 0.9, 1.0, 0.9, None),
         wl(IVec2::new(8, 1), 1, 0.9, 1.0, 0.9, None),
     ];
-    modules.extend(armour_belt(rows, ModuleType::AngledHullPlate, 3));
-    modules.extend(armour_caps(rows, ModuleType::AngledHullPlate, 2));
+    modules.extend(plates(crate::building::armour::belt(rows, ModuleType::AngledHullPlate, 3)));
+    modules.extend(plates(crate::building::armour::caps(rows, ModuleType::AngledHullPlate, 2)));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
@@ -451,8 +365,8 @@ fn pressure_king_layout() -> AiShipLayout {
         wl(IVec2::new(9, -3), 2, 1.0, 1.0, 1.1, None),
         wl(IVec2::new(11, 0), 3, 1.0, 1.0, 1.0, None),
     ];
-    modules.extend(armour_belt(rows, ModuleType::AngledArmorPlate, 4));
-    modules.extend(armour_caps(rows, ModuleType::AngledArmorPlate, 3));
+    modules.extend(plates(crate::building::armour::belt(rows, ModuleType::AngledArmorPlate, 4)));
+    modules.extend(plates(crate::building::armour::caps(rows, ModuleType::AngledArmorPlate, 3)));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
@@ -497,8 +411,8 @@ fn glass_eye_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::SignalBuoy, grid_pos: IVec2::new(13, 0), rotation: Rotation::East },
     ];
     // Carries zero weapons — nothing to tune.
-    modules.extend(armour_belt(rows, ModuleType::AngledHullPlate, 3));
-    modules.extend(armour_caps(rows, ModuleType::AngledHullPlate, 2));
+    modules.extend(plates(crate::building::armour::belt(rows, ModuleType::AngledHullPlate, 3)));
+    modules.extend(plates(crate::building::armour::caps(rows, ModuleType::AngledHullPlate, 2)));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts: vec![] }
 }
 
@@ -575,8 +489,8 @@ fn iron_tide_layout() -> AiShipLayout {
         wl(IVec2::new(12, -2), 3, 1.0, 1.0, 1.1, None),
         wl(IVec2::new(11, 4), 3, 1.0, 1.0, 1.1, None),
     ];
-    modules.extend(armour_belt(rows, ModuleType::AngledArmorPlate, 4));
-    modules.extend(armour_caps(rows, ModuleType::AngledArmorPlate, 3));
+    modules.extend(plates(crate::building::armour::belt(rows, ModuleType::AngledArmorPlate, 4)));
+    modules.extend(plates(crate::building::armour::caps(rows, ModuleType::AngledArmorPlate, 3)));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
@@ -630,8 +544,8 @@ fn blackwater_layout() -> AiShipLayout {
         wl(IVec2::new(12, -1), 2, 1.0, 1.0, 1.05, None),
         wl(IVec2::new(6, 2), 3, 1.0, 1.0, 1.1, None),
     ];
-    modules.extend(armour_belt(rows, ModuleType::AngledArmorPlate, 3));
-    modules.extend(armour_caps(rows, ModuleType::AngledArmorPlate, 2));
+    modules.extend(plates(crate::building::armour::belt(rows, ModuleType::AngledArmorPlate, 3)));
+    modules.extend(plates(crate::building::armour::caps(rows, ModuleType::AngledArmorPlate, 2)));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
@@ -670,10 +584,10 @@ fn rust_swarm_layout() -> AiShipLayout {
         wl(IVec2::new(4, 1), 0, 1.0, 1.5, 0.7, Some(KineticAmmoType::Flak)),
         wl(IVec2::new(5, 0), 1, 1.0, 1.3, 0.8, None),
     ];
-    modules.extend(armour_belt(rows, ModuleType::AngledHullPlate, 3));
+    modules.extend(plates(crate::building::armour::belt(rows, ModuleType::AngledHullPlate, 3)));
     // Scrap hull: a couple of salvaged plates bolted on, not a belt. At 34
     // cells anything more buries the ship in armour it has no business carrying.
-    modules.extend(armour_caps(rows, ModuleType::AngledHullPlate, 1));
+    modules.extend(plates(crate::building::armour::caps(rows, ModuleType::AngledHullPlate, 1)));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
@@ -776,8 +690,8 @@ fn dreadnought_layout() -> AiShipLayout {
         wl(IVec2::new(13, 4), 3, 1.0, 1.0, 1.15, None),
         wl(IVec2::new(13, -5), 3, 1.0, 1.0, 1.15, None),
     ];
-    modules.extend(armour_belt(rows, ModuleType::AngledArmorPlate, 4));
-    modules.extend(armour_caps(rows, ModuleType::AngledArmorPlate, 3));
+    modules.extend(plates(crate::building::armour::belt(rows, ModuleType::AngledArmorPlate, 4)));
+    modules.extend(plates(crate::building::armour::caps(rows, ModuleType::AngledArmorPlate, 3)));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 
@@ -881,8 +795,8 @@ fn void_titan_layout() -> AiShipLayout {
         wl(IVec2::new(16, 5), 3, 1.0, 1.05, 1.25, None),
         wl(IVec2::new(16, -6), 3, 1.0, 1.05, 1.25, None),
     ];
-    modules.extend(armour_belt(rows, ModuleType::AngledArmorPlate, 4));
-    modules.extend(armour_caps(rows, ModuleType::AngledArmorPlate, 3));
+    modules.extend(plates(crate::building::armour::belt(rows, ModuleType::AngledArmorPlate, 4)));
+    modules.extend(plates(crate::building::armour::caps(rows, ModuleType::AngledArmorPlate, 3)));
     AiShipLayout { hull_cells, modules, body_size: hull_size(rows), hull_material: material, loadouts }
 }
 

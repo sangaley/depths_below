@@ -228,9 +228,38 @@ fn builtin_starter_design() -> crate::building::blueprint::Blueprint {
         m(ModuleType::BridgeWing, 5, 1, Rotation::East),
         mw(ModuleType::HeavyMissile, 7, 1, Rotation::East, 3, 1.0, 1.0, 1.1, None),
         mw(ModuleType::HeavyMissile, 7, -1, Rotation::East, 3, 1.0, 1.0, 1.1, None),
-        m(ModuleType::AngledArmorPlate, 8, 0, Rotation::North),
-        m(ModuleType::AngledArmorPlate, 9, 0, Rotation::North),
     ];
+
+    // The player's ship gets the same treatment as every faction hull: plating
+    // derived from its own outline, one plate per step of the wedge, plus caps
+    // along the dorsal and ventral edges.
+    //
+    // It had two AngledArmorPlates before, at (8,0) and (9,0) — both on the
+    // SPINE, which is hull. Hull wins its own cell in ShipGrid, so neither was
+    // ever the thing a round met; they were decoration. Anything derived here
+    // lands outboard, where it can actually be hit.
+    let occupied: std::collections::HashSet<IVec2> = hull_cells
+        .iter()
+        .map(|c| c.grid_pos)
+        .chain(modules.iter().map(|m| m.grid_pos))
+        .collect();
+    let mut modules = modules;
+    let plating = crate::building::armour::belt(hull_rows, ModuleType::AngledArmorPlate, 3)
+        .into_iter()
+        .chain(crate::building::armour::caps(hull_rows, ModuleType::AngledArmorPlate, 2));
+    for (grid_pos, module_type, rotation) in plating {
+        if occupied.contains(&grid_pos) {
+            continue;
+        }
+        modules.push(BlueprintModule {
+            module_type,
+            grid_pos,
+            rotation,
+            custom_name: None,
+            subcomponents: None,
+            extras: None,
+        });
+    }
 
     Blueprint {
         name: "starter_destroyer".into(),
@@ -879,6 +908,48 @@ fn insert_companion_components(commands: &mut Commands, entity: Entity, companio
             commands.entity(entity).insert(ResearchLabComp {
                 research_speed: *research_speed,
             });
+        }
+    }
+}
+
+#[cfg(test)]
+mod starter_tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    fn is_plate(mt: ModuleType) -> bool {
+        matches!(mt, ModuleType::AngledArmorPlate | ModuleType::AngledHullPlate)
+    }
+
+    /// The player's hull is held to the same rule as every faction hull:
+    /// plating outboard, never buried. The starter used to carry two plates on
+    /// its own spine, which ShipGrid resolves to hull — armour that could not
+    /// be hit.
+    #[test]
+    fn starter_plating_is_outboard_and_attached() {
+        let design = builtin_starter_design();
+        let hull: HashSet<IVec2> = design.hull_cells.iter().map(|c| c.grid_pos).collect();
+        let plates: Vec<_> = design.modules.iter().filter(|m| is_plate(m.module_type)).collect();
+
+        assert!(plates.len() >= 8, "the wedge should carry a real belt, got {}", plates.len());
+        for p in plates {
+            assert!(!hull.contains(&p.grid_pos),
+                "plate at {:?} is buried in hull and would never be hit", p.grid_pos);
+            let touching = [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y]
+                .iter().any(|d| hull.contains(&(p.grid_pos + *d)));
+            assert!(touching, "plate at {:?} is floating free of the ship", p.grid_pos);
+        }
+    }
+
+    /// Nothing may double-book a cell — the derived plating is filtered against
+    /// the hand-placed modules, and this is what proves the filter works.
+    #[test]
+    fn starter_has_no_overlapping_modules() {
+        let design = builtin_starter_design();
+        let mut seen = HashSet::new();
+        for m in &design.modules {
+            assert!(seen.insert(m.grid_pos),
+                "two modules both at {:?}", m.grid_pos);
         }
     }
 }
