@@ -636,6 +636,22 @@ pub fn check_projectile_hits(
                 if obl.ricochet {
                     proj.bounces += 1;
                     proj.last_hit = Some(hit_entity);
+                    // Without this a deflection was indistinguishable from a
+                    // shot that did nothing: a small pale spark and no number.
+                    // The angle is the part that teaches — "it bounced" invites
+                    // you to blame the gun, "68 deg" tells you to change your
+                    // approach or your ammo.
+                    // TODO(audio): wants a hard metallic skip here. There's no
+                    // suitable asset — assets/audio/impacts has explosions only
+                    // — and picking one is a taste call, so it's left unwired
+                    // rather than filled with something wrong.
+                    let degrees = obl.cos_impact.clamp(-1.0, 1.0).acos().to_degrees();
+                    spawn_floating_label(
+                        &mut commands,
+                        hit_pos,
+                        &format!("GLANCED {degrees:.0}\u{00b0}"),
+                        Color::srgb(0.85, 0.92, 1.0),
+                    );
                     spawn_hit_effect(&mut commands, hit_pos, Color::srgb(0.95, 0.95, 0.85), 10.0);
                     if proj.bounces > MAX_BOUNCES {
                         commands.entity(proj_entity).despawn();

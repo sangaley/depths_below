@@ -85,6 +85,23 @@ pub(crate) fn spawn_hit_effect(commands: &mut Commands, position: Vec2, color: C
     ));
 }
 
+/// Spawn a floating word that drifts upward and fades out — the same channel
+/// as a damage number, for outcomes that aren't a number. A round that skips
+/// off a plate did something, and reporting it as "-3" reads as a bad hit
+/// rather than as a deflection.
+pub(crate) fn spawn_floating_label(commands: &mut Commands, position: Vec2, text: &str, color: Color) {
+    commands.spawn((
+        Text2d::new(text.to_string()),
+        TextFont { font_size: FontSize::Px(16.0), ..default() },
+        TextColor(color),
+        Transform::from_xyz(position.x, position.y + 20.0, 1.0),
+        FloatingDamage {
+            timer: Timer::from_seconds(0.9, TimerMode::Once),
+            velocity: 34.0,
+        },
+    ));
+}
+
 /// Spawn a floating damage number that drifts upward and fades out.
 pub(crate) fn spawn_floating_damage(commands: &mut Commands, position: Vec2, damage: f32, color: Color) {
     commands.spawn((

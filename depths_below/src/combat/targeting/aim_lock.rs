@@ -230,6 +230,16 @@ pub fn draw_aim_lock(
     lock: Res<AimLock>,
     existing: Query<Entity, With<AimLockMarker>>,
     blocks: Query<(Option<&Module>, Option<&HullSegment>)>,
+    // Everything below is for the angle readout: predicting the shot means
+    // running the same walk and the same obliquity that hit resolution will.
+    player: Query<&Transform, With<Ship>>,
+    ships: Query<(&GlobalTransform, &crate::building::ShipGrid), With<AiShip>>,
+    block_data: Query<&crate::building::Block>,
+    guns: Query<
+        (&Module, &ChildOf, Option<&crate::building::customization::tuning::SelectedAmmo>),
+        With<Weapon>,
+    >,
+    player_root: Query<Entity, With<Ship>>,
 ) {
     for entity in existing.iter() {
         commands.entity(entity).despawn();
@@ -287,6 +297,83 @@ pub fn draw_aim_lock(
             ..default()
         },
         Transform::from_xyz(point.x - (BAR_W - fill) * 0.5, bar_y, 6.01),
+        AimLockMarker,
+    ));
+
+    // ---- predicted impact angle ----
+    //
+    // The whole armour model is invisible until you can see it coming. A
+    // number here turns "my shots aren't doing anything" into "I'm hitting
+    // this plate at 71 degrees", which points at a fix: come round, or load
+    // something that doesn't skip.
+    //
+    // Predicted by running the real machinery rather than a lookalike, so the
+    // readout can't drift away from what actually happens.
+    let Ok(player_transform) = player.single() else { return };
+    let Some(ship) = lock.ship else { return };
+    let Ok((ship_gt, grid)) = ships.get(ship) else { return };
+
+    // Whatever the guns are loaded with decides what bounces, so read it off
+    // the first player weapon rather than assuming a default.
+    let me = player_root.single().ok();
+    let (ammo, caliber) = guns
+        .iter()
+        .find(|(_, parent, _)| Some(parent.parent()) == me)
+        .map(|(module, _, selected)| {
+            (
+                selected.map(|a| a.0),
+                crate::combat::new_projectiles::caliber_scale(module.module_type),
+            )
+        })
+        .unwrap_or((None, 1.0));
+
+    let muzzle = player_transform.translation.truncate();
+    let inv = ship_gt.affine().inverse();
+    let to_cell = |world: Vec2| {
+        let p = inv.transform_point3(world.extend(0.0)).truncate();
+        Vec2::new(p.x / 66.0, (p.y + 33.0) / 66.0)
+    };
+    let (from, to) = (to_cell(muzzle), to_cell(point));
+    let dir_local = (to - from).normalize_or_zero();
+
+    // The first live block on the line is what a shot would actually meet —
+    // which is not always the block under the reticle.
+    let mut predicted = None;
+    for step in grid.walk(from, to) {
+        let block = block_data
+            .get(step.entity)
+            .copied()
+            .unwrap_or(crate::building::Block::module(step.cell));
+        let entry = from + dir_local * step.t_enter;
+        let exit = from + dir_local * (step.t_enter + step.span);
+        if let Some(surface) =
+            crate::combat::impact::clip_to_shape(&block, step.entry_face, step.cell, entry, exit)
+        {
+            let obl = crate::combat::impact::obliquity(
+                surface.normal, dir_local, &block, ammo, caliber,
+            );
+            predicted = Some((step.entity, obl));
+            break;
+        }
+    }
+    let Some((first_hit, obl)) = predicted else { return };
+
+    let degrees = obl.cos_impact.clamp(-1.0, 1.0).acos().to_degrees();
+    let (label, label_color) = if obl.ricochet {
+        (format!("{degrees:.0}\u{00b0} BOUNCE"), Color::srgb(0.55, 0.8, 1.0))
+    } else if Some(first_hit) != lock.block {
+        // Something is in the way — the reticle is on a block the shot can't
+        // reach from here.
+        (format!("{degrees:.0}\u{00b0} COVERED"), Color::srgb(1.0, 0.75, 0.3))
+    } else {
+        (format!("{degrees:.0}\u{00b0}"), Color::srgb(0.75, 0.85, 0.8))
+    };
+
+    commands.spawn((
+        Text2d::new(label),
+        TextFont { font_size: FontSize::Px(13.0), ..default() },
+        TextColor(label_color),
+        Transform::from_xyz(point.x, bar_y - 11.0, 6.0),
         AimLockMarker,
     ));
 }
