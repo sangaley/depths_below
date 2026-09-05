@@ -91,7 +91,15 @@ pub(super) fn projectile_movement(
 /// Torpedo/Bullet: single target. Charge: AoE hits all creatures in radius.
 pub(super) fn projectile_collision(
     mut commands: Commands,
-    mut projectile_query: Query<(Entity, &mut Projectile, &mut Transform, &mut Sprite)>,
+    // Transform and Sprite are MUTABLE here now (a deflected round is moved and
+    // recoloured), which puts them up against the &Transform in the creature
+    // and ship queries below. Bevy can't infer that a projectile is never a
+    // creature or a ship, so the disjointness has to be spelled out — same
+    // missing-canceling-pair issue already documented on ship_query.
+    mut projectile_query: Query<
+        (Entity, &mut Projectile, &mut Transform, &mut Sprite),
+        (Without<Creature>, Without<Ship>, Without<AiShip>),
+    >,
     // Enemy rounds resolve their own deflection, same maths the player's guns
     // use — see the ricochet arm below.
     block_query: Query<&crate::building::Block>,

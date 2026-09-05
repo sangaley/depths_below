@@ -483,7 +483,14 @@ const MAX_CREATURE_HIT_RADIUS: f32 = 90.0;
 /// projectile instead of every creature in the world.
 pub fn check_projectile_hits(
     mut commands: Commands,
-    mut proj_query: Query<(Entity, &mut Projectile, &mut Transform, &mut Velocity, &mut Sprite)>,
+    // Transform and Sprite went MUTABLE here (a bounced round is stepped clear
+    // of the plate and recoloured), which collides with the &Transform in the
+    // creature and AI-ship queries below. Bevy can't infer that a projectile is
+    // never a creature or a ship, so say so.
+    mut proj_query: Query<
+        (Entity, &mut Projectile, &mut Transform, &mut Velocity, &mut Sprite),
+        (Without<Creature>, Without<Ship>, Without<crate::ai_ship::components::AiShip>),
+    >,
     mut creature_query: Query<(&Transform, &mut Creature), Without<Ship>>,
     creature_grid: Res<crate::spatial::CreatureGrid>,
     mut ai_ship_query: Query<
