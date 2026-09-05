@@ -45,6 +45,13 @@ pub fn ai_weapon_fire_system(
         &AmmoStorage,
         &OwnedByAiShip,
         Option<&ModuleEfficiency>,
+        // A weapon's OWN position and mount. AI guns fired from the ship root
+        // through a 360-degree arc, so every gun on the ship was effectively
+        // the same gun at the same point — a stern turret shot forward through
+        // its own hull, and a dozen mounts all muzzle-flashed on top of each
+        // other. Both of those the player has never been able to do.
+        &GlobalTransform,
+        &WeaponMount,
         // Faction loadouts have set this since layouts.rs was written
         // (apply_module_extras on spawn); nothing ever read it at fire time,
         // so every AI shot resolved as unspecialised regardless.
@@ -166,7 +173,7 @@ pub fn ai_weapon_fire_system(
         let dist_to_target = ai_pos.distance(centroid);
 
         for child in children.iter() {
-            let Ok((mut weapon, mut cooldown, module, ammo_storage, _owned, eff, loaded)) =
+            let Ok((mut weapon, mut cooldown, module, ammo_storage, _owned, eff, weapon_gt, mount, loaded)) =
                 weapon_query.get_mut(child)
             else {
                 continue;
@@ -192,6 +199,26 @@ pub fn ai_weapon_fire_system(
                 continue;
             }
 
+            // Each gun shoots from where it actually is.
+            let muzzle = weapon_gt.translation().truncate();
+
+            // ...and only if its mount can bear. The player's guns have always
+            // been held to this (is_in_firing_arc in new_projectiles); the AI
+            // skipped it entirely, so a Fixed-mount railgun bolted facing aft
+            // could fire dead ahead through the length of its own ship. Turrets
+            // still cover 360, broadsides 180, fixed mounts 120 — so where a
+            // weapon SITS on an enemy hull now decides what it can shoot at,
+            // exactly as it does on yours.
+            let to_target = aim_base - muzzle;
+            if !crate::combat::is_in_firing_arc(
+                ai_transform.rotation.to_euler(EulerRot::ZYX).0,
+                &module.rotation,
+                mount,
+                to_target.normalize_or_zero(),
+            ) {
+                continue;
+            }
+
             // Tick cooldown
             cooldown.timer.tick(time.delta());
             if !cooldown.timer.is_finished() {
@@ -204,7 +231,7 @@ pub fn ai_weapon_fire_system(
             }
             fired_events.write(WeaponFired {
                 weapon_type: module.module_type,
-                position: ai_pos,
+                position: muzzle,
                 from_player: false,
             });
 
@@ -236,7 +263,7 @@ pub fn ai_weapon_fire_system(
             // actually travels. Enemies aim true (no accuracy spread); the
             // target's own jinking over the flight is the only reason to miss.
             let aim_point = crate::combat::targeting::lead_prediction::calculate_lead(
-                ai_pos,
+                muzzle,
                 Vec2::ZERO,
                 aim_base,
                 target_vel,
@@ -249,7 +276,7 @@ pub fn ai_weapon_fire_system(
             crate::combat::projectiles::spawn_projectile(
                 &mut commands,
                 &asset_server,
-                ai_pos,
+                muzzle,
                 aim_point,
                 weapon.damage * efficiency,
                 base_speed,
