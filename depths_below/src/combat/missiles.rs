@@ -23,15 +23,17 @@ const EJECT_TIME_GUIDED: f32 = 0.4;
 const EJECT_TIME_CLUSTER: f32 = 0.2;
 
 /// Base motor thrust. Ignition has to read as a kick, not a drift.
-const BOOST_THRUST: f32 = 900.0;
+const BOOST_THRUST: f32 = 700.0;
 
 /// Seconds the motor burns. Thrust x burn time is the missile's whole speed
 /// budget: 900 x 1.6 = 1440 u/s on top of the eject charge.
-const BURN_TIME: f32 = 1.6;
+const BURN_TIME: f32 = 1.4;
 
-/// Speed ceiling. Well under the railgun's 9000 so missiles stay dodgeable,
-/// interceptable by point defense, and legible on screen.
-const MISSILE_MAX_SPEED: f32 = 2200.0;
+/// Speed ceiling. Turn radius goes with the SQUARE of speed, so this is the
+/// single biggest lever on whether a missile can corner: dropping the cap
+/// from 2200 to 1200 cuts the circle it flies to under a third of its old
+/// size before agility is touched at all.
+const MISSILE_MAX_SPEED: f32 = 1200.0;
 
 /// Radians of steering authority a fresh missile carries. Every radian it
 /// turns is deducted; at zero it coasts. Enough for ~8s of hard cornering,
@@ -44,7 +46,7 @@ const RESERVE_TURN: f32 = 25.0;
 /// motor — still only doing eject speed — could legally pull 7 rad/s. That is
 /// a donut, not a course correction, and it spent the entire steering budget
 /// in the first second and a half of flight.
-const MAX_TURN_RATE: f32 = 3.0;
+const MAX_TURN_RATE: f32 = 4.0;
 
 /// Heading-error gain for the pure-pursuit fallback. Proportional, so a
 /// missile only slightly off the target eases on instead of slamming full
@@ -55,11 +57,15 @@ const PURSUIT_GAIN: f32 = 2.5;
 /// snaps almost straight; below 2 it wanders and misses.
 const PN_GAIN: f32 = 3.0;
 
-/// Max lateral acceleration by launcher, in units/s². Divided by speed to get
-/// a turn rate — at ~1500 u/s these are 1.7 and 0.9 rad/s, which is the gap
-/// between a seeker that cuts the corner and one that overshoots.
-const LATERAL_GUIDED: f32 = 2600.0;
-const LATERAL_HEAVY: f32 = 1400.0;
+/// Max lateral acceleration by launcher, in units/s².
+///
+/// The number to reason about is TURN RADIUS, r = v²/a, because that is what
+/// you actually see. At the 1200 u/s cap a Guided pulls a ~275-unit circle
+/// (~4 cells) and a Heavy a ~450-unit one (~7 cells). The previous values
+/// gave the Heavy a 29-cell circle: technically guided, and in practice it
+/// sailed past everything it was aimed at.
+const LATERAL_GUIDED: f32 = 5200.0;
+const LATERAL_HEAVY: f32 = 3200.0;
 
 /// Inside this range the seeker is allowed a harder turn — the terminal dive.
 const TERMINAL_RANGE: f32 = 300.0;
@@ -206,7 +212,17 @@ pub fn fire_missiles_system(
         // seeker where it belongs. It is also inherently safe in the way the
         // arc clamp was trying to be: a missile that leaves along its own
         // tube never leaves backwards through the hull.
-        let launch_dir = Vec2::from_angle(ship_physics.rotation + module.rotation.to_radians());
+        //
+        // The +FRAC_PI_2 is not a fudge: module art in this game is drawn
+        // pointing +Y, not +X (turrets::aim_turrets subtracts the same
+        // quarter turn for barrels). Rotation::East is -PI/2, so an
+        // East-mounted launcher RENDERS pointing +X — the bow — which is why
+        // every layout puts bow tubes at East and stern engines at West.
+        // Without this the missile left 90 degrees off the tube it visibly
+        // came out of.
+        let launch_dir = Vec2::from_angle(
+            ship_physics.rotation + module.rotation.to_radians() + std::f32::consts::FRAC_PI_2,
+        );
 
         // Determine missile properties based on module type and bay chain length
         let bay_count = machine_stats.get(entity)
