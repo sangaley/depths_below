@@ -735,15 +735,16 @@ pub fn fire_plasma_system(
             super::new_projectiles::MissileProjectile {
                 damage: weapon.damage,
                 target: None, // dumb-fire — not a guided missile
-                burn_fuel: 0.0,
-                reserve_fuel: 0.0,
-                thrust: 0.0,
-                tracking_agility: 0.0,
-                armed: false,
+                // No motor, no seeker, no eject phase: a plasma bolt launches
+                // at full speed and flies straight. It borrows this component
+                // only for blast-radius hit resolution.
                 arm_distance: 30.0,
-                traveled: 0.0,
                 blast_radius: 45.0, // "area damage on impact"
                 owner: entity,
+                launch_dir: direction,
+                life: 4.0,
+                prev_pos: weapon_pos,
+                ..default()
             },
             Velocity(direction * speed),
             GravityAffected { mass: 1.0 },
@@ -841,15 +842,21 @@ pub fn fire_emp_missiles(
             super::new_projectiles::MissileProjectile {
                 damage: 5.0, // Low physical damage
                 target: Some(target_entity),
-                burn_fuel: fuel_cost * 0.7,
-                reserve_fuel: fuel_cost * 0.3,
-                thrust: 350.0,
-                tracking_agility: 1.5,
-                armed: false,
+                // A short pop clear of the hull, then a modest burn — an EMP
+                // round is a delivery vehicle, not a killer, so it flies
+                // slower and turns wider than a real seeker.
+                burn_fuel: 1.2,
+                reserve_fuel: 10.0,
+                thrust: 500.0,
+                max_lateral: 1800.0,
                 arm_distance: 100.0,
-                traveled: 0.0,
                 blast_radius: emp_radius,
                 owner: entity,
+                eject_time: 0.25,
+                launch_dir: direction,
+                life: 7.0,
+                prev_pos: weapon_pos,
+                ..default()
             },
             EmpWarhead {
                 emp_radius,

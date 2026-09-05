@@ -6,9 +6,57 @@ use super::*;
 
 // ============================================================================
 // MISSILE SYSTEM
-// Guided missiles with burn phase + reserve fuel for course corrections.
+// Cold-gas eject -> motor burn -> proportional-navigation guidance.
 // Bay chain length determines missile size. Decoyable. Shootable.
 // ============================================================================
+
+/// Cold-gas eject speed. The missile leaves the tube on a gas charge, not its
+/// own motor — ~3 cells/s, slow enough to read as a "pop" rather than a shot.
+const EJECT_SPEED: f32 = 200.0;
+
+/// Seconds of coast before the motor lights, per launcher. At EJECT_SPEED
+/// that is ~90-100 units for the big tubes: clear of the hull and its
+/// outboard plating before the burn starts, which is what makes the silo
+/// obstruction rule mean something.
+const EJECT_TIME_HEAVY: f32 = 0.5;
+const EJECT_TIME_GUIDED: f32 = 0.4;
+const EJECT_TIME_CLUSTER: f32 = 0.2;
+
+/// Base motor thrust. Ignition has to read as a kick, not a drift.
+const BOOST_THRUST: f32 = 900.0;
+
+/// Seconds the motor burns. Thrust x burn time is the missile's whole speed
+/// budget: 900 x 1.6 = 1440 u/s on top of the eject charge.
+const BURN_TIME: f32 = 1.6;
+
+/// Speed ceiling. Well under the railgun's 9000 so missiles stay dodgeable,
+/// interceptable by point defense, and legible on screen.
+const MISSILE_MAX_SPEED: f32 = 2200.0;
+
+/// Radians of steering authority a fresh missile carries. Every radian it
+/// turns is deducted; at zero it coasts. ~2 full circles of correction.
+const RESERVE_TURN: f32 = 12.0;
+
+/// Proportional-navigation gain. 3 flies a visible curve onto the target; 5
+/// snaps almost straight; below 2 it wanders and misses.
+const PN_GAIN: f32 = 3.0;
+
+/// Max lateral acceleration by launcher, in units/s². Divided by speed to get
+/// a turn rate — at ~1500 u/s these are 1.7 and 0.9 rad/s, which is the gap
+/// between a seeker that cuts the corner and one that overshoots.
+const LATERAL_GUIDED: f32 = 2600.0;
+const LATERAL_HEAVY: f32 = 1400.0;
+
+/// Inside this range the seeker is allowed a harder turn — the terminal dive.
+const TERMINAL_RANGE: f32 = 300.0;
+const TERMINAL_AGILITY_BONUS: f32 = 1.6;
+
+/// Seconds before self-destruct, per launcher. Heavy carries the most: range
+/// 9600 at ~1400 u/s average is ~7s, plus margin to hook round for a second
+/// pass after an overshoot.
+const LIFE_HEAVY: f32 = 9.0;
+const LIFE_GUIDED: f32 = 8.0;
+const LIFE_CLUSTER: f32 = 5.0;
 
 /// Fire missile weapons when their fire group is active
 pub fn fire_missiles_system(
@@ -16,7 +64,7 @@ pub fn fire_missiles_system(
     fire_state: Res<FireGroupState>,
     power_state: Res<crate::resources::PowerState>,
     selection: Res<TargetSelection>,
-    ship_query: Query<(Entity, &ShipPhysics, &Transform), With<Ship>>,
+    ship_query: Query<(Entity, &ShipPhysics, &Transform, &Velocity), With<Ship>>,
     mut weapon_query: Query<(
         Entity, &Module, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
@@ -33,7 +81,7 @@ pub fn fire_missiles_system(
     mut notifications: MessageWriter<ShowNotification>,
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
 ) {
-    let Ok((player_ship, ship_physics, ship_transform)) = ship_query.single() else { return };
+    let Ok((player_ship, ship_physics, ship_transform, ship_velocity)) = ship_query.single() else { return };
 
     // Weapons need power — grid deficit silences launchers too.
     if power_state.power_balance < 0.0 {
@@ -111,14 +159,22 @@ pub fn fire_missiles_system(
 
         // Base missile stats scaled by bay count. The tuning velocity slider
         // is "thrust" for missiles — hotter engines, faster closing speed.
+        //
+        // Bigger missiles accelerate more slowly but burn for longer, so the
+        // speed budget (thrust x burn) comes out the same. What size actually
+        // costs is agility: a heavy bay throws a missile that turns wide.
         let missile_damage = weapon.damage * size_mult;
         let thrust_mult = tuning.map(|t| t.velocity).unwrap_or(1.0);
-        let missile_thrust = 400.0 * thrust_mult / size_mult.sqrt(); // Bigger = slower acceleration
-        let tracking = match module.module_type {
-            ModuleType::GuidedMissile => 2.0,     // Good tracking
-            ModuleType::HeavyMissile => 1.2,      // Sluggish tracking
-            ModuleType::ClusterRocket => 0.0,      // No tracking — dumb fire
-            _ => 1.0,
+        let bulk = size_mult.sqrt();
+        let missile_thrust = BOOST_THRUST * thrust_mult / bulk;
+        let burn_time = BURN_TIME * bulk;
+        let (max_lateral, eject_time, life) = match module.module_type {
+            ModuleType::GuidedMissile => (LATERAL_GUIDED / bulk, EJECT_TIME_GUIDED, LIFE_GUIDED),
+            ModuleType::HeavyMissile => (LATERAL_HEAVY / bulk, EJECT_TIME_HEAVY, LIFE_HEAVY),
+            // Cluster rockets are unguided by design (see the registry entry) —
+            // zero lateral authority, and homing_target is dropped below.
+            ModuleType::ClusterRocket => (0.0, EJECT_TIME_CLUSTER, LIFE_CLUSTER),
+            _ => (LATERAL_HEAVY / bulk, EJECT_TIME_HEAVY, LIFE_HEAVY),
         };
         let blast_radius = 30.0 + size_mult * 20.0;
 
@@ -134,10 +190,10 @@ pub fn fire_missiles_system(
         }
         fuel_state.current_fuel -= fuel_cost;
 
-        // Fuel split: 70% burn, 30% reserve (default — customizable via Tier 3)
-        let total_fuel = fuel_cost;
-        let burn_fuel = total_fuel * 0.7;
-        let reserve_fuel = total_fuel * 0.3;
+        // Ship fuel pays for the LAUNCH; the missile's own motor burn and
+        // steering authority are properties of the missile, not of how much
+        // fuel the ship happened to have. Keeping them separate is why burn
+        // duration is now tunable at all.
 
         // Fire!
         cooldown.timer.reset();
@@ -151,12 +207,10 @@ pub fn fire_missiles_system(
         });
 
         let direction = launch_dir;
-        let initial_vel = direction * 100.0; // Slow launch
 
         // Visual size scales with bay count
         let visual_w = 24.0 + size_mult * 8.0;
         let visual_h = 10.0 + size_mult * 4.0;
-        let angle = direction.y.atan2(direction.x);
 
         let volley_count = match module.module_type {
             ModuleType::ClusterRocket => (3.0 * size_mult).min(8.0) as u32, // More bays = more rockets
@@ -164,14 +218,25 @@ pub fn fire_missiles_system(
         };
 
         for i in 0..volley_count {
-            let spread = if volley_count > 1 {
-                let spread_angle = (i as f32 - volley_count as f32 / 2.0) * 0.15;
-                Vec2::new(spread_angle.cos(), spread_angle.sin()) * 20.0
+            // Fan the volley by ROTATING the launch heading. The old version
+            // added a fixed world-space offset built from cos/sin of the
+            // spread angle, which is not a rotation — every rocket in the
+            // salvo got shoved the same way regardless of which way the tube
+            // was pointing.
+            let spread_angle = if volley_count > 1 {
+                (i as f32 - (volley_count - 1) as f32 / 2.0) * 0.12
             } else {
-                Vec2::ZERO
+                0.0
             };
-
-            let missile_vel = initial_vel + spread;
+            let (sin, cos) = spread_angle.sin_cos();
+            let dir = Vec2::new(
+                direction.x * cos - direction.y * sin,
+                direction.x * sin + direction.y * cos,
+            );
+            // Inherit the ship's own velocity. Without it a ship running at
+            // speed rear-ends its own salvo — the missile left the tube at
+            // 200 u/s absolute while the hull behind it was already doing more.
+            let missile_vel = dir * EJECT_SPEED + ship_velocity.0;
             let per_missile_damage = if volley_count > 1 {
                 missile_damage / volley_count as f32
             } else {
@@ -185,21 +250,25 @@ pub fn fire_missiles_system(
                         ..default()
                     }, Transform {
                         translation: Vec3::new(weapon_pos.x, weapon_pos.y, 0.5),
-                        rotation: Quat::from_rotation_z(angle),
+                        rotation: Quat::from_rotation_z(dir.y.atan2(dir.x)),
                         ..default()
                     }),
                 MissileProjectile {
                     damage: per_missile_damage,
-                    target: if tracking > 0.0 { homing_target } else { None },
-                    burn_fuel,
-                    reserve_fuel,
+                    target: if max_lateral > 0.0 { homing_target } else { None },
+                    burn_fuel: burn_time,
+                    reserve_fuel: RESERVE_TURN,
                     thrust: missile_thrust,
-                    tracking_agility: tracking,
-                    armed: false,
+                    max_lateral,
                     arm_distance: 80.0,
-                    traveled: 0.0,
                     blast_radius,
                     owner: entity,
+                    eject_time,
+                    launch_dir: dir,
+                    life,
+                    terminal_range: TERMINAL_RANGE,
+                    prev_pos: weapon_pos,
+                    ..default()
                 },
                 Velocity(missile_vel),
                 GravityAffected { mass: 2.0 + size_mult },
@@ -218,78 +287,107 @@ pub fn fire_missiles_system(
     }
 }
 
-/// Move and guide missiles — burn phase then coast/correct phase
+/// Move and guide missiles: cold-gas eject, then motor burn, then guidance.
+///
+/// The eject phase is the whole trick. A missile that lights its motor in the
+/// tube and steers immediately just flies at the target, which is what made
+/// the old ones read as slow bullets. Committing the first ~90 units to the
+/// silo heading means the seeker inherits a bad angle and has to fly a curve
+/// out of it — and a sluggish one overshoots and comes back around.
 pub fn move_missiles(
     time: Res<Time>,
     mut commands: Commands,
     mut missile_query: Query<(Entity, &mut MissileProjectile, &mut Transform, &mut Velocity, &GravityForce)>,
-    target_query: Query<&Transform, Without<MissileProjectile>>,
+    target_query: Query<(&Transform, Option<&Velocity>), Without<MissileProjectile>>,
 ) {
     let dt = time.delta_secs();
 
     for (entity, mut missile, mut transform, mut velocity, gravity) in missile_query.iter_mut() {
         let pos = transform.translation.truncate();
+        missile.prev_pos = pos;
 
-        // Track distance traveled
-        let move_dist = velocity.0.length() * dt;
-        missile.traveled += move_dist;
+        missile.life -= dt;
+        if missile.life <= 0.0 {
+            commands.entity(entity).despawn();
+            continue;
+        }
 
-        // Arm after minimum distance
+        missile.traveled += velocity.0.length() * dt;
         if !missile.armed && missile.traveled > missile.arm_distance {
             missile.armed = true;
         }
 
-        // === BURN PHASE: engine is on, accelerating ===
-        if missile.burn_fuel > 0.0 {
-            let burn_cost = missile.thrust * 0.01 * dt;
-            missile.burn_fuel -= burn_cost;
+        // === EJECT: gas charge only. Motor cold, seeker caged. ===
+        if missile.eject_time > 0.0 {
+            missile.eject_time -= dt;
+        } else {
+            // === BURN: motor lit. ===
+            if missile.burn_fuel > 0.0 {
+                missile.burn_fuel -= dt;
+                let forward = velocity.0.normalize_or_zero();
+                velocity.0 += forward * missile.thrust * dt;
+                let speed = velocity.0.length();
+                if speed > MISSILE_MAX_SPEED {
+                    velocity.0 *= MISSILE_MAX_SPEED / speed;
+                }
+            }
 
-            let forward = velocity.0.normalize_or_zero();
-            velocity.0 += forward * missile.thrust * dt;
-        }
+            // === GUIDANCE: proportional navigation. ===
+            //
+            // PN steers to null the rotation rate of the line of sight rather
+            // than to point at the target, which is what produces a lead
+            // curve instead of the tail-chase the old cross-product
+            // controller flew. Commanded lateral acceleration is
+            // N x (LOS rate) x (closing speed).
+            if missile.reserve_fuel > 0.0 && missile.max_lateral > 0.0 {
+                if let Some(target) = missile.target {
+                    if let Ok((target_tf, target_vel)) = target_query.get(target) {
+                        let speed = velocity.0.length();
+                        let los = target_tf.translation.truncate() - pos;
+                        let range = los.length();
+                        if speed > 1.0 && range > 1.0 {
+                            let los_dir = los / range;
+                            let rel_vel = target_vel.map(|v| v.0).unwrap_or(Vec2::ZERO) - velocity.0;
+                            let closing = -rel_vel.dot(los_dir);
+                            let cap = if range < missile.terminal_range {
+                                missile.max_lateral * TERMINAL_AGILITY_BONUS
+                            } else {
+                                missile.max_lateral
+                            };
 
-        // === GUIDANCE: use reserve fuel to correct course ===
-        if missile.reserve_fuel > 0.0 && missile.tracking_agility > 0.0 {
-            if let Some(target) = missile.target {
-                if let Ok(target_transform) = target_query.get(target) {
-                    let target_pos = target_transform.translation.truncate();
-                    let to_target = (target_pos - pos).normalize_or_zero();
-                    let current_dir = velocity.0.normalize_or_zero();
+                            let lateral = if closing > 1.0 {
+                                let los_rate = los_dir.perp_dot(rel_vel) / range;
+                                (PN_GAIN * los_rate * closing).clamp(-cap, cap)
+                            } else {
+                                // Overshot, or the target is outrunning us. PN
+                                // has no closing speed to work with and would
+                                // command nothing, leaving the missile to fly
+                                // off into the dark. Fall back to pure pursuit
+                                // at full deflection so it hooks round for
+                                // another pass.
+                                let heading = velocity.0 / speed;
+                                let sign = heading.perp_dot(los_dir);
+                                if sign >= 0.0 { cap } else { -cap }
+                            };
 
-                    // Rotate toward target
-                    let cross = current_dir.x * to_target.y - current_dir.y * to_target.x;
-                    let turn = cross.clamp(-missile.tracking_agility, missile.tracking_agility) * dt;
-
-                    let speed = velocity.0.length();
-                    let new_angle = current_dir.y.atan2(current_dir.x) + turn;
-                    velocity.0 = Vec2::new(new_angle.cos(), new_angle.sin()) * speed;
-
-                    // Consume reserve fuel for course corrections
-                    missile.reserve_fuel -= turn.abs() * 0.5;
+                            let turn = (lateral / speed) * dt;
+                            let heading = velocity.0.y.atan2(velocity.0.x) + turn;
+                            velocity.0 = Vec2::new(heading.cos(), heading.sin()) * speed;
+                            // Every radian of correction is spent authority.
+                            missile.reserve_fuel -= turn.abs();
+                        }
+                    }
                 }
             }
         }
 
-        // Apply gravity
         velocity.0 += gravity.0 * dt;
 
-        // Move
         transform.translation.x += velocity.0.x * dt;
         transform.translation.y += velocity.0.y * dt;
 
-        // Rotate sprite to face movement
         if velocity.0.length_squared() > 1.0 {
-            let angle = velocity.0.y.atan2(velocity.0.x);
-            transform.rotation = Quat::from_rotation_z(angle);
-        }
-
-        // Despawn if out of fuel and far from any target (lost missile)
-        if missile.burn_fuel <= 0.0 && missile.reserve_fuel <= 0.0 {
-            // Coast for 3 more seconds then despawn
-            missile.burn_fuel -= dt; // Hack: use negative burn_fuel as coast timer
-            if missile.burn_fuel < -3.0 {
-                commands.entity(entity).despawn();
-            }
+            transform.rotation = Quat::from_rotation_z(velocity.0.y.atan2(velocity.0.x));
         }
     }
 }

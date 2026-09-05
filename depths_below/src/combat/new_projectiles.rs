@@ -97,28 +97,71 @@ pub enum ProjectileDamageType {
     EmpRound,       // Disables modules
 }
 
-/// Missile entity — has guidance and fuel
+/// Missile entity — cold-gas eject, then motor burn, then guided flight.
+///
+/// The three phases are what separate a missile from a bullet: it leaves the
+/// tube on a gas charge committed to the silo heading (`eject_time`), lights
+/// the motor (`burn_fuel`), and only then starts steering (`reserve_fuel`).
+/// By ignition the geometry is already off, so the seeker has to fly a curve
+/// to fix it — which is the whole point.
 #[derive(Component)]
 pub struct MissileProjectile {
     pub damage: f32,
     pub target: Option<Entity>,
-    pub burn_fuel: f32,        // Fuel for main engine
-    pub reserve_fuel: f32,     // Fuel for course corrections
+    /// SECONDS of main-motor burn remaining. Was a raw fuel quantity drained
+    /// at a thrust-dependent rate, which made burn duration an accident of
+    /// two unrelated numbers; as a time it is the thing you actually tune.
+    pub burn_fuel: f32,
+    /// RADIANS of steering authority remaining. Each frame's turn is
+    /// subtracted, so a missile that fights a hard crossing shot runs out of
+    /// corrections and coasts — the reason a Heavy can be baited into a miss.
+    pub reserve_fuel: f32,
     pub thrust: f32,
-    pub tracking_agility: f32, // How fast it can turn (rad/s)
+    /// Maximum lateral acceleration in units/s². Divided by current speed to
+    /// get a turn rate, so a missile that is going fast turns wide — the
+    /// reason overshoot happens at all.
+    pub max_lateral: f32,
     pub armed: bool,           // Needs to travel min distance before arming
     pub arm_distance: f32,
     pub traveled: f32,
     pub blast_radius: f32,
     pub owner: Entity,
+    /// Seconds of cold-gas coast left before the motor lights. While this is
+    /// positive the missile does not thrust and does not steer.
+    pub eject_time: f32,
+    /// The silo heading it was ejected along — held rigidly during the coast.
+    pub launch_dir: Vec2,
+    /// Seconds until self-destruct. Replaces the old trick of running
+    /// `burn_fuel` negative and using it as a coast timer, which fought any
+    /// attempt to give the motor a real burn duration.
+    pub life: f32,
+    /// Inside this range the seeker gets a harder turn limit — terminal dive.
+    pub terminal_range: f32,
+    /// Position last frame — swept-hit anchor, same role as `Projectile::prev_pos`.
+    pub prev_pos: Vec2,
 }
 
-/// Visual trail marker for projectiles
-#[derive(Component)]
-pub struct ProjectileTrail {
-    pub color: Color,
-    pub width: f32,
-    pub fade_time: f32,
+impl Default for MissileProjectile {
+    fn default() -> Self {
+        Self {
+            damage: 0.0,
+            target: None,
+            burn_fuel: 0.0,
+            reserve_fuel: 0.0,
+            thrust: 0.0,
+            max_lateral: 0.0,
+            armed: false,
+            arm_distance: 80.0,
+            traveled: 0.0,
+            blast_radius: 40.0,
+            owner: Entity::PLACEHOLDER,
+            eject_time: 0.0,
+            launch_dir: Vec2::X,
+            life: 6.0,
+            terminal_range: 300.0,
+            prev_pos: Vec2::ZERO,
+        }
+    }
 }
 
 // ============================================================================
