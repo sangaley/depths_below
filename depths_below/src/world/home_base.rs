@@ -55,7 +55,7 @@ const BERTH_OFFSET: Vec2 = Vec2::new(700.0, 400.0);
 // solid (see ship::collision), and the root of a big ship can sit ~800 units
 // behind its own nose — a tighter range is physically unreachable with a
 // large hull parked against the station.
-const DOCK_RANGE: f32 = 1800.0;
+pub const DOCK_RANGE: f32 = 1800.0;
 
 /// One station's identity and placement. Derived deterministically from the
 /// system it belongs to, so it's identical every time that system loads and

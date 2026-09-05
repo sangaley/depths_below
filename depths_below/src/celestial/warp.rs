@@ -41,6 +41,13 @@ pub(crate) fn target_galaxy_pos(galaxy_map: &GalaxyMap, target: GalaxyWarpTarget
 /// once and the charge runs on its own — no need to hold the key through
 /// what can be up to a 60s charge; press V again to cancel early. Charge
 /// time and fuel cost both scale with galaxy-map distance to the target.
+/// How far off a station a warp drops you.
+///
+/// Must stay inside `home_base::DOCK_RANGE` or arriving "at a station" means
+/// arriving next to one you still have to fly to — which is the whole point
+/// of landing here. Enough standoff not to materialise inside the structure.
+pub const STATION_ARRIVAL_STANDOFF: f32 = 900.0;
+
 pub fn warp_input_system(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -249,18 +256,32 @@ pub fn execute_warp_jump(
             crate::ai_ship::simulation::ensure_system_population(&mut sim, &galaxy_map, warm_id);
         }
 
-        // Land the player IN the fight. Factions field only 1-5 ships scattered
-        // across a 15-80k-radius territory, so the cluster-relative arrival above
-        // almost never falls within the 10k render distance of any of them — you'd
-        // warp into empty space. Re-drop a short hop from an actual faction ship of
-        // the system we just loaded so at least one enemy is in range immediately.
+        // Arrive at a station, inside docking range.
+        //
+        // Every system carries STATIONS_PER_SYSTEM full stations (world::
+        // home_base) — buy, sell, build and hire at all of them — so a jump
+        // now lands somewhere you can refit rather than somewhere you have to
+        // survive. The cluster-relative arrival computed above is a fallback
+        // for systems we can't place a station for.
+        //
+        // This replaces a "land the player IN the fight" re-drop that put you
+        // 5k from a live faction ship the moment you arrived. That solved a
+        // real problem — factions field 1-5 ships across a 15-80k territory,
+        // so a neutral arrival is usually empty space — but it meant every
+        // jump opened in an engagement you didn't choose, with no chance to
+        // sell a hold of salvage or repair first. Finding the fight is a
+        // short flight; being dropped into one isn't a decision.
         if let Some(new_id) = streaming.loaded_system {
-            if let Some(target) = sim.ships.iter()
-                .find(|s| s.system_id == new_id && s.behavior != crate::ai_ship::components::SimBehavior::Dead)
-                .map(|s| s.position)
-            {
+            let local_center = galaxy_map
+                .systems
+                .iter()
+                .find(|s| s.id == new_id)
+                .map(|s| s.local_center)
+                .unwrap_or(galaxy::HAVEN_LOCAL_CENTER);
+            if let Some(site) = crate::world::home_base::station_sites(new_id, local_center).first() {
+                // Off to one side rather than on top of the structure.
                 let a = rand::random::<f32>() * std::f32::consts::TAU;
-                let arrival = target + Vec2::new(a.cos(), a.sin()) * 5_000.0;
+                let arrival = site.pos + Vec2::new(a.cos(), a.sin()) * STATION_ARRIVAL_STANDOFF;
                 ship_transform.translation.x = arrival.x;
                 ship_transform.translation.y = arrival.y;
             }
@@ -292,6 +313,32 @@ pub fn on_warp_complete(
                 notification_type: NotificationType::Info,
                 duration: 5.0,
             });
+        }
+    }
+}
+
+#[cfg(test)]
+mod arrival_tests {
+    use super::*;
+
+    /// Warping into a system has to leave you able to press F. These two
+    /// constants live in different files, so nothing but this connects them.
+    #[test]
+    fn arrival_standoff_is_inside_docking_range() {
+        assert!(
+            STATION_ARRIVAL_STANDOFF < crate::world::home_base::DOCK_RANGE,
+            "arriving {STATION_ARRIVAL_STANDOFF} out of a {} dock range means you land next to a station you still have to fly to",
+            crate::world::home_base::DOCK_RANGE
+        );
+    }
+
+    /// ...and every system really does have a station to arrive at, so the
+    /// fallback path is genuinely only for uncharted space.
+    #[test]
+    fn every_system_has_somewhere_to_arrive() {
+        for id in [0u32, 1, 7, 42, 300] {
+            let sites = crate::world::home_base::station_sites(id, Vec2::ZERO);
+            assert!(!sites.is_empty(), "system {id} has no station to warp to");
         }
     }
 }

@@ -1019,7 +1019,7 @@ pub fn build_registry() -> ModuleRegistry {
         power_generation: 0.0,
         power_consumption: 20.0,
         color: Color::srgb(0.6, 0.5, 0.3),
-        companion: CompanionData::Salvage { range: 100.0, efficiency: 1.0 },
+        companion: CompanionData::Salvage { range: 250.0, efficiency: 1.0 },
         customizable: false,
         cost: 68,
         base_stats: CalculatedStats::default(),
