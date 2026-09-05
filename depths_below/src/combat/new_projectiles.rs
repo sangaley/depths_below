@@ -324,9 +324,16 @@ pub fn fire_weapons_system(
         let (damage_type, ammo_damage_mult, penetration) = match selected_ammo.map(|a| a.0) {
             Some(ammo) => (
                 match ammo {
-                    KineticAmmoType::Incendiary => ProjectileDamageType::Incendiary,
-                    KineticAmmoType::EMPShell => ProjectileDamageType::EmpRound,
-                    KineticAmmoType::APHE | KineticAmmoType::HEFrag | KineticAmmoType::Flak =>
+                    KineticAmmoType::Incendiary
+                    | KineticAmmoType::PlasmaSlug
+                    | KineticAmmoType::NaniteCanister => ProjectileDamageType::Incendiary,
+                    // A neutron shell does nothing electrical, but of the four
+                    // damage types this is the one that means "the hull is
+                    // fine, what's inside it isn't".
+                    KineticAmmoType::EMPShell | KineticAmmoType::NeutronShell =>
+                        ProjectileDamageType::EmpRound,
+                    KineticAmmoType::APHE | KineticAmmoType::HEFrag | KineticAmmoType::Flak
+                    | KineticAmmoType::Antimatter | KineticAmmoType::Singularity =>
                         ProjectileDamageType::Explosive,
                     _ => ProjectileDamageType::Kinetic,
                 },
@@ -499,6 +506,8 @@ pub fn check_projectile_hits(
     >,
     mut ai_module_query: Query<(&mut Module, &GlobalTransform), Without<DestroyedModule>>,
     mut ai_hull_query: Query<(&mut HullSegment, &GlobalTransform), Without<crate::components::HullDestroyed>>,
+    // Neutron shells hurt the people, not the plate — see AmmoHitBehavior::Irradiate.
+    mut crew_query: Query<&mut crate::components::CrewMember>,
     owner_parent_query: Query<&ChildOf>,
     grid_query: Query<&crate::building::ShipGrid>,
     block_query: Query<&crate::building::Block>,
@@ -519,8 +528,11 @@ pub fn check_projectile_hits(
             let center = shield.world_center(ai_transform);
             let dist_to_ship = proj_pos.distance(center);
 
-            // Directional shield: only the facing arc intercepts; flank/rear slips past.
-            if shield.is_up() && dist_to_ship < shield.radius && shield.covers_arc(proj_pos - center) {
+            // Directional shield: only the facing arc intercepts; flank/rear
+            // slips past — and so does a phase slug, which is out of phase
+            // with the matter the bubble is built to stop.
+            let phased = proj.ammo.is_some_and(|a| a.ignores_shields());
+            if !phased && shield.is_up() && dist_to_ship < shield.radius && shield.covers_arc(proj_pos - center) {
                 shield.absorb(proj.damage);
                 spawn_hit_effect(&mut commands, proj_pos, Color::srgb(0.5, 0.8, 1.0), 14.0);
                 commands.entity(proj_entity).despawn();
@@ -827,6 +839,38 @@ pub fn check_projectile_hits(
                                 }
                             }
                         }
+                        Implode { crush_damage, crush_radius } => {
+                            // Same reach as a blast, but every block in it
+                            // takes the FULL crush — an implosion has no
+                            // falloff, it just closes. Splash already applies
+                            // one flat figure, which is exactly right here.
+                            let radius = crush_radius * proj.caliber;
+                            splash_blocks(
+                                &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
+                                hit_entity, hit_pos, radius, crush_damage,
+                            );
+                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(0.4, 0.2, 0.6), radius);
+                        }
+                        Irradiate { dose, crew_affected } => {
+                            // The hull is left alone on purpose. AI crew carry
+                            // no Transform (see ai_ship::crew), so there is no
+                            // position to measure a radius against — the cone
+                            // is expressed as a headcount instead, taken off
+                            // the ship's living crew.
+                            let mut left = crew_affected;
+                            for child in children.iter() {
+                                if left == 0 { break; }
+                                if let Ok(mut crew) = crew_query.get_mut(child) {
+                                    if crew.health <= 0.0 { continue; }
+                                    crew.health = (crew.health - dose).max(0.0);
+                                    left -= 1;
+                                }
+                            }
+                            // Dosed crew stop staffing their station, which is
+                            // where the damage actually lands: an unmanned
+                            // gun runs at zero efficiency (crew::compute_module_efficiency).
+                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(0.8, 1.0, 0.6), 90.0);
+                        }
                         // HEAT: its 1.8× damage + 70 pen already rode in on
                         // proj.damage at spawn; the angle-sensitivity part of
                         // the shaped-charge fantasy needs hit normals the
@@ -857,6 +901,9 @@ pub fn check_projectile_hits(
             match ammo.hit_behavior(proj.damage) {
                 SurfaceExplode { blast_radius, fragment_damage, .. } => Some((blast_radius * proj.caliber, fragment_damage)),
                 ProximityBurst { fragment_radius, fragment_damage, .. } => Some((fragment_radius * proj.caliber, fragment_damage)),
+                // A well pulls in whatever is swimming past it, same as frag
+                // catches a swarm — the reason it's worth firing at a shoal.
+                Implode { crush_radius, crush_damage } => Some((crush_radius * proj.caliber, crush_damage * 0.5)),
                 _ => None,
             }
         });

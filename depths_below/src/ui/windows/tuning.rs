@@ -26,17 +26,9 @@ const BASELINE_TICK: Color = Color::srgba(0.9, 0.9, 0.9, 0.35);
 const AMMO_SELECTED_BG: Color = ThemeColors::BG_PRESSED;
 const AMMO_BG: Color = ThemeColors::BG_INPUT;
 
-const ALL_AMMO: [KineticAmmoType; 9] = [
-    KineticAmmoType::AP,
-    KineticAmmoType::APHE,
-    KineticAmmoType::HEFrag,
-    KineticAmmoType::Incendiary,
-    KineticAmmoType::EMPShell,
-    KineticAmmoType::Flak,
-    KineticAmmoType::HEAT,
-    KineticAmmoType::HESH,
-    KineticAmmoType::APFSDS,
-];
+/// The roster lives on the type itself, so a new round shows up in this
+/// picker the moment it's added rather than being silently unpickable.
+const ALL_AMMO: [KineticAmmoType; 15] = KineticAmmoType::ALL;
 
 #[derive(Component)]
 pub struct TuningWindow {
@@ -218,7 +210,18 @@ fn spawn_tuning_window(
                 Interaction::None,
                 Button,
                 AmmoTypeButton { ammo },
-                Tooltip { text: ammo.description().into(), detail: None },
+                Tooltip {
+                    text: ammo.description().into(),
+                    // Price is the only thing separating the exotic rounds
+                    // from being a straight upgrade, so it belongs on the
+                    // button rather than buried in the docking bill.
+                    detail: Some(format!(
+                        "{:.0}c/round  ·  {:.0}% weight  ·  {:.0}% muzzle vel",
+                        crate::combat::ammo_types::rearm_price(Some(ammo), 1),
+                        ammo.weight_mult() * 100.0,
+                        ammo.velocity_mult() * 100.0,
+                    )),
+                },
             )).id();
             let label = commands.spawn((
                 Text::new(ammo.name()),

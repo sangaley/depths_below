@@ -171,8 +171,8 @@ fn cannon_customization() -> ModuleCustomizationDef {
                 description: "Projectile type and propellant. Determines damage type and ballistic performance.".into(),
                 options: vec![
                     SubComponentOption {
-                        name: "Armor Piercing (AP)".into(),
-                        description: "Dense penetrator. High damage vs hull, low splash.".into(),
+                        name: "Solid".into(),
+                        description: "Dense metal, no filler. Hits the hull hard, splashes almost nothing.".into(),
                         stat_modifiers: { let mut m = HashMap::new(); m.insert("hull_damage".into(), 1.5); m.insert("area_damage".into(), 0.2); m },
                         parameters: vec![
                             param("caliber", "Projectile diameter — must be ≤ bore diameter", "Damage", 15.0, 200.0, 75.0, "mm"),
@@ -182,8 +182,8 @@ fn cannon_customization() -> ModuleCustomizationDef {
                         ],
                     },
                     SubComponentOption {
-                        name: "High Explosive (HE)".into(),
-                        description: "Explosive filler. Area damage, less penetration.".into(),
+                        name: "Shredder".into(),
+                        description: "Explosive filler. Covers an area, gives up penetration to do it.".into(),
                         stat_modifiers: { let mut m = HashMap::new(); m.insert("area_damage".into(), 1.8); m.insert("hull_damage".into(), 0.8); m },
                         parameters: vec![
                             param("caliber", "Shell diameter", "Damage", 20.0, 200.0, 80.0, "mm"),
@@ -194,8 +194,8 @@ fn cannon_customization() -> ModuleCustomizationDef {
                         ],
                     },
                     SubComponentOption {
-                        name: "Incendiary".into(),
-                        description: "Sets targets on fire. Sustained damage over time.".into(),
+                        name: "Torch".into(),
+                        description: "Sets the target burning. Damage that keeps arriving after the hit.".into(),
                         stat_modifiers: { let mut m = HashMap::new(); m.insert("fire_chance".into(), 0.8); m.insert("hull_damage".into(), 0.6); m },
                         parameters: vec![
                             param("caliber", "Shell diameter", "Damage", 20.0, 150.0, 70.0, "mm"),
@@ -206,8 +206,8 @@ fn cannon_customization() -> ModuleCustomizationDef {
                         ],
                     },
                     SubComponentOption {
-                        name: "EMP Shell".into(),
-                        description: "Electromagnetic pulse on impact. Disables systems temporarily.".into(),
+                        name: "Blackout".into(),
+                        description: "Pulse on impact. Everything wired in reach stops working for a while.".into(),
                         stat_modifiers: { let mut m = HashMap::new(); m.insert("disable_chance".into(), 0.6); m.insert("hull_damage".into(), 0.3); m },
                         parameters: vec![
                             param("caliber", "Shell diameter", "Damage", 30.0, 150.0, 80.0, "mm"),

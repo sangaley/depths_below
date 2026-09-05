@@ -2,12 +2,20 @@ use bevy::prelude::*;
 
 // ============================================================================
 // KINETIC AMMO TYPES
-// 9 types, each with unique hit behavior and tradeoffs.
+// 15 types, each with unique hit behavior and tradeoffs.
 // Players load a magazine MIX at station. Fires in loaded order.
 // Different weights affect fire rate. Can't change mid-combat.
 // ============================================================================
 
-/// The 9 kinetic ammo types
+/// The 15 kinetic ammo types.
+///
+/// The VARIANT names are the real-world designations and are load-bearing:
+/// serde writes them straight into designs/*.json (`"ammo": "APFSDS"`) and
+/// into saves, so renaming one silently breaks every ship design that used
+/// it. What the player reads is `name()`, which is crew slang — a gun crew
+/// calls a squash head a Bell because it rings the plate, not because anyone
+/// aboard remembers what HESH stood for. Keep the two layers separate: the
+/// identifier is a key, the name is fiction.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Hash, serde::Serialize, serde::Deserialize)]
 pub enum KineticAmmoType {
     /// Solid penetrator — goes through hull, hits modules behind
@@ -28,34 +36,82 @@ pub enum KineticAmmoType {
     HESH,
     /// Fin-stabilized sabot — fastest, extreme penetration, needle damage
     APFSDS,
+
+    // ---- EXOTIC ROUNDS -----------------------------------------------------
+    // Everything above is something a foundry could press today. Everything
+    // below needs a containment field, a nanoforge, or a collapsed core, and
+    // the price per round says so. They fit the same breech and share the
+    // same table, so a magazine can mix them freely with the cheap stuff.
+    /// Bottled plasma — melts its way in, then keeps burning inside
+    PlasmaSlug,
+    /// Anti-hydrogen in a failing magnetic bottle — annihilates on contact
+    Antimatter,
+    /// Collapses to a pinpoint well — crushes a compartment, ignores angle
+    Singularity,
+    /// Disassembler swarm — no impact worth the name, eats the block for half a minute
+    NaniteCanister,
+    /// Phase-shifted slug — walks through shields and armour alike, arrives weak
+    PhaseSlug,
+    /// Fast neutrons — passes through the hull and kills the crew behind it
+    NeutronShell,
 }
 
 impl KineticAmmoType {
+    /// Every round, conventional block first and exotics after. The one
+    /// place the roster is written down: the tuning picker renders this, and
+    /// the tests sweep it, so a variant added to the enum without a stat
+    /// entry can't slip through unnoticed.
+    pub const ALL: [Self; 15] = [
+        Self::AP, Self::APHE, Self::HEFrag, Self::Incendiary, Self::EMPShell,
+        Self::Flak, Self::HEAT, Self::HESH, Self::APFSDS,
+        Self::PlasmaSlug, Self::Antimatter, Self::Singularity,
+        Self::NaniteCanister, Self::PhaseSlug, Self::NeutronShell,
+    ];
+
+    /// Whether this round needs a containment field or a nanoforge to exist.
+    /// Only used to sort and to justify the price; nothing branches on it.
+    pub fn is_exotic(&self) -> bool {
+        matches!(self, Self::PlasmaSlug | Self::Antimatter | Self::Singularity
+            | Self::NaniteCanister | Self::PhaseSlug | Self::NeutronShell)
+    }
+
     pub fn name(&self) -> &'static str {
         match self {
-            Self::AP => "AP",
-            Self::APHE => "APHE",
-            Self::HEFrag => "HE-Frag",
-            Self::Incendiary => "Incendiary",
-            Self::EMPShell => "EMP Shell",
-            Self::Flak => "Flak",
-            Self::HEAT => "HEAT",
-            Self::HESH => "HESH",
-            Self::APFSDS => "APFSDS",
+            Self::AP => "Solid",
+            Self::APHE => "Cracker",
+            Self::HEFrag => "Shredder",
+            Self::Incendiary => "Torch",
+            Self::EMPShell => "Blackout",
+            Self::Flak => "Curtain",
+            Self::HEAT => "Lance",
+            Self::HESH => "Bell",
+            Self::APFSDS => "Rod",
+            Self::PlasmaSlug => "Plasma Slug",
+            Self::Antimatter => "Antimatter",
+            Self::Singularity => "Singularity",
+            Self::NaniteCanister => "Nanite Swarm",
+            Self::PhaseSlug => "Phase Slug",
+            Self::NeutronShell => "Neutron Shell",
         }
     }
 
     pub fn description(&self) -> &'static str {
         match self {
-            Self::AP => "Solid penetrator. Goes through hull, hits what's behind. Wasted if nothing behind armor.",
-            Self::APHE => "Penetrates then detonates inside. Devastating. Passes through thin targets without arming.",
-            Self::HEFrag => "Surface burst + fragments. Great vs creatures. Bounces off heavy armor.",
-            Self::Incendiary => "Sets fires. Sustained damage. Useless against depressurized targets.",
-            Self::EMPShell => "Disables modules. Zero physical damage. Useless vs creatures.",
-            Self::Flak => "Proximity airburst. Anti-missile, anti-swarm. Terrible vs armored targets.",
-            Self::HEAT => "Shaped charge jet. Extreme penetration at 90°. Angled hits do almost nothing.",
-            Self::HESH => "Squash head. Shockwave damages modules behind armor. Needs solid hull to work.",
-            Self::APFSDS => "Ultra-fast dart. Goes through everything. Needle damage — can overpenetrate.",
+            Self::AP => "Just metal, no filler. Goes through the plate and hits whatever is behind it. Wasted if nothing is.",
+            Self::APHE => "Punches in, then opens up inside. Devastating — but a thin target lets it through before it can arm.",
+            Self::HEFrag => "Bursts on the skin and throws fragments. Shreds anything unarmoured. Skips off heavy plate.",
+            Self::Incendiary => "Starts fires that keep burning. Needs air in the compartment — a depressurised target won't light.",
+            Self::EMPShell => "Kills every system in reach and scratches nothing. No physical damage at all, so no use on creatures.",
+            Self::Flak => "Bursts short and fills the space with fragments. Puts a wall in front of missiles and swarms; wasted on armour.",
+            Self::HEAT => "A focused jet that eats plate — but only square on. Hit at an angle and almost nothing gets through.",
+            Self::HESH => "Doesn't penetrate. Rings the plate hard enough that its inner face lets go, and the scab kills what's behind. Needs solid hull to ring.",
+            Self::APFSDS => "A long rod at absurd speed. Through everything, and often out the far side without hitting much.",
+            Self::PlasmaSlug => "Bottled star-stuff. Melts a hole going in and keeps burning inside. Hotter and shorter-lived than incendiary.",
+            Self::Antimatter => "A microgram of anti-hydrogen in a bottle that fails on impact. Nothing survives the blast. Costs more than the gun.",
+            Self::Singularity => "Collapses to a pinpoint well and drags the compartment into it. Gravity does not care what angle you hit at.",
+            Self::NaniteCanister => "A canister of disassemblers. Barely dents the plate, then eats the block from inside for half a minute.",
+            Self::PhaseSlug => "Held out of phase. Shields have nothing to grab and armour barely does either — but it re-materialises with little left.",
+            Self::NeutronShell => "Fast neutrons through the plate. Leaves the hull intact and the crew behind it dead.",
         }
     }
 
@@ -71,6 +127,12 @@ impl KineticAmmoType {
             Self::HEAT => 1.4,        // Heavy — shaped charge liner
             Self::HESH => 1.3,        // Heavy — plastic explosive
             Self::APFSDS => 0.7,      // Light — discarding sabot, tiny dart
+            Self::PlasmaSlug => 0.8,      // Light — the slug is mostly field
+            Self::Antimatter => 0.9,      // The bottle weighs more than the payload
+            Self::Singularity => 1.7,     // Heaviest — a collapsed core in a casing
+            Self::NaniteCanister => 1.0,  // A canister of dust
+            Self::PhaseSlug => 0.5,       // Lightest — half of it isn't here
+            Self::NeutronShell => 1.25,   // Shielded until it isn't
         }
     }
 
@@ -86,6 +148,15 @@ impl KineticAmmoType {
             Self::HEAT => 6,
             Self::HESH => 5,
             Self::APFSDS => 10,
+            // Dearer than every conventional round on purpose: it beats
+            // incendiary on burn, pen, speed and weight at once, so the
+            // price is the only thing keeping incendiary worth loading.
+            Self::PlasmaSlug => 12,
+            Self::Antimatter => 45,   // The reason you don't just load these
+            Self::Singularity => 30,
+            Self::NaniteCanister => 12,
+            Self::PhaseSlug => 22,
+            Self::NeutronShell => 18,
         }
     }
 
@@ -101,6 +172,12 @@ impl KineticAmmoType {
             Self::HEAT => 0.75,      // Slowest — shaped charge is heavy
             Self::HESH => 0.8,       // Slow — soft nose
             Self::APFSDS => 1.5,     // Fastest — lightweight dart
+            Self::PlasmaSlug => 1.2,      // Fast — light, and it accelerates itself
+            Self::Antimatter => 1.15,
+            Self::Singularity => 0.7,     // Slow and heavy; lead it generously
+            Self::NaniteCanister => 0.85, // Fragile cargo, gentle charge
+            Self::PhaseSlug => 1.3,       // Half-real, half the drag
+            Self::NeutronShell => 0.85,
         }
     }
 
@@ -116,6 +193,12 @@ impl KineticAmmoType {
             Self::HEAT => 70.0,     // Extreme — but angle dependent
             Self::HESH => 0.0,      // Zero pen — works through shockwave
             Self::APFSDS => 90.0,   // Highest penetration
+            Self::PlasmaSlug => 30.0,     // Burns through rather than punching
+            Self::Antimatter => 25.0,     // Only needs to get barely inside
+            Self::Singularity => 20.0,    // The well does the work, not the slug
+            Self::NaniteCanister => 20.0, // Enough to breach and deliver
+            Self::PhaseSlug => 95.0,      // Armour is barely there for it
+            Self::NeutronShell => 15.0,   // The shell stops; the radiation doesn't
         }
     }
 
@@ -126,6 +209,17 @@ impl KineticAmmoType {
     /// plating over it is gone. See armor_pass_through for the None case.
     pub fn pass_through(&self) -> f32 {
         (self.penetration() / 100.0).clamp(0.0, 0.9)
+    }
+
+    /// Whether a raised shield can intercept this round at all.
+    ///
+    /// True for exactly one round. A shield stops matter, and the phase slug
+    /// spends its flight not quite being any — it crosses the bubble as if
+    /// it were not there and hits the hull underneath. That is the whole
+    /// reason to pay 22 credits for a round that lands under half an AP's
+    /// damage: against a shielded target it is the only one that lands.
+    pub fn ignores_shields(&self) -> bool {
+        matches!(self, Self::PhaseSlug)
     }
 
     /// Direct damage on hit
@@ -140,6 +234,12 @@ impl KineticAmmoType {
             Self::HEAT => 1.8,       // High — focused jet
             Self::HESH => 0.3,       // Low direct — shockwave does internal
             Self::APFSDS => 0.8,     // Moderate — needle damage
+            Self::PlasmaSlug => 0.6,      // Low direct, the burn is the point
+            Self::Antimatter => 2.2,      // Highest in the game, by a distance
+            Self::Singularity => 0.9,     // Modest on the block it hits — see the implosion
+            Self::NaniteCanister => 0.15, // Almost nothing. Wait for it.
+            Self::PhaseSlug => 0.45,      // The price of ignoring everything
+            Self::NeutronShell => 0.1,    // It is not trying to hurt the ship
         }
     }
 
@@ -155,6 +255,12 @@ impl KineticAmmoType {
             Self::HEAT => Color::srgb(0.8, 0.4, 0.1),    // Dark orange
             Self::HESH => Color::srgb(0.7, 0.7, 0.3),    // Olive
             Self::APFSDS => Color::srgb(0.9, 0.9, 1.0),  // White-bright (fast)
+            Self::PlasmaSlug => Color::srgb(0.45, 0.85, 1.0),   // Arc-blue
+            Self::Antimatter => Color::srgb(0.85, 0.45, 1.0),   // Violet
+            Self::Singularity => Color::srgb(0.35, 0.2, 0.55),  // Dark — it eats its own light
+            Self::NaniteCanister => Color::srgb(0.5, 0.9, 0.5), // Sickly green
+            Self::PhaseSlug => Color::srgba(0.75, 0.95, 1.0, 0.6), // Half-there
+            Self::NeutronShell => Color::srgb(0.8, 1.0, 0.6),   // Cherenkov green-white
         }
     }
 }
@@ -210,6 +316,23 @@ pub enum AmmoHitBehavior {
         shockwave_radius: f32, // How many blocks deep the shockwave goes
         requires_solid_hull: bool,
     },
+    /// Collapses inward instead of blowing outward (Singularity).
+    /// Reads like a blast on the damage numbers, but it is the one round
+    /// whose armour interaction is angle-blind — see `ricochet_cos` — and
+    /// the only one that sheds no spall, because nothing is thrown clear.
+    Implode {
+        crush_damage: f32,
+        crush_radius: f32,
+    },
+    /// Radiation through intact armour (Neutron Shell). Hurts nobody's hull
+    /// and everybody's crew — the ship is left whole and unmanned, which is
+    /// also what makes it the round to fire at something you intend to board.
+    Irradiate {
+        /// Dose delivered to each crew member caught, in crew HP.
+        dose: f32,
+        /// How many of the ship's crew the cone reaches.
+        crew_affected: u32,
+    },
 }
 
 impl KineticAmmoType {
@@ -262,6 +385,41 @@ impl KineticAmmoType {
             Self::APFSDS => AmmoHitBehavior::Penetrate {
                 remaining_pen: self.penetration(),
                 damage_falloff: 0.15, // Only loses 15% per layer — goes through everything
+            },
+            // Hotter and shorter than incendiary: roughly double the burn
+            // rate over less than half the time, so it wants a follow-up
+            // rather than being left to cook.
+            Self::PlasmaSlug => AmmoHitBehavior::Ignite {
+                fire_intensity: 1.4,
+                fire_duration: 3.5,
+            },
+            // No arming threshold — there is no fuse to arm, only a bottle
+            // to fail. It goes off on a shuttle's skin as happily as on a
+            // dreadnought's belt.
+            Self::Antimatter => AmmoHitBehavior::PenetrateExplode {
+                penetration: self.penetration(),
+                blast_damage: base_damage * 1.6,
+                blast_radius: 160.0, // two rings of blocks
+                min_armor_to_arm: 0.0,
+            },
+            Self::Singularity => AmmoHitBehavior::Implode {
+                crush_damage: base_damage * 1.1,
+                crush_radius: 130.0, // one and a half rings, evenly crushed
+            },
+            // Same delivery as a burn, a different clock: a twentieth of
+            // plasma's bite over eight times as long. Fire one early and it
+            // is still working when the fight ends.
+            Self::NaniteCanister => AmmoHitBehavior::Ignite {
+                fire_intensity: 0.8,
+                fire_duration: 26.0,
+            },
+            Self::PhaseSlug => AmmoHitBehavior::Penetrate {
+                remaining_pen: self.penetration(),
+                damage_falloff: 0.1, // Barely notices the plate it passed
+            },
+            Self::NeutronShell => AmmoHitBehavior::Irradiate {
+                dose: 55.0,        // Two shells put a crewman down
+                crew_affected: 2,
             },
         }
     }
@@ -331,19 +489,51 @@ impl LoadedMagazine {
     }
 }
 
+/// Baseline rearm price for one round, in credits — what the docking menu
+/// has always charged per round, and what a weapon with no ammo profile
+/// (lasers, missiles, an untuned gun) still charges.
+pub const BASE_ROUND_PRICE: f32 = 5.0;
+
+/// What a station charges to put `rounds` of this type back in the magazine.
+///
+/// Priced off `cost_per_round` and normalised so AP costs exactly the old
+/// flat rate: everything is quoted relative to the cheap solid shot. This is
+/// the only brake on the exotic rounds — antimatter out-damages the whole
+/// table and would simply be the correct answer every time if a magazine of
+/// it cost the same as brass.
+pub fn rearm_price(ammo: Option<KineticAmmoType>, rounds: u32) -> f32 {
+    let per_round = match ammo {
+        Some(a) => {
+            let ap = KineticAmmoType::AP.cost_per_round() as f32;
+            BASE_ROUND_PRICE * a.cost_per_round() as f32 / ap
+        }
+        None => BASE_ROUND_PRICE,
+    };
+    per_round * rounds as f32
+}
+
 /// Default magazine configs for common loadouts
 pub fn default_magazines() -> Vec<(&'static str, Vec<KineticAmmoType>, &'static str)> {
     vec![
-        ("Standard AP", vec![KineticAmmoType::AP], "Solid penetrators. Reliable against armor."),
-        ("Anti-Armor Mix", vec![KineticAmmoType::AP, KineticAmmoType::AP, KineticAmmoType::APHE], "Two AP to weaken, one APHE to finish."),
-        ("Anti-Creature", vec![KineticAmmoType::HEFrag], "Surface burst + fragments. Shreds unarmored targets."),
-        ("Fire Starter", vec![KineticAmmoType::Incendiary, KineticAmmoType::Incendiary, KineticAmmoType::HEFrag], "Set fires, then fragment."),
-        ("Point Defense", vec![KineticAmmoType::Flak], "Proximity burst. Anti-missile, anti-swarm."),
-        ("System Killer", vec![KineticAmmoType::AP, KineticAmmoType::EMPShell], "Penetrate hull, disable electronics inside."),
-        ("Shaped Charge", vec![KineticAmmoType::HEAT], "Maximum single-target penetration. Angle matters."),
-        ("Concussion", vec![KineticAmmoType::HESH], "Shockwave through hull. Damages internal modules without penetrating."),
-        ("Sabot Dart", vec![KineticAmmoType::APFSDS], "Ultra-fast. Goes through everything. Expensive."),
+        ("Straight Solid", vec![KineticAmmoType::AP], "Plain metal. Cheap, reliable, always does something."),
+        ("Can Opener", vec![KineticAmmoType::AP, KineticAmmoType::AP, KineticAmmoType::APHE], "Two to weaken the plate, one to open up inside it."),
+        ("Meat Grinder", vec![KineticAmmoType::HEFrag], "Skin bursts and fragments. For things that aren't wearing armour."),
+        ("Arson", vec![KineticAmmoType::Incendiary, KineticAmmoType::Incendiary, KineticAmmoType::HEFrag], "Light it, then open it up so it keeps burning."),
+        ("Point Defence", vec![KineticAmmoType::Flak], "A wall of fragments. Missiles and swarms die in it."),
+        ("Dark Ship", vec![KineticAmmoType::AP, KineticAmmoType::EMPShell], "Open the hull, then kill everything wired behind it."),
+        ("Lancework", vec![KineticAmmoType::HEAT], "Maximum against one target, square on. Angle ruins it."),
+        ("Ringing", vec![KineticAmmoType::HESH], "Never breaches. Kills the compartment through plate it can't get through."),
+        ("Long Rod", vec![KineticAmmoType::APFSDS], "Through anything, and often out the other side. Expensive."),
         ("Kitchen Sink", vec![KineticAmmoType::AP, KineticAmmoType::HEFrag, KineticAmmoType::Incendiary, KineticAmmoType::APHE], "A bit of everything."),
+        // Exotic loads. Every one of these costs more per magazine than the
+        // gun firing it, so they're written as MIXES with cheap filler — the
+        // expensive round is the payload, the AP is what pays for the trip.
+        ("Breach & Burn", vec![KineticAmmoType::AP, KineticAmmoType::PlasmaSlug], "Open the plate, then pour a star in through the hole."),
+        ("Long Game", vec![KineticAmmoType::AP, KineticAmmoType::AP, KineticAmmoType::NaniteCanister], "Seed disassemblers early. Let the fight last long enough for them to finish."),
+        ("Shield Breaker", vec![KineticAmmoType::PhaseSlug], "Ignores bubbles entirely. Weak per hit — this is how you hurt something you otherwise can't."),
+        ("Boarding Prep", vec![KineticAmmoType::NeutronShell, KineticAmmoType::NeutronShell, KineticAmmoType::AP], "Kill the crew, keep the hull. Walk aboard a ship that still works."),
+        ("Grave Digger", vec![KineticAmmoType::AP, KineticAmmoType::AP, KineticAmmoType::AP, KineticAmmoType::Singularity], "Three to strip the plate, one to fold the compartment inward."),
+        ("Blank Cheque", vec![KineticAmmoType::Antimatter], "Every trigger pull costs more than a hull plate. Nothing survives one."),
     ]
 }
 
@@ -393,6 +583,21 @@ pub fn spall(ammo: Option<KineticAmmoType>) -> SpallProfile {
         Some(APHE) => SpallProfile { fragments: 6, cone_degrees: 50.0, damage_frac: 0.12, reach: 2.0, through_solid: false },
         Some(HESH) => SpallProfile { fragments: 10, cone_degrees: 80.0, damage_frac: 0.18, reach: 2.0, through_solid: true },
         Some(Incendiary) => SpallProfile { fragments: 2, cone_degrees: 30.0, damage_frac: 0.05, reach: 2.0, through_solid: false },
+        // Molten spatter rather than steel — wide, close, and it sticks.
+        Some(PlasmaSlug) => SpallProfile { fragments: 4, cone_degrees: 45.0, damage_frac: 0.12, reach: 1.0, through_solid: false },
+        // The inner face doesn't fragment so much as leave. Nothing else
+        // comes close, which is what you are buying.
+        Some(Antimatter) => SpallProfile { fragments: 12, cone_degrees: 70.0, damage_frac: 0.25, reach: 3.0, through_solid: false },
+        // A phased slug parts the plate instead of breaking it; there is
+        // barely a hole behind it to shed anything.
+        Some(PhaseSlug) => SpallProfile { fragments: 1, cone_degrees: 15.0, damage_frac: 0.04, reach: 3.0, through_solid: false },
+        // The one round that pulls in rather than throwing out. Its damage
+        // is all in the implosion, and none of it goes anywhere.
+        Some(Singularity) => SpallProfile::NONE,
+        // The canister is meant to stay put and be opened from the inside.
+        Some(NaniteCanister) => SpallProfile::NONE,
+        // The shell stops at the plate. What gets through is not physical.
+        Some(NeutronShell) => SpallProfile::NONE,
         // Surface bursts and EMP never get inside to shed anything.
         Some(HEFrag) | Some(Flak) | Some(EMPShell) => SpallProfile::NONE,
         // AP, and the unspecialised default for beams/rams/AI fire, which
@@ -458,11 +663,8 @@ mod spall_tests {
     /// breach — and the reason its penetration is 0 by design.
     #[test]
     fn only_hesh_spalls_through_unbreached_armour() {
-        for ammo in [
-            KineticAmmoType::AP, KineticAmmoType::APHE, KineticAmmoType::HEFrag,
-            KineticAmmoType::Incendiary, KineticAmmoType::EMPShell, KineticAmmoType::Flak,
-            KineticAmmoType::HEAT, KineticAmmoType::APFSDS,
-        ] {
+        for ammo in KineticAmmoType::ALL {
+            if ammo == KineticAmmoType::HESH { continue; }
             assert!(!spall(Some(ammo)).through_solid, "{ammo:?} must not spall through solid armour");
         }
         assert!(spall(Some(KineticAmmoType::HESH)).through_solid);
@@ -483,5 +685,155 @@ mod spall_tests {
     fn unspecialised_fire_gets_the_baseline() {
         assert_eq!(spall(None), spall(Some(KineticAmmoType::AP)));
         assert!(spall(None).fragments > 0);
+    }
+
+    /// Nothing may be pulled inward AND thrown outward. The singularity's
+    /// damage is all in the implosion, so it is the only penetrating round
+    /// that sheds nothing.
+    #[test]
+    fn an_implosion_throws_nothing_clear() {
+        assert_eq!(spall(Some(KineticAmmoType::Singularity)), SpallProfile::NONE);
+        assert!(matches!(
+            KineticAmmoType::Singularity.hit_behavior(100.0),
+            AmmoHitBehavior::Implode { .. }
+        ));
+    }
+
+    /// Exactly one round crosses a raised shield. If a second ever does, the
+    /// shield module stops being a decision and this test should be the thing
+    /// that argues about it.
+    #[test]
+    fn only_the_phase_slug_ignores_shields() {
+        for ammo in KineticAmmoType::ALL {
+            assert_eq!(
+                ammo.ignores_shields(),
+                ammo == KineticAmmoType::PhaseSlug,
+                "{ammo:?} shield behaviour",
+            );
+        }
+    }
+
+    /// A neutron shell is bought to leave a working ship behind. If its
+    /// direct damage ever creeps up to the cheap rounds' level there is no
+    /// reason to pay nine times the price for it.
+    #[test]
+    fn a_neutron_shell_spares_the_hull_and_not_the_crew() {
+        let shell = KineticAmmoType::NeutronShell;
+        assert!(shell.damage_mult() < KineticAmmoType::AP.damage_mult() * 0.25);
+        assert_eq!(spall(Some(shell)), SpallProfile::NONE);
+        match shell.hit_behavior(100.0) {
+            AmmoHitBehavior::Irradiate { dose, crew_affected } => {
+                assert!(dose > 0.0 && crew_affected > 0);
+                // Two shells put a 100 HP crewman down — a real magazine's
+                // worth of work, not a one-shot crew wipe.
+                assert!(dose * 2.0 >= 100.0, "two shells should finish a crewman");
+                assert!(dose < 100.0, "but one should not");
+            }
+            other => panic!("neutron shell should irradiate, got {other:?}"),
+        }
+    }
+
+    /// The exotics are a price tier, not just a flavour tier. Every one of
+    /// them costs more than every conventional round — that's what stops
+    /// them from being a straight upgrade you always load.
+    #[test]
+    fn exotics_cost_more_than_anything_conventional() {
+        let dearest_conventional = KineticAmmoType::ALL.iter()
+            .filter(|a| !a.is_exotic())
+            .map(|a| a.cost_per_round())
+            .max()
+            .unwrap();
+        for ammo in KineticAmmoType::ALL.iter().filter(|a| a.is_exotic()) {
+            assert!(
+                ammo.cost_per_round() > dearest_conventional,
+                "{ammo:?} at {} undercuts the conventional ceiling of {dearest_conventional}",
+                ammo.cost_per_round(),
+            );
+        }
+    }
+
+    /// Antimatter is the ceiling on both axes at once — biggest hit, biggest
+    /// bill. It is the round you fire when the shot has to land now.
+    #[test]
+    fn antimatter_is_the_ceiling() {
+        let am = KineticAmmoType::Antimatter;
+        for ammo in KineticAmmoType::ALL {
+            if ammo == am { continue; }
+            assert!(am.damage_mult() > ammo.damage_mult(), "{ammo:?} out-damages antimatter");
+            assert!(am.cost_per_round() > ammo.cost_per_round(), "{ammo:?} out-costs antimatter");
+        }
+    }
+
+    /// AP rearms at exactly the flat rate the docking menu charged before
+    /// ammo types had prices, so adding the exotics didn't quietly reprice
+    /// everyone's ordinary resupply.
+    #[test]
+    fn ap_rearms_at_the_old_flat_rate() {
+        assert_eq!(rearm_price(Some(KineticAmmoType::AP), 20), BASE_ROUND_PRICE * 20.0);
+        assert_eq!(rearm_price(None, 20), BASE_ROUND_PRICE * 20.0);
+    }
+
+    /// A magazine of exotics has to hurt to buy — that's the entire brake on
+    /// rounds that otherwise dominate the table. Loading antimatter should
+    /// cost more than repairing a wrecked hull (500c).
+    #[test]
+    fn an_exotic_magazine_costs_real_money() {
+        let ap = rearm_price(Some(KineticAmmoType::AP), 20);
+        for ammo in KineticAmmoType::ALL.iter().filter(|a| a.is_exotic()) {
+            assert!(rearm_price(Some(*ammo), 20) > ap * 2.0, "{ammo:?} rearm is too cheap");
+        }
+        assert!(rearm_price(Some(KineticAmmoType::Antimatter), 20) > 500.0);
+    }
+
+    /// The serialized identifiers are a data contract, not decoration:
+    /// designs/*.json stores `"ammo": "APFSDS"` and saves store the same, so
+    /// renaming a variant to match its crew-slang display name would quietly
+    /// orphan every ship design that loaded that round. Display names are
+    /// free to change; these are not.
+    #[test]
+    fn variant_identifiers_survive_the_rename() {
+        for (ammo, on_disk) in [
+            (KineticAmmoType::AP, "\"AP\""),
+            (KineticAmmoType::APHE, "\"APHE\""),
+            (KineticAmmoType::HEFrag, "\"HEFrag\""),
+            (KineticAmmoType::Incendiary, "\"Incendiary\""),
+            (KineticAmmoType::EMPShell, "\"EMPShell\""),
+            (KineticAmmoType::Flak, "\"Flak\""),
+            (KineticAmmoType::HEAT, "\"HEAT\""),
+            (KineticAmmoType::HESH, "\"HESH\""),
+            (KineticAmmoType::APFSDS, "\"APFSDS\""),
+        ] {
+            assert_eq!(
+                serde_json::to_string(&ammo).unwrap(), on_disk,
+                "{ammo:?} changed on disk — existing ship designs would fail to load",
+            );
+        }
+        // And the display name really has moved off the identifier, which is
+        // the whole point of keeping the two apart.
+        assert_eq!(KineticAmmoType::HESH.name(), "Bell");
+        assert_eq!(KineticAmmoType::APFSDS.name(), "Rod");
+    }
+
+    /// No two rounds may share a display name — the tuning picker is a grid
+    /// of nothing but these, so a collision is unpickable in practice.
+    #[test]
+    fn display_names_are_distinct() {
+        let mut seen = std::collections::HashSet::new();
+        for ammo in KineticAmmoType::ALL {
+            assert!(seen.insert(ammo.name()), "duplicate display name {:?}", ammo.name());
+        }
+    }
+
+    /// Every round in the roster has a real entry in every stat table — no
+    /// variant riding on a placeholder. Catches a new variant bolted onto the
+    /// enum and given a copy of AP's numbers.
+    #[test]
+    fn every_round_is_priced_and_named() {
+        for ammo in KineticAmmoType::ALL {
+            assert!(!ammo.name().is_empty());
+            assert!(ammo.description().len() > 20, "{ammo:?} needs a real description");
+            assert!(ammo.cost_per_round() > 0, "{ammo:?} must cost something");
+            assert!(ammo.weight_mult() > 0.0 && ammo.velocity_mult() > 0.0, "{ammo:?}");
+        }
     }
 }

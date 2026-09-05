@@ -56,7 +56,14 @@ fn ricochet_cos(ammo: Option<KineticAmmoType>) -> f32 {
         Some(AP) | None => 0.342,                    // 70° — also beams/rams
         Some(APHE) | Some(HEAT) => 0.423,            // 65°
         Some(HESH) => -1.0,                          // never: it squashes
-        Some(HEFrag) | Some(Flak) | Some(Incendiary) | Some(EMPShell) => 0.574, // 55°
+        // Gravity has no angle of incidence to skip off, and a slug held out
+        // of phase never really touches the plate to skip off it. The two
+        // exotic rounds that can't be shrugged off by sloping the hull.
+        Some(Singularity) | Some(PhaseSlug) => -1.0, // never
+        Some(PlasmaSlug) => 0.259,                   // 75° — it melts in rather than biting
+        Some(Antimatter) => 0.423,                   // 65° — a blunt bottle, like APHE
+        Some(HEFrag) | Some(Flak) | Some(Incendiary) | Some(EMPShell)
+        | Some(NaniteCanister) | Some(NeutronShell) => 0.574, // 55°
     }
 }
 

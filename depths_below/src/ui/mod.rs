@@ -3697,7 +3697,7 @@ fn get_docking_services(
     hull_state: &HullState,
     oxygen_state: &OxygenState,
     fuel_state: &FuelState,
-    weapon_query: &Query<&Weapon, Without<Creature>>,
+    weapon_query: &Query<(&Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), Without<Creature>>,
     crew_count: usize,
     total_berths: u32,
     inventory: &Inventory,
@@ -3720,14 +3720,19 @@ fn get_docking_services(
     let o2_missing = oxygen_state.max_oxygen - oxygen_state.current_oxygen;
     let o2_cost = (o2_missing * 2.0) as u32;
 
-    // Count weapons that need ammo
+    // Count weapons that need ammo, and price each gun's refill by what it
+    // has loaded — a railgun full of antimatter costs multiples of the same
+    // railgun full of AP (combat::ammo_types::rearm_price).
     let mut ammo_needed = 0u32;
-    for weapon in weapon_query.iter() {
+    let mut ammo_cost_raw = 0.0f32;
+    for (weapon, selected) in weapon_query.iter() {
         if weapon.ammo < weapon.max_ammo {
-            ammo_needed += weapon.max_ammo - weapon.ammo;
+            let short = weapon.max_ammo - weapon.ammo;
+            ammo_needed += short;
+            ammo_cost_raw += crate::combat::ammo_types::rearm_price(selected.map(|a| a.0), short);
         }
     }
-    let ammo_cost = ammo_needed * 5;
+    let ammo_cost = ammo_cost_raw as u32;
 
     let hire_full_cost = 200 + (crew_count as u32) * 50;
     let bio_have = inventory.items.get(&ItemType::BioSample).copied().unwrap_or(0);
@@ -3806,7 +3811,7 @@ fn spawn_docking_menu(
     hull_state: Res<HullState>,
     oxygen_state: Res<OxygenState>,
     fuel_state: Res<FuelState>,
-    weapon_query: Query<&Weapon, Without<Creature>>,
+    weapon_query: Query<(&Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), Without<Creature>>,
     crew_query: Query<&CrewMember>,
     inventory: Res<Inventory>,
     currency: Res<Currency>,
@@ -3970,7 +3975,7 @@ fn docking_menu_input(
     mut item_query: Query<(&DockingServiceItem, &mut Text, &mut TextColor, &Children)>,
     mut span_query: Query<&mut TextSpan>,
     econ_state: (ResMut<HullState>, ResMut<OxygenState>, ResMut<FuelState>, ResMut<Currency>, ResMut<Inventory>),
-    mut weapon_query: Query<&mut Weapon, Without<Creature>>,
+    mut weapon_query: Query<(&mut Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), Without<Creature>>,
     crew_query: Query<&CrewMember>,
     mut notifications: MessageWriter<ShowNotification>,
     mut next_state: ResMut<NextState<GameState>>,
@@ -4030,7 +4035,9 @@ fn docking_menu_input(
 
     if keyboard.just_pressed(KeyCode::Enter) {
         let crew_count = crew_query.iter().count();
-        let weapon_read_query_hack: Vec<_> = weapon_query.iter().map(|w| (w.ammo, w.max_ammo)).collect();
+        let weapon_read_query_hack: Vec<_> = weapon_query.iter()
+            .map(|(w, sel)| (w.ammo, w.max_ammo, sel.map(|a| a.0)))
+            .collect();
 
         match selection.0 {
             0 => {
@@ -4170,9 +4177,12 @@ fn docking_menu_input(
             3 => {
                 // Rearm Weapons - AmmoCrates provide 10 rounds each (free), rest costs credits
                 let mut ammo_needed = 0u32;
-                for &(ammo, max_ammo) in &weapon_read_query_hack {
+                let mut full_price = 0.0f32;
+                for &(ammo, max_ammo, loaded) in &weapon_read_query_hack {
                     if ammo < max_ammo {
-                        ammo_needed += max_ammo - ammo;
+                        let short = max_ammo - ammo;
+                        ammo_needed += short;
+                        full_price += crate::combat::ammo_types::rearm_price(loaded, short);
                     }
                 }
                 if ammo_needed == 0 {
@@ -4196,7 +4206,12 @@ fn docking_menu_input(
                     }
 
                     let remaining_ammo = ammo_needed - ammo_from_crates;
-                    let cost = (remaining_ammo as f32 * 5.0 * discounts.ammo) as u32;
+                    // Crates supply ROUNDS, not credits, so they knock the
+                    // same fraction off the bill as off the count. A crate is
+                    // therefore worth more against a magazine of antimatter
+                    // than against one of AP, which is the right way round.
+                    let unpaid = remaining_ammo as f32 / ammo_needed as f32;
+                    let cost = (full_price * unpaid * discounts.ammo) as u32;
                     if remaining_ammo > 0 && currency.credits < cost {
                         notifications.write(ShowNotification {
                             message: format!("Not enough credits for full rearm (need {}c)", cost),
@@ -4205,7 +4220,7 @@ fn docking_menu_input(
                         });
                     } else {
                         currency.credits -= cost;
-                        for mut weapon in weapon_query.iter_mut() {
+                        for (mut weapon, _) in weapon_query.iter_mut() {
                             weapon.ammo = weapon.max_ammo;
                         }
                         let msg = if cost > 0 {
@@ -4427,7 +4442,9 @@ fn docking_menu_input(
 
     // Rebuild menu text to reflect updated state
     let crew_count = crew_query.iter().count();
-    let weapon_data: Vec<_> = weapon_query.iter().map(|w| (w.ammo, w.max_ammo)).collect();
+    let weapon_data: Vec<_> = weapon_query.iter()
+        .map(|(w, sel)| (w.ammo, w.max_ammo, sel.map(|a| a.0)))
+        .collect();
 
     let hull_damage = 1.0 - hull_state.hull_integrity;
     let hull_repair_full_cost = (hull_damage * 500.0 * discounts.hull_repair) as u32;
@@ -4437,12 +4454,15 @@ fn docking_menu_input(
     let o2_missing = oxygen_state.max_oxygen - oxygen_state.current_oxygen;
     let o2_cost = (o2_missing * 2.0) as u32;
     let mut ammo_needed = 0u32;
-    for &(ammo, max_ammo) in &weapon_data {
+    let mut ammo_cost_raw = 0.0f32;
+    for &(ammo, max_ammo, loaded) in &weapon_data {
         if ammo < max_ammo {
-            ammo_needed += max_ammo - ammo;
+            let short = max_ammo - ammo;
+            ammo_needed += short;
+            ammo_cost_raw += crate::combat::ammo_types::rearm_price(loaded, short);
         }
     }
-    let ammo_cost = (ammo_needed as f32 * 5.0 * discounts.ammo) as u32;
+    let ammo_cost = (ammo_cost_raw * discounts.ammo) as u32;
     let hire_full_cost = 200 + (crew_count as u32) * 50;
     let bio_have = inventory.items.get(&ItemType::BioSample).copied().unwrap_or(0);
     let bio_usable = (hire_full_cost / 60).min(bio_have);
