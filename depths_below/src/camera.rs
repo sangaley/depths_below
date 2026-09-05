@@ -69,6 +69,7 @@ impl Plugin for CameraPlugin {
                 (
                     camera_zoom_input,
                     camera_shake_on_damage,
+                    camera_shake_on_kill,
                     camera_shake_update,
                     free_look_input,
                     camera_follow_ship,
@@ -209,15 +210,55 @@ fn camera_zoom_input(
     }
 }
 
+/// Ceiling on accumulated hit shake. Low on purpose: this is a nudge that
+/// tells you something connected, not a rattle you fight to aim through.
+const MAX_HIT_SHAKE: f32 = 3.5;
+
 /// Trigger shake on ship damage.
-/// Was `(amount * 0.3).min(15.0)` stacking up to a cap of 20, oscillating at
-/// ~6-8Hz — with weapon damage now going up to 80, that pegged near max on
-/// nearly every hit and stayed there under sustained fire. Removed.
+///
+/// This was emptied out — it read the events and did nothing — because the
+/// original `(amount * 0.3).min(15.0)` stacked toward a cap of 20 and, once
+/// weapon damage reached 80, pegged near maximum on nearly every hit and
+/// stayed there under fire. Deleting it fixed the shaking and lost the
+/// feedback: being shot became something you could only read off the hull bar.
+///
+/// Restored an order of magnitude smaller and capped well below the old one,
+/// so a hit registers in the frame and a sustained burst hums rather than
+/// throws the camera around.
 fn camera_shake_on_damage(
     mut damage_events: MessageReader<ShipDamaged>,
-    mut _camera_state: ResMut<CameraState>,
+    mut camera_state: ResMut<CameraState>,
 ) {
-    for _event in damage_events.read() {}
+    for event in damage_events.read() {
+        let kick = (event.amount * 0.03).min(1.2);
+        camera_state.shake_intensity = (camera_state.shake_intensity + kick).min(MAX_HIT_SHAKE);
+    }
+}
+
+/// A kill is the payoff of a fight and deserves to land as an event.
+///
+/// Scaled by distance so a hulk coming apart across the system is a tremor and
+/// one dying at knife range is a jolt, and by cause: a reactor letting go
+/// should hit harder than a crew striking colours.
+pub fn camera_shake_on_kill(
+    mut destroyed: MessageReader<crate::events::AiShipDestroyed>,
+    ship: Query<&Transform, With<Ship>>,
+    mut camera_state: ResMut<CameraState>,
+) {
+    let Ok(ship_transform) = ship.single() else { return };
+    let here = ship_transform.translation.truncate();
+    for event in destroyed.read() {
+        let base = match event.cause {
+            crate::events::ShipDeathCause::Meltdown => 9.0, // containment lets go
+            crate::events::ShipDeathCause::Gutted => 5.0,
+            crate::events::ShipDeathCause::Struck => 2.5,   // she just stops fighting
+        };
+        // Full strength inside 1500 units, nothing past 9000.
+        let d = here.distance(event.position);
+        let falloff = (1.0 - ((d - 1500.0) / 7500.0)).clamp(0.0, 1.0);
+        if falloff <= 0.0 { continue; }
+        camera_state.shake_intensity = (camera_state.shake_intensity + base * falloff).min(14.0);
+    }
 }
 
 /// Decay shake over time and compute offset

@@ -925,3 +925,56 @@ mod gunnery_tests {
         }
     }
 }
+
+/// Tell the player they won, and how.
+///
+/// AiShipDestroyed reached the audio system and nothing else, so a kill — the
+/// payoff of the whole fight — produced no line, no readout, nothing but the
+/// target going quiet. The CAUSE is the interesting part and it was already
+/// being computed and thrown away: check_ai_cripple decides whether a crew
+/// struck colours, the reactor let go, or you ground the hull to nothing, and
+/// each leaves a different wreck to pick over.
+pub fn announce_kills(
+    mut destroyed: MessageReader<AiShipDestroyed>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    for event in destroyed.read() {
+        let (line, kind) = match event.cause {
+            // The cleanest kill and the best salvage — worth naming as a win,
+            // not just as a death.
+            ShipDeathCause::Struck => (
+                format!("{} struck colors — intact derelict", faction_name(event.ship_type)),
+                NotificationType::Success,
+            ),
+            ShipDeathCause::Meltdown => (
+                format!("{} reactor breach — she's gone", faction_name(event.ship_type)),
+                NotificationType::Warning,
+            ),
+            ShipDeathCause::Gutted => (
+                format!("{} gutted — little left to salvage", faction_name(event.ship_type)),
+                NotificationType::Info,
+            ),
+        };
+        notifications.write(ShowNotification {
+            message: line,
+            notification_type: kind,
+            duration: 3.5,
+        });
+    }
+}
+
+fn faction_name(ship_type: AiShipType) -> &'static str {
+    use AiShipType::*;
+    match ship_type {
+        Leviathan => "Leviathan hauler",
+        AbyssalCult => "Cult hybrid",
+        Drowned => "Drowned hulk",
+        PressureKing => "Pressure King",
+        GlassEye => "Glass Eye",
+        IronTide => "Iron Tide",
+        Blackwater => "Blackwater merc",
+        RustSwarm => "Rust Swarm raider",
+        Dreadnought => "Dreadnought",
+        VoidTitan => "Void Titan",
+    }
+}
