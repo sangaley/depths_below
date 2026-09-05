@@ -182,6 +182,7 @@ pub fn fire_weapons_system(
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&crate::building::customization::tuning::SelectedAmmo>,
         Option<&ModuleTemperature>,
+        Option<&crate::combat::targeting::AutoAimPoint>,
     ), Without<DestroyedModule>>,
     target_transform_query: Query<&Transform, Without<Ship>>,
     target_velocity_query: Query<&Velocity, Without<Ship>>,
@@ -222,7 +223,7 @@ pub fn fire_weapons_system(
         .map(|m| (m.grid_position, m.module_type, m.is_active))
         .collect();
 
-    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, customization, tuning, selected_ammo, temp) in weapon_query.iter_mut() {
+    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, customization, tuning, selected_ammo, temp, auto_aim) in weapon_query.iter_mut() {
         // Player ship only: this query has no ownership filter on its own, and
         // AI ships carry the exact same Weapon/FireGroup/WeaponMount
         // components (shared spawn_module path). Unscoped, holding Space
@@ -285,6 +286,21 @@ pub fn fire_weapons_system(
             };
             let vel = aim_lock.ship
                 .and_then(|e| target_velocity_query.get(e).ok())
+                .map(|v| v.0)
+                .unwrap_or(Vec2::ZERO);
+            (aim, vel)
+        } else if let Some(auto) = auto_aim {
+            // Nothing locked: this gun has been handed its own block on the
+            // engaged ship (targeting::auto_engage). Every gun gets a
+            // different one, which is what stops a battery from drilling a
+            // single tile while the rest of the hull goes untouched.
+            let to_point = auto.point - weapon_pos;
+            let aim = if to_point.length() > weapon.range {
+                weapon_pos + to_point.normalize_or_zero() * weapon.range
+            } else {
+                auto.point
+            };
+            let vel = target_velocity_query.get(auto.ship)
                 .map(|v| v.0)
                 .unwrap_or(Vec2::ZERO);
             (aim, vel)

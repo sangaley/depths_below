@@ -32,10 +32,13 @@ pub struct TargetBracket;
 #[derive(Component)]
 pub struct TargetInfoText;
 
-/// System: Tab cycles through valid targets (closest first).
-/// NOT registered — disabled per user request (Tab is the radar key; the
-/// enemy target-lock riding on it was unwanted). Kept for easy re-enable.
-#[allow(dead_code)]
+/// System: `\` cycles through valid targets, closest first.
+///
+/// Was bound to Tab and left unregistered, because Tab is the radar key and
+/// the target-lock riding on it was unwanted. It has a key of its own now:
+/// with nothing manually locked the guns engage the nearest enemy by
+/// themselves (see `targeting::auto_engage`), and this is how you tell them
+/// to pick a different one.
 pub fn cycle_target(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut selection: ResMut<TargetSelection>,
@@ -44,7 +47,7 @@ pub fn cycle_target(
     ai_ship_query: Query<(Entity, &Transform), (With<AiShip>, Without<Ship>)>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    if !keyboard.just_pressed(KeyCode::Tab) { return; }
+    if !keyboard.just_pressed(KeyCode::Backslash) { return; }
 
     let Ok(ship_transform) = ship_query.single() else { return };
     let ship_pos = ship_transform.translation.truncate();

@@ -275,6 +275,15 @@ impl Plugin for CombatPlugin {
                 targeting::maintain_aim_lock.after(targeting::aim_lock_input),
                 targeting::draw_aim_lock.after(targeting::maintain_aim_lock),
                 targeting::fire_group_input.after(targeting::maintain_aim_lock),
+                // `\` picks which enemy the unlocked battery works on, and
+                // assign_auto_aim then hands each gun its own block on it.
+                // Ordered before the firing set so a switch takes effect on
+                // the frame it was pressed.
+                targeting::cycle_target,
+                targeting::assign_auto_aim
+                    .after(targeting::cycle_target)
+                    .after(targeting::maintain_aim_lock)
+                    .before(CombatSet::WeaponFire),
             ).run_if(in_state(GameState::Exploring)))
             // Shields: attach to player + AI ships, recharge, drive bubble visuals
             .add_systems(Update, (
