@@ -170,8 +170,16 @@ impl PowerChannels {
 /// Double-buffered heat map for heat diffusion calculations
 #[derive(Resource, Default)]
 pub struct HeatNetworkState {
-    pub temperatures: HashMap<IVec2, f32>,
-    pub prev_temperatures: HashMap<IVec2, f32>,
+    /// Keyed by (owning ship, ship-local cell).
+    ///
+    /// Keyed by bare IVec2 this was a single map shared by every ship in the
+    /// world — and grid coordinates are ship-local, so an AI reactor at ITS
+    /// (0,0) wrote into the player's (0,0). The workaround was to scope the
+    /// whole heat simulation to the player, which meant enemy guns never
+    /// overheated: yours stuttered under sustained fire and theirs didn't.
+    /// Same shape of bug GridOccupancy had, same fix.
+    pub temperatures: HashMap<(Entity, IVec2), f32>,
+    pub prev_temperatures: HashMap<(Entity, IVec2), f32>,
 }
 
 #[derive(Resource, Default)]

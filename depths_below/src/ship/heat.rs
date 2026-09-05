@@ -4,12 +4,11 @@
 //! weapons generate heat; CoolingPumps and HeatVents remove it. Overheated
 //! modules take damage and may catch fire.
 //!
-//! PLAYER SHIP ONLY: the heat map is keyed by ship-local grid coordinates,
-//! and AI ships reuse the same local coordinates (their reactor also sits
-//! near (0,0)). Before scoping, every spawned AI ship's reactors dumped heat
-//! into the player's mid-section tiles, silently cooking the player's
-//! modules. AI ships use their simplified hull-integrity damage model and
-//! don't participate in heat simulation.
+//! EVERY SHIP, not just the player's. The map is keyed by (ship, local cell),
+//! so an AI reactor's heat stays on the AI ship instead of landing on the
+//! player tile with the same local coordinates — which is what forced this to
+//! be player-only before, and meant enemy weapons never overheated while
+//! yours thermally throttled under sustained fire.
 
 use bevy::prelude::*;
 use crate::components::*;
@@ -22,14 +21,11 @@ use crate::events::*;
 pub fn sync_module_temperatures(
     mut heat_state: ResMut<HeatNetworkState>,
     module_query: Query<(&Module, &ModuleTemperature, &ChildOf)>,
-    ship_query: Query<Entity, With<Ship>>,
 ) {
-    let Ok(player_ship) = ship_query.single() else { return };
     // Seed any new modules into the map
     for (module, temp, parent) in module_query.iter() {
-        if parent.parent() != player_ship { continue; }
         heat_state.temperatures
-            .entry(module.grid_position)
+            .entry((parent.parent(), module.grid_position))
             .or_insert(temp.current);
     }
 }
@@ -44,9 +40,7 @@ pub fn generate_heat(
         &WeaponCooldown, &Module, &ChildOf,
         Option<&crate::building::customization::tuning::WeaponTuning>,
     ), Without<DestroyedModule>>,
-    ship_query: Query<Entity, With<Ship>>,
 ) {
-    let Ok(player_ship) = ship_query.single() else { return };
     let dt = time.delta_secs();
 
     // Reactors generate heat proportional to output. Tuned against a
@@ -60,10 +54,9 @@ pub fn generate_heat(
     // current reactor (output ≤ 500) net-negative when idle — heat now only
     // becomes a real risk once weapon fire or engine thrust piles more on.
     for (reactor, module, parent) in reactor_query.iter() {
-        if parent.parent() != player_ship { continue; }
         if !module.is_active { continue; }
         let heat_gain = (reactor.output / 100.0) * 0.8 * dt;
-        *heat_state.temperatures.entry(module.grid_position).or_insert(0.0) += heat_gain;
+        *heat_state.temperatures.entry((parent.parent(), module.grid_position)).or_insert(0.0) += heat_gain;
     }
 
     // Active engines generate some heat. Was 2.0 — a 400-thrust engine
@@ -71,10 +64,9 @@ pub fn generate_heat(
     // source of passive-idle heat creep independent of the reactor. 1.0
     // keeps every current engine (thrust ≤ 400) net-negative when idle too.
     for (engine, module, parent) in engine_query.iter() {
-        if parent.parent() != player_ship { continue; }
         if !module.is_active { continue; }
         let heat_gain = (engine.thrust / 100.0) * 1.0 * dt;
-        *heat_state.temperatures.entry(module.grid_position).or_insert(0.0) += heat_gain;
+        *heat_state.temperatures.entry((parent.parent(), module.grid_position)).or_insert(0.0) += heat_gain;
     }
 
     // Weapons generate heat while recently fired (cooldown running), scaled
@@ -83,13 +75,12 @@ pub fn generate_heat(
     // counterweight that keeps "max every slider" from being free; the
     // constant power draw alone barely registers against a mid-game reactor.
     for (cooldown, module, parent, tuning) in weapon_query.iter() {
-        if parent.parent() != player_ship { continue; }
         if !module.is_active { continue; }
         if !cooldown.timer.is_finished() {
             // Currently cooling = recently fired
             let factor = tuning.map(|t| t.power_factor()).unwrap_or(1.0);
             let heat_gain = crate::building::customization::tuning::weapon_heat_per_second(factor) * dt;
-            *heat_state.temperatures.entry(module.grid_position).or_insert(0.0) += heat_gain;
+            *heat_state.temperatures.entry((parent.parent(), module.grid_position)).or_insert(0.0) += heat_gain;
         }
     }
 }
@@ -99,36 +90,35 @@ pub fn diffuse_heat(
     time: Res<Time>,
     mut heat_state: ResMut<HeatNetworkState>,
     temp_query: Query<(&Module, &ModuleTemperature, &ChildOf)>,
-    ship_query: Query<Entity, With<Ship>>,
 ) {
-    let Ok(player_ship) = ship_query.single() else { return };
     let dt = time.delta_secs();
 
     // Build conductivity map (player modules only — AI local coords collide)
-    let mut conductivity_map: std::collections::HashMap<IVec2, f32> = std::collections::HashMap::new();
+    let mut conductivity_map: std::collections::HashMap<(Entity, IVec2), f32> = std::collections::HashMap::new();
     for (module, temp, parent) in temp_query.iter() {
-        if parent.parent() != player_ship { continue; }
-        conductivity_map.insert(module.grid_position, temp.conductivity);
+        conductivity_map.insert((parent.parent(), module.grid_position), temp.conductivity);
     }
 
     // Snapshot current temperatures into prev for reading
     heat_state.prev_temperatures = heat_state.temperatures.clone();
 
     // Compute deltas into a separate map to avoid borrow conflicts
-    let mut deltas: Vec<(IVec2, f32)> = Vec::new();
+    let mut deltas: Vec<((Entity, IVec2), f32)> = Vec::new();
     let offsets = [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y];
 
-    for (&pos, &temp) in heat_state.prev_temperatures.iter() {
+    for (&(ship, pos), &temp) in heat_state.prev_temperatures.iter() {
         if temp <= 0.0 { continue; }
-        let conductivity = conductivity_map.get(&pos).copied().unwrap_or(0.5);
+        let conductivity = conductivity_map.get(&(ship, pos)).copied().unwrap_or(0.5);
         let transfer_rate = conductivity * 0.1 * dt;
 
         for offset in &offsets {
-            let neighbor = pos + *offset;
+            // Same ship only — heat crosses between adjacent tiles of one
+            // hull, never between two ships that happen to share a local cell.
+            let neighbor = (ship, pos + *offset);
             if let Some(&neighbor_temp) = heat_state.prev_temperatures.get(&neighbor) {
                 let delta = (temp - neighbor_temp) * transfer_rate;
                 if delta > 0.0 {
-                    deltas.push((pos, -delta));
+                    deltas.push(((ship, pos), -delta));
                     deltas.push((neighbor, delta));
                 }
             }
@@ -148,19 +138,16 @@ pub fn apply_cooling(
     mut heat_state: ResMut<HeatNetworkState>,
     cooling_query: Query<(&CoolingPumpComp, &Module, &ChildOf), Without<DestroyedModule>>,
     vent_query: Query<(&HeatVentComp, &Module, &ChildOf), Without<DestroyedModule>>,
-    ship_query: Query<Entity, With<Ship>>,
 ) {
-    let Ok(player_ship) = ship_query.single() else { return };
     let dt = time.delta_secs();
     let offsets = [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y];
 
     // CoolingPumps: remove heat from adjacent tiles
     for (pump, module, parent) in cooling_query.iter() {
-        if parent.parent() != player_ship { continue; }
         if !module.is_active { continue; }
         let cooling_per_neighbor = pump.cooling_rate * dt / 4.0;
         for offset in &offsets {
-            let neighbor = module.grid_position + *offset;
+            let neighbor = (parent.parent(), module.grid_position + *offset);
             if let Some(temp) = heat_state.temperatures.get_mut(&neighbor) {
                 *temp = (*temp - cooling_per_neighbor).max(0.0);
             }
@@ -169,11 +156,10 @@ pub fn apply_cooling(
 
     // HeatVents: dissipate own tile heat, scaled by distance (deeper void = better radiative cooling)
     for (vent, module, parent) in vent_query.iter() {
-        if parent.parent() != player_ship { continue; }
         if !module.is_active { continue; }
         let depth_bonus = 1.0 + (depth_state.current_depth / 500.0).min(2.0);
         let dissipation = vent.dissipation_rate * depth_bonus * dt;
-        if let Some(temp) = heat_state.temperatures.get_mut(&module.grid_position) {
+        if let Some(temp) = heat_state.temperatures.get_mut(&(parent.parent(), module.grid_position)) {
             *temp = (*temp - dissipation).max(0.0);
         }
     }
@@ -199,9 +185,8 @@ pub fn apply_heat_damage(
     let dt = time.delta_secs();
 
     for (entity, mut module, temp, on_fire, parent) in module_query.iter_mut() {
-        if parent.parent() != player_ship { continue; }
         let current = heat_state.temperatures
-            .get(&module.grid_position)
+            .get(&(parent.parent(), module.grid_position))
             .copied()
             .unwrap_or(temp.current);
 
@@ -214,7 +199,10 @@ pub fn apply_heat_damage(
             let damage = (current - temp.max_temp) * 0.5 * dt;
             module.health = (module.health - damage).max(0.0);
 
-            if !*warned {
+            // Damage applies to every ship now; the WARNING is yours alone.
+            // Without the check, an enemy cooking its own guns would tell you
+            // to deploy cooling.
+            if !*warned && parent.parent() == player_ship {
                 *warned = true;
                 notifications.write(ShowNotification {
                     message: "Module overheating! Deploy cooling systems.".into(),
@@ -251,12 +239,9 @@ pub fn apply_heat_damage(
 pub fn sync_reactor_heat(
     heat_state: Res<HeatNetworkState>,
     mut reactor_query: Query<(&mut Reactor, &Module, &ChildOf), Without<DestroyedModule>>,
-    ship_query: Query<Entity, With<Ship>>,
 ) {
-    let Ok(player_ship) = ship_query.single() else { return };
     for (mut reactor, module, parent) in reactor_query.iter_mut() {
-        if parent.parent() != player_ship { continue; }
-        if let Some(&temp) = heat_state.temperatures.get(&module.grid_position) {
+        if let Some(&temp) = heat_state.temperatures.get(&(parent.parent(), module.grid_position)) {
             reactor.heat = temp;
         }
     }
@@ -266,13 +251,85 @@ pub fn sync_reactor_heat(
 pub fn sync_temperatures_back(
     heat_state: Res<HeatNetworkState>,
     mut temp_query: Query<(&Module, &mut ModuleTemperature, &ChildOf)>,
-    ship_query: Query<Entity, With<Ship>>,
 ) {
-    let Ok(player_ship) = ship_query.single() else { return };
     for (module, mut temp, parent) in temp_query.iter_mut() {
-        if parent.parent() != player_ship { continue; }
-        if let Some(&t) = heat_state.temperatures.get(&module.grid_position) {
+        if let Some(&t) = heat_state.temperatures.get(&(parent.parent(), module.grid_position)) {
             temp.current = t;
         }
+    }
+}
+
+#[cfg(test)]
+mod heat_tests {
+    use super::*;
+    use crate::ai_ship::components::AiShip;
+
+    fn reactor_module(cell: IVec2) -> Module {
+        Module {
+            module_type: ModuleType::StandardReactor,
+            health: 100.0,
+            max_health: 100.0,
+            power_consumption: 0.0,
+            power_generation: 500.0,
+            is_active: true,
+            grid_position: cell,
+            size: IVec2::ONE,
+            rotation: Rotation::North,
+        }
+    }
+
+    /// The reason this simulation was player-only: grid coordinates are
+    /// ship-local, so an AI reactor at ITS (0,0) and the player's module at
+    /// (0,0) are different blocks that collided on one key. Heat generated on
+    /// an enemy landed on your hull.
+    ///
+    /// Keying by (ship, cell) is what makes running it for everyone safe — and
+    /// running it for everyone is what finally makes enemy guns overheat.
+    #[test]
+    fn heat_does_not_leak_between_ships_sharing_a_cell() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<HeatNetworkState>();
+        app.add_systems(Update, generate_heat);
+
+        let player = app.world_mut().spawn(Ship).id();
+        let enemy = app.world_mut().spawn(AiShip).id();
+
+        // Same LOCAL cell on both ships — the exact collision that forced the
+        // player-only scoping.
+        let cell = IVec2::ZERO;
+        app.world_mut()
+            .spawn((reactor_module(cell), Reactor { output: 500.0, heat: 0.0, max_heat: 100.0, explosion_risk: false }))
+            .insert(ChildOf(enemy));
+
+        app.update();
+
+        let heat = app.world().resource::<HeatNetworkState>();
+        assert!(heat.temperatures.contains_key(&(enemy, cell)),
+            "the enemy's reactor should heat its OWN tile");
+        assert!(!heat.temperatures.contains_key(&(player, cell)),
+            "enemy heat landed on the player's hull — the leak is back");
+    }
+
+    /// And an enemy reactor really does generate, which is the point of
+    /// unscoping: their weapons can now cook themselves like yours do.
+    #[test]
+    fn enemy_ships_generate_heat_at_all() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<HeatNetworkState>();
+        app.add_systems(Update, generate_heat);
+
+        let enemy = app.world_mut().spawn(AiShip).id();
+        app.world_mut()
+            .spawn((reactor_module(IVec2::new(3, 1)), Reactor { output: 500.0, heat: 0.0, max_heat: 100.0, explosion_risk: false }))
+            .insert(ChildOf(enemy));
+
+        app.update();
+        app.update();
+
+        let heat = app.world().resource::<HeatNetworkState>();
+        let t = heat.temperatures.get(&(enemy, IVec2::new(3, 1))).copied().unwrap_or(0.0);
+        assert!(t > 0.0, "an active enemy reactor produced no heat");
     }
 }
