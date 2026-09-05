@@ -43,10 +43,15 @@ pub fn mix_color(base: Color, target: Color, t: f32) -> Color {
     let b = base.to_srgba();
     let d = target.to_srgba();
     let t = t.clamp(0.0, 1.0);
-    Color::srgb(
+    // Carry alpha through. Returning srgb() dropped it and handed back an
+    // OPAQUE colour, so anything with a transparent base got repainted solid
+    // black on its first tint — which is what turned the angled plates' empty
+    // half into a black square instead of showing the sky behind it.
+    Color::srgba(
         b.red + (d.red - b.red) * t,
         b.green + (d.green - b.green) * t,
         b.blue + (d.blue - b.blue) * t,
+        b.alpha + (d.alpha - b.alpha) * t,
     )
 }
 

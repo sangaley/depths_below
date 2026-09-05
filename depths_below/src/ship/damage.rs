@@ -269,6 +269,12 @@ pub fn tint_damaged_modules(
 ) {
     for (module, base, mut sprite) in module_query.iter_mut() {
         if module.max_health <= 0.0 { continue; }
+        // A fully transparent base means the module draws no square of its own
+        // and builds its shape out of child sprites instead — the angled
+        // plates. There's nothing here to tint, and tinting it anyway fades a
+        // solid rectangle in over the block's real silhouette as it takes
+        // damage.
+        if base.0.alpha() <= 0.0 { continue; }
         let damage_frac = 1.0 - (module.health / module.max_health).clamp(0.0, 1.0);
         sprite.color = mix_color(base.0, DAMAGE_TINT_TARGET, damage_frac);
     }

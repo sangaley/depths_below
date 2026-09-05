@@ -182,13 +182,21 @@ pub fn ai_ship_death_system(
                         intact_count += 1;
                     }
                     module.is_active = false;
-                    sprite.color = WRECK_TINT;
+                    // Same rule as the damage tint: a transparent sprite is a
+                    // block that draws its shape out of children (the angled
+                    // plates). Painting it would fade a solid square in over
+                    // the silhouette.
+                    if sprite.color.alpha() > 0.0 {
+                        sprite.color = WRECK_TINT;
+                    }
                 } else if let Ok((mut sprite, _hull, is_destroyed)) = hull_query.get_mut(child) {
                     block_count += 1;
                     if !is_destroyed {
                         intact_count += 1;
                     }
-                    sprite.color = WRECK_TINT;
+                    if sprite.color.alpha() > 0.0 {
+                        sprite.color = WRECK_TINT;
+                    }
                 }
             }
         }
