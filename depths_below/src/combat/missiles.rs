@@ -34,8 +34,22 @@ const BURN_TIME: f32 = 1.6;
 const MISSILE_MAX_SPEED: f32 = 2200.0;
 
 /// Radians of steering authority a fresh missile carries. Every radian it
-/// turns is deducted; at zero it coasts. ~2 full circles of correction.
-const RESERVE_TURN: f32 = 12.0;
+/// turns is deducted; at zero it coasts. Enough for ~8s of hard cornering,
+/// so only a missile genuinely fighting an evasive target runs itself dry.
+const RESERVE_TURN: f32 = 25.0;
+
+/// Hard ceiling on turn RATE, independent of the lateral-acceleration cap.
+///
+/// Turn rate is lateral accel / speed, so a missile that has just lit its
+/// motor — still only doing eject speed — could legally pull 7 rad/s. That is
+/// a donut, not a course correction, and it spent the entire steering budget
+/// in the first second and a half of flight.
+const MAX_TURN_RATE: f32 = 3.0;
+
+/// Heading-error gain for the pure-pursuit fallback. Proportional, so a
+/// missile only slightly off the target eases on instead of slamming full
+/// deflection and sawing back the other way.
+const PURSUIT_GAIN: f32 = 2.5;
 
 /// Proportional-navigation gain. 3 flies a visible curve onto the target; 5
 /// snaps almost straight; below 2 it wanders and misses.
@@ -64,6 +78,7 @@ pub fn fire_missiles_system(
     fire_state: Res<FireGroupState>,
     power_state: Res<crate::resources::PowerState>,
     selection: Res<TargetSelection>,
+    aim_lock: Res<super::targeting::AimLock>,
     ship_query: Query<(Entity, &ShipPhysics, &Transform, &Velocity), With<Ship>>,
     mut weapon_query: Query<(
         Entity, &Module, &mut Weapon, &mut WeaponCooldown,
@@ -132,8 +147,17 @@ pub fn fire_missiles_system(
 
         let weapon_pos = global_transform.translation().truncate();
 
-        // Selected target = homing; no target = dumb-fire toward the cursor.
-        let (target_pos, homing_target) = if let Some(target_entity) = selection.target {
+        // Homing target, in the order the player expects to be obeyed.
+        //
+        // Right-click block lock is the documented primary way to aim the
+        // battery (see combat::targeting::aim_lock) and every other weapon
+        // honours it — missiles read only `selection.target`, the middle-click
+        // ship lock, so the normal aiming flow produced unguided rockets that
+        // flew at the cursor. Homing follows the locked SHIP rather than the
+        // locked block: a block's Transform is ship-local, and the warhead's
+        // blast radius covers the difference anyway.
+        let locked = aim_lock.ship.filter(|_| aim_lock.is_locked());
+        let (target_pos, homing_target) = if let Some(target_entity) = locked.or(selection.target) {
             let Ok(target_transform) = target_query.get(target_entity) else { continue };
             (target_transform.translation.truncate(), Some(target_entity))
         } else if let Some(cursor) = cursor_world {
@@ -354,23 +378,27 @@ pub fn move_missiles(
                             } else {
                                 missile.max_lateral
                             };
+                            let max_turn = (cap / speed).min(MAX_TURN_RATE);
 
-                            let lateral = if closing > 1.0 {
+                            let turn_rate = if closing > 1.0 {
                                 let los_rate = los_dir.perp_dot(rel_vel) / range;
-                                (PN_GAIN * los_rate * closing).clamp(-cap, cap)
+                                let lateral = PN_GAIN * los_rate * closing;
+                                (lateral / speed).clamp(-max_turn, max_turn)
                             } else {
                                 // Overshot, or the target is outrunning us. PN
                                 // has no closing speed to work with and would
                                 // command nothing, leaving the missile to fly
                                 // off into the dark. Fall back to pure pursuit
-                                // at full deflection so it hooks round for
-                                // another pass.
+                                // — proportional on heading error, so it hooks
+                                // round hard when the target is behind it and
+                                // gently when it is nearly lined up.
                                 let heading = velocity.0 / speed;
-                                let sign = heading.perp_dot(los_dir);
-                                if sign >= 0.0 { cap } else { -cap }
+                                let angle_err = heading.perp_dot(los_dir)
+                                    .atan2(heading.dot(los_dir));
+                                (angle_err * PURSUIT_GAIN).clamp(-max_turn, max_turn)
                             };
 
-                            let turn = (lateral / speed) * dt;
+                            let turn = turn_rate * dt;
                             let heading = velocity.0.y.atan2(velocity.0.x) + turn;
                             velocity.0 = Vec2::new(heading.cos(), heading.sin()) * speed;
                             // Every radian of correction is spent authority.
