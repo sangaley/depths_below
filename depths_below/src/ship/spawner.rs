@@ -261,12 +261,48 @@ pub(crate) fn builtin_starter_design() -> crate::building::blueprint::Blueprint 
         });
     }
 
+    lay_hallways(&mut hull_cells, &modules);
+
     Blueprint {
         name: "starter_destroyer".into(),
         hull_cells,
         modules,
         created_at: "builtin".into(),
         version: BLUEPRINT_VERSION,
+    }
+}
+
+/// Turns every enclosed cell no module stands on into walkable decking.
+///
+/// Derived rather than hand-listed, so the corridors follow the layout: move a
+/// module and the space that opens up behind it becomes hallway on the next
+/// export, with no second list to drift out of sync. What's left as `Inner` is
+/// structure — the cells modules occupy, which crew route around anyway.
+///
+/// This is what makes the destroyer walkable under the hallways-only rule. It
+/// is not cosmetic: without it every post on the ship is unreachable.
+pub(crate) fn lay_hallways(
+    hull_cells: &mut [crate::building::blueprint::BlueprintHullCell],
+    modules: &[crate::building::blueprint::BlueprintModule],
+) {
+    let registry = crate::building::registry::build_registry();
+    let occupied: std::collections::HashSet<IVec2> = modules
+        .iter()
+        .flat_map(|m| {
+            let def = registry.get(m.module_type);
+            crate::building::ShipGrid::cells_for(
+                m.grid_pos,
+                def.size,
+                m.rotation,
+                crate::building::footprints::footprint_override(m.module_type),
+            )
+        })
+        .collect();
+
+    for cell in hull_cells.iter_mut() {
+        if cell.layer == HullLayer::Inner && !occupied.contains(&cell.grid_pos) {
+            cell.layer = HullLayer::Hallway;
+        }
     }
 }
 

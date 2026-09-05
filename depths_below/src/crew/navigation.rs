@@ -1,17 +1,17 @@
 //! Interior navigation: which ship-local cells crew can walk, and how to get
 //! between two of them.
 //!
-//! The deck is derived, the walls are authored. `HullLayer::Inner` is what
-//! both hull generators (`ship/spawner.rs` and `ai_ship/layouts.rs`) assign to
-//! every enclosed cell, so it already describes the floor of every ship in the
-//! game — the starter and all ten factions get a walkable interior without a
-//! single design being re-authored. `Outer` is the shell, `Void` is the gap
-//! between hulls, and neither is somewhere a person can stand.
+//! Crew walk on hallways and nothing else. `HullLayer::Hallway` is the only
+//! surface that carries them; the outer shell, the structural `Inner` hull and
+//! the void between hulls are all things you route AROUND. That makes where
+//! the hallways go a real design decision — a post with no hallway route to it
+//! cannot be manned, however much floor happens to surround it.
 //!
-//! Modules sit ON the deck rather than replacing it, so they stay walkable and
-//! just cost more to cross. That falls out of the grid rather than being a
-//! special case: armour plates sit OUTBOARD on cells with no hull under them
-//! (see `building::armour`), so they never enter the map at all.
+//! The exception is the posts themselves. Crew have to stand somewhere to do
+//! their job, so a module they occupy — a crew station or a bunk — is walkable
+//! even though the machinery next to it isn't. Crossing one is expensive:
+//! squeezing through the gun deck to reach the reactor should lose to walking
+//! the corridor. Every other module is solid.
 //!
 //! A destroyed block drops out of the map the moment it is marked, which is
 //! what makes battle damage sever routes for free.
@@ -26,14 +26,12 @@ use crate::components::*;
 /// What a crew member finds when they step into a cell.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NavCell {
-    /// Purpose-built passage — `Corridor`, `LadderShaft`, `MaintenanceTunnel`.
-    /// The registry has promised "crew moves faster through corridors" since
-    /// those blocks were added; this is where that becomes true.
-    Corridor,
-    /// Bare deck: inner hull with nothing standing on it.
-    Floor,
-    /// Deck with machinery on it. Passable, but you squeeze past.
-    Machinery,
+    /// Laid decking. The only surface crew cross freely.
+    Hallway,
+    /// A module crew occupy — a crew station or a bunk. Walkable because
+    /// somebody has to stand there, but dear enough that routing THROUGH one
+    /// loses to any reasonable hallway.
+    Post,
     /// A bulkhead door. Passable only while unsealed.
     Door { sealed: bool },
 }
@@ -44,10 +42,9 @@ impl NavCell {
     /// being admissible.
     pub const fn cost(self) -> u32 {
         match self {
-            NavCell::Corridor => 6,
-            NavCell::Floor => 10,
-            NavCell::Machinery => 18,
-            NavCell::Door { .. } => 10,
+            NavCell::Hallway => 6,
+            NavCell::Door { .. } => 6,
+            NavCell::Post => 14,
         }
     }
 
@@ -238,18 +235,10 @@ pub fn reachable_from(nav: &NavGrid, from: IVec2) -> HashSet<IVec2> {
 /// `None` is a wall.
 pub fn hull_nav_cell(layer: HullLayer, sealed: bool) -> Option<NavCell> {
     match layer {
-        HullLayer::Inner => Some(NavCell::Floor),
+        HullLayer::Hallway => Some(NavCell::Hallway),
         HullLayer::BulkheadDoor => Some(NavCell::Door { sealed }),
-        HullLayer::Outer | HullLayer::Void => None,
+        HullLayer::Inner | HullLayer::Outer | HullLayer::Void => None,
     }
-}
-
-/// Blocks whose whole job is letting people through.
-pub fn is_passage(module_type: ModuleType) -> bool {
-    matches!(
-        module_type,
-        ModuleType::Corridor | ModuleType::LadderShaft | ModuleType::MaintenanceTunnel
-    )
 }
 
 /// Rebuilds every ship's `NavGrid` from its own live blocks.
@@ -262,7 +251,10 @@ pub fn is_passage(module_type: ModuleType) -> bool {
 pub fn rebuild_nav_grids(
     mut commands: Commands,
     ships: Query<Entity, Or<(With<Ship>, With<AiShip>)>>,
-    modules: Query<(&Module, &ChildOf), Without<DestroyedModule>>,
+    modules: Query<
+        (&Module, &ChildOf, Has<CrewStation>, Has<Quarters>),
+        Without<DestroyedModule>,
+    >,
     hulls: Query<(&HullSegment, &Transform, &ChildOf, Has<BulkheadSealed>), Without<HullDestroyed>>,
     mut grids: Query<&mut NavGrid>,
     mut last_counts: Local<(usize, usize, usize, usize)>,
@@ -287,24 +279,31 @@ pub fn rebuild_nav_grids(
         cells.insert(transform_to_grid(transform), cell);
     }
 
-    // Modules then refine the deck they stand on. A module with no deck under
-    // it (an outboard armour plate) is skipped rather than inserted, so it
-    // stays a wall — you can't walk on plating bolted to the outside.
-    for (module, parent) in modules.iter() {
+    // Modules then claim their cells. Machinery is solid and takes its cells
+    // OFF the map even if a hallway was laid under it — you can't walk through
+    // a reactor because someone decked the floor first. Posts do the opposite:
+    // a crew station or a bunk is somewhere a person stands, so it goes on the
+    // map whether or not it sits on decking.
+    //
+    // Posts are applied in a second pass so a post always wins its cell,
+    // regardless of the order the queries happen to yield modules in.
+    let mut posts: Vec<(Entity, IVec2)> = Vec::new();
+    for (module, parent, is_station, is_quarters) in modules.iter() {
         let Some(cells) = per_ship.get_mut(&parent.parent()) else { continue };
         let footprint = footprints::footprint_override(module.module_type);
-        let refined = if is_passage(module.module_type) {
-            NavCell::Corridor
+        let occupied =
+            ShipGrid::cells_for(module.grid_position, module.size, module.rotation, footprint);
+        if is_station || is_quarters {
+            posts.extend(occupied.iter().map(|c| (parent.parent(), *c)));
         } else {
-            NavCell::Machinery
-        };
-        for cell in ShipGrid::cells_for(module.grid_position, module.size, module.rotation, footprint) {
-            // Only upgrade actual floor — a door keeps being a door, and a
-            // cell with no hull stays off the map.
-            if cells.get(&cell) == Some(&NavCell::Floor) {
-                cells.insert(cell, refined);
+            for cell in occupied {
+                cells.remove(&cell);
             }
         }
+    }
+    for (ship, cell) in posts {
+        let Some(cells) = per_ship.get_mut(&ship) else { continue };
+        cells.insert(cell, NavCell::Post);
     }
 
     for (ship, cells) in per_ship {
@@ -328,8 +327,8 @@ mod nav_tests {
     use crate::building::blueprint::Blueprint;
 
     /// Builds a grid from an ASCII sketch, so a test's intent is visible in
-    /// its own source. Rows read top-down; `.` floor, `#` wall (absent),
-    /// `c` corridor, `m` machinery, `d` open door, `D` sealed door.
+    /// its own source. Rows read top-down; `=` hallway, `P` crew post,
+    /// `d` open door, `D` sealed door, anything else solid.
     /// Cell (0,0) is the BOTTOM-left, matching ship-local grid orientation.
     fn sketch(rows: &[&str]) -> NavGrid {
         let mut cells = HashMap::new();
@@ -338,9 +337,8 @@ mod nav_tests {
             let y = height - 1 - row_index as i32;
             for (x, ch) in row.chars().enumerate() {
                 let cell = match ch {
-                    '.' => NavCell::Floor,
-                    'c' => NavCell::Corridor,
-                    'm' => NavCell::Machinery,
+                    '=' => NavCell::Hallway,
+                    'P' => NavCell::Post,
                     'd' => NavCell::Door { sealed: false },
                     'D' => NavCell::Door { sealed: true },
                     _ => continue,
@@ -357,7 +355,7 @@ mod nav_tests {
 
     #[test]
     fn walks_a_straight_corridor() {
-        let nav = sketch(&["....."]);
+        let nav = sketch(&["====="]);
         let path = find_path(&nav, IVec2::new(0, 0), IVec2::new(4, 0)).unwrap();
         assert_eq!(path.len(), 5);
         assert_eq!(path[0], IVec2::new(0, 0));
@@ -368,9 +366,9 @@ mod nav_tests {
     fn routes_around_a_wall() {
         // A bulkhead across the middle with a gap at the top.
         let nav = sketch(&[
-            ".....",
-            "..#..",
-            "..#..",
+            "=====",
+            "==#==",
+            "==#==",
         ]);
         let path = find_path(&nav, IVec2::new(0, 0), IVec2::new(4, 0)).unwrap();
         // It must go up and over, never through the blocked column.
@@ -381,38 +379,37 @@ mod nav_tests {
 
     #[test]
     fn a_sealed_door_is_a_wall_and_an_open_one_is_not() {
-        let open = sketch(&["..d.."]);
+        let open = sketch(&["==d=="]);
         assert!(find_path(&open, IVec2::new(0, 0), IVec2::new(4, 0)).is_some());
 
-        let sealed = sketch(&["..D.."]);
+        let sealed = sketch(&["==D=="]);
         assert_eq!(find_path(&sealed, IVec2::new(0, 0), IVec2::new(4, 0)), None);
     }
 
     #[test]
-    fn prefers_the_longer_corridor_to_the_shorter_squeeze() {
-        // Four steps straight across, three of them machinery: 18*3 + 10 = 64.
-        // Eight steps around the outside, seven of them corridor: 6*7 + 10 = 52.
-        // Fewer cells is not the same as less effort, and the corridor wins.
+    fn walks_the_long_way_round_rather_than_through_the_gun_deck() {
+        // Straight across shoves through six manned posts: 14*6 = 84.
+        // The way round is nine hallway steps plus the post itself: 6*9 + 14 = 68.
+        // Fewer cells is not less effort, and pushing past working crew loses.
         let nav = sketch(&[
-            "ccccc",
-            "c...c",
-            ".mmm.",
+            "=======",
+            "=     =",
+            "PPPPPPP",
         ]);
-        let path = find_path(&nav, IVec2::new(0, 0), IVec2::new(4, 0)).unwrap();
+        let path = find_path(&nav, IVec2::new(0, 0), IVec2::new(6, 0)).unwrap();
         assert!(
-            !path.contains(&IVec2::new(2, 0)),
-            "crew squeezed through machinery instead of using the corridor: {path:?}"
+            !path.contains(&IVec2::new(3, 0)),
+            "crew shoved through the gun deck instead of using the hallway: {path:?}"
         );
-        assert_eq!(path.len(), 9, "expected the eight-step way round: {path:?}");
-        assert_eq!(cost_of(&nav, &path), 52);
+        assert_eq!(cost_of(&nav, &path), 6 * 9 + 14);
     }
 
     #[test]
     fn a_severed_section_is_unreachable() {
         let nav = sketch(&[
-            "..#..",
-            "..#..",
-            "..#..",
+            "==#==",
+            "==#==",
+            "==#==",
         ]);
         assert_eq!(find_path(&nav, IVec2::new(0, 0), IVec2::new(4, 0)), None);
         assert_eq!(reachable_from(&nav, IVec2::new(0, 0)).len(), 6);
@@ -422,7 +419,7 @@ mod nav_tests {
     fn nearest_passable_finds_the_deck_from_inside_a_wall() {
         let nav = sketch(&[
             "#####",
-            "##.##",
+            "##=##",
             "#####",
         ]);
         assert_eq!(nearest_of(&nav, IVec2::new(0, 0)), Some(IVec2::new(2, 1)));
@@ -445,19 +442,24 @@ mod nav_tests {
                 cells.insert(hull.grid_pos, cell);
             }
         }
+        let mut posts = Vec::new();
         for module in &design.modules {
-            let refined = if is_passage(module.module_type) {
-                NavCell::Corridor
-            } else {
-                NavCell::Machinery
-            };
+            let def = registry.get(module.module_type);
             let footprint = footprints::footprint_override(module.module_type);
-            let size = registry.get(module.module_type).size;
-            for cell in ShipGrid::cells_for(module.grid_pos, size, module.rotation, footprint) {
-                if cells.get(&cell) == Some(&NavCell::Floor) {
-                    cells.insert(cell, refined);
+            let occupied =
+                ShipGrid::cells_for(module.grid_pos, def.size, module.rotation, footprint);
+            let is_post = def.crew_station
+                || matches!(def.companion, crate::building::registry::CompanionData::Quarters { .. });
+            if is_post {
+                posts.extend(occupied);
+            } else {
+                for cell in occupied {
+                    cells.remove(&cell);
                 }
             }
+        }
+        for cell in posts {
+            cells.insert(cell, NavCell::Post);
         }
         NavGrid { cells, version: 1 }
     }
@@ -486,6 +488,40 @@ mod nav_tests {
             unreachable.len(),
             nav.cells.len(),
             unreachable
+        );
+    }
+
+    /// The builtin is only a fallback — `designs/starter.json` is what the
+    /// game actually spawns, and it wins whenever it exists. A walkable
+    /// builtin next to a shipped design nobody can walk is exactly the drift
+    /// that would put crew on a ship they can't cross, so check the file.
+    #[test]
+    fn the_shipped_starter_design_is_walkable() {
+        let design = crate::building::blueprint::load_design_file("designs/starter.json")
+            .expect("designs/starter.json missing or unparseable");
+        let nav = nav_from_design(&design);
+
+        let halls = nav.cells.values().filter(|c| **c == NavCell::Hallway).count();
+        assert!(halls > 0, "the shipped starter has no hallways — crew cannot move at all");
+
+        let start = *nav
+            .cells
+            .iter()
+            .find(|(_, c)| **c == NavCell::Hallway)
+            .expect("no hallway to start from")
+            .0;
+        let reachable = reachable_from(&nav, start);
+        let stranded: Vec<_> = nav
+            .cells
+            .iter()
+            .filter(|(cell, kind)| **kind == NavCell::Post && !reachable.contains(cell))
+            .map(|(cell, _)| *cell)
+            .collect();
+        assert!(
+            stranded.is_empty(),
+            "{} crew posts have no hallway route and would go unmanned: {:?}",
+            stranded.len(),
+            stranded
         );
     }
 

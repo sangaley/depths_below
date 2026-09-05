@@ -277,12 +277,12 @@ mod walking_tests {
 
     fn hull_at(cell: IVec2) -> (HullSegment, Transform) {
         (
-            HullSegment { grid_position: cell, hull_layer: HullLayer::Inner, ..default() },
+            HullSegment { grid_position: cell, hull_layer: HullLayer::Hallway, ..default() },
             Transform::from_translation(grid_to_local(cell).extend(0.1)),
         )
     }
 
-    /// A one-row ship: deck from (0,0) to (len-1, 0), crew at one end, a
+    /// A one-row ship: hallway from (0,0) to (len-1, 0), crew at one end, a
     /// station at the other.
     fn corridor_ship(app: &mut App, len: i32) -> (Entity, Entity, IVec2) {
         let ship = app.world_mut().spawn(Ship).id();

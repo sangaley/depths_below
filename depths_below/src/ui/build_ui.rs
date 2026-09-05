@@ -1222,6 +1222,7 @@ pub fn update_build_info(
                     match layer {
                         HullLayer::Outer => "Primary hull plating. First line of defense against radiation and debris.",
                         HullLayer::Inner => "Secondary hull layer. Adds redundancy.",
+                        HullLayer::Hallway => "Walkable decking. The ONLY surface crew can cross \u{2014} every post needs a hallway route or it goes unmanned.",
                         HullLayer::Void => "Empty space between hulls. Absorbs damage.",
                         HullLayer::BulkheadDoor => "Airtight door. Isolates depressurized sections.",
                     }.to_string()

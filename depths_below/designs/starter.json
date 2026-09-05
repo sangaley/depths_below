@@ -78,7 +78,7 @@
         -7,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -86,7 +86,7 @@
         -6,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -94,7 +94,7 @@
         -5,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -110,7 +110,7 @@
         -3,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -158,7 +158,7 @@
         -7,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -166,7 +166,7 @@
         -6,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -182,7 +182,7 @@
         -4,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -190,7 +190,7 @@
         -3,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -198,7 +198,7 @@
         -2,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -310,7 +310,7 @@
         -2,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -318,7 +318,7 @@
         -1,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -326,7 +326,7 @@
         0,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -334,7 +334,7 @@
         1,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -342,7 +342,7 @@
         2,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -350,7 +350,7 @@
         3,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -358,7 +358,7 @@
         4,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -414,7 +414,7 @@
         -7,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -422,7 +422,7 @@
         -6,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -430,7 +430,7 @@
         -5,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -462,7 +462,7 @@
         -1,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -478,7 +478,7 @@
         1,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -486,7 +486,7 @@
         2,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -526,7 +526,7 @@
         7,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -534,7 +534,7 @@
         8,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -542,7 +542,7 @@
         9,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -614,7 +614,7 @@
         -2,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -622,7 +622,7 @@
         -1,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -638,7 +638,7 @@
         1,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -646,7 +646,7 @@
         2,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -654,7 +654,7 @@
         3,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -662,7 +662,7 @@
         4,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -718,7 +718,7 @@
         -7,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -726,7 +726,7 @@
         -6,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -742,7 +742,7 @@
         -4,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -750,7 +750,7 @@
         -3,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -758,7 +758,7 @@
         -2,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -830,7 +830,7 @@
         -7,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -838,7 +838,7 @@
         -6,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -846,7 +846,7 @@
         -5,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {
@@ -862,7 +862,7 @@
         -3,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Steel"
     },
     {

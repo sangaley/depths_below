@@ -32,6 +32,12 @@ pub enum HullLayer {
     Inner,
     Void,
     BulkheadDoor,
+    /// Decking a person can actually walk on.
+    ///
+    /// The one hull layer crew can cross. Everything else — the shell, the
+    /// structural interior, the void between hulls — is something you route
+    /// AROUND, so where the hallways go decides which posts can be manned.
+    Hallway,
 }
 
 /// Hull material tiers - determines radiation shielding and durability
@@ -474,9 +480,9 @@ impl ModuleCategory {
                 ModuleType::ViewPort,
                 ModuleType::EmergencyBulkhead,
                 ModuleType::FirebreakWall,
-                ModuleType::Corridor,
-                ModuleType::LadderShaft,
-                ModuleType::MaintenanceTunnel,
+                // Corridor/LadderShaft/MaintenanceTunnel are deliberately
+                // absent: passages are HullLayer::Hallway now. The variants
+                // stay so old blueprints still deserialize.
             ],
         }
     }
