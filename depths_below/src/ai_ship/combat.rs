@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use crate::components::*;
 use crate::events::*;
 use crate::combat::{spawn_floating_damage, spawn_hit_effect};
+use crate::combat::ammo_types::KineticAmmoType;
 use super::components::*;
 
 /// AI ships in Engaging state fire weapons at their current AiShipTarget —
@@ -44,6 +45,10 @@ pub fn ai_weapon_fire_system(
         &AmmoStorage,
         &OwnedByAiShip,
         Option<&ModuleEfficiency>,
+        // Faction loadouts have set this since layouts.rs was written
+        // (apply_module_extras on spawn); nothing ever read it at fire time,
+        // so every AI shot resolved as unspecialised regardless.
+        Option<&crate::building::customization::tuning::SelectedAmmo>,
     )>,
     player_query: Query<&Transform, With<Ship>>,
     target_transform_query: Query<&Transform>,
@@ -161,7 +166,7 @@ pub fn ai_weapon_fire_system(
         let dist_to_target = ai_pos.distance(centroid);
 
         for child in children.iter() {
-            let Ok((mut weapon, mut cooldown, module, ammo_storage, _owned, eff)) =
+            let Ok((mut weapon, mut cooldown, module, ammo_storage, _owned, eff, loaded)) =
                 weapon_query.get_mut(child)
             else {
                 continue;
@@ -251,6 +256,7 @@ pub fn ai_weapon_fire_system(
                 weapon.range,
                 crate::components::ProjectileOwner::AiShip(ai_entity),
                 ammo_storage.ammo_type,
+                loaded.map(|a| a.0),
             );
         }
     }
@@ -779,5 +785,143 @@ pub fn ai_chain_reactions(
             direction: None,
             attacker: None,
         });
+    }
+}
+
+/// Crews that keep watching their rounds skip off you eventually stop firing
+/// the round that skips.
+///
+/// This is the counterplay to sloped armour. Without it, a player who learns
+/// to angle becomes steadily harder to hurt with no answer from the other
+/// side — fights get EASIER the better you understand the system, which is
+/// backwards. An enemy that changes what it loads is also the most legible
+/// form of AI thinking available here: you see the tracers change colour and
+/// then start biting.
+///
+/// The replacement is picked to defeat geometry rather than to hit harder.
+/// HESH spalls through armour it never breaches; the exotics ignore impact
+/// angle outright. Which one a faction reaches for is a characterisation:
+/// scrappers improvise a squash head, deep-zone lords have something worse.
+pub fn ai_adapt_ammo(
+    // Entity comes from the SAME query. Zipping a separate Query<Entity> against
+    // this one would assume both iterate in the same archetype order, which
+    // Bevy does not promise — and getting it wrong silently attributes one
+    // ship's gunnery record to another.
+    mut ships: Query<(Entity, &AiShipType, &AiShipTarget, &Children, &mut AiGunneryLog)>,
+    mut weapons: Query<&mut crate::building::customization::tuning::SelectedAmmo, With<Weapon>>,
+    mut notifications: MessageWriter<ShowNotification>,
+    mut last_target: Local<std::collections::HashMap<Entity, Option<Entity>>>,
+) {
+    for (entity, faction, target, children, mut log) in ships.iter_mut() {
+        // Studying a new ship starts the lesson over — what worked against the
+        // last one says nothing about this one's armour.
+        let previous = last_target.entry(entity).or_insert(None);
+        if *previous != target.entity {
+            *previous = target.entity;
+            log.ricochets = 0;
+            log.switched = false;
+        }
+
+        if log.switched || log.ricochets < RICOCHETS_BEFORE_SWITCH {
+            continue;
+        }
+        log.switched = true;
+
+        let answer = angle_proof_round(*faction);
+        let mut changed = 0;
+        for child in children.iter() {
+            if let Ok(mut loaded) = weapons.get_mut(child) {
+                loaded.0 = answer;
+                changed += 1;
+            }
+        }
+        if changed > 0 {
+            notifications.write(ShowNotification {
+                message: format!("Enemy switching ammunition — {}", answer.name()),
+                notification_type: NotificationType::Warning,
+                duration: 3.0,
+            });
+        }
+    }
+}
+
+/// What a faction reaches for when angles are beating it. Characterisation as
+/// much as balance: a scrap crew improvises, a deep-zone lord doesn't have to.
+fn angle_proof_round(faction: AiShipType) -> KineticAmmoType {
+    use AiShipType::*;
+    match faction {
+        // Nothing exotic aboard — but a squash head doesn't need to get
+        // through, and that's the whole trick.
+        RustSwarm | Drowned | Leviathan => KineticAmmoType::HESH,
+        // Disciplined gunnery: a dart barely deflects at any angle.
+        Blackwater | IronTide => KineticAmmoType::APFSDS,
+        // Bio-organic and deep-zone: they have stranger things loaded.
+        AbyssalCult | PressureKing | GlassEye => KineticAmmoType::HESH,
+        // Gravity does not care what angle you hit at.
+        Dreadnought | VoidTitan => KineticAmmoType::Singularity,
+    }
+}
+
+#[cfg(test)]
+mod gunnery_tests {
+    use super::*;
+    use crate::combat::impact::{obliquity, Obliquity};
+    use crate::building::Block;
+    use crate::components::HullMaterial;
+    use bevy::math::{IVec2, Vec2};
+
+    const ALL_FACTIONS: [AiShipType; 10] = [
+        AiShipType::Leviathan, AiShipType::AbyssalCult, AiShipType::Drowned,
+        AiShipType::PressureKing, AiShipType::GlassEye, AiShipType::IronTide,
+        AiShipType::Blackwater, AiShipType::RustSwarm, AiShipType::Dreadnought,
+        AiShipType::VoidTitan,
+    ];
+
+    /// The point of switching is to stop skipping. Every faction's answer has
+    /// to actually beat the geometry that beat it — otherwise the crew "adapts"
+    /// into the same failure and the player still can't be touched.
+    #[test]
+    fn every_factions_answer_survives_the_angle_that_beat_it() {
+        // The plate that caused the problem, hit at a glancing 78 degrees.
+        let plate = Block::hull(IVec2::ZERO, HullMaterial::Composite);
+        let face = Vec2::NEG_X;
+        let incoming = Vec2::from_angle(78f32.to_radians());
+
+        // Baseline: unspecialised fire skips off this, which is why the crew
+        // is reconsidering in the first place.
+        assert!(obliquity(face, incoming, &plate, None, 1.0).ricochet);
+
+        for faction in ALL_FACTIONS {
+            let answer = angle_proof_round(faction);
+            let o = obliquity(face, incoming, &plate, Some(answer), 1.0);
+            let spall = crate::combat::ammo_types::spall(Some(answer));
+            // Either it doesn't deflect, or it doesn't NEED to get through.
+            assert!(
+                !o.ricochet || spall.through_solid,
+                "{faction:?} switches to {answer:?}, which still skips and can't spall through"
+            );
+        }
+    }
+
+    /// A switch has to be a change. Reloading the round that was already
+    /// bouncing is the crew learning nothing.
+    #[test]
+    fn the_answer_is_never_the_default_round() {
+        for faction in ALL_FACTIONS {
+            assert_ne!(angle_proof_round(faction), KineticAmmoType::AP);
+        }
+    }
+
+    /// Head-on, the switch must not be a straight downgrade — the crew is
+    /// solving an angle problem, not throwing damage away.
+    #[test]
+    fn the_answer_still_works_square_on() {
+        let plate = Block::hull(IVec2::ZERO, HullMaterial::Composite);
+        for faction in ALL_FACTIONS {
+            let answer = angle_proof_round(faction);
+            let o = obliquity(Vec2::NEG_X, Vec2::X, &plate, Some(answer), 1.0);
+            assert!(!o.ricochet, "{faction:?}'s {answer:?} shouldn't bounce dead-on");
+            assert_eq!(o, Obliquity::HEAD_ON.clone(), "{faction:?}: square-on is square-on");
+        }
     }
 }

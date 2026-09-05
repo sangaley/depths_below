@@ -173,6 +173,7 @@ pub fn spawn_ai_ship(
         },
         AiShipDecisionTimer::default(),
         AiShipTarget::default(),
+        AiGunneryLog::default(),
         Velocity(Vec2::ZERO),
         Depth(position.y.abs() / 10.0),
     )).id();

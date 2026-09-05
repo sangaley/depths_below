@@ -43,7 +43,15 @@ impl Plugin for AiShipPlugin {
                     movement::ai_thruster_system,
                     movement::ai_fuel_system,
                     power::update_ai_power,
-                    combat::ai_weapon_fire_system.after(power::update_ai_power),
+                    // Grouped: this tuple is at Bevy's 20-element limit, so
+                    // gunnery goes in as one nested pair rather than two slots.
+                    (
+                        combat::ai_weapon_fire_system.after(power::update_ai_power),
+                        // Reads the ricochet tally projectile_collision keeps and
+                        // changes what the guns are loading. After firing, so a
+                        // switch lands on the next volley rather than mid-burst.
+                        combat::ai_adapt_ammo.after(combat::ai_weapon_fire_system),
+                    ),
                     combat::ai_distress_system,
                     combat::process_ai_ship_damage_system,
                     combat::check_ai_reactor_destruction,

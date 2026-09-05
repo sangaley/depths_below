@@ -541,3 +541,19 @@ pub fn factions_hostile(a: AiShipType, b: AiShipType) -> bool {
 pub struct ReactorMeltdown {
     pub remaining: f32,
 }
+
+/// What a ship has learned from watching its own rounds come off you.
+///
+/// Counts ricochets against the current target. Past a threshold the crew
+/// concludes the angle is the problem and changes what they're loading —
+/// which is the difference between an enemy that keeps failing the same way
+/// and one that adapts. Reset when they switch targets, so learning doesn't
+/// carry across to a ship they haven't studied.
+#[derive(Component, Default, Debug)]
+pub struct AiGunneryLog {
+    pub ricochets: u32,
+    pub switched: bool,
+}
+
+/// Ricochets against one target before the crew changes ammunition.
+pub const RICOCHETS_BEFORE_SWITCH: u32 = 4;

@@ -102,6 +102,7 @@ pub(super) fn crew_weapon_system(
                     range,
                     ProjectileOwner::Player,
                     ammo_storage.ammo_type,
+                    None,
                 );
             }
         }
@@ -208,6 +209,7 @@ pub(super) fn manual_weapon_system(
                 range,
                 ProjectileOwner::Player,
                 ammo_storage.ammo_type,
+                None,
             );
             notifications.write(ShowNotification {
                 message: ammo_storage.ammo_type.display_name().into(),
@@ -228,6 +230,7 @@ pub(super) fn manual_weapon_system(
                 range,
                 ProjectileOwner::Player,
                 ammo_storage.ammo_type,
+                None,
             );
             notifications.write(ShowNotification {
                 message: "Fired! No targets in range".into(),

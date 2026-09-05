@@ -26,6 +26,7 @@ pub(crate) fn spawn_projectile(
     range: f32,
     owner: ProjectileOwner,
     ammo_type: AmmoType,
+    kinetic: Option<crate::combat::ammo_types::KineticAmmoType>,
 ) {
     let direction = (target - origin).normalize_or_zero();
     let angle = direction.y.atan2(direction.x);
@@ -62,6 +63,7 @@ pub(crate) fn spawn_projectile(
             ammo_type,
             prev_pos: origin,
             bounces: 0,
+            kinetic,
         },
     ));
 }
@@ -103,6 +105,7 @@ pub(super) fn projectile_collision(
     // Enemy rounds resolve their own deflection, same maths the player's guns
     // use — see the ricochet arm below.
     block_query: Query<&crate::building::Block>,
+    mut gunnery_query: Query<&mut crate::ai_ship::components::AiGunneryLog>,
     mut creature_query: Query<(Entity, &Transform, &mut Creature), Without<Ship>>,
     // Without<AiShip>: this system also reads AI ships' ShipShield
     // (immutably) via ai_ship_query below. Bevy's conflict checker can't
@@ -286,7 +289,7 @@ pub(super) fn projectile_collision(
                         &block, step.entry_face, step.cell, entry, exit,
                     );
                     let obl = surface
-                        .map(|s| crate::combat::impact::obliquity(s.normal, dir_local, &block, None, 1.0))
+                        .map(|s| crate::combat::impact::obliquity(s.normal, dir_local, &block, projectile.kinetic, 1.0))
                         .unwrap_or(crate::combat::impact::Obliquity::HEAD_ON);
 
                     if obl.ricochet && projectile.bounces < 2 {
@@ -318,6 +321,13 @@ pub(super) fn projectile_collision(
                             let graze = 1.0 - obl.cos_impact;
                             super::spawn_impact_sparks(&mut commands, at, out, graze, 9 + (graze * 7.0) as usize);
                             spawn_hit_effect(&mut commands, at, Color::srgb(0.95, 0.95, 0.85), 10.0);
+                        }
+                        // Tell the shooter. A ship that can't see its own
+                        // rounds skipping can't learn anything from them.
+                        if let crate::components::ProjectileOwner::AiShip(shooter) = projectile.owner {
+                            if let Ok(mut log) = gunnery_query.get_mut(shooter) {
+                                log.ricochets += 1;
+                            }
                         }
                         hit_player = true;
                         continue;

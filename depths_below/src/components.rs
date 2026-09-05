@@ -1101,6 +1101,14 @@ pub struct Projectile {
     /// way the player's does off theirs, and needs the same bound: a round
     /// caught in a concave notch would otherwise skip off it forever.
     pub bounces: u8,
+    /// The actual round loaded, as opposed to `ammo_type`'s four-way
+    /// Missile/Bullet/Charge/Mine split.
+    ///
+    /// AI weapons have carried a SelectedAmmo from their faction loadouts all
+    /// along (apply_module_extras), but nothing read it when they fired — so
+    /// every incoming shot resolved as unspecialised, and an Iron Tide firing
+    /// APFSDS deflected off your plating exactly like a scrap raider's junk.
+    pub kinetic: Option<crate::combat::ammo_types::KineticAmmoType>,
 }
 
 /// Deployed mine - arms after delay, detonates on creature proximity

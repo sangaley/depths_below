@@ -53,6 +53,7 @@ pub(super) fn creature_ranged_attack(
             shoot_range,
             ProjectileOwner::Creature,
             AmmoType::Charge,
+            None,
         );
     }
 }
