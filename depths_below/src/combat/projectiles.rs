@@ -265,6 +265,11 @@ pub(super) fn projectile_collision(
                     let block_pos = ship_gt.affine()
                         .transform_point3(local.extend(0.0))
                         .truncate();
+                    // Incoming fire sparks off your own plating too. Without
+                    // this, hits on the player registered only as a hull-bar
+                    // twitch and a notification line.
+                    spawn_hit_effect(&mut commands, block_pos, Color::srgb(1.0, 0.55, 0.2), 14.0);
+                    super::spawn_impact_sparks(&mut commands, block_pos, -projectile.direction, 0.25, 6);
                     damage_events.write(ShipDamaged {
                         source: DamageSource::Creature(Entity::PLACEHOLDER),
                         amount: projectile.damage,

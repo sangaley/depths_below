@@ -483,7 +483,7 @@ const MAX_CREATURE_HIT_RADIUS: f32 = 90.0;
 /// projectile instead of every creature in the world.
 pub fn check_projectile_hits(
     mut commands: Commands,
-    mut proj_query: Query<(Entity, &mut Projectile, &Transform, &mut Velocity)>,
+    mut proj_query: Query<(Entity, &mut Projectile, &Transform, &mut Velocity, &mut Sprite)>,
     mut creature_query: Query<(&Transform, &mut Creature), Without<Ship>>,
     creature_grid: Res<crate::spatial::CreatureGrid>,
     mut ai_ship_query: Query<
@@ -498,7 +498,7 @@ pub fn check_projectile_hits(
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
     _notifications: MessageWriter<ShowNotification>,
 ) {
-    'projectiles: for (proj_entity, mut proj, proj_transform, mut proj_vel) in proj_query.iter_mut() {
+    'projectiles: for (proj_entity, mut proj, proj_transform, mut proj_vel, mut proj_sprite) in proj_query.iter_mut() {
         let proj_pos = proj_transform.translation.truncate();
         // A weapon's own ship is never a valid target for its own shot,
         // regardless of aim — belt-and-suspenders on top of firing-arc and
@@ -547,6 +547,10 @@ pub fn check_projectile_hits(
                     Vec2::new(p.x / 66.0, (p.y + 33.0) / 66.0)
                 };
                 let (cell_from, cell_to) = (to_cell(proj.prev_pos), to_cell(proj_pos));
+                // World-space heading, for effects: dir_local is in the
+                // target's cell space and would spray along the wrong axis on
+                // any ship that isn't sitting at zero rotation.
+                let dir_local_world = proj_vel.0.normalize_or_zero();
                 // Direction in the SHIP's own cell space — the hull's heading
                 // is already baked into `inv`, so angling the ship angles
                 // every plate on that side without any new per-block data.
@@ -589,6 +593,9 @@ pub fn check_projectile_hits(
                     ai_module_query.get_mut(step.entity).ok().map(|(mut module, _)| {
                         module.health = (module.health - impact.to_block).max(0.0);
                         spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.6, 0.2), 12.0);
+                        // Biting hits spray back along the round's own path —
+                        // debris coming out of the hole, not off it.
+                        spawn_impact_sparks(&mut commands, hit_pos, -dir_local_world, 0.2, 5);
                         spawn_floating_damage(&mut commands, hit_pos, impact.to_block, Color::srgb(1.0, 0.8, 0.3));
                         (step.entity, hit_pos)
                     })
@@ -615,6 +622,7 @@ pub fn check_projectile_hits(
                         hull.health = (hull.health - impact.to_block).max(0.0);
                         let hit_pos = gt.translation().truncate();
                         spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.5, 0.2), 16.0);
+                        spawn_impact_sparks(&mut commands, hit_pos, -dir_local_world, 0.2, 6);
                         spawn_floating_damage(&mut commands, hit_pos, impact.to_block, Color::srgb(1.0, 0.3, 0.3));
                         (step.entity, hit_pos)
                     });
@@ -677,6 +685,17 @@ pub fn check_projectile_hits(
                             .rotate(mirror.lerp(tangent, skid).normalize_or_zero());
                         proj_vel.0 = out * proj_vel.0.length() * (0.45 + 0.40 * (1.0 - obl.cos_impact));
                         proj.damage *= 0.10 + 0.30 * (1.0 - obl.cos_impact);
+
+                        // Sparks along the NEW heading. This is the whole
+                        // point: the round already changed direction, but a
+                        // small pale flash gave no way to see that it had, so
+                        // a deflection looked like a shot that simply failed.
+                        let graze = 1.0 - obl.cos_impact;
+                        spawn_impact_sparks(&mut commands, hit_pos, out, graze, 9 + (graze * 7.0) as usize);
+                        // ...and the round itself goes hot, so it can be
+                        // followed off the plate instead of vanishing into the
+                        // background as a dim shape travelling somewhere new.
+                        proj_sprite.color = Color::srgb(1.0, 0.85, 0.55);
                     }
                     ai_damage_events.write(crate::events::AiShipDamaged {
                         target: ai_entity,

@@ -85,6 +85,64 @@ pub(crate) fn spawn_hit_effect(commands: &mut Commands, position: Vec2, color: C
     ));
 }
 
+/// Sparks thrown off an impact, sprayed along `dir`.
+///
+/// Directional on purpose. A symmetric puff says "something happened here"; a
+/// fan says "it went THAT way", and for a ricochet the direction IS the
+/// information — it's the only way to see that a round left along a new
+/// heading instead of simply failing to do damage.
+///
+/// `energy` (0..1) scales count and spread: a grazing skip throws a long thin
+/// streak, a near-square one that barely turned throws a short hot burst.
+pub(crate) fn spawn_impact_sparks(
+    commands: &mut Commands,
+    position: Vec2,
+    dir: Vec2,
+    energy: f32,
+    count: usize,
+) {
+    let dir = dir.normalize_or_zero();
+    if dir == Vec2::ZERO {
+        return;
+    }
+    let energy = energy.clamp(0.0, 1.0);
+    for i in 0..count {
+        // Grazing hits stay tight to the new heading; blunt ones scatter.
+        let spread = (rand::random::<f32>() - 0.5) * (1.4 - energy * 0.9);
+        let heading = Vec2::from_angle(spread).rotate(dir);
+        let speed = 180.0 + rand::random::<f32>() * (260.0 + energy * 420.0);
+        let life = 0.14 + rand::random::<f32>() * 0.26;
+        // A few white-hot ones among the orange so the spray has depth
+        // instead of reading as one flat colour.
+        let hot = i % 3 == 0;
+        commands.spawn((
+            Sprite {
+                color: if hot {
+                    Color::srgb(1.0, 0.97, 0.86)
+                } else {
+                    Color::srgb(1.0, 0.68, 0.24)
+                },
+                custom_size: Some(Vec2::new(if hot { 6.0 } else { 4.0 }, 1.8)),
+                ..default()
+            },
+            Transform {
+                translation: position.extend(0.62),
+                // Streaks lie along their own flight, so the spray reads as
+                // motion rather than as confetti.
+                rotation: Quat::from_rotation_z(heading.y.atan2(heading.x)),
+                ..default()
+            },
+            crate::vfx::particles::Particle {
+                velocity: heading * speed,
+                lifetime: life,
+                max_lifetime: life,
+                fade: true,
+                shrink: true,
+            },
+        ));
+    }
+}
+
 /// Spawn a floating word that drifts upward and fades out — the same channel
 /// as a damage number, for outcomes that aren't a number. A round that skips
 /// off a plate did something, and reporting it as "-3" reads as a bad hit
