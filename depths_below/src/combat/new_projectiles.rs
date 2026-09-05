@@ -55,6 +55,15 @@ pub struct Projectile {
 /// How many times one round may skip before it's spent.
 pub const MAX_BOUNCES: u8 = 2;
 
+/// Speed cap on a deflected round.
+///
+/// A ricochet sheds most of its energy, and the fraction alone wasn't enough:
+/// a railgun does 9000 u/s, so even at 45% it left at 4000 and was off the
+/// screen before the next frame. The deflection is the feedback — you're meant
+/// to SEE the round leave along a new heading — and it's worth nothing if it
+/// lasts one frame. Capped to something you can follow.
+pub const RICOCHET_MAX_SPEED: f32 = 1500.0;
+
 /// Closest approach between point `p` and segment `a -> b`.
 /// Returns (distance, t) where t is 0 at `a` and 1 at `b`.
 ///
@@ -724,7 +733,8 @@ pub fn check_projectile_hits(
                         let scatter = (rand::random::<f32>() - 0.5) * 0.17; // ±~5°
                         let out = Vec2::from_angle(scatter)
                             .rotate(mirror.lerp(tangent, skid).normalize_or_zero());
-                        proj_vel.0 = out * proj_vel.0.length() * (0.45 + 0.40 * (1.0 - obl.cos_impact));
+                        let kept = proj_vel.0.length() * (0.45 + 0.40 * (1.0 - obl.cos_impact));
+                        proj_vel.0 = out * kept.min(RICOCHET_MAX_SPEED);
                         proj.damage *= 0.10 + 0.30 * (1.0 - obl.cos_impact);
 
                         // Sparks along the NEW heading. This is the whole

@@ -316,7 +316,8 @@ pub(super) fn projectile_collision(
                             let out = Vec2::from_angle(scatter)
                                 .rotate(mirror.lerp(tangent, skid).normalize_or_zero());
                             projectile.direction = out;
-                            projectile.speed *= 0.45 + 0.40 * (1.0 - obl.cos_impact);
+                            projectile.speed = (projectile.speed * (0.45 + 0.40 * (1.0 - obl.cos_impact)))
+                                .min(super::new_projectiles::RICOCHET_MAX_SPEED);
                             projectile.damage *= 0.10 + 0.30 * (1.0 - obl.cos_impact);
                             projectile.bounces += 1;
                             proj_sprite.color = Color::srgb(1.0, 0.85, 0.55);

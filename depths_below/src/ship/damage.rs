@@ -292,7 +292,17 @@ pub fn process_module_destruction(
 ) {
     let player_ship = ship_query.single().ok();
     for (entity, mut module, mut sprite, parent) in module_query.iter_mut() {
-        if module.health <= 0.0 && module.is_active {
+        // Health alone decides this. It used to also require is_active, which
+        // meant a module that spawns INACTIVE could never be destroyed — its
+        // health went to zero and past it and nothing ever marked it. That's
+        // every Structural and Utility block: armour plates, bulkheads,
+        // corridors, cargo. They stayed in ShipGrid forever (it filters on
+        // Without<DestroyedModule>), so a wrecked plate went on armouring the
+        // ship and deflecting rounds at 0 HP.
+        //
+        // The de-dup this was standing in for is the query's own
+        // Without<DestroyedModule> filter, which is the correct guard.
+        if module.health <= 0.0 {
             module.is_active = false;
             module.health = 0.0;
             // try_insert: applies to every ship including AI ships. If this
@@ -797,6 +807,85 @@ pub fn explosion_shockwaves(
             let falloff = 1.0 - dist / shock_radius;
             let dv = (impulse / mass * falloff).min(SHOCKWAVE_MAX_KICK);
             velocity.0 += dir * dv;
+        }
+    }
+}
+
+#[cfg(test)]
+mod destruction_tests {
+    use super::*;
+
+    fn module_at_zero(module_type: ModuleType, is_active: bool) -> Module {
+        Module {
+            module_type,
+            health: 0.0,
+            max_health: 100.0,
+            power_consumption: 0.0,
+            power_generation: 0.0,
+            is_active,
+            grid_position: IVec2::ZERO,
+            size: IVec2::ONE,
+            rotation: Rotation::North,
+        }
+    }
+
+    fn run(module: Module) -> bool {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.add_message::<ModuleDestroyed>();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, process_module_destruction);
+        let ship = app.world_mut().spawn(Ship).id();
+        let block = app.world_mut()
+            .spawn((module, Sprite::default(), BaseSpriteColor(Color::WHITE)))
+            .insert(ChildOf(ship))
+            .id();
+        app.update();
+        app.world().get::<DestroyedModule>(block).is_some()
+    }
+
+    /// A block at zero health is destroyed, whatever it is.
+    ///
+    /// This used to also require is_active, and everything Structural,
+    /// Utility, Storage, Crew and Control spawns INACTIVE (see spawn_module) —
+    /// so armour plates, bulkheads, corridors and cargo holds could take
+    /// unlimited damage and never die. Worse for the armour model: ShipGrid
+    /// filters on Without<DestroyedModule>, so a wrecked plate stayed in the
+    /// grid and went on deflecting rounds at 0 HP.
+    #[test]
+    fn inactive_blocks_can_still_be_destroyed() {
+        for module_type in [
+            ModuleType::AngledArmorPlate,
+            ModuleType::ArmorPlate,
+            ModuleType::StaggeredArmorPlate,
+            ModuleType::Bulkhead,
+            ModuleType::Corridor,
+        ] {
+            assert!(run(module_at_zero(module_type, false)),
+                "{module_type:?} spawns inactive and must still be destructible");
+        }
+    }
+
+    /// Active modules keep working the way they always did.
+    #[test]
+    fn active_blocks_are_unaffected() {
+        assert!(run(module_at_zero(ModuleType::SmallReactor, true)));
+    }
+
+    /// Every armour block this matters for really does spawn inactive — if
+    /// that ever changes, this test should be the thing that notices.
+    #[test]
+    fn armour_plates_do_spawn_inactive() {
+        for module_type in [
+            ModuleType::AngledArmorPlate,
+            ModuleType::AngledHullPlate,
+            ModuleType::ArmorPlate,
+        ] {
+            assert!(!matches!(module_type.category(),
+                ModuleCategory::Power | ModuleCategory::Propulsion
+                | ModuleCategory::LifeSupport | ModuleCategory::Weapons
+                | ModuleCategory::Detection),
+                "{module_type:?} is in an always-active category; revisit the destruction rule");
         }
     }
 }
