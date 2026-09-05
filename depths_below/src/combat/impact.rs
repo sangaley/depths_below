@@ -115,28 +115,32 @@ pub fn clip_to_shape(
         return Some(SurfaceHit { normal: face, span: (exit - entry).length() });
     };
 
-    // Material is the half-cell on the facing side of a diagonal through the
-    // centre: the set of local points with p·n >= 0.
+    // `facing` is an outward SURFACE normal: it points away from the plate into
+    // open space, so the material lies BEHIND it — the half-cell with p·n <= 0.
+    // Putting the material on the +n side instead means a round meets the flat
+    // cell edge first with the diagonal tucked behind it, which is backwards,
+    // and leaves the plate's mass hanging off the hull instead of packed
+    // against it.
     let n = Vec2::from_angle(angle);
     let centre = cell.as_vec2();
     let (a, b) = (entry - centre, exit - centre);
     let (da, db) = (a.dot(n), b.dot(n));
 
-    if da < 0.0 && db < 0.0 {
-        return None; // passed through the hollow corner entirely
+    if da > 0.0 && db > 0.0 {
+        return None; // crossed the open corner without reaching the plate
     }
 
-    let (start, end) = if da >= 0.0 && db >= 0.0 {
+    let (start, end) = if da <= 0.0 && db <= 0.0 {
         (a, b)
     } else {
         let cross = a.lerp(b, da / (da - db));
-        if da >= 0.0 { (a, cross) } else { (cross, b) }
+        if da <= 0.0 { (a, cross) } else { (cross, b) }
     };
 
     Some(SurfaceHit {
-        // Started inside the material => came in through a flat leg, so the
-        // surface is the cell face. Otherwise it crossed the hypotenuse.
-        normal: if da >= 0.0 { face } else { n },
+        // Already in the material on entry => came in through a flat leg, so
+        // the surface is the cell face. Otherwise it crossed the hypotenuse.
+        normal: if da <= 0.0 { face } else { n },
         span: (end - start).length(),
     })
 }
@@ -274,23 +278,24 @@ mod tests {
         let wedge = Block::for_module(IVec2::ZERO, ModuleType::AngledArmorPlate, Rotation::North);
         let cell = IVec2::ZERO;
 
-        // 1. Straight through the hollow SW corner: never touches it.
-        let missed = clip_to_shape(&wedge, IVec2::new(-1, 0), cell,
-            Vec2::new(-0.5, -0.3), Vec2::new(-0.2, -0.5));
-        assert_eq!(missed, None, "a round crossing the empty corner must miss");
+        // 1. Straight through the open NE corner: never reaches the plate.
+        let missed = clip_to_shape(&wedge, IVec2::new(0, 1), cell,
+            Vec2::new(0.3, 0.5), Vec2::new(0.5, 0.3));
+        assert_eq!(missed, None, "a round crossing the open corner must miss");
 
         // 2. Crossing the hypotenuse: meets the sloped face.
-        let sloped = clip_to_shape(&wedge, IVec2::new(-1, 0), cell,
-            Vec2::new(-0.5, 0.1), Vec2::new(0.5, 0.1)).expect("crosses into material");
+        let sloped = clip_to_shape(&wedge, IVec2::new(0, 1), cell,
+            Vec2::new(-0.1, 0.5), Vec2::new(-0.1, -0.5)).expect("crosses into material");
         let n = Vec2::from_angle(std::f32::consts::FRAC_PI_4);
         assert!(sloped.normal.distance(n) < 1e-4, "should meet the diagonal, got {:?}", sloped.normal);
         assert!(sloped.span < 1.0, "only part of the cell is material");
 
         // 3. Entering already inside the material, through a flat leg: the
-        //    cell face, square-on, no help from the angle at all.
-        let flat = clip_to_shape(&wedge, IVec2::new(0, 1), cell,
-            Vec2::new(0.2, 0.5), Vec2::new(0.2, -0.1)).expect("starts in material");
-        assert!(flat.normal.distance(Vec2::Y) < 1e-4, "should meet the flat leg, got {:?}", flat.normal);
+        //    cell face, square-on, no help from the angle at all. The legs of a
+        //    NE-facing wedge are its south and west edges.
+        let flat = clip_to_shape(&wedge, IVec2::new(-1, 0), cell,
+            Vec2::new(-0.5, -0.2), Vec2::new(0.1, -0.2)).expect("starts in material");
+        assert!(flat.normal.distance(Vec2::NEG_X) < 1e-4, "should meet the flat leg, got {:?}", flat.normal);
     }
 
     /// A full block is unaffected: it fills its cell, so the clip hands back

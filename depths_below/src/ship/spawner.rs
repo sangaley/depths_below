@@ -437,9 +437,12 @@ pub fn spawn_module(
         let body = face.mix(&Color::BLACK, 0.35);
         for i in 0..BANDS {
             let y = H - band * (i as f32 + 0.5);
-            // Material fills x + y >= 0: at height y it runs from x = -y out
-            // to the right edge.
-            let width = (H + y).clamp(0.0, H * 2.0);
+            // `facing` is an outward normal, so the plate's material sits
+            // BEHIND it: the half with x + y <= 0. At height y that runs from
+            // the left edge in to x = -y. Drawing the other half puts the
+            // mass on the outside and leaves the plate hanging off the hull
+            // with a gap where it should be bolted on.
+            let width = (H - y).clamp(0.0, H * 2.0);
             if width <= 0.5 { continue; }
             let quad = commands.spawn((
                 Sprite {
@@ -447,7 +450,7 @@ pub fn spawn_module(
                     custom_size: Some(Vec2::new(width, band + 0.5)),
                     ..default()
                 },
-                Transform::from_xyz(H - width * 0.5, y, 0.05),
+                Transform::from_xyz(-H + width * 0.5, y, 0.05),
             )).id();
             commands.entity(module_entity).add_child(quad);
         }
