@@ -8,6 +8,7 @@ use crate::building::GridOccupancy;
 
 pub mod eva_salvage;
 pub mod hiring;
+pub mod navigation;
 use eva_salvage::EvaSalvaging;
 
 pub struct CrewPlugin;
@@ -19,6 +20,17 @@ impl Plugin for CrewPlugin {
             .init_resource::<StaffingState>()
             .init_resource::<AutoAssignTimer>()
             .init_resource::<RepairScrapPool>()
+            // Interior navigation. Rebuilt in every state crew act in, and at
+            // dock especially — the whole point of build mode is changing the
+            // shape of the ship they have to walk through.
+            .add_systems(
+                Update,
+                navigation::rebuild_nav_grids.run_if(
+                    in_state(GameState::Exploring)
+                        .or_else(in_state(GameState::StationDocked))
+                        .or_else(in_state(GameState::Docked)),
+                ),
+            )
             // Staffing / efficiency systems run at both StationDocked and Exploring
             // so the HUD shows correct crew/station counts at the surface.
             .add_systems(

@@ -100,7 +100,7 @@ pub fn spawn_starter_ship(
 ///     [O][O][O][O][O][O][O][O][O][O]
 ///
 /// Stern: engine bank/reactors/fuel · Mid: crew + gun deck · Bow: bridge/missiles/armor
-fn builtin_starter_design() -> crate::building::blueprint::Blueprint {
+pub(crate) fn builtin_starter_design() -> crate::building::blueprint::Blueprint {
     use crate::building::blueprint::{Blueprint, BlueprintHullCell, BlueprintModule, BLUEPRINT_VERSION};
 
     // Isosceles wedge: flat wide stern at -x, tapering to a sharp bow at +x.
