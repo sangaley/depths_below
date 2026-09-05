@@ -132,6 +132,13 @@ pub(super) fn projectile_collision(
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     for (proj_entity, mut projectile, mut proj_transform, mut proj_sprite) in projectile_query.iter_mut() {
+        // Same race the new projectile path has: projectile_movement despawns
+        // a round the frame its timer runs out, and both systems queue commands
+        // before the flush. Resolving a hit on a spent round queues a second
+        // despawn for the same entity and the flush logs "Entity despawned".
+        if projectile.lifetime.is_finished() {
+            continue;
+        }
         let proj_pos = proj_transform.translation.truncate();
 
         // Stage 2 of the ownership rework: an AI shot that whiffs past the
