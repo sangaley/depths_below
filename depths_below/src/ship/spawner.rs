@@ -244,7 +244,7 @@ fn builtin_starter_design() -> crate::building::blueprint::Blueprint {
         .chain(modules.iter().map(|m| m.grid_pos))
         .collect();
     let mut modules = modules;
-    let plating = crate::building::armour::belt(hull_rows, ModuleType::AngledArmorPlate, 3)
+    let plating = crate::building::armour::belt(hull_rows, ModuleType::AngledArmorPlate)
         .into_iter()
         .chain(crate::building::armour::caps(hull_rows, ModuleType::AngledArmorPlate, 2));
     for (grid_pos, module_type, rotation) in plating {
