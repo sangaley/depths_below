@@ -82,7 +82,7 @@ pub fn fire_missiles_system(
     ship_query: Query<(Entity, &ShipPhysics, &Transform, &Velocity), With<Ship>>,
     mut weapon_query: Query<(
         Entity, &Module, &mut Weapon, &mut WeaponCooldown,
-        &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
+        &GlobalTransform, &FireGroup, &ChildOf,
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&ModuleTemperature>,
     ), Without<DestroyedModule>>,
@@ -131,7 +131,7 @@ pub fn fire_missiles_system(
         .map(|(e, t, _)| (e, t.translation.truncate()))
         .collect();
 
-    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning, temp) in weapon_query.iter_mut() {
+    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, parent, tuning, temp) in weapon_query.iter_mut() {
         // Player ship only — see fire_weapons_system for why this matters:
         // AI ships carry identical missile-bay components and would
         // otherwise launch whenever the player fires, homing on the
@@ -188,22 +188,25 @@ pub fn fire_missiles_system(
                 })
                 .map(|(e, _)| *e)
         });
-        let (target_pos, homing_target) = if let Some(target_entity) = locked.or(selection.target).or(auto) {
-            let Ok((_, target_transform, _)) = target_query.get(target_entity) else { continue };
-            (target_transform.translation.truncate(), Some(target_entity))
-        } else if let Some(cursor) = cursor_world {
-            (cursor, None)
-        } else {
-            continue;
-        };
+        // Only the seeker's target is decided here. Where the missile is
+        // POINTED is no longer a function of the target at all — it leaves
+        // down the tube either way — so a launcher with nothing to chase
+        // still fires, and flies out unguided.
+        let homing_target = locked.or(selection.target).or(auto)
+            .filter(|e| target_query.get(*e).is_ok());
 
-        // Fixed-mount launchers can't swivel outside their arc, but they
-        // never silently refuse to fire (players read that as "rockets are
-        // broken" — aiming at a far cursor put every pod off-cone). Launch
-        // direction is clamped to the arc edge instead: at worst the salvo
-        // flies visibly off-aim, still never backwards through the hull.
-        let aim_dir = (target_pos - weapon_pos).normalize_or_zero();
-        let launch_dir = clamp_to_firing_arc(ship_physics.rotation, &module.rotation, mount, aim_dir);
+        // The tube points where the tube points.
+        //
+        // Launch direction used to be the aim direction bent back to the edge
+        // of the firing arc, so a target anywhere inside the cone meant the
+        // missile left already angled onto it — nothing about the launch said
+        // "silo". Ejecting along the module's own facing instead makes every
+        // launch come out of the tube the way the tube is welded on, whatever
+        // the ship is doing, and leaves the turn onto the target to the
+        // seeker where it belongs. It is also inherently safe in the way the
+        // arc clamp was trying to be: a missile that leaves along its own
+        // tube never leaves backwards through the hull.
+        let launch_dir = Vec2::from_angle(ship_physics.rotation + module.rotation.to_radians());
 
         // Determine missile properties based on module type and bay chain length
         let bay_count = machine_stats.get(entity)
@@ -373,7 +376,8 @@ pub fn move_missiles(
         }
 
         // === EJECT: gas charge only. Motor cold, seeker caged. ===
-        if missile.eject_time > 0.0 {
+        let ejecting = missile.eject_time > 0.0;
+        if ejecting {
             missile.eject_time -= dt;
         } else {
             // === BURN: motor lit. ===
@@ -445,8 +449,15 @@ pub fn move_missiles(
         transform.translation.x += velocity.0.x * dt;
         transform.translation.y += velocity.0.y * dt;
 
-        if velocity.0.length_squared() > 1.0 {
-            transform.rotation = Quat::from_rotation_z(velocity.0.y.atan2(velocity.0.x));
+        // Point down the TUBE while the gas charge carries it out, and along
+        // the flight path once the motor and seeker take over. Facing purely
+        // by velocity made a missile launched from a moving ship slide out
+        // sideways: it inherits the hull's speed, which at anything above a
+        // crawl swamps the 200 u/s eject and leaves the sprite pointing where
+        // the ship is going rather than where the silo is aimed.
+        let facing = if ejecting { missile.launch_dir } else { velocity.0 };
+        if facing.length_squared() > 1.0e-4 {
+            transform.rotation = Quat::from_rotation_z(facing.y.atan2(facing.x));
         }
     }
 }
@@ -486,7 +497,7 @@ pub fn check_missile_hits(
 
             if shield.is_up() && dist_to_ship < shield.radius && shield.covers_arc(missile_pos - center) {
                 shield.absorb(missile.damage);
-                spawn_hit_effect(&mut commands, missile_pos, Color::srgb(0.5, 0.8, 1.0), missile.blast_radius);
+                spawn_explosion(&mut commands, missile_pos, missile.blast_radius * 0.7, Color::srgb(0.5, 0.8, 1.0));
                 commands.entity(missile_entity).despawn();
                 continue 'missiles;
             }
@@ -506,7 +517,7 @@ pub fn check_missile_hits(
                     }
                 }
                 if hit_any {
-                    spawn_hit_effect(&mut commands, missile_pos, Color::srgb(1.0, 0.5, 0.1), missile.blast_radius);
+                    spawn_explosion(&mut commands, missile_pos, missile.blast_radius, Color::srgb(1.0, 0.5, 0.1));
                     spawn_floating_damage(&mut commands, missile_pos, total_damage, Color::srgb(1.0, 0.4, 0.1));
                     // amount: 0.0 — damage already applied directly above to
                     // every module in the blast radius. process_ai_ship_damage_system
@@ -548,7 +559,7 @@ pub fn check_missile_hits(
             // (handled by the explosion effect — could expand later)
 
             // Explosion visual
-            spawn_hit_effect(&mut commands, missile_pos, Color::srgb(1.0, 0.5, 0.1), missile.blast_radius);
+            spawn_explosion(&mut commands, missile_pos, missile.blast_radius, Color::srgb(1.0, 0.5, 0.1));
             spawn_floating_damage(&mut commands, missile_pos, missile.damage, Color::srgb(1.0, 0.3, 0.1));
 
             commands.entity(missile_entity).despawn();

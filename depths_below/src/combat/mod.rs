@@ -85,6 +85,80 @@ pub(crate) fn spawn_hit_effect(commands: &mut Commands, position: Vec2, color: C
     ));
 }
 
+/// A warhead going off: expanding fireball, shock ring, radial spray, smoke.
+///
+/// `spawn_hit_effect` is a static square sized to the blast radius, which
+/// makes a 50-unit warhead and a 10-unit bullet strike look like the same
+/// event at different zoom levels. `radius` here is the DAMAGE radius; the
+/// visuals deliberately overshoot it, because an explosion whose fireball
+/// stops exactly at its kill radius reads as smaller than it is.
+pub(crate) fn spawn_explosion(commands: &mut Commands, position: Vec2, radius: f32, color: Color) {
+    use crate::vfx::particles::{Blast, Particle};
+
+    // Unit-sized sprites scaled by Blast, so growth is one number.
+    let core = |commands: &mut Commands, from: f32, to: f32, dur: f32, z: f32, hot: Color, cool: Color| {
+        commands.spawn((
+            Sprite { color: hot, custom_size: Some(Vec2::ONE), ..default() },
+            Transform::from_xyz(position.x, position.y, z),
+            Blast { elapsed: 0.0, duration: dur, from, to, hot, cool },
+        ));
+    };
+
+    // Fireball: white-hot core cooling to deep orange.
+    core(commands, radius * 0.5, radius * 2.2, 0.42, 0.62,
+         Color::srgba(1.0, 0.95, 0.80, 1.0), Color::srgba(0.9, 0.25, 0.05, 0.7));
+    // Shock ring: wider, thinner, gone sooner — it sells the scale.
+    core(commands, radius * 0.8, radius * 3.4, 0.30, 0.61,
+         Color::srgba(1.0, 0.75, 0.40, 0.55), Color::srgba(0.8, 0.4, 0.2, 0.0));
+
+    // Radial spray. Unlike an impact fan this is symmetric: a detonation has
+    // no incoming direction to report.
+    for i in 0..22 {
+        let angle = (i as f32 / 22.0) * std::f32::consts::TAU
+            + rand::random::<f32>() * 0.28;
+        let heading = Vec2::from_angle(angle);
+        let speed = radius * (4.0 + rand::random::<f32>() * 6.0);
+        let life = 0.25 + rand::random::<f32>() * 0.35;
+        let hot = i % 3 == 0;
+        commands.spawn((
+            Sprite {
+                color: if hot { Color::srgb(1.0, 0.97, 0.86) } else { Color::srgb(1.0, 0.6, 0.18) },
+                custom_size: Some(Vec2::new(if hot { 9.0 } else { 6.0 }, 2.4)),
+                ..default()
+            },
+            Transform {
+                translation: position.extend(0.63),
+                rotation: Quat::from_rotation_z(angle),
+                ..default()
+            },
+            Particle::new(heading * speed, life),
+        ));
+    }
+
+    // Smoke: slow, dark, long-lived, so the site still reads a second later.
+    for _ in 0..10 {
+        let angle = rand::random::<f32>() * std::f32::consts::TAU;
+        let heading = Vec2::from_angle(angle);
+        let life = 0.9 + rand::random::<f32>() * 0.8;
+        let grey = 0.18 + rand::random::<f32>() * 0.16;
+        commands.spawn((
+            Sprite {
+                color: Color::srgba(grey, grey * 0.92, grey * 0.88, 0.75),
+                custom_size: Some(Vec2::splat(radius * (0.4 + rand::random::<f32>() * 0.4))),
+                ..default()
+            },
+            Transform::from_xyz(position.x, position.y, 0.59),
+            Particle {
+                velocity: heading * radius * (0.5 + rand::random::<f32>()),
+                lifetime: life,
+                max_lifetime: life,
+                fade: true,
+                shrink: false,
+            },
+        ));
+    }
+}
+
 /// Sparks thrown off an impact, sprayed along `dir`.
 ///
 /// Directional on purpose. A symmetric puff says "something happened here"; a

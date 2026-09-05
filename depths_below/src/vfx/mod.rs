@@ -25,6 +25,7 @@ impl Plugin for VfxPlugin {
                     particles::spawn_engine_particles,
                     particles::spawn_breach_particles,
                     particles::update_particles,
+                    particles::update_blasts,
                     debris::spawn_block_debris,
                     debris::update_debris,
                     screen_effects::update_screen_effects,

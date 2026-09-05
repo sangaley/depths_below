@@ -19,6 +19,13 @@ pub struct Particle {
     pub shrink: bool,
 }
 
+impl Particle {
+    /// A particle that fades and shrinks over `life` seconds.
+    pub fn new(velocity: Vec2, life: f32) -> Self {
+        Self { velocity, lifetime: life, max_lifetime: life, fade: true, shrink: true }
+    }
+}
+
 /// Spawn engine exhaust particles behind active engines when thrusting
 pub fn spawn_engine_particles(
     time: Res<Time>,
@@ -126,6 +133,58 @@ pub fn spawn_breach_particles(
                 },
             ));
         }
+    }
+}
+
+/// An expanding, fading blast sphere.
+///
+/// `HitEffect` is a fixed-size square that sits still for 0.2s, which is
+/// adequate for a bullet strike and reads as nothing at all for a warhead.
+/// This grows and cools instead, so the size of a detonation is something you
+/// can actually see.
+#[derive(Component)]
+pub struct Blast {
+    pub elapsed: f32,
+    pub duration: f32,
+    pub from: f32,
+    pub to: f32,
+    pub hot: Color,
+    pub cool: Color,
+}
+
+/// Grow, cool and fade every blast, then despawn it.
+pub fn update_blasts(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut query: Query<(Entity, &mut Blast, &mut Transform, &mut Sprite)>,
+) {
+    let dt = time.delta_secs();
+
+    for (entity, mut blast, mut transform, mut sprite) in query.iter_mut() {
+        blast.elapsed += dt;
+        let t = (blast.elapsed / blast.duration).clamp(0.0, 1.0);
+
+        if t >= 1.0 {
+            commands.entity(entity).despawn();
+            continue;
+        }
+
+        // Ease out: a detonation is fastest at the instant it goes off and
+        // coasts to its full width, rather than growing at a constant rate.
+        let eased = 1.0 - (1.0 - t).powi(3);
+        let size = blast.from + (blast.to - blast.from) * eased;
+        transform.scale = Vec3::splat(size);
+
+        let hot = blast.hot.to_srgba();
+        let cool = blast.cool.to_srgba();
+        sprite.color = Color::srgba(
+            hot.red + (cool.red - hot.red) * t,
+            hot.green + (cool.green - hot.green) * t,
+            hot.blue + (cool.blue - hot.blue) * t,
+            // Hold opacity through the first half, then fall away — a
+            // fireball does not start fading the moment it appears.
+            (1.0 - t).powi(2) * (hot.alpha + (cool.alpha - hot.alpha) * t),
+        );
     }
 }
 
