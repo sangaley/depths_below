@@ -350,7 +350,13 @@ pub fn spawn_module(
     // apart) washed the detailed sprites into solid coloured blocks. Damage
     // darkening and wreck greying still work: they multiply DOWN from this
     // base (stored in BaseSpriteColor), and white is their neutral start.
-    let module_base_color = Color::WHITE;
+    // Wedges draw nothing here: their whole point is a silhouette that ISN'T a
+    // square, and the shared module sprite is a full textured square. Painting
+    // a dark triangle over it just made a square with a triangle on it — the
+    // outline never actually got cut. The triangle is built from child quads
+    // below instead, so the block's shape is the shape.
+    let is_wedge = matches!(module_type, ModuleType::AngledArmorPlate | ModuleType::AngledHullPlate);
+    let module_base_color = if is_wedge { Color::NONE } else { Color::WHITE };
 
     let module_entity = commands.spawn((
         (Sprite {
@@ -413,40 +419,53 @@ pub fn spawn_module(
         });
     }
 
-    // WEDGES: the shared module sprite is a full square (both angled plates
-    // point at hull_beam.png), so nothing on screen said which way the plate
-    // faced — you could rotate it four times and see no difference while the
-    // simulation moved the face. Now that a round clips against the real
-    // half-cell shape, the player has to be able to SEE the hollow corner to
-    // aim at it, or it's an invisible weak spot.
+    // WEDGES: the plate itself, as a staircase of quads filling the half-cell
+    // the armour actually occupies — the same half `Block::facing` reports to
+    // hit resolution, so what you see is what a round meets.
     //
-    // Just the normal block with half taken out of it: a staircase of quads
-    // in the background colour over the hollow side. Children inherit the
-    // parent's visual_angle, so this is authored once facing north-east and R
-    // turns it with the block.
-    if matches!(module_type, ModuleType::AngledArmorPlate | ModuleType::AngledHullPlate) {
+    // Children inherit the parent's visual_angle, so this is authored once
+    // facing north-east and R turns it with the block.
+    if is_wedge {
         // A 1x1 module sprite is 60 units, NOT the 66-unit cell pitch — see
-        // local_w/local_h above. Sizing the cut to the cell is what made the
-        // first attempt hang over into the neighbouring blocks.
+        // local_w/local_h above. Sizing to the cell overhangs the neighbours.
         const H: f32 = 30.0;
         const BANDS: usize = 20;
         let band = (H * 2.0) / BANDS as f32;
+        let face = def.color;
+        // Matches the hull plating around it rather than reading as a flat
+        // colour chip: a darker body with a lit edge along the cut.
+        let body = face.mix(&Color::BLACK, 0.35);
         for i in 0..BANDS {
             let y = H - band * (i as f32 + 0.5);
-            // Material fills x + y >= 0, so at height y the hollow runs from
-            // the left edge out to x = -y.
-            let width = (H - y).clamp(0.0, H * 2.0);
+            // Material fills x + y >= 0: at height y it runs from x = -y out
+            // to the right edge.
+            let width = (H + y).clamp(0.0, H * 2.0);
             if width <= 0.5 { continue; }
-            let cut = commands.spawn((
+            let quad = commands.spawn((
                 Sprite {
-                    color: Color::srgb(0.043, 0.051, 0.067),
+                    color: body,
                     custom_size: Some(Vec2::new(width, band + 0.5)),
                     ..default()
                 },
-                Transform::from_xyz(-H + width * 0.5, y, 0.05),
+                Transform::from_xyz(H - width * 0.5, y, 0.05),
             )).id();
-            commands.entity(module_entity).add_child(cut);
+            commands.entity(module_entity).add_child(quad);
         }
+        // Lit edge along the hypotenuse — the sloped face, and the only part of
+        // the block that tells you which way it's turned.
+        let edge = commands.spawn((
+            Sprite {
+                color: face.mix(&Color::WHITE, 0.35),
+                custom_size: Some(Vec2::new(H * 2.0 * std::f32::consts::SQRT_2 - 2.0, 3.0)),
+                ..default()
+            },
+            Transform {
+                translation: Vec3::new(0.0, 0.0, 0.08),
+                rotation: Quat::from_rotation_z(-std::f32::consts::FRAC_PI_4),
+                ..default()
+            },
+        )).id();
+        commands.entity(module_entity).add_child(edge);
     }
 
     // FirebreakWall gets a marker component for fire blocking
