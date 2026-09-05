@@ -1545,9 +1545,13 @@ mod tests {
     #[test]
     fn fuel_state_defaults() {
         let fuel = FuelState::default();
-        assert!((fuel.current_fuel - 500.0).abs() < f32::EPSILON);
-        assert!((fuel.max_fuel - 500.0).abs() < f32::EPSILON);
-        assert!((fuel.fuel_consumption_rate - 1.0).abs() < f32::EPSILON);
+        // The invariant that actually matters: a new tank starts full.
+        assert_eq!(fuel.current_fuel, fuel.max_fuel);
+        // The numbers are deliberate — see the Default impl. This asserted the
+        // old 500 / 1.0 long after they were raised, so the suite has simply
+        // been red ever since rather than catching anything.
+        assert!((fuel.max_fuel - 1500.0).abs() < f32::EPSILON);
+        assert!((fuel.fuel_consumption_rate - 0.8).abs() < f32::EPSILON);
     }
 
     #[test]

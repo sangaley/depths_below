@@ -515,6 +515,14 @@ pub fn check_projectile_hits(
     _notifications: MessageWriter<ShowNotification>,
 ) {
     'projectiles: for (proj_entity, mut proj, mut proj_transform, mut proj_vel, mut proj_sprite) in proj_query.iter_mut() {
+        // Spent this frame: move_projectiles already queued its despawn. Both
+        // systems sit in the same tuple and queue commands before the flush, so
+        // resolving a hit on it here queues a SECOND despawn for the same
+        // entity and the flush logs "Entity despawned: ... is invalid". Bevy
+        // absorbs it, but it's noise that would mask a real one.
+        if proj.lifetime <= 0.0 {
+            continue;
+        }
         let proj_pos = proj_transform.translation.truncate();
         // A weapon's own ship is never a valid target for its own shot,
         // regardless of aim — belt-and-suspenders on top of firing-arc and
