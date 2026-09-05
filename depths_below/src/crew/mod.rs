@@ -9,6 +9,7 @@ use crate::building::GridOccupancy;
 pub mod eva_salvage;
 pub mod hiring;
 pub mod navigation;
+pub mod walking;
 use eva_salvage::EvaSalvaging;
 
 pub struct CrewPlugin;
@@ -30,6 +31,25 @@ impl Plugin for CrewPlugin {
                         .or_else(in_state(GameState::StationDocked))
                         .or_else(in_state(GameState::Docked)),
                 ),
+            )
+            // Crew walking. Same states as staffing: they should walk to a
+            // newly-placed station while docked, not teleport there the
+            // instant the player leaves. Planning is chained after
+            // auto_assign_crew because destinations are read off the
+            // assignments it just made.
+            .init_resource::<walking::CrewPlanTimer>()
+            .add_systems(
+                Update,
+                (
+                    walking::plan_crew_destinations,
+                    walking::plan_crew_paths,
+                    walking::walk_crew,
+                )
+                    .chain()
+                    .after(auto_assign_crew)
+                    .run_if(in_state(GameState::Exploring)
+                        .or_else(in_state(GameState::StationDocked))
+                        .or_else(in_state(GameState::Docked))),
             )
             // Staffing / efficiency systems run at both StationDocked and Exploring
             // so the HUD shows correct crew/station counts at the surface.
@@ -121,7 +141,7 @@ fn crew_arrive_with_quarters(
     mut placed_events: MessageReader<ModulePlaced>,
     registry: Res<crate::building::ModuleRegistry>,
     ship_query: Query<Entity, With<Ship>>,
-    quarters_query: Query<(&Quarters, &Module)>,
+    quarters_query: Query<(&Quarters, &Module, &ChildOf)>,
     crew_query: Query<&CrewMember>,
     mut roster: ResMut<CrewRoster>,
     mut notifications: MessageWriter<ShowNotification>,
@@ -145,14 +165,25 @@ fn crew_arrive_with_quarters(
         // staffing gap never closes (22/30 became 30/38 instead of 38/38).
         // The just-placed module's Quarters companion isn't flushed yet
         // this frame, so its berths come from the registry def.
-        let existing_berths: u32 = quarters_query
-            .iter()
-            .filter(|(_, module)| module.is_active && module.health > 0.0)
-            .map(|(quarters, _)| quarters.berths)
+        //
+        // Ship-scoped: AI ships carry Quarters modules too, and an unscoped
+        // count let every enemy's bunks inflate the player's capacity — the
+        // same leak OwnedByAiShip was introduced to close elsewhere. The
+        // ChildOf needed for berth placement makes the fix free.
+        let ours = || {
+            quarters_query
+                .iter()
+                .filter(|(_, _, parent)| parent.parent() == ship)
+        };
+        let existing_berths: u32 = ours()
+            .filter(|(_, module, _)| module.is_active && module.health > 0.0)
+            .map(|(quarters, _, _)| quarters.berths)
             .sum();
         let capacity = existing_berths + new_berths;
         let alive = crew_query.iter().filter(|c| c.health > 0.0).count() as u32;
         let to_spawn = capacity.saturating_sub(alive);
+
+        let berths = walking::quarters_cells(ours().map(|(_, module, _)| module));
 
         let mut rng = rand::thread_rng();
         for i in 0..to_spawn {
@@ -165,7 +196,7 @@ fn crew_arrive_with_quarters(
                             custom_size: Some(Vec2::new(16.0, 16.0)),
                             ..default()
                         },
-                        Transform::from_xyz(i as f32 * 14.0 - 20.0, -20.0, 0.5),
+                        Transform::from_translation(walking::berth_position(&berths, alive as usize + i as usize)),
                     ),
                     CrewMember {
                         name: name.to_string(),
@@ -199,6 +230,7 @@ pub fn spawn_starter_crew(
     mut commands: Commands,
     ship_query: Query<Entity, With<Ship>>,
     existing_crew: Query<Entity, With<CrewMember>>,
+    quarters_query: Query<(&Quarters, &Module, &ChildOf)>,
     mut roster: ResMut<CrewRoster>,
 ) {
     // Guard: don't spawn duplicate crew
@@ -211,17 +243,23 @@ pub fn spawn_starter_crew(
 
     let crew_names = ["Jones", "Smith", "Chen", "Morgan", "Rivera", "Volkov", "Tanaka", "Okafor"];
 
+    // Start them in the bunks. They walk to their posts from there, which is
+    // both how a watch actually changes and a free demonstration that the
+    // pathing works on the ship the player is looking at.
+    let berths = walking::quarters_cells(
+        quarters_query
+            .iter()
+            .filter(|(_, _, parent)| parent.parent() == ship)
+            .map(|(_, module, _)| module),
+    );
+
     for (i, name) in crew_names.iter().enumerate() {
         let crew = commands.spawn((
             (Sprite {
                     color: Color::srgb(0.8, 0.6, 0.5),
                     custom_size: Some(Vec2::new(16.0, 16.0)),
                     ..default()
-                }, Transform::from_xyz(
-                    (i as f32 - 3.5) * 20.0,
-                    0.0,
-                    0.5,
-                )),
+                }, Transform::from_translation(walking::berth_position(&berths, i))),
             CrewMember {
                 name: name.to_string(),
                 health: 100.0,

@@ -211,6 +211,11 @@ pub fn find_path(nav: &NavGrid, from: IVec2, to: IVec2) -> Option<Vec<IVec2>> {
 /// Every cell reachable from `from`. Cheaper than pathing to each candidate
 /// in turn when a caller needs to ask "which of these many stations can this
 /// crew member actually get to".
+///
+/// Only the tests call this so far; it is the query auto-assignment needs
+/// once an unreachable post is supposed to go dark rather than just be
+/// unwalkable-to.
+#[allow(dead_code)]
 pub fn reachable_from(nav: &NavGrid, from: IVec2) -> HashSet<IVec2> {
     let mut seen = HashSet::new();
     if !nav.passable(from) {
