@@ -86,7 +86,13 @@ pub fn fire_missiles_system(
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&ModuleTemperature>,
     ), Without<DestroyedModule>>,
-    target_query: Query<&Transform, Without<Ship>>,
+    // One query, not three: everything a missile may chase, and the lookup
+    // for whatever is already locked. Bevy caps a system at 16 parameters
+    // and this one was at the ceiling.
+    target_query: Query<
+        (Entity, &Transform, Option<&Creature>),
+        (Without<Ship>, Or<(With<crate::ai_ship::components::AiShip>, With<Creature>)>),
+    >,
     machine_stats: Query<&crate::building::multiblock::components::MachineStats>,
     mut fuel_state: ResMut<crate::resources::FuelState>,
     windows_query: Query<&Window>,
@@ -115,6 +121,15 @@ pub fn fire_missiles_system(
     let cursor_world = input_state.gamepad_aim
         .map(|dir| ship_transform.translation.truncate() + dir * 2000.0)
         .or(cursor_world);
+
+    // Everything a missile could reasonably chase, gathered once. Cheap —
+    // a handful of AI ships and whatever creatures are loaded — and reused
+    // by every launcher below.
+    let candidates: Vec<(Entity, Vec2)> = target_query
+        .iter()
+        .filter(|(_, _, creature)| creature.is_none_or(|c| c.health > 0.0))
+        .map(|(e, t, _)| (e, t.translation.truncate()))
+        .collect();
 
     for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning, temp) in weapon_query.iter_mut() {
         // Player ship only — see fire_weapons_system for why this matters:
@@ -157,8 +172,24 @@ pub fn fire_missiles_system(
         // locked block: a block's Transform is ship-local, and the warhead's
         // blast radius covers the difference anyway.
         let locked = aim_lock.ship.filter(|_| aim_lock.is_locked());
-        let (target_pos, homing_target) = if let Some(target_entity) = locked.or(selection.target) {
-            let Ok(target_transform) = target_query.get(target_entity) else { continue };
+        // Nothing locked: seek on the player's behalf rather than throwing a
+        // guided weapon away as a dumb rocket. Candidates are scored by
+        // distance to the CURSOR, so where you point still decides which
+        // enemy gets the salvo, but only ones inside this launcher's range
+        // are eligible — a seeker aimed at something it cannot reach is just
+        // a slower miss.
+        let auto = cursor_world.and_then(|cursor| {
+            candidates.iter()
+                .filter(|(_, pos)| weapon_pos.distance(*pos) <= weapon.range)
+                .min_by(|(_, a), (_, b)| {
+                    cursor.distance_squared(*a)
+                        .partial_cmp(&cursor.distance_squared(*b))
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .map(|(e, _)| *e)
+        });
+        let (target_pos, homing_target) = if let Some(target_entity) = locked.or(selection.target).or(auto) {
+            let Ok((_, target_transform, _)) = target_query.get(target_entity) else { continue };
             (target_transform.translation.truncate(), Some(target_entity))
         } else if let Some(cursor) = cursor_world {
             (cursor, None)
