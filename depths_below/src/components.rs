@@ -1097,6 +1097,10 @@ pub struct Projectile {
     /// prev_pos -> current so a fast round can't step over a block between
     /// two samples — same reason `new_projectiles::Projectile` carries one.
     pub prev_pos: Vec2,
+    /// Ricochets so far. Enemy fire deflects off the player's plating the same
+    /// way the player's does off theirs, and needs the same bound: a round
+    /// caught in a concave notch would otherwise skip off it forever.
+    pub bounces: u8,
 }
 
 /// Deployed mine - arms after delay, detonates on creature proximity

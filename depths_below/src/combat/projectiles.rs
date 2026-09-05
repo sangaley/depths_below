@@ -61,6 +61,7 @@ pub(crate) fn spawn_projectile(
             owner,
             ammo_type,
             prev_pos: origin,
+            bounces: 0,
         },
     ));
 }
@@ -90,7 +91,10 @@ pub(super) fn projectile_movement(
 /// Torpedo/Bullet: single target. Charge: AoE hits all creatures in radius.
 pub(super) fn projectile_collision(
     mut commands: Commands,
-    projectile_query: Query<(Entity, &Projectile, &Transform)>,
+    mut projectile_query: Query<(Entity, &mut Projectile, &mut Transform, &mut Sprite)>,
+    // Enemy rounds resolve their own deflection, same maths the player's guns
+    // use — see the ricochet arm below.
+    block_query: Query<&crate::building::Block>,
     mut creature_query: Query<(Entity, &Transform, &mut Creature), Without<Ship>>,
     // Without<AiShip>: this system also reads AI ships' ShipShield
     // (immutably) via ai_ship_query below. Bevy's conflict checker can't
@@ -116,7 +120,7 @@ pub(super) fn projectile_collision(
     mut ai_damage_events: MessageWriter<AiShipDamaged>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    for (proj_entity, projectile, proj_transform) in projectile_query.iter() {
+    for (proj_entity, mut projectile, mut proj_transform, mut proj_sprite) in projectile_query.iter_mut() {
         let proj_pos = proj_transform.translation.truncate();
 
         // Stage 2 of the ownership rework: an AI shot that whiffs past the
@@ -246,18 +250,71 @@ pub(super) fn projectile_collision(
                 // a dead shield went on doing it. The shield looked like it
                 // was still working; it was just the bubble acting as a
                 // hitbox.
+                let inv = ship_gt.affine().inverse();
+                let to_cell = |world: Vec2| {
+                    let p = inv.transform_point3(world.extend(0.0)).truncate();
+                    Vec2::new(p.x / 66.0, (p.y + 33.0) / 66.0)
+                };
+                let cell_from = to_cell(projectile.prev_pos);
+                let dir_local = (to_cell(proj_pos) - cell_from).normalize_or_zero();
                 let block_hit = grid.and_then(|grid| {
-                    let inv = ship_gt.affine().inverse();
-                    let to_cell = |world: Vec2| {
-                        let p = inv.transform_point3(world.extend(0.0)).truncate();
-                        Vec2::new(p.x / 66.0, (p.y + 33.0) / 66.0)
-                    };
-                    grid.walk(to_cell(projectile.prev_pos), to_cell(proj_pos))
-                        .into_iter()
-                        .next()
+                    grid.walk(cell_from, to_cell(proj_pos)).into_iter().next()
                 });
 
                 if let Some(step) = block_hit {
+                    // RICOCHET — decided HERE, at the round, not downstream in
+                    // process_ship_damage. By the time a ShipDamaged event is
+                    // read the projectile is already gone, so a deflection off
+                    // the player's plating could never be seen. Enemy fire
+                    // skips off your armour exactly the way yours skips off
+                    // theirs.
+                    let block = block_query
+                        .get(step.entity)
+                        .copied()
+                        .unwrap_or(crate::building::Block::module(step.cell));
+                    let entry = cell_from + dir_local * step.t_enter;
+                    let exit = cell_from + dir_local * (step.t_enter + step.span);
+                    let surface = crate::combat::impact::clip_to_shape(
+                        &block, step.entry_face, step.cell, entry, exit,
+                    );
+                    let obl = surface
+                        .map(|s| crate::combat::impact::obliquity(s.normal, dir_local, &block, None, 1.0))
+                        .unwrap_or(crate::combat::impact::Obliquity::HEAD_ON);
+
+                    if obl.ricochet && projectile.bounces < 2 {
+                        let local = Vec2::new(step.cell.x as f32 * 66.0, step.cell.y as f32 * 66.0 - 33.0);
+                        let at = ship_gt.affine().transform_point3(local.extend(0.0)).truncate();
+                        let n_local = surface.map(|s| s.normal).unwrap_or(Vec2::ZERO);
+                        let n = ship_gt.affine()
+                            .transform_vector3(n_local.extend(0.0))
+                            .truncate()
+                            .normalize_or_zero();
+                        let v = projectile.direction.normalize_or_zero();
+                        if n != Vec2::ZERO && v != Vec2::ZERO {
+                            let mirror = v - 2.0 * v.dot(n) * n;
+                            let tangent = (v - v.dot(n) * n).normalize_or_zero();
+                            let skid = 0.35 + 0.45 * (1.0 - obl.cos_impact);
+                            let scatter = (rand::random::<f32>() - 0.5) * 0.17;
+                            let out = Vec2::from_angle(scatter)
+                                .rotate(mirror.lerp(tangent, skid).normalize_or_zero());
+                            projectile.direction = out;
+                            projectile.speed *= 0.45 + 0.40 * (1.0 - obl.cos_impact);
+                            projectile.damage *= 0.10 + 0.30 * (1.0 - obl.cos_impact);
+                            projectile.bounces += 1;
+                            proj_sprite.color = Color::srgb(1.0, 0.85, 0.55);
+                            // Step it clear so it doesn't restart inside the
+                            // hull and spend its bounces on the spot.
+                            proj_transform.translation.x += out.x * 70.0;
+                            proj_transform.translation.y += out.y * 70.0;
+                            projectile.prev_pos = proj_transform.translation.truncate();
+                            let graze = 1.0 - obl.cos_impact;
+                            super::spawn_impact_sparks(&mut commands, at, out, graze, 9 + (graze * 7.0) as usize);
+                            spawn_hit_effect(&mut commands, at, Color::srgb(0.95, 0.95, 0.85), 10.0);
+                        }
+                        hit_player = true;
+                        continue;
+                    }
+
                     // Report the impact at the block the round actually
                     // reached, so process_ship_damage's own walk starts from
                     // the right place instead of from the bubble's edge.

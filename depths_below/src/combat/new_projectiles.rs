@@ -483,7 +483,7 @@ const MAX_CREATURE_HIT_RADIUS: f32 = 90.0;
 /// projectile instead of every creature in the world.
 pub fn check_projectile_hits(
     mut commands: Commands,
-    mut proj_query: Query<(Entity, &mut Projectile, &Transform, &mut Velocity, &mut Sprite)>,
+    mut proj_query: Query<(Entity, &mut Projectile, &mut Transform, &mut Velocity, &mut Sprite)>,
     mut creature_query: Query<(&Transform, &mut Creature), Without<Ship>>,
     creature_grid: Res<crate::spatial::CreatureGrid>,
     mut ai_ship_query: Query<
@@ -498,7 +498,7 @@ pub fn check_projectile_hits(
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
     _notifications: MessageWriter<ShowNotification>,
 ) {
-    'projectiles: for (proj_entity, mut proj, proj_transform, mut proj_vel, mut proj_sprite) in proj_query.iter_mut() {
+    'projectiles: for (proj_entity, mut proj, mut proj_transform, mut proj_vel, mut proj_sprite) in proj_query.iter_mut() {
         let proj_pos = proj_transform.translation.truncate();
         // A weapon's own ship is never a valid target for its own shot,
         // regardless of aim — belt-and-suspenders on top of firing-arc and
@@ -644,22 +644,15 @@ pub fn check_projectile_hits(
                 if obl.ricochet {
                     proj.bounces += 1;
                     proj.last_hit = Some(hit_entity);
-                    // Without this a deflection was indistinguishable from a
-                    // shot that did nothing: a small pale spark and no number.
-                    // The angle is the part that teaches — "it bounced" invites
-                    // you to blame the gun, "68 deg" tells you to change your
-                    // approach or your ammo.
-                    // TODO(audio): wants a hard metallic skip here. There's no
-                    // suitable asset — assets/audio/impacts has explosions only
-                    // — and picking one is a taste call, so it's left unwired
-                    // rather than filled with something wrong.
-                    let degrees = obl.cos_impact.clamp(-1.0, 1.0).acos().to_degrees();
-                    spawn_floating_label(
-                        &mut commands,
-                        hit_pos,
-                        &format!("GLANCED {degrees:.0}\u{00b0}"),
-                        Color::srgb(0.85, 0.92, 1.0),
-                    );
+                    // No floating word here. The sparks and the round's own
+                    // new heading carry it, and a label per bounce buried the
+                    // screen in text during a real fight. The angle still
+                    // lives in the aim-lock readout, where it's one line on
+                    // the block you're actually working on.
+                    // TODO(audio): wants a hard metallic skip. No suitable
+                    // asset — assets/audio/impacts has explosions only — and
+                    // picking one is a taste call, so it's left unwired rather
+                    // than filled with something wrong.
                     spawn_hit_effect(&mut commands, hit_pos, Color::srgb(0.95, 0.95, 0.85), 10.0);
                     if proj.bounces > MAX_BOUNCES {
                         commands.entity(proj_entity).despawn();
@@ -696,6 +689,17 @@ pub fn check_projectile_hits(
                         // followed off the plate instead of vanishing into the
                         // background as a dim shape travelling somewhere new.
                         proj_sprite.color = Color::srgb(1.0, 0.85, 0.55);
+
+                        // Step the round clear of the plate it just skipped
+                        // off. Without this it restarts next frame still
+                        // inside the ship, finds another block immediately,
+                        // and burns its two bounces within a few frames — so
+                        // it never visibly goes anywhere. `last_hit` only
+                        // protects it from re-hitting the SAME block.
+                        let clear = out * 70.0;
+                        proj_transform.translation.x += clear.x;
+                        proj_transform.translation.y += clear.y;
+                        proj.prev_pos = proj_transform.translation.truncate();
                     }
                     ai_damage_events.write(crate::events::AiShipDamaged {
                         target: ai_entity,
