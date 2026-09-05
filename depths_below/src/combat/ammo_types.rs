@@ -347,6 +347,60 @@ pub fn default_magazines() -> Vec<(&'static str, Vec<KineticAmmoType>, &'static 
     ]
 }
 
+/// What comes off the BACK of a plate when a round gets through it.
+///
+/// Distinct from the round's own effect in `AmmoHitBehavior`: that's the shell
+/// doing something (detonating, burning, disabling). This is the ARMOUR
+/// failing — fragments of the plate's inner face driven into whatever is
+/// behind it. It's why a penetration is categorically worse than a dent, and
+/// it's where the rounds differ most, because it describes what each one does
+/// once it's inside.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SpallProfile {
+    /// Fragments thrown off the inner face.
+    pub fragments: u32,
+    /// Half-angle of the cone they spray into, in degrees. A long dart makes a
+    /// neat hole; a squash head detaches a whole scab.
+    pub cone_degrees: f32,
+    /// Damage per fragment, as a fraction of the round's damage.
+    pub damage_frac: f32,
+    /// How far in the fragments carry, in cells.
+    pub reach: f32,
+    /// Whether it spalls WITHOUT penetrating. True only for HESH, whose entire
+    /// identity is defeating armour it can't get through — it's the answer to
+    /// a sloped hull, and the reason its penetration is 0 by design.
+    pub through_solid: bool,
+}
+
+impl SpallProfile {
+    pub const NONE: Self = Self {
+        fragments: 0, cone_degrees: 0.0, damage_frac: 0.0, reach: 0.0, through_solid: false,
+    };
+}
+
+/// Per-round spall. The shape of the cone is the round's signature:
+///
+///   APFSDS  narrow and deep   — a needle. Goes far in, wrecks little.
+///   HEAT    narrow and hot    — kills whatever is directly behind the hole.
+///   AP      the baseline.
+///   APHE    wide              — its own blast finishes the compartment.
+///   HESH    widest, and the only one that works through UNBREACHED armour.
+pub fn spall(ammo: Option<KineticAmmoType>) -> SpallProfile {
+    use KineticAmmoType::*;
+    match ammo {
+        Some(APFSDS) => SpallProfile { fragments: 3, cone_degrees: 12.0, damage_frac: 0.08, reach: 4.0, through_solid: false },
+        Some(HEAT) => SpallProfile { fragments: 3, cone_degrees: 10.0, damage_frac: 0.30, reach: 3.0, through_solid: false },
+        Some(APHE) => SpallProfile { fragments: 6, cone_degrees: 50.0, damage_frac: 0.12, reach: 2.0, through_solid: false },
+        Some(HESH) => SpallProfile { fragments: 10, cone_degrees: 80.0, damage_frac: 0.18, reach: 2.0, through_solid: true },
+        Some(Incendiary) => SpallProfile { fragments: 2, cone_degrees: 30.0, damage_frac: 0.05, reach: 2.0, through_solid: false },
+        // Surface bursts and EMP never get inside to shed anything.
+        Some(HEFrag) | Some(Flak) | Some(EMPShell) => SpallProfile::NONE,
+        // AP, and the unspecialised default for beams/rams/AI fire, which
+        // arrives with no ammo profile recorded.
+        Some(AP) | None => SpallProfile { fragments: 5, cone_degrees: 35.0, damage_frac: 0.10, reach: 2.0, through_solid: false },
+    }
+}
+
 /// Pass-through for a hit whose round has no ammo profile — an unspecialised
 /// shell, a beam, a ram. Armour stops most of it; a little always bleeds
 /// through to whatever is bolted behind the plate.
@@ -354,5 +408,80 @@ pub fn armor_pass_through(ammo: Option<KineticAmmoType>) -> f32 {
     match ammo {
         Some(a) => a.pass_through(),
         None => 0.15,
+    }
+}
+
+#[cfg(test)]
+mod spall_tests {
+    use super::*;
+
+    /// The cone shape is each round's signature for what it does INSIDE a
+    /// ship, and it's the axis they differ on most. A dart bores a neat hole;
+    /// a squash head detaches a whole scab.
+    #[test]
+    fn cone_width_separates_the_rounds() {
+        let dart = spall(Some(KineticAmmoType::APFSDS));
+        let jet = spall(Some(KineticAmmoType::HEAT));
+        let ap = spall(Some(KineticAmmoType::AP));
+        let aphe = spall(Some(KineticAmmoType::APHE));
+        let hesh = spall(Some(KineticAmmoType::HESH));
+
+        assert!(dart.cone_degrees < ap.cone_degrees, "a long rod should bore, not scatter");
+        assert!(jet.cone_degrees < ap.cone_degrees, "a shaped charge jet is focused");
+        assert!(aphe.cone_degrees > ap.cone_degrees);
+        assert!(hesh.cone_degrees > aphe.cone_degrees, "HESH should be the widest");
+    }
+
+    /// APFSDS reaches deepest and hurts least per fragment — the overpenetration
+    /// trade its description already promises.
+    #[test]
+    fn a_dart_goes_deep_and_does_little() {
+        let dart = spall(Some(KineticAmmoType::APFSDS));
+        let ap = spall(Some(KineticAmmoType::AP));
+        assert!(dart.reach > ap.reach);
+        assert!(dart.damage_frac < ap.damage_frac);
+        assert!(dart.fragments < ap.fragments);
+    }
+
+    /// HEAT concentrates: fewest fragments, hardest each. It kills the one
+    /// thing behind the hole rather than gutting a compartment.
+    #[test]
+    fn a_shaped_charge_concentrates() {
+        let jet = spall(Some(KineticAmmoType::HEAT));
+        let ap = spall(Some(KineticAmmoType::AP));
+        assert!(jet.damage_frac > ap.damage_frac);
+        assert!(jet.fragments <= ap.fragments);
+    }
+
+    /// HESH is the ONLY round that spalls without getting through. That's its
+    /// whole identity — the answer to armour too thick or too angled to
+    /// breach — and the reason its penetration is 0 by design.
+    #[test]
+    fn only_hesh_spalls_through_unbreached_armour() {
+        for ammo in [
+            KineticAmmoType::AP, KineticAmmoType::APHE, KineticAmmoType::HEFrag,
+            KineticAmmoType::Incendiary, KineticAmmoType::EMPShell, KineticAmmoType::Flak,
+            KineticAmmoType::HEAT, KineticAmmoType::APFSDS,
+        ] {
+            assert!(!spall(Some(ammo)).through_solid, "{ammo:?} must not spall through solid armour");
+        }
+        assert!(spall(Some(KineticAmmoType::HESH)).through_solid);
+        assert_eq!(KineticAmmoType::HESH.penetration(), 0.0, "HESH earns its spall by not penetrating");
+    }
+
+    /// Surface bursts never get inside, so they shed nothing.
+    #[test]
+    fn surface_bursts_and_emp_shed_nothing() {
+        for ammo in [KineticAmmoType::HEFrag, KineticAmmoType::Flak, KineticAmmoType::EMPShell] {
+            assert_eq!(spall(Some(ammo)), SpallProfile::NONE, "{ammo:?} should not spall");
+        }
+    }
+
+    /// Unspecialised fire — beams, rams, AI shots with no ammo recorded — gets
+    /// the AP baseline rather than nothing, so a breach always means something.
+    #[test]
+    fn unspecialised_fire_gets_the_baseline() {
+        assert_eq!(spall(None), spall(Some(KineticAmmoType::AP)));
+        assert!(spall(None).fragments > 0);
     }
 }

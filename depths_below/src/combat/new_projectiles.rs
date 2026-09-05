@@ -591,12 +591,14 @@ pub fn check_projectile_hits(
                 );
 
                 // Primary hit: damage the struck block, remember where.
+                let mut penetrated = false;
                 let primary: Option<(Entity, Vec2)> = if let Ok((_, gt)) = ai_module_query.get(step.entity) {
                     // A cell holding armour resolves to the plate (hull wins
                     // the cell in update_ship_grids), so reaching a module
                     // means nothing covers it: fully exposed, takes everything.
                     let hit_pos = gt.translation().truncate();
                     let impact = crate::combat::impact::resolve_impact(proj.damage, &block, surface.span, obl, Some(0.0));
+                    penetrated = impact.outcome == crate::combat::impact::ImpactOutcome::Penetrated;
                     ai_module_query.get_mut(step.entity).ok().map(|(mut module, _)| {
                         module.health = (module.health - impact.to_block).max(0.0);
                         spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.6, 0.2), 12.0);
@@ -625,6 +627,7 @@ pub fn check_projectile_hits(
                         None => 0.0,
                     };
                     let impact = crate::combat::impact::resolve_impact(proj.damage, &block, surface.span, obl, Some(pass));
+                    penetrated = impact.outcome == crate::combat::impact::ImpactOutcome::Penetrated;
                     let hull_hit = ai_hull_query.get_mut(step.entity).ok().map(|(mut hull, gt)| {
                         hull.health = (hull.health - impact.to_block).max(0.0);
                         let hit_pos = gt.translation().truncate();
@@ -643,6 +646,24 @@ pub fn check_projectile_hits(
                 };
 
                 let Some((hit_entity, hit_pos)) = primary else { continue };
+
+                // SPALL — the plate's inner face letting go. Not the round's
+                // own effect (that's AmmoHitBehavior below); this is the
+                // ARMOUR failing, which is what makes a breach categorically
+                // worse than a dent.
+                //
+                // HESH is the exception that proves the rule: through_solid
+                // means it spalls WITHOUT getting through, which is its whole
+                // identity and the reason its penetration is 0 by design. It's
+                // the answer to a sloped hull you can't punch.
+                let spall = crate::combat::ammo_types::spall(proj.ammo);
+                if penetrated || spall.through_solid {
+                    spall_blocks(
+                        &mut commands, grid, &mut ai_module_query, &mut ai_hull_query,
+                        spall, step.cell, dir_local, proj.damage, hit_entity,
+                        hit_pos, dir_local_world,
+                    );
+                }
 
                 // RICOCHET — the round skipped instead of biting. It's still
                 // flying, so deflect it rather than despawning: a bounce can
@@ -912,6 +933,66 @@ pub fn caliber_scale(module_type: ModuleType) -> f32 {
 
 /// Blast damage to every block within `radius` of the impact, except the
 /// primary block (it already took the direct hit).
+/// Fragments off the back of a breached plate, driven INWARD along the round's
+/// path in a cone.
+///
+/// Deliberately not `splash_blocks`. That's a radius — it treats a bulkhead as
+/// empty air and sprays the same in every direction. Spall is directional and
+/// it STOPS at the first thing it meets, so what's behind the plate matters:
+/// a reactor sitting right behind thin armour is in real danger, and a layer
+/// of junk in front of it genuinely shields it.
+///
+/// Each fragment is a short walk on the same grid hit resolution uses, so it
+/// respects the ship's actual layout rather than a distance check.
+fn spall_blocks(
+    commands: &mut Commands,
+    grid: &crate::building::ShipGrid,
+    module_query: &mut Query<(&mut Module, &GlobalTransform), Without<DestroyedModule>>,
+    hull_query: &mut Query<(&mut HullSegment, &GlobalTransform), Without<crate::components::HullDestroyed>>,
+    profile: crate::combat::ammo_types::SpallProfile,
+    from_cell: IVec2,
+    dir_local: Vec2,
+    damage: f32,
+    exclude: Entity,
+    world_at: Vec2,
+    world_dir: Vec2,
+) {
+    if profile.fragments == 0 || damage <= 0.0 || dir_local == Vec2::ZERO {
+        return;
+    }
+    let origin = from_cell.as_vec2();
+    let half = profile.cone_degrees.to_radians();
+    for i in 0..profile.fragments {
+        // Spread evenly across the cone rather than randomly, so a narrow
+        // profile reads as a focused jet instead of three coin flips.
+        let t = if profile.fragments == 1 {
+            0.0
+        } else {
+            (i as f32 / (profile.fragments - 1) as f32) * 2.0 - 1.0
+        };
+        let jitter = (rand::random::<f32>() - 0.5) * 0.15;
+        let heading = Vec2::from_angle(t * half + jitter).rotate(dir_local);
+        for step in grid.walk(origin, origin + heading * profile.reach) {
+            if step.entity == exclude { continue; }
+            let frag = damage * profile.damage_frac;
+            if let Ok((mut module, gt)) = module_query.get_mut(step.entity) {
+                module.health = (module.health - frag).max(0.0);
+                spawn_floating_damage(commands, gt.translation().truncate(), frag, Color::srgb(0.95, 0.85, 0.6));
+            } else if let Ok((mut hull, gt)) = hull_query.get_mut(step.entity) {
+                hull.health = (hull.health - frag).max(0.0);
+                spawn_floating_damage(commands, gt.translation().truncate(), frag, Color::srgb(0.95, 0.85, 0.6));
+            } else {
+                continue;
+            }
+            // Stops at the first thing it hits — that's the whole point.
+            break;
+        }
+    }
+    // Sparks blowing INWARD, so a breach reads differently from a bounce
+    // (which sprays back out along the round's new heading).
+    spawn_impact_sparks(commands, world_at, world_dir, 0.5, 4 + profile.fragments as usize);
+}
+
 fn splash_blocks(
     commands: &mut Commands,
     children: &Children,
