@@ -17,6 +17,44 @@ No CI/CD pipeline. Tests are sparse and cover mostly pure logic — registry
 integrity, material tiers, stat calculation, inventory, grid indexing. Most
 systems are verified by playtesting, not by tests.
 
+## Parallel sessions: one worktree each
+
+Several Claude sessions run against this repo at once. They must NOT share a
+working tree. Two of them in `/Users/shhh/depths_below` at the same time cost a
+full afternoon: one session's half-finished `DecorationType` refactor broke the
+other's build, a `cargo build` raced a concurrent one and reported errors that
+did not exist, and 177 modified files from two unrelated workstreams ended up
+tangled in the same diff - `src/ui/mod.rs` had to be committed hunk by hunk to
+separate them.
+
+Give each session its own worktree, as a sibling directory:
+
+```bash
+git worktree add ../depths_below-<topic> -b <topic>   # new lane
+git worktree list                                     # who is where
+git worktree remove ../depths_below-<topic>           # when the branch lands
+```
+
+`/Users/shhh/depths_below` itself is a worktree like any other - don't treat it
+as the place work happens by default. Check `git worktree list` and `git branch
+--show-current` before your first edit, and before every commit.
+
+### Disk
+
+Each worktree builds into its own `target/`, and a Bevy debug build is 6GB
+fresh and grows past 25GB with incremental artifacts. This volume filled to
+zero bytes three times in one session; a full disk shows up as
+`rustc interrupted by SIGSEGV`, not as a disk error, and it takes the running
+game down with it. Two useful habits:
+
+```bash
+df -h /                                    # before starting a long build
+rm -rf target/debug/incremental            # ~2GB, pure cache, always safe
+```
+
+`cargo clean` reclaims everything at the cost of one full rebuild - fine on a
+worktree you are done with, disruptive on one another session is building in.
+
 ## Architecture
 
 Bevy 0.19 ECS **space survival game**. 2D, sprite-based, grid-based building system (66.0 unit cells). Originally a ship game, fully converted to space theme.
