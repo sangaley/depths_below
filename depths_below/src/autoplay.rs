@@ -23,22 +23,24 @@
 use bevy::ecs::system::SystemParam;
 use bevy::input::InputSystems;
 use bevy::prelude::*;
-use bevy::render::view::window::screenshot::{save_to_disk, Screenshot};
+use bevy::render::view::window::screenshot::{Screenshot, ScreenshotCaptured};
 use std::collections::HashSet;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::ai_ship::components::{AiShip, AiShipWreck};
 use crate::celestial::poi::SpacePoi;
 use crate::combat::targeting::selection::TargetSelection;
-use crate::components::{Ship, Velocity};
+use crate::components::{Ship, Velocity, Wreck};
 use crate::contracts::{ContractState, ContractStatus, MissionBoardOpen};
 use crate::crew::eva_salvage::EvaSalvaging;
 use crate::events::{AiShipDestroyed, NotificationType, ShowNotification};
-use crate::resources::{Currency, FuelState, HullState, InputState};
+use crate::resources::{Currency, FuelState, HullState, InputState, StaffingState};
 use crate::states::GameState;
 use crate::tutorial::{Advance, Tutorial};
-use crate::world::home_base::SystemStations;
+use crate::world::home_base::{SystemStations, DOCK_RANGE};
 
 // ============================================================================
 // TUNING
@@ -137,6 +139,22 @@ pub struct Director {
     detail_seen: bool,
     strip_wait: f32,
     loot_cooldown: f32,
+    /// Wrecks we tried and got nothing from. `Wreck::loot_remaining` already
+    /// filters stripped hulks, but a wreck can also refuse a detail because
+    /// there is no idle crew — without remembering those, Hunt sees the wreck,
+    /// diverts to Strip, fails, and bounces straight back forever.
+    spent_wrecks: HashSet<Entity>,
+    /// Grace period after leaving Strip so a bad wreck can't re-trigger it on
+    /// the very next frame.
+    strip_cooldown: f32,
+    /// A capture came back blank and is owed a retake.
+    shot_pending: bool,
+    shot_retries: u32,
+    blanks_seen: u32,
+    /// Seconds until the next periodic status line.
+    status_in: f32,
+    /// How long we've been holding station for an EVA detail.
+    eva_hold: f32,
 }
 
 impl Director {
@@ -250,6 +268,13 @@ impl Plugin for AutoplayPlugin {
             detail_seen: false,
             strip_wait: 0.0,
             loot_cooldown: 0.0,
+            spent_wrecks: HashSet::new(),
+            strip_cooldown: 0.0,
+            shot_pending: false,
+            shot_retries: 0,
+            blanks_seen: 0,
+            status_in: 0.0,
+            eva_hold: 0.0,
         };
         director.log("start", &format!("target {}c", target));
 
@@ -265,6 +290,7 @@ impl Plugin for AutoplayPlugin {
                     director_clock,
                     director_brain,
                     director_timescale,
+                    director_status,
                     director_watch,
                 )
                     .chain(),
@@ -322,6 +348,7 @@ fn director_clock(time: Res<Time<Real>>, mut d: ResMut<Director>) {
     d.phase_elapsed += dt;
     d.shot_cooldown = (d.shot_cooldown - dt).max(0.0);
     d.loot_cooldown = (d.loot_cooldown - dt).max(0.0);
+    d.strip_cooldown = (d.strip_cooldown - dt).max(0.0);
     d.beat += dt;
     d.dt = dt;
 }
@@ -333,8 +360,8 @@ fn director_clock(time: Res<Time<Real>>, mut d: ResMut<Director>) {
 #[derive(SystemParam)]
 struct World1<'w, 's> {
     ships: Query<'w, 's, (&'static Transform, &'static Velocity), With<Ship>>,
-    enemies: Query<'w, 's, &'static Transform, (With<AiShip>, Without<Ship>)>,
-    wrecks: Query<'w, 's, &'static Transform, (With<AiShipWreck>, Without<Ship>)>,
+    enemies: Query<'w, 's, (Entity, &'static Transform), (With<AiShip>, Without<AiShipWreck>, Without<Ship>)>,
+    wrecks: Query<'w, 's, (Entity, &'static Transform, &'static Wreck), Without<Ship>>,
     pois: Query<'w, 's, (&'static Transform, &'static SpacePoi), Without<Ship>>,
     eva: Query<'w, 's, (), With<EvaSalvaging>>,
 }
@@ -360,15 +387,25 @@ fn director_brain(
     // ---- goal check -------------------------------------------------------
     if currency.credits >= d.target {
         let msg = format!(
-            "target reached: {}c after {:.0}s, {} kills",
-            currency.credits, d.run_elapsed, d.kills
+            "target reached: {}c after {:.0}s, {} kills, {} frames saved ({} blank)",
+            currency.credits,
+            d.run_elapsed,
+            d.kills,
+            SAVED_CAPTURES.load(Ordering::Relaxed),
+            BLANK_CAPTURES.load(Ordering::Relaxed)
         );
         d.log("done", &msg);
         d.go(Phase::Done);
         return;
     }
     if d.run_elapsed > d.deadline {
-        let msg = format!("deadline hit at {}c", currency.credits);
+        let msg = format!(
+            "deadline hit at {}c, {} kills, {} frames saved ({} blank)",
+            currency.credits,
+            d.kills,
+            SAVED_CAPTURES.load(Ordering::Relaxed),
+            BLANK_CAPTURES.load(Ordering::Relaxed)
+        );
         d.log("abort", &msg);
         d.go(Phase::Aborted);
         return;
@@ -384,8 +421,61 @@ fn director_brain(
         d.stall_timer = 0.0;
     }
 
-    let docked = *state.get() == GameState::StationDocked;
+    // StationDocked is the one that has build mode, the board and hiring.
+    // `Docked` is a different thing entirely (outpost/wreck), and Loading /
+    // Paused are transients. Treating anything non-Exploring as "not docked"
+    // is what made the director thrash Outfit -> Hunt -> Boot in three frames
+    // the moment it touched an outpost.
+    let at_station = *state.get() == GameState::StationDocked;
     let flying = *state.get() == GameState::Exploring;
+
+    // Crew outside pins the ship. A detail breaks off past BREAK_RANGE, so
+    // flying anywhere with people on the hull strands them — which is exactly
+    // how an earlier run lost a detail six crew at a time while it hurried off
+    // to dock. Hold station and let them finish.
+    if flying && !w.eva.is_empty() {
+        // Record that a detail really did go out. Strip's completion test runs
+        // below this guard and would otherwise never observe it, and would
+        // write the wreck off as "no detail launched" the moment they landed.
+        d.detail_seen = true;
+        d.eva_hold += d.dt;
+
+        if let Ok((_, vel_c)) = w.ships.single() {
+            if vel_c.0.length() > 30.0 {
+                d.hold(KeyCode::ShiftLeft);
+            }
+        }
+
+        // A detail that never comes home would pin the ship for the rest of
+        // the run. Recall them the way a player would and carry on.
+        if d.eva_hold > 150.0 && d.beat > 1.5 {
+            d.beat = 0.0;
+            d.eva_hold = 0.0;
+            d.log("salvage", "detail out too long — recalling");
+            d.tap(KeyCode::KeyF);
+        }
+        return;
+    }
+    d.eva_hold = 0.0;
+
+    match *state.get() {
+        GameState::Paused => {
+            if d.beat > 1.0 {
+                d.beat = 0.0;
+                d.tap(KeyCode::Escape);
+            }
+            return;
+        }
+        GameState::Docked => {
+            if d.beat > 1.0 {
+                d.beat = 0.0;
+                d.tap(KeyCode::Enter);
+            }
+            return;
+        }
+        GameState::Loading | GameState::GameOver => return,
+        _ => {}
+    }
 
     // ---- phase logic ------------------------------------------------------
     match d.phase {
@@ -396,7 +486,7 @@ fn director_brain(
                     d.beat = 0.0;
                     d.tap(KeyCode::Enter);
                 }
-            } else if docked {
+            } else if at_station {
                 d.go(Phase::Training);
             }
         }
@@ -405,14 +495,26 @@ fn director_brain(
             match tutorial.pending() {
                 None => {
                     d.log("tutorial", "training complete");
-                    d.go(if docked { Phase::Outfit } else { Phase::Home });
+                    d.go(if at_station { Phase::Outfit } else { Phase::Home });
                 }
-                Some(step) => drive_tutorial(&mut d, step, &w, flying),
+                Some(step) => {
+                    // Training is a nice-to-have on a run whose point is the
+                    // economy loop. If a step can't be satisfied, dismiss it
+                    // ([;]) and get on with the game rather than burning the
+                    // whole deadline on the tutorial card.
+                    if d.phase_elapsed > 240.0 {
+                        let msg = format!("stuck on {:?} for 240s — dismissing training", step);
+                        d.log("tutorial", &msg);
+                        d.tap(KeyCode::Semicolon);
+                    } else {
+                        drive_tutorial(&mut d, step, &w, &stations, flying)
+                    }
+                }
             }
         }
 
         Phase::Outfit => {
-            if !docked {
+            if !at_station {
                 d.go(Phase::Hunt);
                 return;
             }
@@ -432,7 +534,7 @@ fn director_brain(
         }
 
         Phase::Board => {
-            if !docked {
+            if !at_station {
                 d.go(Phase::Hunt);
                 return;
             }
@@ -472,7 +574,7 @@ fn director_brain(
             if flying {
                 d.log("launch", "in open space");
                 d.go(Phase::Hunt);
-            } else if docked && d.beat > 0.8 {
+            } else if at_station && d.beat > 0.8 {
                 d.beat = 0.0;
                 d.tap(KeyCode::Enter);
             }
@@ -480,7 +582,9 @@ fn director_brain(
 
         Phase::Hunt => {
             if !flying {
-                d.go(if docked { Phase::Board } else { Phase::Boot });
+                if at_station {
+                    d.go(Phase::Board);
+                }
                 return;
             }
             let integrity = hull.hull_integrity;
@@ -497,7 +601,7 @@ fn director_brain(
 
             // Nearest live hostile first; that's what a contract wants dead.
             let mut best: Option<(f32, Vec2)> = None;
-            for etf in w.enemies.iter() {
+            for (_, etf) in w.enemies.iter() {
                 let p = etf.translation.truncate();
                 let dist = pos.distance(p);
                 if best.map_or(true, |(b, _)| dist < b) {
@@ -508,14 +612,20 @@ fn director_brain(
             if let Some((dist, tp)) = best {
                 // Acquire a contact so `auto_engage` spreads the battery across
                 // its silhouette instead of every barrel drilling one tile.
-                if selection.target.is_none() && d.beat > 1.2 {
+                // Acquire, and re-cycle if what we locked is no longer among
+                // the living — a defeated hull stays an AiShip entity, so a
+                // stale lock means the battery keeps drilling a corpse.
+                let live_lock = selection
+                    .target
+                    .is_some_and(|t| w.enemies.iter().any(|(e, _)| e == t));
+                if !live_lock && d.beat > 1.2 {
                     d.beat = 0.0;
                     d.tap(KeyCode::Backslash);
                 }
                 engage(&mut d, pos, vel, tp, dist);
-            } else if nearest(w.wrecks.iter().map(|t| t.translation.truncate()), pos)
-                .is_some_and(|(dist, _)| dist < 9000.0)
-                || loot_nearby(&w, pos).is_some_and(|(dist, _)| dist < 9000.0)
+            } else if d.strip_cooldown <= 0.0
+                && (salvageable(&w, &d, pos).is_some_and(|(dist, _, _)| dist < 9000.0)
+                    || loot_nearby(&w, pos).is_some_and(|(dist, _)| dist < 9000.0))
             {
                 d.go(Phase::Strip);
             } else {
@@ -557,8 +667,7 @@ fn director_brain(
                 }
             }
 
-            let Some((dist, wp)) = nearest(w.wrecks.iter().map(|t| t.translation.truncate()), pos)
-            else {
+            let Some((dist, wp, wreck_entity)) = salvageable(&w, &d, pos) else {
                 // No wreck. Chase a lootable POI if one is close, else hunt.
                 match loot_nearby(&w, pos) {
                     Some((d2, p2)) if d2 < 8000.0 => {
@@ -600,13 +709,18 @@ fn director_brain(
                     return;
                 } else if d.strip_wait > 6.0 {
                     // F was pressed but nobody went out — no idle crew, or the
-                    // wreck was already stripped. Not worth parking on.
-                    d.log("salvage", "no detail launched — moving on");
+                    // wreck was already stripped. Write it off so Hunt doesn't
+                    // send us straight back to it.
+                    d.spent_wrecks.insert(wreck_entity);
+                    d.strip_cooldown = 8.0;
+                    d.log("salvage", "no detail launched — writing this wreck off");
                     d.go(Phase::Hunt);
                     return;
                 }
 
                 if d.strip_wait > SALVAGE_TIMEOUT {
+                    d.spent_wrecks.insert(wreck_entity);
+                    d.strip_cooldown = 8.0;
                     d.log("salvage", "timed out on this wreck");
                     d.go(Phase::Hunt);
                 }
@@ -614,7 +728,7 @@ fn director_brain(
         }
 
         Phase::Home => {
-            if docked {
+            if at_station {
                 d.log("dock", "docked — turning in");
                 d.go(Phase::Board);
                 return;
@@ -625,22 +739,11 @@ fn director_brain(
             let Ok((tf, _vel)) = w.ships.single() else { return };
             let pos = tf.translation.truncate();
 
-            let Some(site) = stations.sites.iter().min_by(|a, b| {
-                pos.distance(a.pos)
-                    .partial_cmp(&pos.distance(b.pos))
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            }) else {
-                // No stations loaded here — this is where a warp would go.
+            if !head_for_dock(&mut d, &stations, pos, !w.eva.is_empty()) {
+                // No station loaded here — this is where an interstellar hop
+                // would go once warp routing is wired in.
                 d.log("home", "no station in this system");
                 d.go(Phase::Hunt);
-                return;
-            };
-
-            let dist = pos.distance(site.pos);
-            fly_to(&mut d, pos, site.pos, dist, 300.0);
-            if dist < 2200.0 && d.beat > 0.6 {
-                d.beat = 0.0;
-                d.tap(KeyCode::KeyF);
             }
         }
 
@@ -648,7 +751,7 @@ fn director_brain(
     }
 
     // Pause/menu states shouldn't count against the stall watchdog.
-    if flying || docked {
+    if flying || at_station {
         d.stall_timer += 1.0 / 60.0;
     }
     if d.stall_timer > STALL_SECONDS {
@@ -718,6 +821,41 @@ fn engage(d: &mut Director, pos: Vec2, vel: Vec2, tp: Vec2, dist: f32) {
     }
 }
 
+/// Fly to the nearest station and press F only once actually in range.
+///
+/// This has to be one shared routine: out in open space F does NOT dock, it
+/// toggles an EVA salvage detail. The first version tapped F on the spot for
+/// the tutorial's dock step and spent two minutes dispatching and recalling
+/// the same seven crew instead of ever flying home.
+fn head_for_dock(
+    d: &mut Director,
+    stations: &SystemStations,
+    pos: Vec2,
+    crew_out: bool,
+) -> bool {
+    let Some(site) = stations.sites.iter().min_by(|a, b| {
+        pos.distance(a.pos)
+            .partial_cmp(&pos.distance(b.pos))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    }) else {
+        return false;
+    };
+
+    let dist = pos.distance(site.pos);
+    fly_to(d, pos, site.pos, dist, 400.0);
+
+    // Only inside the real docking radius, and on a slow beat so we aren't
+    // mashing a key that means something else the moment we drift out.
+    // F is overloaded: at a station it docks, and within eva_salvage's
+    // ORDER_RANGE of a wreck it ALSO throws a detail out. One press did both
+    // in an earlier run, docking the ship with nineteen crew on the hull.
+    if dist < DOCK_RANGE * 0.9 && d.beat > 1.0 && !crew_out {
+        d.beat = 0.0;
+        d.tap(KeyCode::KeyF);
+    }
+    true
+}
+
 fn nearest(points: impl Iterator<Item = Vec2>, from: Vec2) -> Option<(f32, Vec2)> {
     points.fold(None, |best: Option<(f32, Vec2)>, p| {
         let dist = from.distance(p);
@@ -726,6 +864,21 @@ fn nearest(points: impl Iterator<Item = Vec2>, from: Vec2) -> Option<(f32, Vec2)
             _ => Some((dist, p)),
         }
     })
+}
+
+/// Nearest wreck that still has something in it and hasn't already refused us.
+fn salvageable(w: &World1, d: &Director, pos: Vec2) -> Option<(f32, Vec2, Entity)> {
+    w.wrecks
+        .iter()
+        .filter(|(e, _, wreck)| wreck.loot_remaining > 0 && !d.spent_wrecks.contains(e))
+        .map(|(e, t, _)| {
+            let p = t.translation.truncate();
+            (pos.distance(p), p, e)
+        })
+        .fold(None, |best: Option<(f32, Vec2, Entity)>, cur| match best {
+            Some((b, _, _)) if b <= cur.0 => best,
+            _ => Some(cur),
+        })
 }
 
 fn loot_nearby(w: &World1, pos: Vec2) -> Option<(f32, Vec2)> {
@@ -740,7 +893,13 @@ fn loot_nearby(w: &World1, pos: Vec2) -> Option<(f32, Vec2)> {
 
 /// Flight training reads real keys, so the director answers each step with the
 /// key that step is waiting for.
-fn drive_tutorial(d: &mut Director, step: Advance, w: &World1, flying: bool) {
+fn drive_tutorial(
+    d: &mut Director,
+    step: Advance,
+    w: &World1,
+    stations: &SystemStations,
+    flying: bool,
+) {
     // Info steps just want [Space], but on a human rhythm — one press per
     // beat, not one per frame.
     let beat_ready = d.beat > 0.9;
@@ -773,7 +932,7 @@ fn drive_tutorial(d: &mut Director, step: Advance, w: &World1, flying: bool) {
             let Ok((tf, vel_c)) = w.ships.single() else { return };
             let pos = tf.translation.truncate();
             let vel = vel_c.0;
-            if let Some((dist, tp)) = nearest(w.enemies.iter().map(|t| t.translation.truncate()), pos) {
+            if let Some((dist, tp)) = nearest(w.enemies.iter().map(|(_, t)| t.translation.truncate()), pos) {
                 // The training raider is clamped to 700 range, so this is safe
                 // to do from well outside its reach.
                 engage(d, pos, vel, tp, dist);
@@ -786,24 +945,44 @@ fn drive_tutorial(d: &mut Director, step: Advance, w: &World1, flying: bool) {
             if !flying {
                 return;
             }
-            let Ok((tf, _vel)) = w.ships.single() else { return };
+            let Ok((tf, vel_c)) = w.ships.single() else { return };
             let pos = tf.translation.truncate();
-            if let Some((dist, tp)) = nearest(w.wrecks.iter().map(|t| t.translation.truncate()), pos) {
-                if dist > INTERACT_RANGE {
-                    fly_to(d, pos, tp, dist, INTERACT_RANGE * 0.6);
-                } else if beat_ready {
-                    d.beat = 0.0;
+            // The step completes the moment a detail is actually out, so once
+            // anyone is on the hull there is nothing left to do here.
+            if !w.eva.is_empty() {
+                return;
+            }
+            // One dispatch — but a press that produced no detail must not latch
+            // forever. It wedged a full run on this step for four minutes:
+            // detail_sent stayed true, nobody was outside, and the branch
+            // returned early on every frame from then on.
+            if d.detail_sent {
+                d.strip_wait += d.dt;
+                if d.strip_wait < 5.0 {
+                    return;
+                }
+                d.log("salvage", "training dispatch did not take — retrying");
+                d.detail_sent = false;
+                d.strip_wait = 0.0;
+            }
+            if let Some((dist, tp, _)) = salvageable(w, d, pos) {
+                if dist > SALVAGE_HOLD {
+                    fly_to(d, pos, tp, dist, SALVAGE_HOLD);
+                } else if vel_c.0.length() > 60.0 {
+                    d.hold(KeyCode::ShiftLeft);
+                } else {
                     d.tap(KeyCode::KeyF);
+                    d.detail_sent = true;
+                    d.log("salvage", "training detail dispatched");
                 }
             }
         }
         Advance::Dock => {
-            // Handled by flying home; reuse the Home logic by pressing F when
-            // the station prompt is up. The tutorial docks at the home berth.
-            if beat_ready {
-                d.beat = 0.0;
-                d.tap(KeyCode::KeyF);
+            if !flying {
+                return;
             }
+            let Ok((tf, _vel)) = w.ships.single() else { return };
+            head_for_dock(d, stations, tf.translation.truncate(), !w.eva.is_empty());
         }
         Advance::Build => {
             if beat_ready {
@@ -866,6 +1045,86 @@ fn director_timescale(
 // OBSERVATION — screenshots + everything the game told the player
 // ============================================================================
 
+/// Captures that came back empty. macOS stops updating an occluded window's
+/// surface, so any frame taken while the game is behind another window is
+/// solid black — 57KB of nothing. Counting them lets the director retry
+/// instead of filling the run directory with blanks it will never look at.
+static BLANK_CAPTURES: AtomicU32 = AtomicU32::new(0);
+static SAVED_CAPTURES: AtomicU32 = AtomicU32::new(0);
+
+/// Save a capture only if it actually contains an image.
+///
+/// Replaces bevy's `save_to_disk`, which writes whatever it is handed. Samples
+/// a sparse grid of pixels rather than the whole frame — a real frame lights
+/// up within the first handful of samples, and a blank one costs a few hundred
+/// comparisons to rule out.
+fn save_if_legible(path: PathBuf) -> impl FnMut(On<ScreenshotCaptured>) {
+    move |captured| {
+        let Ok(dyn_img) = captured.image.clone().try_into_dynamic() else {
+            return;
+        };
+        let rgb = dyn_img.to_rgb8();
+
+        let mut lit = 0u32;
+        for px in rgb.pixels().step_by(101) {
+            if px.0[0] as u32 + px.0[1] as u32 + px.0[2] as u32 > 24 {
+                lit += 1;
+                if lit >= 8 {
+                    break;
+                }
+            }
+        }
+
+        if lit < 8 {
+            BLANK_CAPTURES.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+
+        match rgb.save(&path) {
+            Ok(()) => {
+                SAVED_CAPTURES.fetch_add(1, Ordering::Relaxed);
+            }
+            Err(e) => error!("[AUTOPLAY] could not save {}: {e}", path.display()),
+        }
+    }
+}
+
+/// A heartbeat line every 30s. Staffing is on it because a gun with nobody on
+/// it does not fire (combat::weapon_is_crewed) — a run that quietly stops
+/// shooting looks identical in the journal to one that never found a target,
+/// and this is what tells the two apart.
+fn director_status(
+    mut d: ResMut<Director>,
+    currency: Res<Currency>,
+    hull: Res<HullState>,
+    fuel: Res<FuelState>,
+    staffing: Res<StaffingState>,
+    tutorial: Res<Tutorial>,
+) {
+    d.status_in -= d.dt;
+    if d.status_in > 0.0 {
+        return;
+    }
+    d.status_in = 30.0;
+
+    let msg = format!(
+        "{}c | hull {:.0}% | fuel {:.0} | crew {}/{} berths | {}/{} posts manned | {} kills{}",
+        currency.credits,
+        hull.hull_integrity * 100.0,
+        fuel.current_fuel,
+        staffing.total_crew,
+        staffing.total_berths,
+        staffing.staffed_stations,
+        staffing.total_stations,
+        d.kills,
+        match tutorial.pending() {
+            Some(step) => format!(" | training: {:?}", step),
+            None => String::new(),
+        },
+    );
+    d.log("status", &msg);
+}
+
 fn director_watch(
     mut commands: Commands,
     mut d: ResMut<Director>,
@@ -913,10 +1172,32 @@ fn director_watch(
         }
     }
 
-    if want_shot && d.shot_cooldown <= 0.0 {
+    // A blank capture means the window was behind something. Keep the request
+    // alive and retake on a short cycle so the shot lands as soon as the game
+    // is visible again, rather than losing the moment entirely.
+    let blanks = BLANK_CAPTURES.load(Ordering::Relaxed);
+    if blanks != d.blanks_seen {
+        d.blanks_seen = blanks;
+        if d.shot_retries < 40 {
+            d.shot_pending = true;
+            d.shot_retries += 1;
+            d.shot_cooldown = 2.0;
+        } else if d.shot_pending {
+            d.shot_pending = false;
+            d.log("capture", "gave up on a shot — window occluded too long");
+        }
+    }
+
+    if (want_shot || d.shot_pending) && d.shot_cooldown <= 0.0 {
+        if want_shot {
+            d.shot_retries = 0;
+        }
         d.shot_cooldown = SHOT_COOLDOWN;
-        let path = format!("{}/shot_{:04}_{:?}.png", d.dir, d.shots, d.phase);
+        d.shot_pending = false;
+        let path = PathBuf::from(format!("{}/shot_{:04}_{:?}.png", d.dir, d.shots, d.phase));
         d.shots += 1;
-        commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path));
+        commands
+            .spawn(Screenshot::primary_window())
+            .observe(save_if_legible(path));
     }
 }
