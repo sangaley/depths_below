@@ -84,7 +84,7 @@ impl Default for ControllerLayout {
 /// physical key and the pad button together doesn't double-fire; the one
 /// rough edge is that releasing the pad button releases the key even if
 /// the physical key is still down.
-fn bridge_gamepad_buttons(
+pub(crate) fn bridge_gamepad_buttons(
     gamepads: Query<&Gamepad>,
     layout: Res<ControllerLayout>,
     mut keyboard: ResMut<ButtonInput<KeyCode>>,

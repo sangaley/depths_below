@@ -70,8 +70,15 @@ fn main() {
         // Global resources
         .init_resource::<InputState>()
         .init_resource::<crate::resources::InteractPress>()
-        // Ahead of every F handler, so they all see the same single press.
-        .add_systems(First, crate::resources::refresh_interact_press)
+        // Ahead of every F handler, so they all see the same single press -
+        // but AFTER the gamepad bridge, which synthesizes its own key presses
+        // into ButtonInput during PreUpdate. Refreshing in First read the
+        // keyboard before the controller had spoken, so West stopped docking.
+        .add_systems(
+            PreUpdate,
+            crate::resources::refresh_interact_press
+                .after(crate::gamepad::bridge_gamepad_buttons),
+        )
         .insert_resource(ClearColor(Color::srgb(0.05, 0.15, 0.35)))
 
         // Events

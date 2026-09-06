@@ -460,8 +460,10 @@ const WARP_DASH_DISTANCE_PER_SECOND: f32 = 15_000.0;
 const WARP_DASH_MIN_BUFFER: f32 = 800.0;
 const WARP_DASH_MAX_BUFFER: f32 = 3000.0;
 const WARP_DASH_BUFFER_FRACTION: f32 = 0.15;
-/// Below this, fly it. The buffer alone would eat most of the distance.
-const WARP_DASH_MIN_DISTANCE: f32 = 1200.0;
+/// Below this, fly it. The buffer alone would eat most of the distance: at
+/// 1200 the minimum 800 standoff leaves 400 units of travel for a two-second
+/// spin-up, which is a worse deal than the thrusters.
+const WARP_DASH_MIN_DISTANCE: f32 = 2000.0;
 
 fn warp_dash_arrival_buffer(distance: f32) -> f32 {
     (distance * WARP_DASH_BUFFER_FRACTION).clamp(WARP_DASH_MIN_BUFFER, WARP_DASH_MAX_BUFFER)
@@ -3208,7 +3210,7 @@ fn warp_dash_input(
         }
 
         let dir = (target - ship_pos).normalize_or_zero();
-        let target_pos = target - dir * WARP_DASH_ARRIVAL_BUFFER;
+        let target_pos = target - dir * buffer;
         let charge_time = warp_dash_charge_time(jump_dist);
 
         commands.entity(entity).insert(MapWarpCharging {
