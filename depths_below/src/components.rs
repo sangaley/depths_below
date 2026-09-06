@@ -1500,11 +1500,6 @@ impl CrewDuty {
         }
     }
 
-    pub fn next(self) -> CrewDuty {
-        let i = Self::ALL.iter().position(|d| *d == self).unwrap_or(0);
-        Self::ALL[(i + 1) % Self::ALL.len()]
-    }
-
     /// Which module category this duty will take a post in, if any.
     pub fn category(self) -> Option<ModuleCategory> {
         match self {
