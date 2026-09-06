@@ -587,9 +587,9 @@ const MAX_CREATURE_HIT_RADIUS: f32 = 90.0;
 /// carry 75-160, so feeding them their raw radius put the shock ring out past
 /// 500 units and swallowed the screen on every HE hit.
 ///
-/// At 0.4 the fireball lands just inside the damage radius and the ring just
-/// outside it, which is the same relationship a missile detonation has.
-const IMPACT_BLAST_SCALE: f32 = 0.4;
+/// At 0.32 the fireball sits well inside the damage radius and the ring close
+/// to it — tightened by eye from 0.4, which still read as too much on screen.
+const IMPACT_BLAST_SCALE: f32 = 0.32;
 
 pub fn check_projectile_hits(
     fx: Res<crate::vfx::effect_textures::EffectTextures>,
