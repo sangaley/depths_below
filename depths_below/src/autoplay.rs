@@ -33,12 +33,17 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use crate::ai_ship::components::{AiShip, AiShipWreck};
 use crate::celestial::poi::SpacePoi;
 use crate::combat::targeting::selection::TargetSelection;
-use crate::components::{Ship, Velocity, Wreck};
+use crate::components::{DockingMenuSelection, DockingOverlay, Ship, Velocity, Wreck};
 use crate::contracts::{ContractState, ContractStatus, MissionBoardOpen};
 use crate::crew::eva_salvage::EvaSalvaging;
 use crate::events::{AiShipDestroyed, NotificationType, ShowNotification};
 use crate::resources::{Currency, FuelState, HullState, InputState, StaffingState};
 use crate::states::{BuildState, GameState};
+use crate::celestial::components::WarpCharging;
+use crate::celestial::resources::{
+    GalaxyMap, GalaxyWarpTarget, PendingGalaxyWarpTarget, SystemStreamingManager,
+};
+use crate::ui::{MapWarpCharging, PendingWarpTarget};
 use crate::tutorial::{Advance, Tutorial};
 use crate::world::home_base::{SystemStations, DOCK_RANGE};
 
@@ -73,6 +78,30 @@ const SALVAGE_LEASH: f32 = 1650.0;
 const SALVAGE_TIMEOUT: f32 = 150.0;
 /// No credit movement for this long (game seconds) → log a stall and re-plan.
 const STALL_SECONDS: f32 = 240.0;
+/// How far off course we'll go for a wreck or a lootable POI. Hunt and Strip
+/// MUST read the same number: they used to disagree by a thousand units, and
+/// anything sitting in that band made Hunt divert to Strip, Strip decide it
+/// was too far and bounce back, forever — six phase flips in twelve seconds.
+const DIVERT_RANGE: f32 = 9000.0;
+/// How long to sweep an apparently empty system before writing it off. Was
+/// three minutes, which is three minutes of flying in a straight line past
+/// nothing once the local board is stripped — the ship has an interstellar
+/// drive for exactly this, so give up early and use it.
+const SWEEP_SECONDS: f32 = 45.0;
+/// Burn or jump? The dash always stops WARP_DASH_ARRIVAL_BUFFER (3000) short
+/// of its mark and costs a flat two seconds to spin up, so a short hop buys
+/// almost no ground for the wait. Past this it wins outright — and on fuel
+/// too: a jump is 1 unit per 1000 travelled, where the main drive burns that
+/// in a couple of seconds of thrust.
+const WARP_MIN_DISTANCE: f32 = 7000.0;
+/// Matches ui::WARP_DASH_ARRIVAL_BUFFER — how far short the drive drops us.
+const WARP_ARRIVAL_BUFFER: f32 = 3000.0;
+/// Fuel kept back from any jump, so a dash can never strand us out here with
+/// nothing left to fly home on.
+const WARP_FUEL_RESERVE: f32 = 250.0;
+/// A refused jump (no destination, too close, drive busy) never spawns the
+/// charge component. Give up holding G after this and fly it the slow way.
+const WARP_GIVE_UP: f32 = 3.0;
 /// Minimum gap between screenshots, so a chatty phase can't fill the disk.
 const SHOT_COOLDOWN: f32 = 3.0;
 /// Hard cap on saved frames. At one every few seconds a two-hour run can write
@@ -102,6 +131,10 @@ pub enum Phase {
     Strip,
     /// Head home, dock, turn in, sell.
     Home,
+    /// Docked: work the station services before touching the mission board.
+    Trade,
+    /// Local space is stripped — charge the interstellar drive and move on.
+    Jump,
     /// Credit target reached.
     Done,
     /// Deadline or unrecoverable stall.
@@ -159,6 +192,19 @@ pub struct Director {
     status_in: f32,
     /// How long we've been holding station for an EVA detail.
     eva_hold: f32,
+    /// Hunt swept the system and found nothing. Cleared once we've jumped.
+    system_dry: bool,
+    /// How long the interstellar drive has been charging.
+    jump_for: f32,
+    jump_seen: bool,
+    /// Mid-jump: G is being held and the phase logic is suspended until the
+    /// drive fires. Everything else waits — steering during a charge is how
+    /// you cancel it by accident.
+    warping: bool,
+    warp_for: f32,
+    /// The charge component actually appeared, so its disappearance means the
+    /// jump completed rather than the keypress having been refused outright.
+    warp_seen: bool,
 }
 
 impl Director {
@@ -268,6 +314,12 @@ impl Plugin for AutoplayPlugin {
             shot_cooldown: 0.0,
             last_credits: 0,
             stall_timer: 0.0,
+            system_dry: false,
+            jump_for: 0.0,
+            jump_seen: false,
+            warping: false,
+            warp_for: 0.0,
+            warp_seen: false,
             kills: 0,
             step: 0,
             beat: 0.0,
@@ -372,6 +424,20 @@ struct World1<'w, 's> {
     wrecks: Query<'w, 's, (Entity, &'static Transform, &'static Wreck), Without<Ship>>,
     pois: Query<'w, 's, (&'static Transform, &'static SpacePoi), Without<Ship>>,
     eva: Query<'w, 's, (), With<EvaSalvaging>>,
+    dock_menu: Query<'w, 's, &'static DockingMenuSelection, With<DockingOverlay>>,
+}
+
+/// Both drives, bundled: the G-key local dash and the V-key interstellar
+/// jump. Grouped into one SystemParam so director_brain stays under Bevy's
+/// 16-parameter ceiling.
+#[derive(SystemParam)]
+struct Warp1<'w, 's> {
+    local_target: ResMut<'w, PendingWarpTarget>,
+    local_charging: Query<'w, 's, (), With<MapWarpCharging>>,
+    galaxy_target: ResMut<'w, PendingGalaxyWarpTarget>,
+    galaxy_charging: Query<'w, 's, (), With<WarpCharging>>,
+    galaxy_map: Res<'w, GalaxyMap>,
+    streaming: Res<'w, SystemStreamingManager>,
 }
 
 fn director_brain(
@@ -387,6 +453,7 @@ fn director_brain(
     stations: Res<SystemStations>,
     selection: Res<TargetSelection>,
     build_state: Res<State<BuildState>>,
+    mut warp: Warp1,
     w: World1,
 ) {
     if matches!(d.phase, Phase::Done | Phase::Aborted) {
@@ -460,12 +527,41 @@ fn director_brain(
         if d.eva_hold > 150.0 && d.beat > 1.5 {
             d.beat = 0.0;
             d.eva_hold = 0.0;
-            d.log("salvage", "detail out too long — recalling");
+            d.log("salvage", "detail out too long - recalling");
             d.tap(KeyCode::KeyF);
         }
         return;
     }
     d.eva_hold = 0.0;
+
+    // ---- mid-jump ---------------------------------------------------------
+    // A charging drive owns the ship. Hold G and touch nothing else: steering
+    // is fine, but any stray release cancels the charge and wastes the spin-up.
+    if d.warping {
+        let charge_up = !warp.local_charging.is_empty();
+        if charge_up {
+            d.warp_seen = true;
+        }
+
+        if !flying {
+            // Docked or paused mid-charge — the jump is moot.
+            d.warping = false;
+            d.warp_seen = false;
+        } else if d.warp_seen && !charge_up {
+            d.warping = false;
+            d.warp_seen = false;
+            d.log("warp", "arrived");
+        } else if d.warp_for > WARP_GIVE_UP && !d.warp_seen {
+            // G never took. Don't keep holding a key the game is ignoring.
+            d.warping = false;
+            warp.local_target.0 = None;
+            d.log("warp", "drive refused the jump - burning there instead");
+        } else {
+            d.warp_for += d.dt;
+            d.hold(KeyCode::KeyG);
+            return;
+        }
+    }
 
     match *state.get() {
         GameState::Paused => {
@@ -512,7 +608,7 @@ fn director_brain(
                     // ([;]) and get on with the game rather than burning the
                     // whole deadline on the tutorial card.
                     if d.phase_elapsed > 240.0 {
-                        let msg = format!("stuck on {:?} for 240s — dismissing training", step);
+                        let msg = format!("stuck on {:?} for 240s - dismissing training", step);
                         d.log("tutorial", &msg);
                         d.tap(KeyCode::Semicolon);
                     } else {
@@ -539,6 +635,40 @@ fn director_brain(
                 d.step = 2;
             } else if d.step == 2 && d.phase_elapsed > 5.5 {
                 d.go(Phase::Board);
+            }
+        }
+
+        Phase::Trade => {
+            if !at_station {
+                d.go(Phase::Hunt);
+                return;
+            }
+            // What a player actually does on docking, in the order that makes
+            // sense: empty the hold FIRST so there are credits to pay for the
+            // rest, then patch the ship up. Indices are rows in
+            // get_docking_services: 5 Sell Cargo, 0 Repair Hull, 2 Refuel,
+            // 3 Rearm Weapons, 6 Repair Modules. Entering a row that isn't
+            // applicable just prints a notice, so this is safe to run blind.
+            const ROUTINE: [usize; 5] = [5, 0, 2, 3, 6];
+
+            if d.step as usize >= ROUTINE.len() {
+                d.go(Phase::Board);
+                return;
+            }
+            let Ok(sel) = w.dock_menu.single() else {
+                // Overlay hasn't spawned yet - wait a frame.
+                return;
+            };
+            if d.beat <= 0.35 {
+                return;
+            }
+            d.beat = 0.0;
+            let want = ROUTINE[d.step as usize];
+            if sel.0 != want {
+                d.tap(KeyCode::ArrowDown);
+            } else {
+                d.tap(KeyCode::Enter);
+                d.step += 1;
             }
         }
 
@@ -582,7 +712,12 @@ fn director_brain(
         Phase::Launch => {
             if flying {
                 d.log("launch", "in open space");
-                d.go(Phase::Hunt);
+                // A system we already swept is not worth sweeping twice.
+                if d.system_dry {
+                    d.go(Phase::Jump);
+                } else {
+                    d.go(Phase::Hunt);
+                }
             } else if at_station && d.beat > 0.8 {
                 d.beat = 0.0;
                 // handle_menu_input refuses Enter while build mode, the module
@@ -600,7 +735,7 @@ fn director_brain(
         Phase::Hunt => {
             if !flying {
                 if at_station {
-                    d.go(Phase::Board);
+                    d.go(Phase::Trade);
                 }
                 return;
             }
@@ -641,8 +776,8 @@ fn director_brain(
                 }
                 engage(&mut d, pos, vel, tp, dist);
             } else if d.strip_cooldown <= 0.0
-                && (salvageable(&w, &d, pos).is_some_and(|(dist, _, _)| dist < 9000.0)
-                    || loot_nearby(&w, pos).is_some_and(|(dist, _)| dist < 9000.0))
+                && (salvageable(&w, &d, pos).is_some_and(|(dist, _, _)| dist < DIVERT_RANGE)
+                    || loot_nearby(&w, pos).is_some_and(|(dist, _)| dist < DIVERT_RANGE))
             {
                 d.go(Phase::Strip);
             } else {
@@ -652,11 +787,35 @@ fn director_brain(
                     d.beat = 0.0;
                     d.tap(KeyCode::KeyZ);
                 }
-                let heading = Vec2::from_angle(d.run_elapsed * 0.05);
-                d.aim = Some(heading);
-                d.hold(KeyCode::KeyW);
-                if d.phase_elapsed > 180.0 {
-                    d.log("hunt", "no contacts in 3min — going home to re-board");
+                // Do NOT strike out on a bearing. Content clusters around
+                // the station and the system's POIs, so burning off into open
+                // space on an arbitrary heading is the one search pattern
+                // guaranteed to find nothing - and it looked exactly as daft
+                // as it sounds: a dead-straight line into the void the moment
+                // the local board was clear.
+                //
+                // Not a warp either: a dash needs a destination. Gating one on
+                // phase_elapsed chained 49 jumps, threw the ship 300k units out
+                // and drank the whole tank without finding a thing.
+                match nearest_station(&stations, pos) {
+                    // Drift back toward populated space while we scan.
+                    Some(sp) if pos.distance(sp) > DOCK_RANGE * 2.5 => {
+                        let back = pos.distance(sp);
+                        fly_to(&mut d, pos, sp, back, DOCK_RANGE * 2.0);
+                    }
+                    // Already in the neighbourhood: hold still and listen.
+                    _ => {
+                        if vel.length() > 40.0 {
+                            d.hold(KeyCode::ShiftLeft);
+                        }
+                    }
+                }
+                if d.phase_elapsed > SWEEP_SECONDS {
+                    d.system_dry = true;
+                    let msg = format!("nothing in {:.0}s - this system is stripped", SWEEP_SECONDS);
+                    d.log("hunt", &msg);
+                    // Home first: sell the hold and turn in what we can before
+                    // leaving the only station we know in this system.
                     d.go(Phase::Home);
                 }
             }
@@ -664,7 +823,7 @@ fn director_brain(
 
         Phase::Strip => {
             if !flying {
-                d.go(Phase::Board);
+                d.go(Phase::Trade);
                 return;
             }
             let Ok((tf, vel_c)) = w.ships.single() else { return };
@@ -687,13 +846,20 @@ fn director_brain(
             let Some((dist, wp, wreck_entity)) = salvageable(&w, &d, pos) else {
                 // No wreck. Chase a lootable POI if one is close, else hunt.
                 match loot_nearby(&w, pos) {
-                    Some((d2, p2)) if d2 < 8000.0 => {
+                    Some((d2, p2)) if d2 < DIVERT_RANGE => {
                         fly_to(&mut d, pos, p2, d2, INTERACT_RANGE * 0.7)
                     }
                     _ => d.go(Phase::Hunt),
                 }
                 return;
             };
+
+            // Long haul to the wreck: jump most of it. The dash drops us
+            // WARP_ARRIVAL_BUFFER short, still well outside the hold, so the
+            // approach below picks up normally on arrival.
+            if !d.detail_sent && try_warp(&mut d, &mut warp.local_target, &fuel, wp, dist) {
+                return;
+            }
 
             if !d.detail_sent {
                 let vel = vel_c.0;
@@ -724,7 +890,7 @@ fn director_brain(
                     // send us straight back to it.
                     d.spent_wrecks.insert(wreck_entity);
                     d.strip_cooldown = 8.0;
-                    d.log("salvage", "no detail launched — writing this wreck off");
+                    d.log("salvage", "no detail launched - writing this wreck off");
                     d.go(Phase::Hunt);
                     return;
                 }
@@ -740,8 +906,8 @@ fn director_brain(
 
         Phase::Home => {
             if at_station {
-                d.log("dock", "docked — turning in");
-                d.go(Phase::Board);
+                d.log("dock", "docked - working the services");
+                d.go(Phase::Trade);
                 return;
             }
             if !flying {
@@ -750,11 +916,87 @@ fn director_brain(
             let Ok((tf, _vel)) = w.ships.single() else { return };
             let pos = tf.translation.truncate();
 
+            // The run home is the longest trip in the loop — jump it rather
+            // than burning across the system a second time.
+            if let Some(sp) = nearest_station(&stations, pos) {
+                if try_warp(&mut d, &mut warp.local_target, &fuel, sp, pos.distance(sp)) {
+                    return;
+                }
+            }
+
             if !head_for_dock(&mut d, &stations, pos, !w.eva.is_empty()) {
                 // No station loaded here — this is where an interstellar hop
                 // would go once warp routing is wired in.
                 d.log("home", "no station in this system");
                 d.go(Phase::Hunt);
+            }
+        }
+
+        Phase::Jump => {
+            if !flying {
+                // Docked mid-sequence; get back out and try again.
+                d.go(Phase::Launch);
+                return;
+            }
+
+            let charge_up = !warp.galaxy_charging.is_empty();
+            if charge_up {
+                d.jump_seen = true;
+                d.jump_for += d.dt;
+                return; // V starts the charge and it runs on its own.
+            }
+            if d.jump_seen {
+                d.log("jump", "arrived in a new system");
+                d.system_dry = false;
+                d.jump_seen = false;
+                d.jump_for = 0.0;
+                d.go(Phase::Hunt);
+                return;
+            }
+
+            d.jump_for += d.dt;
+            if d.jump_for > 12.0 {
+                // The drive never took. Don't strand the run here.
+                d.log("jump", "no jump available - working this system anyway");
+                d.system_dry = false;
+                d.jump_for = 0.0;
+                d.go(Phase::Hunt);
+                return;
+            }
+
+            // Pick the nearest system that isn't this one. Targeting by id
+            // doesn't need it discovered first - that's the same thing the
+            // galaxy map's click-anywhere does, just without the clicking.
+            if warp.galaxy_target.0.is_none() {
+                let here = warp.streaming.current_galaxy_pos;
+                let nearest = warp
+                    .galaxy_map
+                    .systems
+                    .iter()
+                    .filter(|s| s.galaxy_pos.distance(here) > 1.0)
+                    .min_by(|a, b| {
+                        a.galaxy_pos
+                            .distance(here)
+                            .total_cmp(&b.galaxy_pos.distance(here))
+                    });
+                match nearest {
+                    Some(sys) => {
+                        let msg = format!("targeting {} to jump", sys.name);
+                        warp.galaxy_target.0 = Some(GalaxyWarpTarget::System(sys.id));
+                        d.log("jump", &msg);
+                    }
+                    None => {
+                        d.log("jump", "nowhere to jump to - staying put");
+                        d.system_dry = false;
+                        d.go(Phase::Hunt);
+                        return;
+                    }
+                }
+            }
+
+            if d.beat > 1.0 {
+                d.beat = 0.0;
+                d.tap(KeyCode::KeyV);
             }
         }
 
@@ -779,6 +1021,35 @@ fn director_brain(
 }
 
 /// Point at `tp` and manage throttle so we close to `hold` and sit there.
+/// Cover a long haul with the warp drive instead of the main engine. Sets the
+/// destination the way a map click does, then leaves `warping` set so the brain
+/// holds G until the drive fires. Returns true if a jump was started, in which
+/// case the caller must yield the frame — the charge owns the ship now.
+fn try_warp(
+    d: &mut Director,
+    warp_target: &mut PendingWarpTarget,
+    fuel: &FuelState,
+    tp: Vec2,
+    dist: f32,
+) -> bool {
+    if d.warping || dist < WARP_MIN_DISTANCE {
+        return false;
+    }
+    let jump = dist - WARP_ARRIVAL_BUFFER;
+    let cost = jump / 1000.0;
+    // Never spend the tank down to where we can't fly home afterwards.
+    if fuel.current_fuel < cost + WARP_FUEL_RESERVE {
+        return false;
+    }
+    warp_target.0 = Some(tp);
+    d.warping = true;
+    d.warp_for = 0.0;
+    d.warp_seen = false;
+    let msg = format!("dashing {:.0} units for {:.0} fuel", jump, cost);
+    d.log("warp", &msg);
+    true
+}
+
 fn fly_to(d: &mut Director, pos: Vec2, tp: Vec2, dist: f32, hold: f32) {
     let delta = tp - pos;
     if delta.length_squared() > 1.0 {
@@ -1069,7 +1340,7 @@ fn drive_tutorial(
                 if d.strip_wait < 5.0 {
                     return;
                 }
-                d.log("salvage", "training dispatch did not take — retrying");
+                d.log("salvage", "training dispatch did not take - retrying");
                 d.detail_sent = false;
                 d.strip_wait = 0.0;
             }
@@ -1287,7 +1558,7 @@ fn director_watch(
             d.shot_cooldown = 2.0;
         } else if d.shot_pending {
             d.shot_pending = false;
-            d.log("capture", "gave up on a shot — window occluded too long");
+            d.log("capture", "gave up on a shot - window occluded too long");
         }
     }
 
@@ -1296,7 +1567,7 @@ fn director_watch(
             d.shot_pending = false;
             if d.shots == MAX_SHOTS {
                 d.shots += 1;
-                d.log("capture", "frame cap reached — no more screenshots this run");
+                d.log("capture", "frame cap reached - no more screenshots this run");
             }
         }
         return;
