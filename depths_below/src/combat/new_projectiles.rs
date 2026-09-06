@@ -146,6 +146,14 @@ pub struct MissileProjectile {
     /// it finds the hull to test. `None` for the plasma and EMP rounds that
     /// borrow this component, which keep the ordinary pass-through.
     pub owner_ship: Option<Entity>,
+    /// Ship-local cell of the tube it left.
+    ///
+    /// Identified by CELL and not by entity: `update_ship_grids` writes hull
+    /// after modules, so a launcher sitting on a hull tile — which is all of
+    /// them — resolves to the hull segment in the grid, never to the weapon.
+    /// Comparing entities meant a missile treated its own launcher's cell as
+    /// solid hull and detonated the instant it spawned.
+    pub launch_cell: IVec2,
 }
 
 impl Default for MissileProjectile {
@@ -168,6 +176,7 @@ impl Default for MissileProjectile {
             terminal_range: 300.0,
             prev_pos: Vec2::ZERO,
             owner_ship: None,
+            launch_cell: IVec2::MAX,
         }
     }
 }

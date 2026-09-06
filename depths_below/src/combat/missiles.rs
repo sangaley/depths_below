@@ -342,6 +342,7 @@ pub fn fire_missiles_system(
                     terminal_range: TERMINAL_RANGE,
                     prev_pos: weapon_pos,
                     owner_ship: Some(player_ship),
+                    launch_cell: module.grid_position,
                     ..default()
                 },
                 MissileTrail::default(),
@@ -670,7 +671,7 @@ pub fn check_missile_hits(
                 // Not the tube it is leaving, and not its own plating: one
                 // course of armour is a blow-out panel, exactly as it is for
                 // the build-mode silo check.
-                let own_tube = hit == missile.owner;
+                let own_tube = cell == missile.launch_cell || hit == missile.owner;
                 let panel = ai_module_query
                     .get(hit)
                     .is_ok_and(|(m, _)| crate::building::is_blowout_panel(m.module_type));
