@@ -42,6 +42,15 @@ pub struct EffectTextures {
     /// Directional gun flash, authored pointing along +X like every other
     /// rotated sprite in the project.
     pub muzzle: Handle<Image>,
+    /// A spark: bright head, tapering tail, authored along +X. Anisotropic on
+    /// purpose -- the radial puff stretched onto a long thin quad gives a
+    /// symmetric smear with no sense of which way the spark is going, and for
+    /// a ricochet that direction is the entire message.
+    pub spark: Handle<Image>,
+    /// An annulus for the blast's shock ring. The fireball texture is a filled
+    /// ball, so it cannot serve here: over the ring layer it just draws a
+    /// second, fainter fireball inside the first.
+    pub ring: Handle<Image>,
 }
 
 impl EffectTextures {
@@ -97,5 +106,7 @@ pub fn load_effect_textures(mut commands: Commands, assets: Res<AssetServer>) {
             assets.load("sprites/effects/flame_c.png"),
         ],
         muzzle: assets.load("sprites/effects/muzzle_flash.png"),
+        spark: assets.load("sprites/effects/spark_streak.png"),
+        ring: assets.load("sprites/effects/shock_ring.png"),
     });
 }

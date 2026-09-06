@@ -279,6 +279,7 @@ pub fn ai_ship_death_system(
 /// duration), so a wreck never burns to literally nothing unless it was
 /// already ablaze everywhere.
 pub fn wreck_fire_consumes_loot(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     time: Res<Time>,
     mut commands: Commands,
     mut wreck_query: Query<(Entity, &mut Wreck, &mut AiShipWreck, &Children)>,
@@ -301,15 +302,34 @@ pub fn wreck_fire_consumes_loot(
         wreck.loot_remaining = wreck.loot_remaining.saturating_sub(1);
         ai_wreck.loot_remaining = ai_wreck.loot_remaining.saturating_sub(1);
 
-        // Smoke puff over a random burning block so the loss reads visually
+        // Smoke puff over a random burning block so the loss reads visually.
+        //
+        // Was a flat translucent square that appeared and vanished. A wreck
+        // burning off its cargo should look like it is still burning a second
+        // later, so this drifts and lingers instead.
         let smoke_at = burning_blocks[rng.gen_range(0..burning_blocks.len())];
         if let Ok(gt) = block_pos_query.get(smoke_at) {
-            crate::combat::spawn_hit_effect(
-                &mut commands,
-                gt.translation().truncate(),
-                Color::srgba(0.4, 0.38, 0.35, 0.6),
-                40.0,
-            );
+            let at = gt.translation().truncate();
+            for _ in 0..2 {
+                let drift = Vec2::from_angle(rng.gen_range(0.0..std::f32::consts::TAU))
+                    * rng.gen_range(4.0..16.0);
+                let grey = rng.gen_range(0.26..0.40);
+                commands.spawn((
+                    Sprite {
+                        image: fx.puff(),
+                        color: Color::srgba(grey, grey * 0.95, grey * 0.9, 0.34),
+                        custom_size: Some(Vec2::splat(rng.gen_range(26.0..46.0))),
+                        ..default()
+                    },
+                    Transform::from_xyz(at.x, at.y, 0.59),
+                    crate::vfx::particles::Particle::wisp(
+                        drift,
+                        rng.gen_range(1.6..2.8),
+                        0.34,
+                        false,
+                    ),
+                ));
+            }
         }
     }
 }

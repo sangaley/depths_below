@@ -55,6 +55,8 @@ impl Particle {
 /// Spawn engine exhaust particles behind active engines when thrusting
 pub fn spawn_engine_particles(
     time: Res<Time>,
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
+
     engine_query: Query<(&Engine, &Module, &GlobalTransform), Without<DestroyedModule>>,
     ship_physics: Query<&ShipPhysics, With<Ship>>,
     mut commands: Commands,
@@ -87,7 +89,10 @@ pub fn spawn_engine_particles(
             );
             let vel = (exhaust_dir + spread).normalize_or_zero() * rng.gen_range(80.0..200.0);
             let lifetime = rng.gen_range(0.2..0.5);
-            let size = rng.gen_range(3.0..8.0);
+            // Up from 3-8: at 3 world units a particle is under two screen
+            // pixels, which is why the old exhaust read as a sparse dribble of
+            // dots rather than a plume.
+            let size = rng.gen_range(9.0..20.0);
 
             // Color: blue-white core fading to orange
             let heat = rng.gen_range(0.5..1.0);
@@ -100,11 +105,14 @@ pub fn spawn_engine_particles(
 
             commands.spawn((
                 (Sprite {
+                        // Hot near the nozzle, smoke as it cools -- the same
+                        // two-part read the missile plume has.
+                        image: if heat > 0.72 { fx.flame() } else { fx.puff() },
                         color,
                         custom_size: Some(Vec2::splat(size)),
                         ..default()
                     }, Transform::from_xyz(pos.x, pos.y, 0.5)),
-                Particle::wisp(vel, lifetime, 0.8, true),
+                Particle::wisp(vel, lifetime, 0.55, true),
             ));
         }
     }
@@ -266,5 +274,142 @@ pub fn update_particles(
 
         // Slow down over time (drag-like for particles only — visual, not physics)
         particle.velocity *= 0.98;
+    }
+}
+
+// ============================================================================
+// TRANSIT FLASHES
+//
+// Warp and docking were the two loudest events in the game with no visual at
+// all. A warp jump set the ship's translation and zeroed its velocity; a dock
+// changed GameState. Both reported themselves entirely through notification
+// text, so the most dramatic thing you can do -- crossing a star system --
+// looked like nothing happening.
+// ============================================================================
+
+/// An expanding ring with a bright core: something arrived, or left.
+///
+/// Deliberately quieter than a detonation. This is a drive event, not damage,
+/// so it is one clean ring rather than a fireball plus spray plus smoke, and
+/// the alpha is low enough to read as light rather than as an explosion.
+pub fn spawn_warp_flash(
+    commands: &mut Commands,
+    fx: &crate::vfx::effect_textures::EffectTextures,
+    position: Vec2,
+    scale: f32,
+    color: Color,
+) {
+    let c = color.to_srgba();
+    let pale = Color::srgba(
+        c.red + (1.0 - c.red) * 0.65,
+        c.green + (1.0 - c.green) * 0.65,
+        c.blue + (1.0 - c.blue) * 0.65,
+        0.85,
+    );
+
+    // The ring: fast, wide, gone quickly.
+    commands.spawn((
+        Sprite {
+            image: fx.ring.clone(),
+            color: pale,
+            custom_size: Some(Vec2::ONE),
+            ..default()
+        },
+        Transform::from_xyz(position.x, position.y, 0.7),
+        Blast {
+            elapsed: 0.0,
+            duration: 0.55,
+            from: scale * 0.15,
+            to: scale * 2.6,
+            hot: pale,
+            cool: Color::srgba(c.red, c.green, c.blue, 0.0),
+        },
+    ));
+
+    // The core: a soft glow that collapses rather than expands, so the eye is
+    // pulled to the ship's position instead of away from it.
+    commands.spawn((
+        Sprite {
+            image: fx.fireball.clone(),
+            color: pale,
+            custom_size: Some(Vec2::ONE),
+            ..default()
+        },
+        Transform::from_xyz(position.x, position.y, 0.71),
+        Blast {
+            elapsed: 0.0,
+            duration: 0.40,
+            from: scale * 1.1,
+            to: scale * 0.25,
+            hot: pale,
+            cool: Color::srgba(c.red, c.green, c.blue, 0.0),
+        },
+    ));
+
+    // A few streaks flung outward, so the ring reads as displacing something
+    // rather than as a decal painted on the void.
+    for i in 0..10 {
+        let a = (i as f32 / 10.0) * std::f32::consts::TAU + rand::random::<f32>() * 0.4;
+        let heading = Vec2::from_angle(a);
+        commands.spawn((
+            Sprite {
+                image: fx.spark.clone(),
+                color: pale,
+                custom_size: Some(Vec2::new(scale * 0.5, scale * 0.12)),
+                ..default()
+            },
+            Transform {
+                translation: position.extend(0.72),
+                rotation: Quat::from_rotation_z(a),
+                ..default()
+            },
+            Particle::new(heading * scale * (2.4 + rand::random::<f32>() * 2.0), 0.3 + rand::random::<f32>() * 0.25),
+        ));
+    }
+}
+
+/// Coming alongside: a slow soft pulse, and cold-gas puffs off the hull.
+///
+/// Much gentler than a warp flash -- docking is a manoeuvre, not an event, and
+/// a bright burst here would read as a collision.
+pub fn spawn_dock_pulse(
+    commands: &mut Commands,
+    fx: &crate::vfx::effect_textures::EffectTextures,
+    position: Vec2,
+    scale: f32,
+) {
+    let pale = Color::srgba(0.72, 0.85, 1.0, 0.42);
+    commands.spawn((
+        Sprite {
+            image: fx.ring.clone(),
+            color: pale,
+            custom_size: Some(Vec2::ONE),
+            ..default()
+        },
+        Transform::from_xyz(position.x, position.y, 0.7),
+        Blast {
+            elapsed: 0.0,
+            duration: 1.1,
+            from: scale * 0.5,
+            to: scale * 1.7,
+            hot: pale,
+            cool: Color::srgba(0.6, 0.8, 1.0, 0.0),
+        },
+    ));
+
+    // Manoeuvring thrusters: pale, slow, short-lived.
+    for _ in 0..8 {
+        let a = rand::random::<f32>() * std::f32::consts::TAU;
+        let heading = Vec2::from_angle(a);
+        commands.spawn((
+            Sprite {
+                image: fx.puff(),
+                color: Color::srgba(0.80, 0.86, 0.95, 0.34),
+                custom_size: Some(Vec2::splat(scale * (0.10 + rand::random::<f32>() * 0.10))),
+                ..default()
+            },
+            Transform::from_xyz(position.x, position.y, 0.6),
+            Particle::wisp(heading * scale * 0.5, 0.7 + rand::random::<f32>() * 0.5, 0.34, false),
+        ));
     }
 }

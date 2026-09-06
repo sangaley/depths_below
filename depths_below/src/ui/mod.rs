@@ -3248,6 +3248,7 @@ fn warp_dash_input(
 /// spend the fuel locked in at charge-start, clear the destination.
 fn execute_warp_dash(
     mut commands: Commands,
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut ship_query: Query<(Entity, &mut Transform, &mut Velocity, &MapWarpCharging), With<Ship>>,
     mut fuel_state: ResMut<FuelState>,
     mut pending: ResMut<PendingWarpTarget>,
@@ -3258,9 +3259,22 @@ fn execute_warp_dash(
         return;
     }
 
+    // Both ends of a dash are inside the same loaded system, so unlike an
+    // interstellar jump the departure flash is genuinely visible -- it marks
+    // where you left, which is the only cue that you moved rather than that
+    // the camera cut.
+    let from = transform.translation.truncate();
+    crate::vfx::particles::spawn_warp_flash(
+        &mut commands, &fx, from, 150.0, Color::srgb(0.45, 0.70, 1.0),
+    );
+
     transform.translation.x = charging.target_pos.x;
     transform.translation.y = charging.target_pos.y;
     velocity.0 = Vec2::ZERO;
+
+    crate::vfx::particles::spawn_warp_flash(
+        &mut commands, &fx, charging.target_pos, 150.0, Color::srgb(0.55, 0.78, 1.0),
+    );
     fuel_state.current_fuel = (fuel_state.current_fuel - charging.fuel_cost).max(0.0);
     pending.0 = None;
 

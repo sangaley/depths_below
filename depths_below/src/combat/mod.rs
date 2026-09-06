@@ -179,10 +179,9 @@ pub(crate) fn spawn_explosion(
     // Fireball: near-white core cooling to the event's own colour.
     core(commands, Some(fx.fireball.clone()), radius * 0.5, radius * 2.2, 0.42, 0.62,
          hot_of(0.82, 1.0), cool_of(0.55, 0.7));
-    // Shock ring stays an untextured quad on purpose: the fireball texture is
-    // a filled ball, and stretching a ball over the ring layer just draws a
-    // second, fainter fireball instead of a ring around the first.
-    core(commands, None, radius * 0.8, radius * 3.4, 0.30, 0.61,
+    // Shock ring: an actual annulus, so it reads as a front travelling
+    // outward rather than as a second fireball behind the first.
+    core(commands, Some(fx.ring.clone()), radius * 0.8, radius * 3.4, 0.30, 0.61,
          hot_of(0.45, 0.55), cool_of(0.5, 0.0));
 
     // Radial spray. Unlike an impact fan this is symmetric: a detonation has
@@ -196,8 +195,11 @@ pub(crate) fn spawn_explosion(
         let hot = i % 3 == 0;
         commands.spawn((
             Sprite {
+                image: fx.spark.clone(),
                 color: if hot { hot_of(0.9, 1.0) } else { hot_of(0.25, 1.0) },
-                custom_size: Some(Vec2::new(if hot { 9.0 } else { 6.0 }, 2.4)),
+                // Longer than the solid quad: the texture's tail is mostly
+                // low alpha, so its visible length is well under its footprint.
+                custom_size: Some(Vec2::new(if hot { 16.0 } else { 11.0 }, 3.6)),
                 ..default()
             },
             Transform {
@@ -245,6 +247,7 @@ pub(crate) fn spawn_explosion(
 /// streak, a near-square one that barely turned throws a short hot burst.
 pub(crate) fn spawn_impact_sparks(
     commands: &mut Commands,
+    fx: &crate::vfx::effect_textures::EffectTextures,
     position: Vec2,
     dir: Vec2,
     energy: f32,
@@ -266,12 +269,13 @@ pub(crate) fn spawn_impact_sparks(
         let hot = i % 3 == 0;
         commands.spawn((
             Sprite {
+                image: fx.spark.clone(),
                 color: if hot {
                     Color::srgb(1.0, 0.97, 0.86)
                 } else {
                     Color::srgb(1.0, 0.68, 0.24)
                 },
-                custom_size: Some(Vec2::new(if hot { 6.0 } else { 4.0 }, 1.8)),
+                custom_size: Some(Vec2::new(if hot { 11.0 } else { 8.0 }, 2.8)),
                 ..default()
             },
             Transform {

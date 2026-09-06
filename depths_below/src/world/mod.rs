@@ -202,6 +202,8 @@ fn check_poi_discovery(
 
 /// Check for docking proximity to settlements
 fn check_docking_proximity(
+    mut commands: Commands,
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut press: ResMut<crate::resources::InteractPress>,
     ship_query: Query<&GlobalTransform, With<Ship>>,
     poi_query: Query<(Entity, &GlobalTransform, &PointOfInterest)>,
@@ -227,6 +229,7 @@ fn check_docking_proximity(
             if !press.claim() {
                 return;
             }
+            crate::vfx::particles::spawn_dock_pulse(&mut commands, &fx, ship_pos, 180.0);
             docking_events.write(DockingStarted { target: entity });
             notifications.write(ShowNotification {
                 message: "Docking at settlement...".into(),

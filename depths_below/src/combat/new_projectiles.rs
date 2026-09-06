@@ -740,7 +740,7 @@ pub fn check_projectile_hits(
                         spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.6, 0.2), 12.0);
                         // Biting hits spray back along the round's own path —
                         // debris coming out of the hole, not off it.
-                        spawn_impact_sparks(&mut commands, hit_pos, -dir_local_world, 0.2, 5);
+                        spawn_impact_sparks(&mut commands, &fx, hit_pos, -dir_local_world, 0.2, 5);
                         spawn_floating_damage(&mut commands, hit_pos, impact.to_block, Color::srgb(1.0, 0.8, 0.3));
                         (step.entity, hit_pos)
                     })
@@ -768,7 +768,7 @@ pub fn check_projectile_hits(
                         hull.health = (hull.health - impact.to_block).max(0.0);
                         let hit_pos = gt.translation().truncate();
                         spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.5, 0.2), 16.0);
-                        spawn_impact_sparks(&mut commands, hit_pos, -dir_local_world, 0.2, 6);
+                        spawn_impact_sparks(&mut commands, &fx, hit_pos, -dir_local_world, 0.2, 6);
                         spawn_floating_damage(&mut commands, hit_pos, impact.to_block, Color::srgb(1.0, 0.3, 0.3));
                         (step.entity, hit_pos)
                     });
@@ -795,7 +795,8 @@ pub fn check_projectile_hits(
                 let spall = crate::combat::ammo_types::spall(proj.ammo);
                 if penetrated || spall.through_solid {
                     spall_blocks(
-                        &mut commands, grid, &mut ai_module_query, &mut ai_hull_query,
+                        &mut commands,
+                        &fx, grid, &mut ai_module_query, &mut ai_hull_query,
                         spall, step.cell, dir_local, proj.damage, hit_entity,
                         hit_pos, dir_local_world,
                     );
@@ -849,7 +850,7 @@ pub fn check_projectile_hits(
                         // small pale flash gave no way to see that it had, so
                         // a deflection looked like a shot that simply failed.
                         let graze = 1.0 - obl.cos_impact;
-                        spawn_impact_sparks(&mut commands, hit_pos, out, graze, 9 + (graze * 7.0) as usize);
+                        spawn_impact_sparks(&mut commands, &fx, hit_pos, out, graze, 9 + (graze * 7.0) as usize);
                         // ...and the round itself goes hot, so it can be
                         // followed off the plate instead of vanishing into the
                         // background as a dim shape travelling somewhere new.
@@ -1118,6 +1119,7 @@ pub fn caliber_scale(module_type: ModuleType) -> f32 {
 /// respects the ship's actual layout rather than a distance check.
 fn spall_blocks(
     commands: &mut Commands,
+    fx: &crate::vfx::effect_textures::EffectTextures,
     grid: &crate::building::ShipGrid,
     module_query: &mut Query<(&mut Module, &GlobalTransform), Without<DestroyedModule>>,
     hull_query: &mut Query<(&mut HullSegment, &GlobalTransform), Without<crate::components::HullDestroyed>>,
@@ -1162,7 +1164,7 @@ fn spall_blocks(
     }
     // Sparks blowing INWARD, so a breach reads differently from a bounce
     // (which sprays back out along the round's new heading).
-    spawn_impact_sparks(commands, world_at, world_dir, 0.5, 4 + profile.fragments as usize);
+    spawn_impact_sparks(commands, fx, world_at, world_dir, 0.5, 4 + profile.fragments as usize);
 }
 
 fn splash_blocks(

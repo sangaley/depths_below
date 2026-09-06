@@ -455,7 +455,7 @@ pub fn spawn_missile_trails(
         if !trail.ignited {
             trail.ignited = true;
             spawn_muzzle_flash(&mut commands, &fx, nozzle, -heading, 30.0, Color::srgb(1.0, 0.86, 0.55));
-            spawn_impact_sparks(&mut commands, nozzle, -heading, 0.45, 10);
+            spawn_impact_sparks(&mut commands, &fx, nozzle, -heading, 0.45, 10);
         }
 
         // === FLAME: only while the motor is actually burning. ===

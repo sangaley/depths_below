@@ -157,6 +157,7 @@ pub fn warp_input_system(
 /// first and refreshes Warm neighbors around the new position.
 pub fn execute_warp_jump(
     mut commands: Commands,
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut jump_events: MessageReader<WarpJumpStarted>,
     mut galaxy: ResMut<GalaxyState>,
     mut galaxy_map: ResMut<GalaxyMap>,
@@ -286,6 +287,15 @@ pub fn execute_warp_jump(
                 ship_transform.translation.y = arrival.y;
             }
         }
+
+        // Arrival burst. The departure end is in a system that is about to be
+        // unloaded, so only this one is ever actually seen -- the jump itself
+        // is a translation write, and without this the whole manoeuvre reads
+        // as the starfield suddenly being different.
+        let at = ship_transform.translation.truncate();
+        crate::vfx::particles::spawn_warp_flash(
+            &mut commands, &fx, at, 260.0, Color::srgb(0.45, 0.70, 1.0),
+        );
 
         completed_events.write(WarpJumpCompleted { system_id: streaming.loaded_system });
 
