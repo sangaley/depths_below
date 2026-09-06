@@ -38,7 +38,7 @@ use crate::contracts::{ContractState, ContractStatus, MissionBoardOpen};
 use crate::crew::eva_salvage::EvaSalvaging;
 use crate::events::{AiShipDestroyed, NotificationType, ShowNotification};
 use crate::resources::{Currency, FuelState, HullState, InputState, StaffingState};
-use crate::states::GameState;
+use crate::states::{BuildState, GameState};
 use crate::tutorial::{Advance, Tutorial};
 use crate::world::home_base::{SystemStations, DOCK_RANGE};
 
@@ -75,6 +75,10 @@ const SALVAGE_TIMEOUT: f32 = 150.0;
 const STALL_SECONDS: f32 = 240.0;
 /// Minimum gap between screenshots, so a chatty phase can't fill the disk.
 const SHOT_COOLDOWN: f32 = 3.0;
+/// Hard cap on saved frames. At one every few seconds a two-hour run can write
+/// well over a gigabyte of PNGs, and this machine ran itself out of disk mid-
+/// session doing exactly that — which took the compiler down with it.
+const MAX_SHOTS: u32 = 400;
 
 // ============================================================================
 // STATE
@@ -194,6 +198,10 @@ impl Director {
         self.detail_sent = false;
         self.detail_seen = false;
         self.strip_wait = 0.0;
+        // Changing phase IS progress. Carrying the clock across meant the
+        // watchdog fired inside a station phase that legitimately earns
+        // nothing yet, and yanked the director out mid-sequence.
+        self.stall_timer = 0.0;
     }
 }
 
@@ -378,6 +386,7 @@ fn director_brain(
     board_open: Res<MissionBoardOpen>,
     stations: Res<SystemStations>,
     selection: Res<TargetSelection>,
+    build_state: Res<State<BuildState>>,
     w: World1,
 ) {
     if matches!(d.phase, Phase::Done | Phase::Aborted) {
@@ -576,7 +585,15 @@ fn director_brain(
                 d.go(Phase::Hunt);
             } else if at_station && d.beat > 0.8 {
                 d.beat = 0.0;
-                d.tap(KeyCode::Enter);
+                // handle_menu_input refuses Enter while build mode, the module
+                // panel, customization or the board is up. An earlier run left
+                // the shipyard open and then pressed Enter into the void for
+                // the rest of its deadline. Back out first, always.
+                if *build_state.get() != BuildState::Inactive || board_open.0 {
+                    d.tap(KeyCode::Escape);
+                } else {
+                    d.tap(KeyCode::Enter);
+                }
             }
         }
 
@@ -679,15 +696,9 @@ fn director_brain(
             };
 
             if !d.detail_sent {
-                // Close, then STOP, then dispatch once. Sending a detail while
-                // still carrying speed just drags them off the wreck.
-                if dist > SALVAGE_HOLD {
-                    fly_to(&mut d, pos, wp, dist, SALVAGE_HOLD);
-                } else if speed > 60.0 {
-                    d.hold(KeyCode::ShiftLeft);
-                } else {
-                    d.tap(KeyCode::KeyF);
-                    d.detail_sent = true;
+                let vel = vel_c.0;
+                dispatch_salvage(&mut d, &stations, pos, vel, wp, dist);
+                if d.detail_sent {
                     d.strip_wait = 0.0;
                     d.log("salvage", "detail dispatched");
                 }
@@ -756,6 +767,9 @@ fn director_brain(
     }
     if d.stall_timer > STALL_SECONDS {
         d.stall_timer = 0.0;
+        if *build_state.get() != BuildState::Inactive {
+            d.tap(KeyCode::Escape);
+        }
         let msg = format!("no credit movement in {:.0}s during {:?}", STALL_SECONDS, d.phase);
         d.log("stall", &msg);
         d.go(Phase::Home);
@@ -856,6 +870,94 @@ fn head_for_dock(
     true
 }
 
+/// Distance to the nearest station, if this system has any.
+fn station_distance(stations: &SystemStations, pos: Vec2) -> Option<f32> {
+    stations
+        .sites
+        .iter()
+        .map(|s| pos.distance(s.pos))
+        .fold(None, |best: Option<f32>, d| match best {
+            Some(b) if b <= d => best,
+            _ => Some(d),
+        })
+}
+
+/// Where to park to work a wreck, given F means "dock" inside a station's
+/// radius and "send a detail" outside it.
+///
+/// The two share a key with no mutual exclusion (home_base::dock_at_station
+/// and crew::eva_salvage both read KeyF), so the parking spot decides which
+/// one a press actually performs. Holding the usual 1300 off a wreck near
+/// Haven put the ship 1470 from the station — it docked instead of salvaging
+/// and the run wedged. Closing right up to the wreck settles it.
+fn salvage_hold_distance(stations: &SystemStations, wreck: Vec2) -> f32 {
+    match station_distance(stations, wreck) {
+        // Wreck itself sits well clear of any station: normal standoff.
+        Some(d) if d > DOCK_RANGE * 1.6 => SALVAGE_HOLD,
+        // Near a station — get in close enough that our own position is
+        // outside the dock radius even though the wreck is near it.
+        Some(_) => 300.0,
+        None => SALVAGE_HOLD,
+    }
+}
+
+/// Position of the nearest station, if any.
+fn nearest_station(stations: &SystemStations, pos: Vec2) -> Option<Vec2> {
+    stations
+        .sites
+        .iter()
+        .map(|s| s.pos)
+        .fold(None, |best: Option<Vec2>, p| match best {
+            Some(b) if pos.distance(b) <= pos.distance(p) => best,
+            _ => Some(p),
+        })
+}
+
+/// Park alongside a wreck and send exactly one detail out.
+///
+/// Momentum is forever here, so "close enough AND slow enough" has to be a
+/// window the ship can actually settle into: an earlier version demanded
+/// dist < 300, overshot it every pass, and burned a third of the fuel tank
+/// circling a wreck it never dispatched to. Close to within half a hold,
+/// brake to a stop, THEN press.
+///
+/// The last guard is the F collision: inside a station's dock radius that key
+/// docks the ship instead of launching anyone, so back away from the station
+/// before pressing rather than pressing and hoping.
+fn dispatch_salvage(
+    d: &mut Director,
+    stations: &SystemStations,
+    pos: Vec2,
+    vel: Vec2,
+    wreck: Vec2,
+    dist: f32,
+) {
+    let hold = salvage_hold_distance(stations, wreck);
+
+    if dist > hold * 1.5 {
+        fly_to(d, pos, wreck, dist, hold);
+        return;
+    }
+    if vel.length() > 60.0 {
+        d.hold(KeyCode::ShiftLeft);
+        return;
+    }
+
+    if station_distance(stations, pos).is_some_and(|sd| sd < DOCK_RANGE * 0.95) {
+        if let Some(site) = nearest_station(stations, pos) {
+            let away = (pos - site).normalize_or_zero();
+            if away != Vec2::ZERO {
+                d.aim = Some(away);
+                d.hold(KeyCode::KeyW);
+            }
+        }
+        return;
+    }
+
+    d.tap(KeyCode::KeyF);
+    d.detail_sent = true;
+}
+
 fn nearest(points: impl Iterator<Item = Vec2>, from: Vec2) -> Option<(f32, Vec2)> {
     points.fold(None, |best: Option<(f32, Vec2)>, p| {
         let dist = from.distance(p);
@@ -943,6 +1045,12 @@ fn drive_tutorial(
         }
         Advance::Salvage => {
             if !flying {
+                // Docked with a salvage lesson outstanding — almost always
+                // because F docked us instead of dispatching. Get back out.
+                if beat_ready {
+                    d.beat = 0.0;
+                    d.tap(KeyCode::Enter);
+                }
                 return;
             }
             let Ok((tf, vel_c)) = w.ships.single() else { return };
@@ -966,13 +1074,8 @@ fn drive_tutorial(
                 d.strip_wait = 0.0;
             }
             if let Some((dist, tp, _)) = salvageable(w, d, pos) {
-                if dist > SALVAGE_HOLD {
-                    fly_to(d, pos, tp, dist, SALVAGE_HOLD);
-                } else if vel_c.0.length() > 60.0 {
-                    d.hold(KeyCode::ShiftLeft);
-                } else {
-                    d.tap(KeyCode::KeyF);
-                    d.detail_sent = true;
+                dispatch_salvage(d, stations, pos, vel_c.0, tp, dist);
+                if d.detail_sent {
                     d.log("salvage", "training detail dispatched");
                 }
             }
@@ -1186,6 +1289,17 @@ fn director_watch(
             d.shot_pending = false;
             d.log("capture", "gave up on a shot — window occluded too long");
         }
+    }
+
+    if d.shots >= MAX_SHOTS {
+        if d.shot_pending || want_shot {
+            d.shot_pending = false;
+            if d.shots == MAX_SHOTS {
+                d.shots += 1;
+                d.log("capture", "frame cap reached — no more screenshots this run");
+            }
+        }
+        return;
     }
 
     if (want_shot || d.shot_pending) && d.shot_cooldown <= 0.0 {
