@@ -226,8 +226,13 @@ fn builtin_starter_design() -> crate::building::blueprint::Blueprint {
         m(ModuleType::RadarArray, 3, 0, Rotation::East),
         m(ModuleType::Floodlight, 4, 0, Rotation::East),
         m(ModuleType::BridgeWing, 5, 1, Rotation::East),
-        mw(ModuleType::HeavyMissile, 7, 1, Rotation::East, 3, 1.0, 1.0, 1.1, None),
-        mw(ModuleType::HeavyMissile, 7, -1, Rotation::East, 3, 1.0, 1.0, 1.1, None),
+        // Dorsal and ventral tubes, not forward-firing ones. The bow taper
+        // carries two courses of belt plating, so an East-facing tube here
+        // fires into its own armour; up and down are the only headings off
+        // this hull that are clear. The seeker turns them onto the target
+        // after the pop, and the pair stays mirror-symmetric.
+        mw(ModuleType::HeavyMissile, 7, 1, Rotation::North, 3, 1.0, 1.0, 1.1, None),
+        mw(ModuleType::HeavyMissile, 7, -1, Rotation::South, 3, 1.0, 1.0, 1.1, None),
     ];
 
     // The player's ship gets the same treatment as every faction hull: plating
@@ -936,6 +941,30 @@ fn insert_companion_components(commands: &mut Commands, entity: Entity, companio
 
 #[cfg(test)]
 mod starter_tests {
+    /// The starter's launchers must have a clear lane out, same as any
+    /// faction ship. Both tubes shipped buried behind two hull cells, which
+    /// under the cook-off rule means the player's own ship detonates a
+    /// warhead in its bow the first time they press fire.
+    #[test]
+    fn starter_launchers_have_a_clear_lane() {
+        let design = builtin_starter_design();
+        let mut blocks: Vec<(IVec2, Option<ModuleType>, Rotation)> = design
+            .hull_cells
+            .iter()
+            .map(|h| (h.grid_pos, None, Rotation::North))
+            .collect();
+        blocks.extend(
+            design.modules.iter().map(|m| (m.grid_pos, Some(m.module_type), m.rotation)),
+        );
+
+        let buried = crate::building::entombed_launchers(&blocks);
+        assert!(
+            buried.is_empty(),
+            "buried launchers: {:?}",
+            buried
+        );
+    }
+
     use super::*;
     use std::collections::HashSet;
 

@@ -283,11 +283,11 @@ fn drowned_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::SmallReactor, grid_pos: IVec2::new(1, 0), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::SmallReactor, grid_pos: IVec2::new(0, -1), rotation: Rotation::North },
         // Random weapons still active
-        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(11, 0), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(9, -4), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(12, 0), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(10, -4), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Gatling, grid_pos: IVec2::new(6, 2), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::Gatling, grid_pos: IVec2::new(7, -4), rotation: Rotation::South },
-        ModulePlacement { module_type: ModuleType::ClusterRocket, grid_pos: IVec2::new(8, 1), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::ClusterRocket, grid_pos: IVec2::new(12, 1), rotation: Rotation::East },
         // Empty quarters (no crew)
         ModulePlacement { module_type: ModuleType::BasicQuarters, grid_pos: IVec2::new(4, 0), rotation: Rotation::North },
         // Old cargo
@@ -300,9 +300,9 @@ fn drowned_layout() -> AiShipLayout {
     let loadouts = vec![
         wl(IVec2::new(6, 2), 0, 1.0, 1.3, 0.85, Some(KineticAmmoType::Incendiary)),
         wl(IVec2::new(7, -4), 0, 1.0, 1.3, 0.85, Some(KineticAmmoType::Incendiary)),
-        wl(IVec2::new(11, 0), 1, 0.9, 1.0, 0.9, None),
-        wl(IVec2::new(9, -4), 1, 0.9, 1.0, 0.9, None),
-        wl(IVec2::new(8, 1), 1, 0.9, 1.0, 0.9, None),
+        wl(IVec2::new(12, 0), 1, 0.9, 1.0, 0.9, None),
+        wl(IVec2::new(10, -4), 1, 0.9, 1.0, 0.9, None),
+        wl(IVec2::new(12, 1), 1, 0.9, 1.0, 0.9, None),
     ];
     modules.extend(plates(crate::building::armour::belt(rows, ModuleType::AngledHullPlate)));
     modules.extend(plates(crate::building::armour::caps(rows, ModuleType::AngledHullPlate, 2)));
@@ -346,7 +346,7 @@ fn pressure_king_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::IonDisruptor, grid_pos: IVec2::new(11, -2), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(12, 0), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(10, 2), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(9, -3), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(9, -3), rotation: Rotation::South },
         // Reinforced interior
         ModulePlacement { module_type: ModuleType::RepairBay, grid_pos: IVec2::new(4, 0), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::AdvancedRepairBay, grid_pos: IVec2::new(5, 0), rotation: Rotation::North },
@@ -462,9 +462,9 @@ fn iron_tide_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(13, 0), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(13, 2), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(13, -3), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(12, 1), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(12, -2), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(11, 4), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(15, 1), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(15, -2), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(11, 4), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::Cannon, grid_pos: IVec2::new(9, 3), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::Cannon, grid_pos: IVec2::new(9, -4), rotation: Rotation::South },
         ModulePlacement { module_type: ModuleType::Gatling, grid_pos: IVec2::new(8, 2), rotation: Rotation::North },
@@ -485,8 +485,8 @@ fn iron_tide_layout() -> AiShipLayout {
         wl(IVec2::new(13, 0), 2, 1.1, 0.8, 1.3, Some(KineticAmmoType::APFSDS)),
         wl(IVec2::new(13, 2), 2, 1.1, 0.8, 1.3, Some(KineticAmmoType::APFSDS)),
         wl(IVec2::new(13, -3), 2, 1.1, 0.8, 1.3, Some(KineticAmmoType::APFSDS)),
-        wl(IVec2::new(12, 1), 3, 1.0, 1.0, 1.1, None),
-        wl(IVec2::new(12, -2), 3, 1.0, 1.0, 1.1, None),
+        wl(IVec2::new(15, 1), 3, 1.0, 1.0, 1.1, None),
+        wl(IVec2::new(15, -2), 3, 1.0, 1.0, 1.1, None),
         wl(IVec2::new(11, 4), 3, 1.0, 1.0, 1.1, None),
     ];
     modules.extend(plates(crate::building::armour::belt(rows, ModuleType::AngledArmorPlate)));
@@ -527,8 +527,8 @@ fn blackwater_layout() -> AiShipLayout {
         // Crew
         ModulePlacement { module_type: ModuleType::BasicQuarters, grid_pos: IVec2::new(5, 0), rotation: Rotation::North },
         // Weapons (precise, not overwhelming, but more of it)
-        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(12, 0), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(12, -1), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(14, 0), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(14, -1), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(11, 2), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Gatling, grid_pos: IVec2::new(8, 1), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::Gatling, grid_pos: IVec2::new(8, -2), rotation: Rotation::South },
@@ -540,8 +540,8 @@ fn blackwater_layout() -> AiShipLayout {
         wl(IVec2::new(8, 1), 0, 1.0, 1.2, 1.0, Some(KineticAmmoType::AP)),
         wl(IVec2::new(8, -2), 0, 1.0, 1.2, 1.0, Some(KineticAmmoType::AP)),
         wl(IVec2::new(11, 2), 1, 1.3, 0.9, 1.2, Some(KineticAmmoType::APFSDS)),
-        wl(IVec2::new(12, 0), 2, 1.0, 1.0, 1.05, None),
-        wl(IVec2::new(12, -1), 2, 1.0, 1.0, 1.05, None),
+        wl(IVec2::new(14, 0), 2, 1.0, 1.0, 1.05, None),
+        wl(IVec2::new(14, -1), 2, 1.0, 1.0, 1.05, None),
         wl(IVec2::new(6, 2), 3, 1.0, 1.0, 1.1, None),
     ];
     modules.extend(plates(crate::building::armour::belt(rows, ModuleType::AngledArmorPlate)));
@@ -571,7 +571,7 @@ fn rust_swarm_layout() -> AiShipLayout {
         // Tiny reactor barely keeping things running
         ModulePlacement { module_type: ModuleType::SmallReactor, grid_pos: IVec2::new(0, 0), rotation: Rotation::North },
         // Two weapons now (mine layer + a scavenged gun - cheap and dirty)
-        ModulePlacement { module_type: ModuleType::ClusterRocket, grid_pos: IVec2::new(5, 0), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::ClusterRocket, grid_pos: IVec2::new(7, 0), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Gatling, grid_pos: IVec2::new(4, 1), rotation: Rotation::North },
         // Scrap cargo
         ModulePlacement { module_type: ModuleType::SmallCargo, grid_pos: IVec2::new(2, 0), rotation: Rotation::North },
@@ -582,7 +582,7 @@ fn rust_swarm_layout() -> AiShipLayout {
     // and gives paper-shield swarmers rare anti-missile utility.
     let loadouts = vec![
         wl(IVec2::new(4, 1), 0, 1.0, 1.5, 0.7, Some(KineticAmmoType::Flak)),
-        wl(IVec2::new(5, 0), 1, 1.0, 1.3, 0.8, None),
+        wl(IVec2::new(7, 0), 1, 1.0, 1.3, 0.8, None),
     ];
     modules.extend(plates(crate::building::armour::belt(rows, ModuleType::AngledHullPlate)));
     // Scrap hull: a couple of salvaged plates bolted on, not a belt. At 34
@@ -646,10 +646,10 @@ fn dreadnought_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(16, 3), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(16, -4), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(15, 5), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(14, 2), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(14, -3), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(13, 4), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(13, -5), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(18, 2), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(18, -3), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(18, 4), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(18, -5), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Cannon, grid_pos: IVec2::new(11, 5), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::Cannon, grid_pos: IVec2::new(11, -6), rotation: Rotation::South },
         ModulePlacement { module_type: ModuleType::Cannon, grid_pos: IVec2::new(9, 6), rotation: Rotation::North },
@@ -685,10 +685,10 @@ fn dreadnought_layout() -> AiShipLayout {
         wl(IVec2::new(16, 3), 2, 1.1, 0.85, 1.25, Some(KineticAmmoType::APFSDS)),
         wl(IVec2::new(16, -4), 2, 1.1, 0.85, 1.25, Some(KineticAmmoType::APFSDS)),
         wl(IVec2::new(15, 5), 2, 1.1, 0.85, 1.25, Some(KineticAmmoType::APFSDS)),
-        wl(IVec2::new(14, 2), 3, 1.0, 1.0, 1.15, None),
-        wl(IVec2::new(14, -3), 3, 1.0, 1.0, 1.15, None),
-        wl(IVec2::new(13, 4), 3, 1.0, 1.0, 1.15, None),
-        wl(IVec2::new(13, -5), 3, 1.0, 1.0, 1.15, None),
+        wl(IVec2::new(18, 2), 3, 1.0, 1.0, 1.15, None),
+        wl(IVec2::new(18, -3), 3, 1.0, 1.0, 1.15, None),
+        wl(IVec2::new(18, 4), 3, 1.0, 1.0, 1.15, None),
+        wl(IVec2::new(18, -5), 3, 1.0, 1.0, 1.15, None),
     ];
     modules.extend(plates(crate::building::armour::belt(rows, ModuleType::AngledArmorPlate)));
     modules.extend(plates(crate::building::armour::caps(rows, ModuleType::AngledArmorPlate, 3)));
@@ -753,10 +753,10 @@ fn void_titan_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(19, -5), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(18, 6), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(18, -7), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(17, 3), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(17, -4), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(16, 5), rotation: Rotation::East },
-        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(16, -6), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(23, 3), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(23, -4), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(23, 5), rotation: Rotation::East },
+        ModulePlacement { module_type: ModuleType::HeavyMissile, grid_pos: IVec2::new(23, -6), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::IonDisruptor, grid_pos: IVec2::new(15, 2), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::IonDisruptor, grid_pos: IVec2::new(15, -3), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::IonDisruptor, grid_pos: IVec2::new(14, 7), rotation: Rotation::North },
@@ -790,10 +790,10 @@ fn void_titan_layout() -> AiShipLayout {
         wl(IVec2::new(20, 1), 2, 1.15, 1.0, 1.35, None),
         wl(IVec2::new(20, -1), 2, 1.15, 1.0, 1.35, None),
         wl(IVec2::new(21, 0), 2, 1.15, 1.0, 1.35, None),
-        wl(IVec2::new(17, 3), 3, 1.0, 1.05, 1.25, None),
-        wl(IVec2::new(17, -4), 3, 1.0, 1.05, 1.25, None),
-        wl(IVec2::new(16, 5), 3, 1.0, 1.05, 1.25, None),
-        wl(IVec2::new(16, -6), 3, 1.0, 1.05, 1.25, None),
+        wl(IVec2::new(23, 3), 3, 1.0, 1.05, 1.25, None),
+        wl(IVec2::new(23, -4), 3, 1.0, 1.05, 1.25, None),
+        wl(IVec2::new(23, 5), 3, 1.0, 1.05, 1.25, None),
+        wl(IVec2::new(23, -6), 3, 1.0, 1.05, 1.25, None),
     ];
     modules.extend(plates(crate::building::armour::belt(rows, ModuleType::AngledArmorPlate)));
     modules.extend(plates(crate::building::armour::caps(rows, ModuleType::AngledArmorPlate, 3)));
@@ -802,6 +802,38 @@ fn void_titan_layout() -> AiShipLayout {
 
 #[cfg(test)]
 mod layout_tests {
+    /// Every launcher on every faction ship must have a clear lane out.
+    ///
+    /// This is the invariant behind the cook-off: a buried tube detonates in
+    /// its own hull, so a ship that ships with one destroys itself the first
+    /// time it fires. Guarding it here means an outline change that walls in
+    /// a silo fails the build instead of the fleet.
+    #[test]
+    fn no_launcher_is_entombed() {
+        let mut failures: Vec<String> = Vec::new();
+
+        for &ship_type in ALL.iter() {
+            let layout = get_layout(ship_type);
+            let mut blocks: Vec<(IVec2, Option<ModuleType>, Rotation)> = layout
+                .hull_cells
+                .iter()
+                .map(|h| (h.grid_pos, None, Rotation::North))
+                .collect();
+            blocks.extend(
+                layout.modules.iter().map(|m| (m.grid_pos, Some(m.module_type), m.rotation)),
+            );
+
+            for (cell, mt, blocker) in crate::building::entombed_launchers(&blocks) {
+                failures.push(format!(
+                    "{ship_type:?}: {mt:?} at ({}, {}) is blocked at ({}, {})",
+                    cell.x, cell.y, blocker.x, blocker.y
+                ));
+            }
+        }
+
+        assert!(failures.is_empty(), "buried launchers:\n{}", failures.join("\n"));
+    }
+
     use super::*;
     use std::collections::HashSet;
 

@@ -260,7 +260,7 @@ pub fn update_build_ghost(
     registry: Res<ModuleRegistry>,
     mut ghost_query: Query<(&mut Transform, &mut Sprite, &mut Visibility), (With<BuildGhost>, Without<BuildValidationText>, Without<BuildGhostCell>)>,
     mut cell_query: Query<(&BuildGhostCell, &mut Transform, &mut Sprite, &mut Visibility), (Without<BuildGhost>, Without<BuildValidationText>)>,
-    mut validation_query: Query<(&mut Transform, &mut Text, &mut Visibility), (With<BuildValidationText>, Without<BuildGhost>, Without<BuildGhostCell>)>,
+    mut validation_query: Query<(&mut Transform, &mut Text, &mut Visibility, &mut TextColor), (With<BuildValidationText>, Without<BuildGhost>, Without<BuildGhostCell>)>,
     time: Res<Time>,
     asset_server: Res<AssetServer>,
     mut last_selection: Local<Option<String>>,
@@ -381,7 +381,7 @@ pub fn update_build_ghost(
     }
 
     // Update validation reason text position and content
-    if let Ok((mut v_transform, mut v_text, mut v_vis)) = validation_query.single_mut() {
+    if let Ok((mut v_transform, mut v_text, mut v_vis, mut v_color)) = validation_query.single_mut() {
         if let Some(reason) = &build_state.placement_reason {
             v_transform.translation = Vec3::new(
                 transform.translation.x,
@@ -389,6 +389,14 @@ pub fn update_build_ghost(
                 0.35,
             );
             v_text.0 = reason.clone();
+            // Red refuses the placement; amber allows it and warns. A blocked
+            // silo is legal to build and reads differently from "you cannot
+            // put that there".
+            v_color.0 = if build_state.is_valid_placement {
+                Color::srgb(1.0, 0.75, 0.25)
+            } else {
+                Color::srgb(1.0, 0.4, 0.4)
+            };
             *v_vis = Visibility::Visible;
         } else {
             *v_vis = Visibility::Hidden;

@@ -287,6 +287,32 @@ impl Rotation {
             Rotation::West => std::f32::consts::FRAC_PI_2,
         }
     }
+
+    /// Ship-local angle the module's FACE looks along.
+    ///
+    /// Not the same as `to_radians`. Module art is drawn pointing +Y, so a
+    /// sprite rotated by `to_radians` ends up looking a quarter turn round
+    /// from that angle — `turrets::aim_turrets` subtracts the same quarter
+    /// turn to put a barrel where its art points. Reading `to_radians` as a
+    /// direction is what sent missiles out 90 degrees from their own tube.
+    pub fn facing_angle(&self) -> f32 {
+        self.to_radians() + std::f32::consts::FRAC_PI_2
+    }
+
+    /// `facing_angle` as a grid step, for walking out from a block.
+    ///
+    /// With the quarter turn folded in this is the plain compass mapping the
+    /// names promise: East looks toward +x, the bow. Anything checking a
+    /// module's exit path must use this and not `to_radians`, or it would
+    /// clear a lane the round never travels.
+    pub fn facing_offset(&self) -> IVec2 {
+        match self {
+            Rotation::North => IVec2::Y,
+            Rotation::East => IVec2::X,
+            Rotation::South => IVec2::NEG_Y,
+            Rotation::West => IVec2::NEG_X,
+        }
+    }
 }
 
 /// Module categories for building UI and logic grouping

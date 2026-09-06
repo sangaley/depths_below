@@ -293,6 +293,120 @@ fn module_facing(module_type: ModuleType, rotation: Rotation) -> Option<f32> {
     }
 }
 
+/// What a cell does to a missile trying to leave its tube.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum SiloCell {
+    /// Nothing there.
+    Empty,
+    /// Armour plating — a blow-out panel, not a bulkhead.
+    Panel,
+    /// Hull, machinery, anything a warhead is not getting through.
+    Solid,
+}
+
+/// Plates a missile is allowed to punch out through on its way off the hull.
+///
+/// Without this every bow tube on every ship would read as blocked: the
+/// armour `belt` deliberately places plating OUTBOARD of the hull, so a
+/// launcher sitting on the outermost hull cell has its own skin in front of
+/// it by construction.
+pub fn is_blowout_panel(module_type: ModuleType) -> bool {
+    matches!(
+        module_type,
+        ModuleType::AngledHullPlate
+            | ModuleType::AngledArmorPlate
+            | ModuleType::ArmorPlate
+            | ModuleType::CornerArmorPlate
+            | ModuleType::StaggeredArmorPlate
+            | ModuleType::AblativeArmor
+    )
+}
+
+/// Whether a module is a missile launcher, and so subject to the silo rule.
+pub fn is_launcher(module_type: ModuleType) -> bool {
+    matches!(
+        module_type,
+        ModuleType::HeavyMissile | ModuleType::GuidedMissile | ModuleType::ClusterRocket
+    )
+}
+
+/// How many blow-out panels a missile will punch through before the tube
+/// counts as buried. One is a skin; two is a wall someone built in front of
+/// their own silo.
+const MAX_PANEL_CELLS: usize = 1;
+
+/// Cells to walk before calling an exit path clear. Longer than the widest
+/// hull, so leaving the ship entirely is what ends the walk.
+pub const SILO_REACH: i32 = MAX_WALK_STEPS as i32;
+
+/// First block sealing a launcher's exit path, if any.
+///
+/// `cell_kind` is the caller's grid: `GridOccupancy` in build mode, the live
+/// `ShipGrid` in flight — where destroyed blocks have already dropped out, so
+/// shooting the tile off your own bow un-blocks the tube mid-fight.
+///
+/// `dir` must come from `Rotation::facing_offset`, which is the direction the
+/// missile is actually ejected along.
+pub fn silo_obstruction(
+    muzzle: IVec2,
+    dir: IVec2,
+    cell_kind: impl Fn(IVec2) -> SiloCell,
+) -> Option<IVec2> {
+    let mut panels = 0;
+    for step in 1..=SILO_REACH {
+        let cell = muzzle + dir * step;
+        match cell_kind(cell) {
+            SiloCell::Empty => {}
+            SiloCell::Panel => {
+                panels += 1;
+                if panels > MAX_PANEL_CELLS {
+                    return Some(cell);
+                }
+            }
+            SiloCell::Solid => return Some(cell),
+        }
+    }
+    None
+}
+
+/// Launchers in a flat block list whose exit path is sealed.
+///
+/// Takes `(cell, module type or None for hull, rotation)` so a design can be
+/// checked straight from blueprint or layout data, with no ECS. Shared by the
+/// faction-layout and starter tests so both judge by exactly the rule the
+/// game enforces at the trigger.
+pub fn entombed_launchers(
+    blocks: &[(IVec2, Option<ModuleType>, Rotation)],
+) -> Vec<(IVec2, ModuleType, IVec2)> {
+    // Modules win their cell over hull, matching how ShipGrid is built.
+    let mut occupied: HashMap<IVec2, Option<ModuleType>> = HashMap::new();
+    for (cell, mt, _) in blocks {
+        let slot = occupied.entry(*cell).or_insert(*mt);
+        if mt.is_some() {
+            *slot = *mt;
+        }
+    }
+
+    let mut out = Vec::new();
+    for (cell, mt, rotation) in blocks {
+        let Some(mt) = *mt else { continue };
+        if !is_launcher(mt) {
+            continue;
+        }
+        let blocked = silo_obstruction(*cell, rotation.facing_offset(), |c| {
+            match occupied.get(&c) {
+                None => SiloCell::Empty,
+                Some(Some(m)) if is_blowout_panel(*m) => SiloCell::Panel,
+                Some(_) => SiloCell::Solid,
+            }
+        });
+        if let Some(blocker) = blocked {
+            out.push((*cell, mt, blocker));
+        }
+    }
+    out
+}
+
 /// One occupied cell met by `ShipGrid::walk`, in path order.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GridStep {
@@ -763,8 +877,17 @@ fn update_ghost_preview(
 
         // Auto-rotate modules when ghost moves (unless user manually rotated)
         if ghost_moved && build_state.auto_rotated {
-            if let BuildSelection::Module(_) = build_state.current_selection() {
-                if let Some(rot) = auto_rotate(grid_pos, &occupancy) {
+            if let BuildSelection::Module(mt) = build_state.current_selection() {
+                // A launcher wants a clear LANE, not merely an empty
+                // neighbour: auto_rotate would happily point a tube into a
+                // one-cell gap with the rest of the hull behind it.
+                let rot = if is_launcher(mt) {
+                    auto_rotate_launcher(grid_pos, &occupancy, &module_query)
+                        .or_else(|| auto_rotate(grid_pos, &occupancy))
+                } else {
+                    auto_rotate(grid_pos, &occupancy)
+                };
+                if let Some(rot) = rot {
                     build_state.rotation = rot;
                 }
             }
@@ -844,10 +967,35 @@ fn update_ghost_preview(
             }
         };
 
+        // A launcher's exit path. ADVISORY, not a placement rule: a buried
+        // silo is a mistake the player should be able to see and then make
+        // anyway, the same as any other bad layout decision. What it costs
+        // them is paid at the trigger, not at the shop.
+        let silo_blocker = match selection {
+            BuildSelection::Module(mt) if is_launcher(mt) => {
+                let dir = rotation.facing_offset();
+                // Furthest cell of the footprint along the exit heading — a
+                // multi-cell tube fires from its nose, not its origin.
+                let muzzle = placement_cells.iter().copied()
+                    .max_by_key(|c| c.x * dir.x + c.y * dir.y)
+                    .unwrap_or(grid_pos);
+                silo_obstruction(muzzle, dir, |cell| match occupancy.cells.get(&cell) {
+                    None => SiloCell::Empty,
+                    // A hull tile is not in module_query, so the Err arm is
+                    // hull — and hull stops a missile.
+                    Some(&e) => match module_query.get(e) {
+                        Ok(m) if is_blowout_panel(m.module_type) => SiloCell::Panel,
+                        _ => SiloCell::Solid,
+                    },
+                })
+            }
+            _ => None,
+        };
+
         let valid = no_overlap && (has_neighbor || is_first) && position_ok && can_afford && multiblock_ok && under_limit;
         build_state.is_valid_placement = valid;
         build_state.placement_reason = if valid {
-            None
+            silo_blocker.map(|c| format!("Silo exit blocked at ({}, {})", c.x, c.y))
         } else if !no_overlap {
             Some("Overlaps existing module or hull".into())
         } else if !has_neighbor && !is_first {
@@ -917,6 +1065,37 @@ fn auto_rotate(grid_pos: IVec2, occupancy: &GridOccupancy) -> Option<Rotation> {
     }
 
     best.map(|(rot, _)| rot)
+}
+
+/// Picks the heading whose exit lane is actually clear, for a launcher.
+///
+/// `auto_rotate` scores a direction by whether the ADJACENT cell is empty,
+/// which is the right question for a radar dish and the wrong one for a
+/// missile tube: a gap one cell deep with hull behind it scores as "outward".
+/// Ties break toward the direction pointing away from the ship's centre, so a
+/// bow tube faces the bow rather than whichever clear lane was tested first.
+fn auto_rotate_launcher(
+    grid_pos: IVec2,
+    occupancy: &GridOccupancy,
+    module_query: &Query<&Module, Without<crate::ai_ship::components::OwnedByAiShip>>,
+) -> Option<Rotation> {
+    let cell_kind = |cell: IVec2| match occupancy.cells.get(&cell) {
+        None => SiloCell::Empty,
+        Some(&e) => match module_query.get(e) {
+            Ok(m) if is_blowout_panel(m.module_type) => SiloCell::Panel,
+            _ => SiloCell::Solid,
+        },
+    };
+
+    [Rotation::North, Rotation::East, Rotation::South, Rotation::West]
+        .into_iter()
+        .filter(|rot| silo_obstruction(grid_pos, rot.facing_offset(), cell_kind).is_none())
+        .max_by(|a, b| {
+            let score = |r: &Rotation| {
+                (grid_pos.as_vec2() + r.facing_offset().as_vec2()).length()
+            };
+            score(a).partial_cmp(&score(b)).unwrap_or(std::cmp::Ordering::Equal)
+        })
 }
 
 /// Checks positional rules for module placement

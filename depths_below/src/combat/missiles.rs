@@ -221,9 +221,7 @@ pub fn fire_missiles_system(
         // every layout puts bow tubes at East and stern engines at West.
         // Without this the missile left 90 degrees off the tube it visibly
         // came out of.
-        let launch_dir = Vec2::from_angle(
-            ship_physics.rotation + module.rotation.to_radians() + std::f32::consts::FRAC_PI_2,
-        );
+        let launch_dir = Vec2::from_angle(ship_physics.rotation + module.rotation.facing_angle());
 
         // Determine missile properties based on module type and bay chain length
         let bay_count = machine_stats.get(entity)
