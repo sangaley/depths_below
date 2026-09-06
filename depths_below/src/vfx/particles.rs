@@ -113,6 +113,7 @@ pub fn spawn_engine_particles(
 /// Spawn air particles escaping from hull breaches
 pub fn spawn_breach_particles(
     time: Res<Time>,
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     hull_query: Query<(&HullSegment, &GlobalTransform)>,
     mut commands: Commands,
     mut spawn_timer: Local<f32>,
@@ -130,21 +131,48 @@ pub fn spawn_breach_particles(
         let intensity = hull.depressurization_level;
         let particle_count = (intensity * 4.0) as u32;
 
-        for _ in 0..particle_count.min(3) {
-            let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-            let speed = rng.gen_range(30.0..80.0) * intensity;
-            let vel = Vec2::new(angle.cos() * speed, angle.sin() * speed);
-            let lifetime = rng.gen_range(0.5..1.5);
-            let size = rng.gen_range(2.0..5.0);
+        // A breach vents OUTWARD, and which way it points is the information:
+        // it tells you which side of the hull is holed. This used to pick a
+        // random angle over the full circle, which reads as a puff sitting on
+        // the ship rather than as air leaving it.
+        //
+        // The segment's grid position is ship-local, so its direction from the
+        // origin is roughly "away from the middle"; rotating that through the
+        // segment's own transform puts it in world space and keeps the jet
+        // pointing correctly as the ship turns.
+        let local_out = Vec2::new(
+            hull.grid_position.x as f32,
+            hull.grid_position.y as f32,
+        );
+        let out = global_transform
+            .affine()
+            .transform_vector3(local_out.extend(0.0))
+            .truncate()
+            .normalize_or_zero();
 
-            // White-blue air particles
+        for _ in 0..particle_count.min(3) {
+            // Fall back to a full-circle puff for a block sitting on the ship's
+            // own centreline, where "outward" genuinely has no answer.
+            let dir = if out == Vec2::ZERO {
+                let a = rng.gen_range(0.0..std::f32::consts::TAU);
+                Vec2::new(a.cos(), a.sin())
+            } else {
+                Vec2::from_angle(rng.gen_range(-0.45..0.45)).rotate(out)
+            };
+            let speed = rng.gen_range(70.0..150.0) * intensity;
+            let lifetime = rng.gen_range(0.5..1.1);
+            let size = rng.gen_range(8.0..16.0);
+
+            // Real decompression reads as a condensation fog, not the ice
+            // glitter the films use -- so: pale, soft, and thinning fast.
             commands.spawn((
                 (Sprite {
-                        color: Color::srgba(0.7, 0.8, 1.0, 0.5 * intensity),
+                        image: fx.puff(),
+                        color: Color::srgba(0.78, 0.85, 1.0, 0.42 * intensity),
                         custom_size: Some(Vec2::splat(size)),
                         ..default()
                     }, Transform::from_xyz(pos.x, pos.y, 0.6)),
-                Particle::wisp(vel, lifetime, 0.5 * intensity, true),
+                Particle::wisp(dir * speed, lifetime, 0.42 * intensity, false),
             ));
         }
     }
