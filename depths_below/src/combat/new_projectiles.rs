@@ -577,6 +577,20 @@ const MAX_CREATURE_HIT_RADIUS: f32 = 90.0;
 /// Check projectile collisions with creatures and ships.
 /// Uses the creature spatial grid to only distance-check creatures near each
 /// projectile instead of every creature in the world.
+/// Shrink factor from an explosive round's DAMAGE radius to the radius handed
+/// to `spawn_explosion`.
+///
+/// spawn_explosion deliberately overshoots what it is given -- the fireball
+/// grows to 2.2x and the shock ring to 3.4x -- because a blast that stops
+/// exactly at its kill radius reads as smaller than it is. That overshoot was
+/// tuned against missiles, whose blast_radius is ~30-70. Explosive shells
+/// carry 75-160, so feeding them their raw radius put the shock ring out past
+/// 500 units and swallowed the screen on every HE hit.
+///
+/// At 0.4 the fireball lands just inside the damage radius and the ring just
+/// outside it, which is the same relationship a missile detonation has.
+const IMPACT_BLAST_SCALE: f32 = 0.4;
+
 pub fn check_projectile_hits(
     fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut commands: Commands,
@@ -876,7 +890,7 @@ pub fn check_projectile_hits(
                                 &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
                                 hit_entity, hit_pos, radius, blast_damage,
                             );
-                            spawn_explosion(&mut commands, &fx, hit_pos, radius, Color::srgb(1.0, 0.5, 0.1));
+                            spawn_explosion(&mut commands, &fx, hit_pos, radius * IMPACT_BLAST_SCALE, Color::srgb(1.0, 0.5, 0.1));
                         }
                         ProximityBurst { fragment_damage, fragment_radius, .. } => {
                             let radius = fragment_radius * proj.caliber;
@@ -884,7 +898,7 @@ pub fn check_projectile_hits(
                                 &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
                                 hit_entity, hit_pos, radius, fragment_damage,
                             );
-                            spawn_explosion(&mut commands, &fx, hit_pos, radius, Color::srgb(1.0, 0.9, 0.4));
+                            spawn_explosion(&mut commands, &fx, hit_pos, radius * IMPACT_BLAST_SCALE, Color::srgb(1.0, 0.9, 0.4));
                         }
                         EMPDisable { disable_radius, disable_duration } => {
                             let radius = disable_radius * proj.caliber;
@@ -899,7 +913,7 @@ pub fn check_projectile_hits(
                                     }
                                 }
                             }
-                            spawn_explosion(&mut commands, &fx, hit_pos, radius, Color::srgb(0.4, 0.5, 0.95));
+                            spawn_explosion(&mut commands, &fx, hit_pos, radius * IMPACT_BLAST_SCALE, Color::srgb(0.4, 0.5, 0.95));
                         }
                         Ignite { fire_duration, fire_intensity } => {
                             commands.entity(hit_entity).try_insert(BlockBurning {
@@ -948,7 +962,7 @@ pub fn check_projectile_hits(
                                 &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
                                 hit_entity, hit_pos, radius, crush_damage,
                             );
-                            spawn_explosion(&mut commands, &fx, hit_pos, radius, Color::srgb(0.4, 0.2, 0.6));
+                            spawn_explosion(&mut commands, &fx, hit_pos, radius * IMPACT_BLAST_SCALE, Color::srgb(0.4, 0.2, 0.6));
                         }
                         Irradiate { dose, crew_affected } => {
                             // The hull is left alone on purpose. AI crew carry
@@ -1050,7 +1064,7 @@ pub fn check_projectile_hits(
                         spawn_floating_damage(&mut commands, other_pos, frag_damage, Color::srgb(1.0, 0.7, 0.3));
                     }
                 }
-                spawn_explosion(&mut commands, &fx, proj_pos, radius, Color::srgb(1.0, 0.6, 0.15));
+                spawn_explosion(&mut commands, &fx, proj_pos, radius * IMPACT_BLAST_SCALE, Color::srgb(1.0, 0.6, 0.15));
             }
 
             // Despawn projectile (unless it penetrates)
