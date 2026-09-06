@@ -20,6 +20,7 @@ pub struct Debris {
 
 pub fn spawn_chunks(
     commands: &mut Commands,
+    fx: &crate::vfx::effect_textures::EffectTextures,
     rng: &mut impl Rng,
     origin: Vec2,
     base_color: Color,
@@ -30,7 +31,10 @@ pub fn spawn_chunks(
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
         let speed = rng.gen_range(30.0..130.0);
         let velocity = Vec2::new(angle.cos(), angle.sin()) * speed + inherited_vel;
-        let size = rng.gen_range(7.0..18.0);
+        // Larger than the solid quad this replaced: a shard's texture only
+        // fills a third to a half of its footprint, so a matched size would
+        // read as smaller debris rather than better-shaped debris.
+        let size = rng.gen_range(10.0..24.0);
         let max_lifetime = rng.gen_range(1.2..2.6);
 
         // Charred shade of the block's own color so debris reads as "a piece
@@ -40,8 +44,13 @@ pub fn spawn_chunks(
 
         commands.spawn((
             (Sprite {
+                    image: fx.chunk(),
                     color,
-                    custom_size: Some(Vec2::new(size, size * rng.gen_range(0.5..1.0))),
+                    // Nearly square now. The old 0.5..1.0 squash existed to
+                    // make identical rectangles look varied; the shards carry
+                    // their own irregular outlines, and squashing them on top
+                    // just reads as a stretched sprite.
+                    custom_size: Some(Vec2::new(size, size * rng.gen_range(0.82..1.0))),
                     ..default()
                 }, Transform {
                     translation: origin.extend(0.6),
@@ -61,6 +70,7 @@ pub fn spawn_chunks(
 /// Eject debris when a block dies — module or hull, any ship.
 pub fn spawn_block_debris(
     mut commands: Commands,
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     dead_modules: Query<
         (&GlobalTransform, &Sprite, Option<&BaseSpriteColor>, &ChildOf),
         Added<DestroyedModule>,
@@ -82,13 +92,13 @@ pub fn spawn_block_debris(
         // the same grey chunk.
         let color = base.map(|b| b.0).unwrap_or(sprite.color);
         let inherited = ship_vel_query.get(parent.parent()).map(|v| v.0 * 0.6).unwrap_or(Vec2::ZERO);
-        spawn_chunks(&mut commands, &mut rng, origin, color, inherited);
+        spawn_chunks(&mut commands, &fx, &mut rng, origin, color, inherited);
     }
 
     for (gt, sprite, parent) in dead_hull.iter() {
         let origin = gt.translation().truncate();
         let inherited = ship_vel_query.get(parent.parent()).map(|v| v.0 * 0.6).unwrap_or(Vec2::ZERO);
-        spawn_chunks(&mut commands, &mut rng, origin, sprite.color, inherited);
+        spawn_chunks(&mut commands, &fx, &mut rng, origin, sprite.color, inherited);
     }
 }
 

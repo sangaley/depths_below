@@ -25,6 +25,14 @@ pub struct EffectTextures {
     /// They are normalised to the same footprint, so they differ in structure
     /// and density but not in size and can be swapped freely.
     smoke: [Handle<Image>; 3],
+    /// Six irregular scrap shards. Unlike the smoke these keep their render's
+    /// shading rather than being flattened to white-plus-alpha: smoke is
+    /// shapeless so its silhouette is the whole texture, while a chunk is a
+    /// solid object and its facet shading is what stops it reading as a flat
+    /// sticker. They are authored deliberately light because `spawn_chunks`
+    /// tints them by the block's colour already darkened to 0.55, and
+    /// `Sprite.color` multiplies.
+    debris: [Handle<Image>; 6],
 }
 
 impl EffectTextures {
@@ -37,6 +45,13 @@ impl EffectTextures {
         let i = rand::thread_rng().gen_range(0..self.smoke.len());
         self.smoke[i].clone()
     }
+
+    /// A random scrap shard, for the same reason as `puff`: two chunks off the
+    /// same block should not be the same chunk.
+    pub fn chunk(&self) -> Handle<Image> {
+        let i = rand::thread_rng().gen_range(0..self.debris.len());
+        self.debris[i].clone()
+    }
 }
 
 pub fn load_effect_textures(mut commands: Commands, assets: Res<AssetServer>) {
@@ -45,6 +60,14 @@ pub fn load_effect_textures(mut commands: Commands, assets: Res<AssetServer>) {
             assets.load("sprites/effects/smoke_puff_a.png"),
             assets.load("sprites/effects/smoke_puff_b.png"),
             assets.load("sprites/effects/smoke_puff_c.png"),
+        ],
+        debris: [
+            assets.load("sprites/effects/debris_01.png"),
+            assets.load("sprites/effects/debris_02.png"),
+            assets.load("sprites/effects/debris_03.png"),
+            assets.load("sprites/effects/debris_04.png"),
+            assets.load("sprites/effects/debris_05.png"),
+            assets.load("sprites/effects/debris_06.png"),
         ],
     });
 }

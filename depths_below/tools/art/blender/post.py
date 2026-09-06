@@ -73,7 +73,7 @@ def whiten(src, dst, alpha_mode="both"):
     return out
 
 
-def normalize(src, dst, size, margin=0.08, floor=6):
+def normalize(src, dst, size, margin=0.08, floor=6, gain=1.0, keep_rgb=False):
     """Trim to the alpha bounding box, re-square, pad, resize.
 
     The sim keeps expanding, so frames harvested at f26 and f40 arrive at
@@ -103,13 +103,30 @@ def normalize(src, dst, size, margin=0.08, floor=6):
 
     canvas = canvas.resize(_size(size), Image.LANCZOS)
 
+    if gain != 1.0:
+        # Lift the base tone without flattening the shading.
+        #
+        # Sprite.color MULTIPLIES, so a textured sprite is darker than the
+        # solid quad it replaces by exactly the texture's own luminance --
+        # debris tinted to 0.55 of its block colour and then multiplied by a
+        # mid-grey render lands at ~0.30 and disappears. ART_BRIEF asks for a
+        # "light/neutral base" for precisely this reason. Scaling rather than
+        # adding keeps the facet contrast proportional.
+        canvas.putdata([
+            (min(255, int(r * gain)), min(255, int(g * gain)),
+             min(255, int(b * gain)), a)
+            for r, g, b, a in canvas.getdata()
+        ])
+
     # Force RGB white across the WHOLE canvas, transparent padding included.
+    # (Only when the caller asked for it -- see `keep_rgb`.)
     # The game samples these with linear filtering (nothing calls
     # ImagePlugin::default_nearest), and the sampler interpolates RGB and
     # alpha independently -- so black-but-transparent padding bleeds a dark
     # fringe into the soft rim. On a texture that is almost entirely soft rim
     # that is the whole edge.
-    canvas.putdata([(255, 255, 255, p[3]) for p in canvas.getdata()])
+    if not keep_rgb:
+        canvas.putdata([(255, 255, 255, p[3]) for p in canvas.getdata()])
 
     canvas.save(dst)
     return canvas
@@ -170,7 +187,9 @@ if __name__ == "__main__":
         whiten(sys.argv[2], sys.argv[3],
                sys.argv[4] if len(sys.argv) > 4 else "both")
     elif cmd == "normalize":
-        normalize(sys.argv[2], sys.argv[3], sys.argv[4])
+        normalize(sys.argv[2], sys.argv[3], sys.argv[4],
+                  gain=float(sys.argv[5]) if len(sys.argv) > 5 else 1.0,
+                  keep_rgb="--keep-rgb" in sys.argv)
     elif cmd == "install":
         install(sys.argv[2], sys.argv[3], sys.argv[4])
     else:

@@ -92,7 +92,7 @@ pub fn update_death_rattle(
         if rattle.remaining > 1 {
             // Secondary pop: flash + chunk spray + attenuated crunch
             crate::combat::spawn_explosion(&mut commands, &fx, pos, rng.gen_range(14.0..26.0), Color::srgb(1.0, 0.6, 0.15));
-            crate::vfx::debris::spawn_chunks(&mut commands, &mut rng, pos, color, inherited);
+            crate::vfx::debris::spawn_chunks(&mut commands, &fx, &mut rng, pos, color, inherited);
             boom_events.write(AiModuleExploded { position: pos, blast_damage: 20.0 });
             rattle.remaining -= 1;
             rattle.timer = Timer::from_seconds(rng.gen_range(0.15..0.4), TimerMode::Once);
@@ -101,7 +101,7 @@ pub fn update_death_rattle(
             // The climax of every ship kill. Was one flat 140-unit square.
             crate::combat::spawn_explosion(&mut commands, &fx, pos, 62.0, Color::srgb(1.0, 0.5, 0.1));
             for _ in 0..3 {
-                crate::vfx::debris::spawn_chunks(&mut commands, &mut rng, pos, color, inherited);
+                crate::vfx::debris::spawn_chunks(&mut commands, &fx, &mut rng, pos, color, inherited);
             }
             boom_events.write(AiModuleExploded { position: pos, blast_damage: 100.0 });
             commands.entity(ship_entity).try_remove::<DeathRattle>();

@@ -32,6 +32,7 @@ pub struct DrillRig {
 }
 
 pub fn wreck_drill_system(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     time: Res<Time>,
     mut commands: Commands,
     power_state: Res<PowerState>,
@@ -192,7 +193,7 @@ pub fn wreck_drill_system(
         });
 
         // The block physically comes off the hulk.
-        crate::vfx::debris::spawn_chunks(&mut commands, &mut rng, block_pos, block_sprite.color, Vec2::ZERO);
+        crate::vfx::debris::spawn_chunks(&mut commands, &fx, &mut rng, block_pos, block_sprite.color, Vec2::ZERO);
         commands.entity(block_entity).try_despawn();
 
         // Last block gone? The wreck ceases to exist.

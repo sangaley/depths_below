@@ -346,6 +346,7 @@ pub fn order_salvage_detail(
 /// hulk to their claimed block → pry it loose (block pops off as debris)
 /// → haul it home around the hull → deposit → claim the next block.
 pub fn run_salvage_detail(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     time: Res<Time>,
     mut commands: Commands,
     ship_query: Query<(Entity, &GlobalTransform), With<Ship>>,
@@ -504,6 +505,7 @@ pub fn run_salvage_detail(
                             );
                             crate::vfx::debris::spawn_chunks(
                                 &mut commands,
+                                &fx,
                                 &mut rng,
                                 block_pos,
                                 block_sprite.color,
