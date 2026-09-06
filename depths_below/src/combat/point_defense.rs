@@ -54,22 +54,39 @@ pub fn toggle_intercept_mode(
     }
 }
 
+/// A round fired BY point defence, carrying the ship that fired it.
+///
+/// Without this every kinetic round in the game counted as an interceptor:
+/// pd_missile_collision took a bare `Query<&Projectile>` and killed any
+/// missile within 20 units of any shot. The ship is here so a battery cannot
+/// swat its own outbound salvo, which is the only salvo there currently is —
+/// AI ships do not launch missiles yet, so every missile in the world is the
+/// player's.
+#[derive(Component)]
+pub struct PointDefenseRound {
+    pub ship: Entity,
+}
+
 /// Intercept system: weapons in intercept mode auto-fire at incoming missiles
 pub fn intercept_missiles(
     time: Res<Time>,
-    ship_query: Query<&Transform, With<Ship>>,
+    ship_query: Query<(Entity, &Transform), With<Ship>>,
     mut intercept_weapons: Query<(
         &Module, &mut Weapon, &mut WeaponCooldown, &GlobalTransform,
     ), (With<InterceptMode>, Without<DestroyedModule>)>,
-    missile_query: Query<(Entity, &Transform, &Velocity), With<MissileProjectile>>,
+    missile_query: Query<(Entity, &Transform, &Velocity, &MissileProjectile)>,
     mut commands: Commands,
 ) {
-    let Ok(ship_transform) = ship_query.single() else { return };
+    let Ok((player_ship, ship_transform)) = ship_query.single() else { return };
     let ship_pos = ship_transform.translation.truncate();
 
     // Find incoming missiles (heading toward the ship)
     let mut threats: Vec<(Entity, Vec2, f32)> = Vec::new();
-    for (entity, transform, velocity) in missile_query.iter() {
+    for (entity, transform, velocity, missile) in missile_query.iter() {
+        // Our own warhead is not a threat, however it happens to be flying.
+        // The heading filter below catches an outbound salvo, but not one
+        // that has looped back around on a target behind us.
+        if missile.owner_ship == Some(player_ship) { continue; }
         let missile_pos = transform.translation.truncate();
         let to_ship = ship_pos - missile_pos;
         let dist = to_ship.length();
@@ -136,6 +153,7 @@ pub fn intercept_missiles(
                 bounces: 0,
             },
             Velocity(direction * proj_speed),
+            PointDefenseRound { ship: player_ship },
         ));
 
         // Muzzle flash
@@ -147,15 +165,17 @@ pub fn intercept_missiles(
 /// Uses the missile spatial grid to only distance-check missiles near each PD shot.
 pub fn pd_missile_collision(
     mut commands: Commands,
-    proj_query: Query<(Entity, &Projectile, &Transform)>,
-    missile_query: Query<&Transform, With<MissileProjectile>>,
+    proj_query: Query<(Entity, &PointDefenseRound, &Transform)>,
+    missile_query: Query<(&Transform, &MissileProjectile)>,
     missile_grid: Res<crate::spatial::MissileGrid>,
 ) {
-    for (proj_entity, _proj, proj_transform) in proj_query.iter() {
+    for (proj_entity, pd, proj_transform) in proj_query.iter() {
         let proj_pos = proj_transform.translation.truncate();
 
         for (missile_entity, _) in missile_grid.0.nearby(proj_pos, 20.0) {
-            let Ok(missile_transform) = missile_query.get(missile_entity) else { continue };
+            let Ok((missile_transform, missile)) = missile_query.get(missile_entity) else { continue };
+            // A battery does not shoot down its own salvo on the way out.
+            if missile.owner_ship == Some(pd.ship) { continue; }
             let missile_pos = missile_transform.translation.truncate();
             let dist = proj_pos.distance(missile_pos);
 

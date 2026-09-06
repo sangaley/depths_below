@@ -33,8 +33,12 @@ use crate::ui::theme::{ThemeColors, ThemeFonts, ThemeSpacing};
 // ============================================================================
 
 /// How the current step is completed.
-#[derive(PartialEq, Eq, Clone, Copy)]
-enum Advance {
+///
+/// `pub` so the autoplay director (`autoplay.rs`, dev tooling) can ask what
+/// the current step is waiting on and press the matching key, instead of
+/// guessing its way through training.
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum Advance {
     Launch,    // reached open space (launched from the station)
     Continue,  // an info step — read it, press [Space]
     Thrust,    // held W / Up
@@ -155,6 +159,15 @@ impl Tutorial {
 
     fn current(&self) -> Option<&'static TutorialStep> {
         STEPS.get(self.step)
+    }
+
+    /// What the current step is waiting on, or None when training is over or
+    /// was never armed. Read by the autoplay director (`autoplay.rs`).
+    pub fn pending(&self) -> Option<Advance> {
+        if !self.active {
+            return None;
+        }
+        self.current().map(|s| s.advance)
     }
 }
 
