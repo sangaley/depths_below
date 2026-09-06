@@ -57,7 +57,7 @@ fn main() {
         // Default Bevy plugins (windowing, rendering, input, etc.)
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "Depths Below — Into the Void".into(),
+                title: "Depths Below - Into the Void".into(),
                 resolution: (1280, 720).into(),
                 ..default()
             }),
@@ -69,6 +69,9 @@ fn main() {
 
         // Global resources
         .init_resource::<InputState>()
+        .init_resource::<crate::resources::InteractPress>()
+        // Ahead of every F handler, so they all see the same single press.
+        .add_systems(First, crate::resources::refresh_interact_press)
         .insert_resource(ClearColor(Color::srgb(0.05, 0.15, 0.35)))
 
         // Events

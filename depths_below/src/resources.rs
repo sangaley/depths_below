@@ -750,6 +750,47 @@ impl Default for GameConfig {
 // INPUT STATE
 // ============================================================================
 
+/// F is bound to four separate actions - recall a salvage detail, send one
+/// out, dock, and turn in contracts at a station - and each one used to read
+/// the raw keypress on its own. Nothing arbitrated between them, so wherever
+/// their conditions overlapped they ALL fired on the same press: parking on a
+/// wreck inside a station's dock radius docked the ship *and* pushed a detail
+/// out onto the hull, stranding them the moment the ship teleported to its
+/// berth.
+///
+/// The press is now a single token. Handlers run in a fixed order (see the
+/// `.after()` chains where they're registered) and the first one whose own
+/// conditions are actually met claims it; everyone downstream sees nothing.
+/// Claim LAST, once you know you're going to act - a handler that claims and
+/// then bails swallows the press.
+#[derive(Resource, Default)]
+pub struct InteractPress {
+    available: bool,
+}
+
+impl InteractPress {
+    /// Take the press if it's still going. True means it's yours to act on.
+    pub fn claim(&mut self) -> bool {
+        let got = self.available;
+        self.available = false;
+        got
+    }
+
+    /// Peek without taking - for handlers that need to check other conditions
+    /// before committing.
+    pub fn pending(&self) -> bool {
+        self.available
+    }
+}
+
+/// Re-arms the interact token once per frame, ahead of every handler.
+pub fn refresh_interact_press(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut press: ResMut<InteractPress>,
+) {
+    press.available = keyboard.just_pressed(KeyCode::KeyF);
+}
+
 #[derive(Resource, Default)]
 pub struct InputState {
     pub movement: Vec2,

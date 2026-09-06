@@ -449,9 +449,23 @@ pub struct MapWarpCharging {
 const WARP_DASH_FUEL_PER_1000: f32 = 1.0;
 const WARP_DASH_BASE_CHARGE: f32 = 2.0;
 const WARP_DASH_DISTANCE_PER_SECOND: f32 = 15_000.0;
-/// Stop this far short of the exact clicked point — avoids ever materializing
-/// inside whatever's sitting there (a station, a boss hull, etc).
-const WARP_DASH_ARRIVAL_BUFFER: f32 = 3000.0;
+/// Stop short of the exact clicked point - avoids ever materializing inside
+/// whatever's sitting there (a station, a boss hull, etc).
+///
+/// This used to be a flat 3000, which made the drive useless at exactly the
+/// ranges you most want it: it refused any hop under 3000 AND parked you 3000
+/// out on the ones it did take, so everything from ~3000 to ~6000 bought you
+/// almost no ground for a two-second spin-up. Scaled now, so a short hop gets
+/// a short buffer and only long jumps keep the full standoff.
+const WARP_DASH_MIN_BUFFER: f32 = 800.0;
+const WARP_DASH_MAX_BUFFER: f32 = 3000.0;
+const WARP_DASH_BUFFER_FRACTION: f32 = 0.15;
+/// Below this, fly it. The buffer alone would eat most of the distance.
+const WARP_DASH_MIN_DISTANCE: f32 = 1200.0;
+
+fn warp_dash_arrival_buffer(distance: f32) -> f32 {
+    (distance * WARP_DASH_BUFFER_FRACTION).clamp(WARP_DASH_MIN_BUFFER, WARP_DASH_MAX_BUFFER)
+}
 
 fn warp_dash_fuel_cost(distance: f32) -> f32 {
     (distance / 1000.0) * WARP_DASH_FUEL_PER_1000
@@ -1500,6 +1514,15 @@ fn spawn_station_cargo_panel(mut commands: Commands) {
                 TextColor(ThemeColors::ACCENT_BLUE),
                 StationCargoTotalText,
             ));
+            // Salvage only becomes money at a station, and nothing anywhere
+            // said so: crew haul loot aboard, the hold fills up, and the one
+            // place it converts to credits is a row part-way down the services
+            // list. Name it here, next to the cargo it applies to.
+            panel.spawn((
+                Text::new("Sell in station services (Sell Cargo)"),
+                TextFont { font_size: FontSize::Px(ThemeFonts::TINY), ..default() },
+                TextColor(ThemeColors::TEXT_MUTED),
+            ));
         });
 }
 
@@ -2428,8 +2451,11 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
                 };
 
                 let dist = snap.player_pos.distance(target);
-                let fuel_cost = warp_dash_fuel_cost((dist - WARP_DASH_ARRIVAL_BUFFER).max(0.0));
-                let charge_time = warp_dash_charge_time((dist - WARP_DASH_ARRIVAL_BUFFER).max(0.0));
+                // Same arithmetic the jump itself uses, so the preview can't
+                // quote a price the drive won't charge.
+                let jump_dist = (dist - warp_dash_arrival_buffer(dist)).max(0.0);
+                let fuel_cost = warp_dash_fuel_cost(jump_dist);
+                let charge_time = warp_dash_charge_time(jump_dist);
                 let can_afford = snap.current_fuel >= fuel_cost;
 
                 card.spawn((
@@ -3131,6 +3157,8 @@ fn warp_dash_input(
     ship_query: Query<(Entity, &Transform), (With<Ship>, Without<MapWarpCharging>)>,
     mut charging_query: Query<(Entity, &mut MapWarpCharging), With<Ship>>,
     pending: Res<PendingWarpTarget>,
+    selection: Res<crate::combat::targeting::selection::TargetSelection>,
+    target_pos_query: Query<&GlobalTransform>,
     fuel_state: Res<FuelState>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
@@ -3138,9 +3166,19 @@ fn warp_dash_input(
         let Ok((entity, transform)) = ship_query.single() else { return };
         let ship_pos = transform.translation.truncate();
 
-        let Some(target) = pending.0 else {
+        // Fall back to whatever's currently targeted (\\ cycles contacts).
+        // The dash used to be reachable ONLY by opening the map and clicking,
+        // so a player on the keyboard pressed G, got told to go and find a
+        // mouse, and never used the drive again.
+        let target = pending.0.or_else(|| {
+            selection
+                .target
+                .and_then(|e| target_pos_query.get(e).ok())
+                .map(|gt| gt.translation().truncate())
+        });
+        let Some(target) = target else {
             notifications.write(ShowNotification {
-                message: "No warp destination set — open the map (M) and click one.".into(),
+                message: "No warp destination - target something (\\) or click the map (M).".into(),
                 notification_type: NotificationType::Warning,
                 duration: 3.0,
             });
@@ -3148,7 +3186,7 @@ fn warp_dash_input(
         };
 
         let dist = ship_pos.distance(target);
-        if dist < WARP_DASH_ARRIVAL_BUFFER {
+        if dist < WARP_DASH_MIN_DISTANCE {
             notifications.write(ShowNotification {
                 message: "Already at the warp destination.".into(),
                 notification_type: NotificationType::Info,
@@ -3157,7 +3195,8 @@ fn warp_dash_input(
             return;
         }
 
-        let jump_dist = dist - WARP_DASH_ARRIVAL_BUFFER;
+        let buffer = warp_dash_arrival_buffer(dist);
+        let jump_dist = dist - buffer;
         let fuel_cost = warp_dash_fuel_cost(jump_dist);
         if fuel_state.current_fuel < fuel_cost {
             notifications.write(ShowNotification {

@@ -253,7 +253,10 @@ impl Plugin for ContractsPlugin {
                 tracking::track_capture_contracts,
                 tracking::track_destroy_ship_contracts,
                 tracking::check_contract_completion,
-                tracking::turn_in_at_station_proximity,
+                // Last claim on the F press - docking turns contracts in by
+                // itself on arrival, so this convenience must never beat it.
+                tracking::turn_in_at_station_proximity
+                    .after(crate::world::home_base::station_docking),
             ).chain().run_if(in_state(GameState::Exploring)))
             // Mission board UI — usable docked at Haven or just flying near
             // any station (Haven or an outpost), each with its own board

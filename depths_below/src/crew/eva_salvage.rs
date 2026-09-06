@@ -27,6 +27,10 @@ use crate::ai_ship::components::AiShipWreck;
 // so a big ship parked against a wreck can still have its root ~500+ units
 // from the contact point — 500 made dispatch unreachable nose-on.
 const ORDER_RANGE: f32 = 3000.0;
+/// How many gun posts the default skeleton crew holds back when a detail goes
+/// out. Enough to answer something that wanders in, few enough that the wreck
+/// still gets stripped at a sensible rate.
+const SKELETON_GUNS: usize = 2;
 /// Ship drifting further than this from the worksite recalls the detail.
 /// Scales WITH ORDER_RANGE — if recall is tighter than dispatch, a detail sent
 /// out at the limit gets called straight back and salvage reads as broken.
@@ -83,7 +87,8 @@ type BlockQuery<'w, 's> = Query<
 /// F key: dispatch a salvage detail at the nearest lootable wreck in
 /// range, or recall the detail that's already out.
 pub fn order_salvage_detail(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    mut press: ResMut<crate::resources::InteractPress>,
+    stations: Res<crate::world::home_base::SystemStations>,
     mut commands: Commands,
     ship_query: Query<(Entity, &GlobalTransform), With<Ship>>,
     wreck_query: Query<(Entity, &GlobalTransform, &Wreck, &PointOfInterest)>,
@@ -99,12 +104,16 @@ pub fn order_salvage_detail(
     block_query: BlockQuery,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    if !keyboard.just_pressed(KeyCode::KeyF) {
+    if !press.pending() {
         return;
     }
 
-    // A detail is already out — F recalls it.
+    // A detail is already out - F recalls it, ahead of every other use of the
+    // key. Crew on the hull outrank anything else the press could mean.
     if !active_eva.is_empty() {
+        if !press.claim() {
+            return;
+        }
         for mut eva in active_eva.iter_mut() {
             eva.recalled = true;
         }
@@ -139,7 +148,22 @@ pub fn order_salvage_detail(
             best = Some((entity, root_pos, dist));
         }
     }
-    let Some((wreck_entity, wreck_center, _)) = best else { return };
+    let Some((wreck_entity, wreck_center, wreck_dist)) = best else { return };
+
+    // Yield to docking when the station is the closer of the two. F means
+    // both things and position is the only way to tell them apart, so the
+    // nearer one wins - otherwise parking on a wreck inside a station's dock
+    // radius flung a detail out AND berthed the ship, stranding them.
+    if let Some(idx) = stations.nearest_index(ship_pos) {
+        if let Some(site) = stations.sites.get(idx) {
+            if ship_pos.distance(site.pos) < wreck_dist {
+                return;
+            }
+        }
+    }
+    if !press.claim() {
+        return;
+    }
 
     // Which posts keep their operator? Player-pinned stations
     // (right-click a crew station to toggle), or the default skeleton
@@ -148,6 +172,7 @@ pub fn order_salvage_detail(
     let mut pinned_posts: Vec<Entity> = Vec::new();
     let mut default_helm: Option<Entity> = None;
     let mut default_reactor: Option<Entity> = None;
+    let mut default_weapons: Vec<Entity> = Vec::new();
     if let Ok(children) = children_query.get(ship_entity) {
         for child in children.iter() {
             if let Ok((module, is_pinned)) = station_info.get(child) {
@@ -160,11 +185,22 @@ pub fn order_salvage_detail(
                 if default_reactor.is_none() && reactor_marker.get(child).is_ok() {
                     default_reactor = Some(child);
                 }
+                if module.module_type.category() == ModuleCategory::Weapons {
+                    default_weapons.push(child);
+                }
             }
         }
     }
     if pinned_posts.is_empty() {
         pinned_posts.extend(default_helm.into_iter().chain(default_reactor));
+        // ...and leave the battery crewed. A gun IS its own crew station, so
+        // a helm-and-reactor skeleton emptied every one of them: a fully
+        // crewed warship would sit at 1/20 posts with all guns silent
+        // (combat::weapon_is_crewed) the whole time a detail was out, which
+        // made stripping a wreck the most dangerous thing you could do.
+        // Two posts is enough to answer a scavenger without gutting the
+        // detail; pin more by hand to keep them.
+        pinned_posts.extend(default_weapons.into_iter().take(SKELETON_GUNS));
     }
 
     // Manually-assigned crew hold their posts. Auto-assigned crew are fair
@@ -337,6 +373,12 @@ pub fn run_salvage_detail(
         ItemType::AmmoCrate,
     ];
 
+    // One break-off is one event, not one per spacewalker. The recall check
+    // below runs per crew member, so a four-hand detail used to fire four
+    // identical warnings for a single drift-out -- the noisiest message in the
+    // game by a wide margin.
+    let mut announced_break_off = false;
+
     for (entity, mut transform, mut crew, eva, mut sprite) in eva_query.iter_mut() {
         let eva = eva.into_inner();
         if crew.health <= 0.0 {
@@ -355,11 +397,14 @@ pub fn run_salvage_detail(
             if let Some((center, _)) = bounds {
                 if ship_pos.distance(center) > BREAK_RANGE {
                     eva.recalled = true;
-                    notifications.write(ShowNotification {
-                        message: "Salvage detail breaking off — out of range.".into(),
-                        notification_type: NotificationType::Warning,
-                        duration: 2.5,
-                    });
+                    if !announced_break_off {
+                        announced_break_off = true;
+                        notifications.write(ShowNotification {
+                            message: "Salvage detail breaking off - out of range.".into(),
+                            notification_type: NotificationType::Warning,
+                            duration: 2.5,
+                        });
+                    }
                 }
             }
         }
@@ -431,7 +476,7 @@ pub fn run_salvage_detail(
                             wreck.is_explored = true;
                             statistics.wrecks_salvaged += 1;
                             notifications.write(ShowNotification {
-                                message: "Cargo stripped — hauling hull scrap now (F to recall).".into(),
+                                message: "Cargo stripped - hauling hull scrap now (F to recall).".into(),
                                 notification_type: NotificationType::Info,
                                 duration: 3.0,
                             });
@@ -685,7 +730,7 @@ fn deposit(
     } else {
         eva.recalled = true;
         notifications.write(ShowNotification {
-            message: format!("Cargo hold full — {} jettisoned!", item.name()),
+            message: format!("Cargo hold full - {} jettisoned!", item.name()),
             notification_type: NotificationType::Warning,
             duration: 3.0,
         });

@@ -45,8 +45,15 @@ impl Plugin for WorldPlugin {
                     update_biome,
                     check_poi_discovery,
                     tick_market_events,
-                    check_docking_proximity,
-                    home_base::station_docking,
+                    // Both claim the shared F press (resources::InteractPress),
+                    // so they must sit behind the salvage handler: crew on the
+                    // hull, and a wreck nearer than the station, outrank
+                    // docking. Without the ordering the winner would be
+                    // whichever Bevy happened to schedule first.
+                    check_docking_proximity
+                        .after(crate::crew::eva_salvage::order_salvage_detail),
+                    home_base::station_docking
+                        .after(crate::crew::eva_salvage::order_salvage_detail),
                     home_base::update_base_arrow,
                     discover_log_entries,
                     apply_hazard_damage,
@@ -195,14 +202,14 @@ fn check_poi_discovery(
 
 /// Check for docking proximity to settlements
 fn check_docking_proximity(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    mut press: ResMut<crate::resources::InteractPress>,
     ship_query: Query<&GlobalTransform, With<Ship>>,
     poi_query: Query<(Entity, &GlobalTransform, &PointOfInterest)>,
     mut docking_events: MessageWriter<DockingStarted>,
     mut notifications: MessageWriter<ShowNotification>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
-    if !keyboard.just_pressed(KeyCode::KeyF) {
+    if !press.pending() {
         return;
     }
 
@@ -216,6 +223,10 @@ fn check_docking_proximity(
 
         let dist = ship_pos.distance(poi_gt.translation().truncate());
         if dist < 900.0 {
+            // Claim only now that we know we're actually docking here.
+            if !press.claim() {
+                return;
+            }
             docking_events.write(DockingStarted { target: entity });
             notifications.write(ShowNotification {
                 message: "Docking at settlement...".into(),
@@ -275,7 +286,7 @@ fn tick_market_events(
     let type_name = station_types::station_type_name(station_types::station_type(station_idx));
     notifications.write(ShowNotification {
         message: format!(
-            "MARKET: Outpost {} ({}) short on {} — paying {:.0}% for ~{:.0} min!",
+            "MARKET: Outpost {} ({}) short on {} - paying {:.0}% for ~{:.0} min!",
             station_idx,
             type_name,
             item.name(),

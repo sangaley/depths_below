@@ -370,7 +370,7 @@ pub fn update_base_arrow(
 /// (Before, only Haven did this; the twelve outposts opened a sell-only trade
 /// menu instead.)
 pub fn station_docking(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    mut press: ResMut<crate::resources::InteractPress>,
     stations: Res<SystemStations>,
     mut ship_query: Query<(Entity, &mut Transform, &mut Velocity, &mut ShipPhysics), With<Ship>>,
     mut weapon_query: Query<(&mut Weapon, &ChildOf)>,
@@ -392,7 +392,7 @@ pub fn station_docking(
         *prompted_for = Some(site.index);
         notifications.write(ShowNotification {
             message: format!(
-                "{} ({}) in range — press F to dock",
+                "{} ({}) in range - press F to dock",
                 site.name,
                 station_type_name(site.kind)
             ),
@@ -401,7 +401,10 @@ pub fn station_docking(
         });
     }
 
-    if keyboard.just_pressed(KeyCode::KeyF) {
+    // Claims the shared interact press (see resources::InteractPress). A
+    // salvage detail out on the hull, or a wreck closer than this station,
+    // takes it first - docking would otherwise strand them.
+    if press.claim() {
         let berth = site.pos + BERTH_OFFSET;
         transform.translation.x = berth.x;
         transform.translation.y = berth.y;
@@ -424,7 +427,7 @@ pub fn station_docking(
 
         notifications.write(ShowNotification {
             message: format!(
-                "Docked at {} — O2 and fuel resupplied. B: build | U: shop | J: jobs | Enter: launch",
+                "Docked at {} - O2 and fuel resupplied. B: build | U: shop | J: jobs | Enter: launch",
                 site.name
             ),
             notification_type: NotificationType::Success,

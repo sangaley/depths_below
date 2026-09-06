@@ -239,7 +239,7 @@ pub fn turn_in_contracts(
 /// completed contracts too — you don't need to fly all the way back to
 /// wherever a bounty happened to be posted to collect it.
 pub fn turn_in_at_station_proximity(
-    keyboard: Res<ButtonInput<KeyCode>>,
+    mut press: ResMut<crate::resources::InteractPress>,
     stations: Res<home_base::SystemStations>,
     ship_query: Query<&Transform, With<Ship>>,
     mut state: ResMut<ContractState>,
@@ -248,12 +248,17 @@ pub fn turn_in_at_station_proximity(
     mut turned_in_events: MessageWriter<ContractTurnedIn>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    if !keyboard.just_pressed(KeyCode::KeyF) { return; }
+    if !press.pending() { return; }
     if !state.active_contracts.iter().any(|c| c.status == ContractStatus::Completed) { return; }
 
     let Ok(transform) = ship_query.single() else { return };
     let pos = transform.translation.truncate();
     if stations.nearest_index(pos).is_none() { return; }
+
+    // Last in the chain: docking already turns contracts in on arrival
+    // (OnEnter(StationDocked)), so this is only the turn-in-without-docking
+    // convenience and must never outrank the press's other meanings.
+    if !press.claim() { return; }
 
     turn_in_active(&mut state, &mut rep, &mut currency, &mut turned_in_events, &mut notifications);
 }
