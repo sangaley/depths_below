@@ -441,6 +441,28 @@ pub struct GridStep {
 /// (1,584 units) between two frames.
 pub const MAX_WALK_STEPS: usize = 24;
 
+/// Width of one grid cell in world units.
+pub const GRID_SIZE: f32 = 66.0;
+
+/// Ship-local centre of a grid cell.
+///
+/// The `-33.0` is a half-cell Y offset that every block spawner applies (see
+/// `spawn_module`, `process_hull_placement`, `rooms::transform_to_grid`); it
+/// is asymmetric and easy to drop, which is why it lives here rather than
+/// being retyped. `local_to_grid` is its inverse.
+pub fn grid_to_local(cell: IVec2) -> Vec2 {
+    Vec2::new(cell.x as f32 * GRID_SIZE, cell.y as f32 * GRID_SIZE - 33.0)
+}
+
+/// Grid cell containing a ship-LOCAL point. World-space callers must undo the
+/// ship's own transform first — see `cursor_to_ship_grid`.
+pub fn local_to_grid(local: Vec2) -> IVec2 {
+    IVec2::new(
+        (local.x / GRID_SIZE).round() as i32,
+        ((local.y + 33.0) / GRID_SIZE).round() as i32,
+    )
+}
+
 impl ShipGrid {
     /// Swept walk from `from` to `to` (ship-local CELL coordinates — block
     /// centres sit on integers, cell (gx, gy) spans gx±0.5) yielding every
@@ -1324,6 +1346,7 @@ fn process_hull_placement(
         let color = match event.layer {
             HullLayer::Outer => Color::WHITE,
             HullLayer::Inner => Color::srgb(0.9, 0.9, 0.9),
+            HullLayer::Hallway => Color::srgb(0.42, 0.48, 0.52),
             HullLayer::Void => Color::srgb(0.5, 0.5, 0.6),
             HullLayer::BulkheadDoor => Color::srgb(0.9, 0.8, 0.7),
         };
@@ -1361,6 +1384,7 @@ fn process_hull_placement(
         let layer_name = match event.layer {
             HullLayer::Outer => "Outer Hull",
             HullLayer::Inner => "Inner Hull",
+            HullLayer::Hallway => "Hallway",
             HullLayer::Void => "Void Space",
             HullLayer::BulkheadDoor => "Bulkhead Door",
         };

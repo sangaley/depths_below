@@ -35,7 +35,7 @@ pub fn fire_laser_system(
     targeting: (Res<TargetSelection>, Res<crate::combat::targeting::AimLock>),
     ship_query: Query<(Entity, &Transform, &ShipPhysics), With<Ship>>,
     weapon_query: Query<(
-        Entity, &Module, &Weapon, &FireGroup, &GlobalTransform, &WeaponMount, &ChildOf,
+        Entity, &Module, Has<CrewStation>, Option<&ModuleEfficiency>, &Weapon, &FireGroup, &GlobalTransform, &WeaponMount, &ChildOf,
         Option<&ModuleTemperature>,
     ), (Without<DestroyedModule>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
     target_query: Query<&Transform, Without<Ship>>,
@@ -86,7 +86,11 @@ pub fn fire_laser_system(
     let Ok((player_ship, _ship_transform, ship_physics)) = ship_query.single() else { return };
     let ship_forward = Vec2::new(ship_physics.rotation.cos(), ship_physics.rotation.sin());
 
-    for (weapon_entity, module, weapon, fire_group, global_transform, mount, parent, temp) in weapon_query.iter() {
+    for (weapon_entity, module, has_station, staffing, weapon, fire_group, global_transform, mount, parent, temp) in weapon_query.iter() {
+        // A gun with nobody on it does not fire.
+        if !crate::combat::weapon_is_crewed(has_station, staffing) {
+            continue;
+        }
         // Player ship only — AI ships carry identical laser components and
         // would otherwise fire whenever the player does, beaming toward
         // whatever the player has targeted (including themselves).
@@ -421,7 +425,7 @@ pub fn fire_ion_system(
     selection: Res<TargetSelection>,
     ship_query: Query<(Entity, &ShipPhysics), With<Ship>>,
     mut weapon_query: Query<(
-        &Module, &mut Weapon, &mut WeaponCooldown,
+        &Module, Has<CrewStation>, Option<&ModuleEfficiency>, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&ModuleTemperature>,
@@ -432,7 +436,11 @@ pub fn fire_ion_system(
 ) {
     let Ok((player_ship, ship_physics)) = ship_query.single() else { return };
 
-    for (module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning, temp) in weapon_query.iter_mut() {
+    for (module, has_station, staffing, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning, temp) in weapon_query.iter_mut() {
+        // A gun with nobody on it does not fire.
+        if !crate::combat::weapon_is_crewed(has_station, staffing) {
+            continue;
+        }
         // Player ship only — see fire_weapons_system for why this matters.
         if parent.parent() != player_ship { continue; }
         if module.module_type != ModuleType::IonDisruptor { continue; }
@@ -668,7 +676,7 @@ pub fn fire_plasma_system(
     selection: Res<TargetSelection>,
     ship_query: Query<(Entity, &ShipPhysics), With<Ship>>,
     mut weapon_query: Query<(
-        Entity, &Module, &mut Weapon, &mut WeaponCooldown,
+        Entity, &Module, Has<CrewStation>, Option<&ModuleEfficiency>, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&ModuleTemperature>,
@@ -679,7 +687,11 @@ pub fn fire_plasma_system(
 ) {
     let Ok((player_ship, ship_physics)) = ship_query.single() else { return };
 
-    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning, temp) in weapon_query.iter_mut() {
+    for (entity, module, has_station, staffing, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning, temp) in weapon_query.iter_mut() {
+        // A gun with nobody on it does not fire.
+        if !crate::combat::weapon_is_crewed(has_station, staffing) {
+            continue;
+        }
         // Player ship only — see fire_weapons_system for why this matters.
         if parent.parent() != player_ship { continue; }
         if module.module_type != ModuleType::PlasmaCaster { continue; }
@@ -774,7 +786,7 @@ pub fn fire_emp_missiles(
     selection: Res<TargetSelection>,
     ship_query: Query<(Entity, &ShipPhysics), With<Ship>>,
     mut weapon_query: Query<(
-        Entity, &Module, &mut Weapon, &mut WeaponCooldown,
+        Entity, &Module, Has<CrewStation>, Option<&ModuleEfficiency>, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
     ), Without<DestroyedModule>>,
     target_query: Query<&Transform, Without<Ship>>,
@@ -784,7 +796,11 @@ pub fn fire_emp_missiles(
 ) {
     let Ok((player_ship, ship_physics)) = ship_query.single() else { return };
 
-    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent) in weapon_query.iter_mut() {
+    for (entity, module, has_station, staffing, mut weapon, mut cooldown, global_transform, fire_group, mount, parent) in weapon_query.iter_mut() {
+        // A gun with nobody on it does not fire.
+        if !crate::combat::weapon_is_crewed(has_station, staffing) {
+            continue;
+        }
         // Player ship only — see fire_weapons_system for why this matters.
         if parent.parent() != player_ship { continue; }
         if module.module_type != ModuleType::EMPPulse { continue; }

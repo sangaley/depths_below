@@ -32,6 +32,12 @@ pub enum HullLayer {
     Inner,
     Void,
     BulkheadDoor,
+    /// Decking a person can actually walk on.
+    ///
+    /// The one hull layer crew can cross. Everything else — the shell, the
+    /// structural interior, the void between hulls — is something you route
+    /// AROUND, so where the hallways go decides which posts can be manned.
+    Hallway,
 }
 
 /// Hull material tiers - determines radiation shielding and durability
@@ -500,9 +506,9 @@ impl ModuleCategory {
                 ModuleType::ViewPort,
                 ModuleType::EmergencyBulkhead,
                 ModuleType::FirebreakWall,
-                ModuleType::Corridor,
-                ModuleType::LadderShaft,
-                ModuleType::MaintenanceTunnel,
+                // Corridor/LadderShaft/MaintenanceTunnel are deliberately
+                // absent: passages are HullLayer::Hallway now. The variants
+                // stay so old blueprints still deserialize.
             ],
         }
     }
@@ -1477,6 +1483,68 @@ pub enum CrewState {
     Unconscious,
     /// On EVA ferrying loot from a wreck (see crew::eva_salvage)
     Salvaging,
+}
+
+/// What the player has told this crew member to do.
+///
+/// A standing order, not a task: auto-assignment still picks WHICH reactor or
+/// gun, this only narrows what it's allowed to pick. `Auto` is the old
+/// behaviour — take whatever post has the highest priority — and stays the
+/// default so a ship nobody micromanages runs exactly as it did.
+#[derive(Component, Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum CrewDuty {
+    #[default]
+    Auto,
+    Engines,
+    Guns,
+    Power,
+    LifeSupport,
+    /// Never takes a post. Patches the ship between fights instead, which is
+    /// otherwise only something SPARE hands do — this is how you commit
+    /// someone to it on a ship with more posts than crew.
+    DamageControl,
+}
+
+impl CrewDuty {
+    pub const ALL: [CrewDuty; 6] = [
+        CrewDuty::Auto,
+        CrewDuty::Engines,
+        CrewDuty::Guns,
+        CrewDuty::Power,
+        CrewDuty::LifeSupport,
+        CrewDuty::DamageControl,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            CrewDuty::Auto => "AUTO",
+            CrewDuty::Engines => "ENGINES",
+            CrewDuty::Guns => "GUNS",
+            CrewDuty::Power => "POWER",
+            CrewDuty::LifeSupport => "LIFE SUP",
+            CrewDuty::DamageControl => "REPAIR",
+        }
+    }
+
+    /// Which module category this duty will take a post in, if any.
+    pub fn category(self) -> Option<ModuleCategory> {
+        match self {
+            CrewDuty::Auto | CrewDuty::DamageControl => None,
+            CrewDuty::Engines => Some(ModuleCategory::Propulsion),
+            CrewDuty::Guns => Some(ModuleCategory::Weapons),
+            CrewDuty::Power => Some(ModuleCategory::Power),
+            CrewDuty::LifeSupport => Some(ModuleCategory::LifeSupport),
+        }
+    }
+
+    /// May this crew member take a post in `category`?
+    pub fn allows(self, category: ModuleCategory) -> bool {
+        match self {
+            CrewDuty::Auto => true,
+            CrewDuty::DamageControl => false,
+            other => other.category() == Some(category),
+        }
+    }
 }
 
 /// A module that can be staffed by one crew member.

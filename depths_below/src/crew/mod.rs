@@ -4,10 +4,11 @@ use crate::components::*;
 use crate::resources::*;
 use crate::events::*;
 use crate::building::rooms::RoomMap;
-use crate::building::GridOccupancy;
 
 pub mod eva_salvage;
 pub mod hiring;
+pub mod navigation;
+pub mod walking;
 use eva_salvage::EvaSalvaging;
 
 pub struct CrewPlugin;
@@ -19,6 +20,41 @@ impl Plugin for CrewPlugin {
             .init_resource::<StaffingState>()
             .init_resource::<AutoAssignTimer>()
             .init_resource::<RepairScrapPool>()
+            // Interior navigation. Rebuilt in every state crew act in, and at
+            // dock especially — the whole point of build mode is changing the
+            // shape of the ship they have to walk through.
+            .add_systems(
+                Update,
+                navigation::rebuild_nav_grids.run_if(
+                    in_state(GameState::Exploring)
+                        .or_else(in_state(GameState::StationDocked))
+                        .or_else(in_state(GameState::Docked)),
+                ),
+            )
+            // Crew walking. Same states as staffing: they should walk to a
+            // newly-placed station while docked, not teleport there the
+            // instant the player leaves. Planning is chained after
+            // auto_assign_crew because destinations are read off the
+            // assignments it just made.
+            .init_resource::<walking::CrewPlanTimer>()
+            .init_resource::<walking::CrewErrandTimer>()
+            .add_systems(
+                Update,
+                (
+                    walking::plan_crew_destinations,
+                    walking::walk_engine_room_rounds,
+                    // After destinations: posted crew keep their post, and
+                    // only the hands nobody assigned get sent to the damage.
+                    walking::plan_repair_errands,
+                    walking::plan_crew_paths,
+                    walking::walk_crew,
+                )
+                    .chain()
+                    .after(auto_assign_crew)
+                    .run_if(in_state(GameState::Exploring)
+                        .or_else(in_state(GameState::StationDocked))
+                        .or_else(in_state(GameState::Docked))),
+            )
             // Staffing / efficiency systems run at both StationDocked and Exploring
             // so the HUD shows correct crew/station counts at the surface.
             .add_systems(
@@ -109,7 +145,7 @@ fn crew_arrive_with_quarters(
     mut placed_events: MessageReader<ModulePlaced>,
     registry: Res<crate::building::ModuleRegistry>,
     ship_query: Query<Entity, With<Ship>>,
-    quarters_query: Query<(&Quarters, &Module)>,
+    quarters_query: Query<(&Quarters, &Module, &ChildOf)>,
     crew_query: Query<&CrewMember>,
     mut roster: ResMut<CrewRoster>,
     mut notifications: MessageWriter<ShowNotification>,
@@ -133,14 +169,25 @@ fn crew_arrive_with_quarters(
         // staffing gap never closes (22/30 became 30/38 instead of 38/38).
         // The just-placed module's Quarters companion isn't flushed yet
         // this frame, so its berths come from the registry def.
-        let existing_berths: u32 = quarters_query
-            .iter()
-            .filter(|(_, module)| module.is_active && module.health > 0.0)
-            .map(|(quarters, _)| quarters.berths)
+        //
+        // Ship-scoped: AI ships carry Quarters modules too, and an unscoped
+        // count let every enemy's bunks inflate the player's capacity — the
+        // same leak OwnedByAiShip was introduced to close elsewhere. The
+        // ChildOf needed for berth placement makes the fix free.
+        let ours = || {
+            quarters_query
+                .iter()
+                .filter(|(_, _, parent)| parent.parent() == ship)
+        };
+        let existing_berths: u32 = ours()
+            .filter(|(_, module, _)| module.is_active && module.health > 0.0)
+            .map(|(quarters, _, _)| quarters.berths)
             .sum();
         let capacity = existing_berths + new_berths;
         let alive = crew_query.iter().filter(|c| c.health > 0.0).count() as u32;
         let to_spawn = capacity.saturating_sub(alive);
+
+        let berths = walking::quarters_cells(ours().map(|(_, module, _)| module));
 
         let mut rng = rand::thread_rng();
         for i in 0..to_spawn {
@@ -153,7 +200,7 @@ fn crew_arrive_with_quarters(
                             custom_size: Some(Vec2::new(16.0, 16.0)),
                             ..default()
                         },
-                        Transform::from_xyz(i as f32 * 14.0 - 20.0, -20.0, 0.5),
+                        Transform::from_translation(walking::berth_position(&berths, alive as usize + i as usize)),
                     ),
                     CrewMember {
                         name: name.to_string(),
@@ -187,6 +234,7 @@ pub fn spawn_starter_crew(
     mut commands: Commands,
     ship_query: Query<Entity, With<Ship>>,
     existing_crew: Query<Entity, With<CrewMember>>,
+    quarters_query: Query<(&Quarters, &Module, &ChildOf)>,
     mut roster: ResMut<CrewRoster>,
 ) {
     // Guard: don't spawn duplicate crew
@@ -199,17 +247,23 @@ pub fn spawn_starter_crew(
 
     let crew_names = ["Jones", "Smith", "Chen", "Morgan", "Rivera", "Volkov", "Tanaka", "Okafor"];
 
+    // Start them in the bunks. They walk to their posts from there, which is
+    // both how a watch actually changes and a free demonstration that the
+    // pathing works on the ship the player is looking at.
+    let berths = walking::quarters_cells(
+        quarters_query
+            .iter()
+            .filter(|(_, _, parent)| parent.parent() == ship)
+            .map(|(_, module, _)| module),
+    );
+
     for (i, name) in crew_names.iter().enumerate() {
         let crew = commands.spawn((
             (Sprite {
                     color: Color::srgb(0.8, 0.6, 0.5),
                     custom_size: Some(Vec2::new(16.0, 16.0)),
                     ..default()
-                }, Transform::from_xyz(
-                    (i as f32 - 3.5) * 20.0,
-                    0.0,
-                    0.5,
-                )),
+                }, Transform::from_translation(walking::berth_position(&berths, i))),
             CrewMember {
                 name: name.to_string(),
                 health: 100.0,
@@ -226,6 +280,17 @@ pub fn spawn_starter_crew(
     info!("Spawned {} crew members", crew_names.len());
 }
 
+/// How many nozzles one engineer can keep running by walking between them.
+pub const ENGINES_PER_OPERATOR: usize = 3;
+
+/// Is this crew member available to work a post right now?
+fn crew_on_duty(crew: &CrewMember) -> bool {
+    crew.health > 0.0
+        && crew.state != CrewState::Panicking
+        && crew.state != CrewState::Unconscious
+        && crew.state != CrewState::Salvaging
+}
+
 /// Computes ModuleEfficiency for all modules with a CrewStation.
 /// staffing_factor: 0.0 unstaffed, 1.0 staffed (crew alive, aboard, and
 /// not panicking/unconscious) — a station nobody operates DOES NOT RUN.
@@ -234,31 +299,68 @@ pub fn spawn_starter_crew(
 /// value = damage_efficiency * staffing_factor
 fn compute_module_efficiency(
     mut commands: Commands,
-    mut station_query: Query<(Entity, &Module, &mut CrewStation)>,
+    mut station_query: Query<(Entity, &Module, &mut CrewStation, &ChildOf)>,
     crew_query: Query<&CrewMember>,
 ) {
-    for (entity, module, mut station) in station_query.iter_mut() {
+    // One engineer walks a bank of ENGINES_PER_OPERATOR nozzles. Not one hand
+    // each (five engines ate five of eight crew and the guns stayed dark), and
+    // not one hand for the whole ship however big it gets — a hundred-engine
+    // hull should still cost you a black gang.
+    //
+    // Which engines a short-handed room keeps running is resolved by grid
+    // position so it's stable frame to frame; an engineer's own nozzle is
+    // always covered first.
+    let mut covered_propulsion: std::collections::HashSet<Entity> = std::collections::HashSet::new();
+    {
+        let mut by_ship: std::collections::HashMap<Entity, (Vec<(IVec2, Entity)>, usize)> =
+            std::collections::HashMap::new();
+        for (entity, module, station, parent) in station_query.iter() {
+            if module.module_type.category() != ModuleCategory::Propulsion {
+                continue;
+            }
+            let slot = by_ship.entry(parent.parent()).or_default();
+            let manned = station
+                .assigned_crew
+                .is_some_and(|c| crew_query.get(c).is_ok_and(crew_on_duty));
+            if manned {
+                slot.1 += 1;
+                covered_propulsion.insert(entity);
+            } else {
+                slot.0.push((module.grid_position, entity));
+            }
+        }
+        for (_, (mut unmanned, operators)) in by_ship {
+            let capacity = operators * ENGINES_PER_OPERATOR;
+            let spare = capacity.saturating_sub(operators);
+            unmanned.sort_by_key(|(cell, _)| (cell.x, cell.y));
+            for (_, entity) in unmanned.into_iter().take(spare) {
+                covered_propulsion.insert(entity);
+            }
+        }
+    }
+
+    for (entity, module, mut station, parent) in station_query.iter_mut() {
         let ratio = if module.max_health > 0.0 { module.health / module.max_health } else { 1.0 };
         let damage_eff = ModuleDamageState::from_health_ratio(ratio).efficiency();
 
-        let staffing_factor = if let Some(crew_entity) = station.assigned_crew {
-            if let Ok(crew) = crew_query.get(crew_entity) {
-                if crew.health > 0.0
-                    && crew.state != CrewState::Panicking
-                    && crew.state != CrewState::Unconscious
-                    && crew.state != CrewState::Salvaging
-                {
-                    1.0
-                } else {
-                    // Dead/panicking/unconscious/EVA crew — clear assignment
+        let manned = match station.assigned_crew {
+            Some(crew_entity) => match crew_query.get(crew_entity) {
+                Ok(crew) if crew_on_duty(crew) => true,
+                // Dead/panicking/unconscious/EVA crew, or an entity that no
+                // longer exists — clear the assignment either way.
+                _ => {
                     station.assigned_crew = None;
-                    0.0
+                    false
                 }
-            } else {
-                // Crew entity no longer exists — clear assignment
-                station.assigned_crew = None;
-                0.0
-            }
+            },
+            None => false,
+        };
+
+        let staffing_factor = if manned {
+            1.0
+        } else if covered_propulsion.contains(&entity) {
+            // Within an engineer's rounds.
+            1.0
         } else {
             0.0
         };
@@ -328,8 +430,13 @@ fn update_staffing_state(
 fn auto_assign_crew(
     time: Res<Time>,
     mut timer: ResMut<AutoAssignTimer>,
-    mut station_query: Query<(Entity, &mut CrewStation, Has<KeepManned>, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
-    crew_query: Query<(Entity, &CrewMember, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
+    mut station_query: Query<(Entity, &Module, &mut CrewStation, Has<KeepManned>, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
+    crew_query: Query<(
+        Entity,
+        &CrewMember,
+        Option<&CrewDuty>,
+        Option<&crate::ai_ship::components::OwnedByAiShip>,
+    )>,
     ship_query: Query<Entity, With<Ship>>,
 ) {
     timer.timer.tick(time.delta());
@@ -345,16 +452,16 @@ fn auto_assign_crew(
 
     // Collect all crew currently assigned to any station
     let mut assigned_crew: std::collections::HashSet<Entity> = std::collections::HashSet::new();
-    for (_, station, _, _) in station_query.iter() {
+    for (_, _, station, _, _) in station_query.iter() {
         if let Some(crew_entity) = station.assigned_crew {
             assigned_crew.insert(crew_entity);
         }
     }
 
     // Clean up dead/despawned crew from stations
-    for (_, mut station, _, _) in station_query.iter_mut() {
+    for (_, _, mut station, _, _) in station_query.iter_mut() {
         if let Some(crew_entity) = station.assigned_crew {
-            if let Ok((_, crew, _)) = crew_query.get(crew_entity) {
+            if let Ok((_, crew, _, _)) = crew_query.get(crew_entity) {
                 if crew.health <= 0.0 {
                     station.assigned_crew = None;
                     assigned_crew.remove(&crew_entity);
@@ -367,19 +474,69 @@ fn auto_assign_crew(
         }
     }
 
+    // One engineer per ENGINES_PER_OPERATOR nozzles (see
+    // compute_module_efficiency). Work out how many the room actually wants,
+    // then release anyone beyond that so a big bank stops eating the crew.
+    // Pinned posts are honoured first — a KeepManned engine keeps its hand.
+    let mut engine_berths_wanted: std::collections::HashMap<Entity, usize> =
+        std::collections::HashMap::new();
+    for (_, module, _, _, owned) in station_query.iter() {
+        if module.module_type.category() == ModuleCategory::Propulsion {
+            if let Some(ship) = owner_of(owned) {
+                *engine_berths_wanted.entry(ship).or_insert(0) += 1;
+            }
+        }
+    }
+    for wanted in engine_berths_wanted.values_mut() {
+        *wanted = wanted.div_ceil(ENGINES_PER_OPERATOR);
+    }
+
+    let mut engine_berths_used: std::collections::HashMap<Entity, usize> =
+        std::collections::HashMap::new();
+    for pinned_pass in [true, false] {
+        for (_, module, mut station, pinned, owned) in station_query.iter_mut() {
+            if module.module_type.category() != ModuleCategory::Propulsion || pinned != pinned_pass {
+                continue;
+            }
+            let Some(ship) = owner_of(owned) else { continue };
+            if station.assigned_crew.is_none() {
+                continue;
+            }
+            let used = engine_berths_used.entry(ship).or_insert(0);
+            if *used < engine_berths_wanted.get(&ship).copied().unwrap_or(0) {
+                *used += 1;
+                continue;
+            }
+            if let Some(freed) = station.assigned_crew.take() {
+                assigned_crew.remove(&freed);
+            }
+        }
+    }
+
     // Collect unfilled stations (priority > 0, not manually assigned), bucketed by owning ship
-    let mut unfilled_by_ship: std::collections::HashMap<Entity, Vec<(Entity, u8, bool)>> = std::collections::HashMap::new();
-    for (entity, station, pinned, owned) in station_query.iter() {
+    let mut unfilled_by_ship: std::collections::HashMap<Entity, Vec<(Entity, u8, bool, ModuleCategory)>> = std::collections::HashMap::new();
+    for (entity, module, station, pinned, owned) in station_query.iter() {
         if station.priority > 0 && !station.manually_assigned && station.assigned_crew.is_none() {
             if let Some(ship) = owner_of(owned) {
-                unfilled_by_ship.entry(ship).or_default().push((entity, station.priority, pinned));
+                // Don't offer more engine berths than the room needs.
+                if module.module_type.category() == ModuleCategory::Propulsion {
+                    let used = engine_berths_used.entry(ship).or_insert(0);
+                    if *used >= engine_berths_wanted.get(&ship).copied().unwrap_or(0) {
+                        continue;
+                    }
+                    *used += 1;
+                }
+                unfilled_by_ship
+                    .entry(ship)
+                    .or_default()
+                    .push((entity, station.priority, pinned, module.module_type.category()));
             }
         }
     }
 
     // Collect available crew (alive, not panicking/unconscious, not assigned), bucketed by owning ship
-    let mut available_by_ship: std::collections::HashMap<Entity, Vec<Entity>> = std::collections::HashMap::new();
-    for (entity, crew, owned) in crew_query.iter() {
+    let mut available_by_ship: std::collections::HashMap<Entity, Vec<(Entity, CrewDuty)>> = std::collections::HashMap::new();
+    for (entity, crew, duty, owned) in crew_query.iter() {
         if crew.health > 0.0
             && crew.state != CrewState::Panicking
             && crew.state != CrewState::Unconscious
@@ -387,7 +544,10 @@ fn auto_assign_crew(
             && !assigned_crew.contains(&entity)
         {
             if let Some(ship) = owner_of(owned) {
-                available_by_ship.entry(ship).or_default().push(entity);
+                available_by_ship
+                    .entry(ship)
+                    .or_default()
+                    .push((entity, duty.copied().unwrap_or_default()));
             }
         }
     }
@@ -399,15 +559,21 @@ fn auto_assign_crew(
         // Pinned (keep-manned) posts staff first, then by priority descending
         unfilled.sort_by(|a, b| b.2.cmp(&a.2).then(b.1.cmp(&a.1)));
 
-        let mut crew_idx = 0;
-        for (station_entity, _priority, _pinned) in unfilled {
-            if crew_idx >= available_crew.len() {
-                break;
-            }
-            let crew_entity = available_crew[crew_idx];
-            crew_idx += 1;
+        // Standing orders narrow who each post can draw on. Taking the first
+        // WILLING hand rather than the first hand full stop is the whole
+        // difference: a gunner is passed over for the reactor and is still
+        // there when the post they were told to take comes up.
+        let mut taken: std::collections::HashSet<Entity> = std::collections::HashSet::new();
+        for (station_entity, _priority, _pinned, category) in unfilled {
+            let Some(&(crew_entity, _)) = available_crew
+                .iter()
+                .find(|(e, duty)| !taken.contains(e) && duty.allows(category))
+            else {
+                continue;
+            };
+            taken.insert(crew_entity);
 
-            if let Ok((_, mut station, _, _)) = station_query.get_mut(station_entity) {
+            if let Ok((_, _, mut station, _, _)) = station_query.get_mut(station_entity) {
                 station.assigned_crew = Some(crew_entity);
             }
         }
@@ -698,12 +864,12 @@ impl RepairScrapPool {
 /// ScrapMetal aboard to feed the patches.
 fn crew_repair_system(
     time: Res<Time>,
-    crew_query: Query<(&CrewMember, &CrewRoomLocation)>,
+    ship_query: Query<(Entity, &crate::building::ShipGrid), With<Ship>>,
+    crew_query: Query<(&CrewMember, &Transform, &ChildOf)>,
     repair_bays: Query<(&Module, &RepairSystem), Without<DestroyedModule>>,
     mut hull_query: Query<&mut HullSegment>,
     mut module_query: Query<&mut Module, (Without<DestroyedModule>, Without<RepairSystem>)>,
     room_map: Res<RoomMap>,
-    occupancy: Res<GridOccupancy>,
     mut inventory: ResMut<Inventory>,
     mut pool: ResMut<RepairScrapPool>,
     mut notifications: MessageWriter<ShowNotification>,
@@ -711,11 +877,16 @@ fn crew_repair_system(
     mut stall_notified: Local<bool>,
 ) {
     let dt = time.delta_secs();
+    let Ok((player_ship, grid)) = ship_query.single() else { return };
 
-    // Build per-room repair power: emergency crew at 1.0, idle hands at half
-    let mut room_repair_power: std::collections::HashMap<usize, f32> = std::collections::HashMap::new();
-    for (crew, location) in crew_query.iter() {
-        if crew.health <= 0.0 {
+    // Repair power is where the crew are STANDING, not which room they were
+    // filed under. Rooms were the right model when nobody could move; now that
+    // they walk, a hand mends what's within arm's reach — the cell under them
+    // and its four neighbours. It also drops a dependency on GridOccupancy,
+    // which only rebuilds at dock and is stale for the whole flight.
+    let mut cell_power: std::collections::HashMap<IVec2, f32> = std::collections::HashMap::new();
+    for (crew, transform, parent) in crew_query.iter() {
+        if crew.health <= 0.0 || parent.parent() != player_ship {
             continue;
         }
         let power = match crew.state {
@@ -723,8 +894,9 @@ fn crew_repair_system(
             CrewState::Idle => IDLE_REPAIR_POWER,
             _ => continue,
         };
-        if let Some(room_id) = location.room_id {
-            *room_repair_power.entry(room_id).or_insert(0.0) += power;
+        let here = crate::building::local_to_grid(transform.translation.truncate());
+        for reach in [IVec2::ZERO, IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
+            *cell_power.entry(here + reach).or_insert(0.0) += power;
         }
     }
 
@@ -740,14 +912,19 @@ fn crew_repair_system(
     let mut any_repaired = false;
     let mut repair_stalled = false;
 
-    // Repair hull segments and modules room-by-room
-    for (room_id, crew_power) in room_repair_power.iter() {
-        let boost = room_repair_boost.get(room_id).copied().unwrap_or(0.0);
+    // Repair whatever is under each crew member's hands
+    for (&tile, crew_power) in cell_power.iter() {
+        let boost = room_map
+            .tile_to_room
+            .get(&tile)
+            .and_then(|id| room_repair_boost.get(id))
+            .copied()
+            .unwrap_or(0.0);
         let total_power = crew_power + boost;
 
-        if let Some(room) = room_map.rooms.get(*room_id) {
-            for &tile in &room.tiles {
-                let Some(&entity) = occupancy.cells.get(&tile) else { continue };
+        {
+            {
+                let Some(entity) = grid.get(tile) else { continue };
                 if let Ok(mut hull) = hull_query.get_mut(entity) {
                     // Breach sealing is free — damage control, not materials
                     if hull.is_depressurized && hull.depressurization_level > 0.0 {
@@ -789,7 +966,7 @@ fn crew_repair_system(
         if let Some(&room_id) = room_map.tile_to_room.get(&bay_module.grid_position) {
             if let Some(room) = room_map.rooms.get(room_id) {
                 for &tile in &room.tiles {
-                    if let Some(&entity) = occupancy.cells.get(&tile) {
+                    if let Some(entity) = grid.get(tile) {
                         if let Ok(mut module) = module_query.get_mut(entity) {
                             if module.health < module.max_health && module.health > 0.0 {
                                 module.health = (module.health + repair_sys.repair_rate * dt).min(module.max_health);
@@ -1031,6 +1208,242 @@ fn reconcile_hired_crew(
         // Parent to ship if orphaned
         if parent.is_none() {
             commands.entity(crew_entity).insert(ChildOf(ship));
+        }
+    }
+}
+
+#[cfg(test)]
+mod engine_room_tests {
+    use super::*;
+    use bevy::time::TimeUpdateStrategy;
+    use std::time::Duration;
+
+    fn post(module_type: ModuleType, cell: IVec2, priority: u8) -> (Module, CrewStation) {
+        (
+            Module {
+                module_type,
+                health: 100.0,
+                max_health: 100.0,
+                power_consumption: 0.0,
+                power_generation: 0.0,
+                is_active: true,
+                grid_position: cell,
+                size: IVec2::ONE,
+                rotation: Rotation::North,
+            },
+            CrewStation { priority, assigned_crew: None, manually_assigned: false },
+        )
+    }
+
+    fn hand(name: &str) -> CrewMember {
+        CrewMember {
+            name: name.into(),
+            health: 100.0,
+            max_health: 100.0,
+            oxygen: 100.0,
+            morale: 100.0,
+            state: CrewState::Idle,
+        }
+    }
+
+    /// Propulsion outranks everything but power, so on the starter's five-engine
+    /// bank an eight-hand crew put seven people on reactors and nozzles and left
+    /// the guns dark. One operator runs the bank now; the rest of the ship gets
+    /// the hands back.
+    #[test]
+    fn one_operator_runs_the_whole_engine_bank() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<AutoAssignTimer>();
+        app.add_systems(Update, (auto_assign_crew, compute_module_efficiency).chain());
+
+        let ship = app.world_mut().spawn(Ship).id();
+        let engines: Vec<Entity> = (0..3)
+            .map(|i| {
+                app.world_mut()
+                    .spawn(post(ModuleType::StandardEngine, IVec2::new(-i, 0), 9))
+                    .insert(ChildOf(ship))
+                    .id()
+            })
+            .collect();
+        let gun = app
+            .world_mut()
+            .spawn(post(ModuleType::Gatling, IVec2::new(3, 0), 6))
+            .insert(ChildOf(ship))
+            .id();
+        for name in ["Chen", "Okafor"] {
+            app.world_mut().spawn(hand(name)).insert(ChildOf(ship));
+        }
+
+        // Drive past the 2s auto-assign tick. Steps stay under 250ms because
+        // Time<Virtual> clamps anything larger, so one big jump would be
+        // silently shortened and the timer would never fire.
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(200)));
+        for _ in 0..14 {
+            app.update();
+        }
+
+        let manned = engines
+            .iter()
+            .filter(|e| {
+                app.world().get::<CrewStation>(**e).unwrap().assigned_crew.is_some()
+            })
+            .count();
+        let gun_manned = app.world().get::<CrewStation>(gun).unwrap().assigned_crew.is_some();
+        assert_eq!(
+            manned, 1,
+            "three nozzles is one engineer's round; took {manned} hands (gun manned: {gun_manned})"
+        );
+
+        // ...and the whole bank still runs on that one operator.
+        for engine in &engines {
+            let eff = app.world().get::<ModuleEfficiency>(*engine).unwrap();
+            assert_eq!(
+                eff.staffing_factor, 1.0,
+                "an engine went dark despite the room being manned"
+            );
+        }
+
+        // The hand that would have been a second nozzle-minder is on the gun.
+        assert!(
+            app.world().get::<CrewStation>(gun).unwrap().assigned_crew.is_some(),
+            "freed crew never reached the weapon"
+        );
+    }
+
+    /// A hand covers three nozzles, not the whole ship however big it gets.
+    /// Four engines is one too many for one engineer, so the room wants two.
+    #[test]
+    fn a_bank_bigger_than_one_round_costs_a_second_engineer() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<AutoAssignTimer>();
+        app.add_systems(Update, (auto_assign_crew, compute_module_efficiency).chain());
+
+        let ship = app.world_mut().spawn(Ship).id();
+        let engines: Vec<Entity> = (0..4)
+            .map(|i| {
+                app.world_mut()
+                    .spawn(post(ModuleType::StandardEngine, IVec2::new(-i, 0), 9))
+                    .insert(ChildOf(ship))
+                    .id()
+            })
+            .collect();
+        for name in ["Chen", "Okafor", "Rivera"] {
+            app.world_mut().spawn(hand(name)).insert(ChildOf(ship));
+        }
+
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(200)));
+        for _ in 0..14 {
+            app.update();
+        }
+
+        let manned = engines
+            .iter()
+            .filter(|e| app.world().get::<CrewStation>(**e).unwrap().assigned_crew.is_some())
+            .count();
+        assert_eq!(manned, 2, "four nozzles need two engineers, not {manned}");
+        for engine in &engines {
+            let eff = app.world().get::<ModuleEfficiency>(*engine).unwrap();
+            assert_eq!(eff.staffing_factor, 1.0, "an engine went dark with the room fully crewed");
+        }
+    }
+
+    /// A standing order has to beat priority, or it isn't an order. The
+    /// reactor outranks the gun 10 to 6, so an unconstrained hand always takes
+    /// it; a gunner must be passed over for it and still be there for the gun.
+    #[test]
+    fn a_standing_order_outranks_station_priority() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<AutoAssignTimer>();
+        app.add_systems(Update, auto_assign_crew);
+
+        let ship = app.world_mut().spawn(Ship).id();
+        let reactor = app
+            .world_mut()
+            .spawn(post(ModuleType::StandardReactor, IVec2::new(0, 0), 10))
+            .insert(ChildOf(ship))
+            .id();
+        let gun = app
+            .world_mut()
+            .spawn(post(ModuleType::Gatling, IVec2::new(2, 0), 6))
+            .insert(ChildOf(ship))
+            .id();
+        app.world_mut()
+            .spawn((hand("Rivera"), CrewDuty::Guns))
+            .insert(ChildOf(ship));
+
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(200)));
+        for _ in 0..14 {
+            app.update();
+        }
+
+        assert!(
+            app.world().get::<CrewStation>(gun).unwrap().assigned_crew.is_some(),
+            "a gunner never reached the gun"
+        );
+        assert!(
+            app.world().get::<CrewStation>(reactor).unwrap().assigned_crew.is_none(),
+            "a gunner was drafted onto the reactor despite their orders"
+        );
+    }
+
+    /// Damage control means damage control: they hold no post at all, which is
+    /// how you commit someone to repairs on a ship with more posts than crew.
+    #[test]
+    fn damage_control_crew_take_no_post() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<AutoAssignTimer>();
+        app.add_systems(Update, auto_assign_crew);
+
+        let ship = app.world_mut().spawn(Ship).id();
+        let reactor = app
+            .world_mut()
+            .spawn(post(ModuleType::StandardReactor, IVec2::new(0, 0), 10))
+            .insert(ChildOf(ship))
+            .id();
+        app.world_mut()
+            .spawn((hand("Okafor"), CrewDuty::DamageControl))
+            .insert(ChildOf(ship));
+
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(200)));
+        for _ in 0..14 {
+            app.update();
+        }
+
+        assert!(
+            app.world().get::<CrewStation>(reactor).unwrap().assigned_crew.is_none(),
+            "a damage-control hand was drafted onto a post"
+        );
+    }
+
+    /// Losing the engineer must still cost you the whole bank — otherwise
+    /// sharing the post has quietly removed the reason crew matter.
+    #[test]
+    fn an_unmanned_engine_room_stops_every_engine() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<AutoAssignTimer>();
+        app.add_systems(Update, compute_module_efficiency);
+
+        let ship = app.world_mut().spawn(Ship).id();
+        let engines: Vec<Entity> = (0..3)
+            .map(|i| {
+                app.world_mut()
+                    .spawn(post(ModuleType::StandardEngine, IVec2::new(-i, 0), 9))
+                    .insert(ChildOf(ship))
+                    .id()
+            })
+            .collect();
+
+        app.update();
+        app.update();
+
+        for engine in &engines {
+            let eff = app.world().get::<ModuleEfficiency>(*engine).unwrap();
+            assert_eq!(eff.staffing_factor, 0.0, "an unmanned engine room still produced thrust");
         }
     }
 }

@@ -820,7 +820,7 @@ impl BuildCategory {
 
     pub fn item_count(&self) -> usize {
         match self {
-            // Outer, Inner, Void, BulkheadDoor, then the angled plating.
+            // Outer, Inner, Hallway, Void, BulkheadDoor, then the angled plating.
             BuildCategory::Hull => HULL_LAYERS.len() + HULL_PLATING.len(),
             BuildCategory::Custom => 0, // No saved blueprints yet (will be expanded later)
             other => other.to_module_category()
@@ -852,9 +852,10 @@ pub struct BuildingState {
     pub auto_rotated: bool,
 }
 
-const HULL_LAYERS: [HullLayer; 4] = [
+const HULL_LAYERS: [HullLayer; 5] = [
     HullLayer::Outer,
     HullLayer::Inner,
+    HullLayer::Hallway,
     HullLayer::Void,
     HullLayer::BulkheadDoor,
 ];
@@ -924,6 +925,7 @@ impl BuildingState {
             BuildSelection::Hull(layer) => match layer {
                 HullLayer::Outer => "Outer Hull",
                 HullLayer::Inner => "Inner Hull",
+                HullLayer::Hallway => "Hallway",
                 HullLayer::Void => "Void Space",
                 HullLayer::BulkheadDoor => "Bulkhead Door",
             },
@@ -1429,6 +1431,10 @@ pub struct CrewSaveData {
     pub morale: f32,
     #[serde(default)]
     pub assigned_module_grid: Option<IVec2>,
+    /// The player's standing order for this hand. Defaulted so saves written
+    /// before duties existed load as Auto — which is what they were.
+    #[serde(default)]
+    pub duty: crate::components::CrewDuty,
 }
 
 /// Hull segment with material info for save/load
@@ -1648,9 +1654,10 @@ mod tests {
         }
 
         assert!(matches!(seen[0], BuildSelection::Hull(HullLayer::Outer)));
-        assert!(matches!(seen[3], BuildSelection::Hull(HullLayer::BulkheadDoor)));
-        assert!(matches!(seen[4], BuildSelection::Module(ModuleType::AngledArmorPlate)));
-        assert!(matches!(seen[5], BuildSelection::Module(ModuleType::AngledHullPlate)));
+        assert!(matches!(seen[2], BuildSelection::Hull(HullLayer::Hallway)));
+        assert!(matches!(seen[4], BuildSelection::Hull(HullLayer::BulkheadDoor)));
+        assert!(matches!(seen[5], BuildSelection::Module(ModuleType::AngledArmorPlate)));
+        assert!(matches!(seen[6], BuildSelection::Module(ModuleType::AngledHullPlate)));
 
         // Back to the start after a full lap.
         assert!(matches!(state.current_selection(), BuildSelection::Hull(HullLayer::Outer)));

@@ -508,6 +508,7 @@ pub fn spawn_ship_from_design(
         let color = match cell.layer {
             HullLayer::Outer => Color::WHITE,
             HullLayer::Inner => Color::srgb(0.9, 0.9, 0.9),
+            HullLayer::Hallway => Color::srgb(0.42, 0.48, 0.52),
             HullLayer::Void => Color::srgb(0.5, 0.5, 0.6),
             HullLayer::BulkheadDoor => Color::srgb(0.9, 0.8, 0.7),
         };

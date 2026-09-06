@@ -88,7 +88,9 @@ pub fn fire_missiles_system(
     aim_lock: Res<super::targeting::AimLock>,
     ship_query: Query<(Entity, &ShipPhysics, &Transform, &Velocity), With<Ship>>,
     mut weapon_query: Query<(
-        Entity, &Module, &mut Weapon, &mut WeaponCooldown,
+        // WeaponMount is gone from here deliberately: a missile leaves down
+        // its own tube regardless of arc, so nothing consults the mount.
+        Entity, &Module, Has<CrewStation>, Option<&ModuleEfficiency>, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &ChildOf,
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&ModuleTemperature>,
@@ -138,7 +140,11 @@ pub fn fire_missiles_system(
         .map(|(e, t, _)| (e, t.translation.truncate()))
         .collect();
 
-    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, parent, tuning, temp) in weapon_query.iter_mut() {
+    for (entity, module, has_station, staffing, mut weapon, mut cooldown, global_transform, fire_group, parent, tuning, temp) in weapon_query.iter_mut() {
+        // A gun with nobody on it does not fire.
+        if !crate::combat::weapon_is_crewed(has_station, staffing) {
+            continue;
+        }
         // Player ship only — see fire_weapons_system for why this matters:
         // AI ships carry identical missile-bay components and would
         // otherwise launch whenever the player fires, homing on the

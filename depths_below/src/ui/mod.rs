@@ -21,6 +21,7 @@ impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app
             .init_resource::<PrePauseState>()
+            .init_resource::<OpenDutyDropdown>()
             .init_resource::<CustomizationState>()
             .init_resource::<ComponentPlacementState>()
             .init_resource::<PieceCustomizationState>()
@@ -210,7 +211,10 @@ impl Plugin for UiPlugin {
                     toggle_crew_menu,
                     toggle_map_overlay,
                     toggle_galaxy_view,
-                    crew_menu_assign_input,
+                    crew_duty_click,
+                    crew_duty_option_click,
+                    sync_crew_duty_dropdowns,
+                    refresh_crew_duty_labels,
                 ).run_if(in_state(GameState::Exploring)),
             )
             // Map-click warp destination + G-hold warp dash (while exploring)
@@ -1724,9 +1728,10 @@ fn toggle_crew_menu(
     // Without<OwnedByAiShip>: player-only — AI ships carry CrewMember/
     // CrewStation now too (see ai_ship::crew), unscoped this menu would show
     // AI crew mixed into the player's own crew roster.
-    crew_query: Query<(Entity, &CrewMember), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
     station_query: Query<(&CrewStation, &Module), Without<crate::ai_ship::components::OwnedByAiShip>>,
     staffing_state: Res<StaffingState>,
+    mut open_dropdown: ResMut<OpenDutyDropdown>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyC) {
         return;
@@ -1739,8 +1744,11 @@ fn toggle_crew_menu(
     // returns, so the title bar/border don't linger orphaned on screen.
     if let Some((entity, _)) = existing_menu.iter().find(|(_, w)| w.id == WINDOW_ID) {
         commands.entity(entity).despawn();
+        open_dropdown.0 = None;
         return;
     }
+    // Opening fresh: never inherit an order list left open from last time.
+    open_dropdown.0 = None;
 
     // Build a map: crew entity -> assigned module grid position
     let mut crew_assignments: std::collections::HashMap<Entity, IVec2> = std::collections::HashMap::new();
@@ -1754,7 +1762,7 @@ fn toggle_crew_menu(
         &mut commands,
         WINDOW_ID,
         "Crew Management",
-        Vec2::new(380.0, 320.0),
+        Vec2::new(460.0, 340.0),
         Vec2::new(10.0, 60.0),
     );
 
@@ -1776,7 +1784,8 @@ fn toggle_crew_menu(
             row_gap: Val::Px(theme::ThemeSpacing::SM),
             ..default()
         }).with_children(|list| {
-            for (entity, crew) in crew_query.iter() {
+            for (entity, crew, duty) in crew_query.iter() {
+                let duty = duty.copied().unwrap_or_default();
                 let (status, dot_color) = if crew.health <= 0.0 {
                     ("DEAD".to_string(), theme::ThemeColors::STATUS_DANGER)
                 } else if crew.state == CrewState::Panicking {
@@ -1819,6 +1828,84 @@ fn toggle_crew_menu(
                             TextColor(theme::ThemeColors::TEXT_MUTED),
                         ));
                     });
+
+                    // Standing order, as a real dropdown. Cycling meant
+                    // circling all six to get back to the one you wanted.
+                    //
+                    // The list is a SIBLING of the chip, not a child: nested
+                    // inside the button, a click on an option would land on
+                    // the chip as well and reopen what it just closed.
+                    row.spawn(Node {
+                        position_type: PositionType::Relative,
+                        width: Val::Px(96.0),
+                        ..default()
+                    }).with_children(|slot| {
+                        slot.spawn((
+                            Node {
+                                width: Val::Percent(100.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                padding: UiRect::all(Val::Px(theme::ThemeSpacing::XS)),
+                                border: UiRect::all(Val::Px(1.0)),
+                                ..default()
+                            },
+                            BackgroundColor(theme::ThemeColors::BG_ELEVATED),
+                            BorderColor::all(theme::ThemeColors::BORDER_DEFAULT),
+                            Button,
+                            Interaction::default(),
+                            CrewDutyButton { crew: entity },
+                        )).with_children(|chip| {
+                            chip.spawn((
+                                Text::new(duty.label()),
+                                TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                                TextColor(if duty == CrewDuty::Auto {
+                                    theme::ThemeColors::TEXT_MUTED
+                                } else {
+                                    theme::ThemeColors::TEXT_TITLE
+                                }),
+                                CrewDutyLabel { crew: entity },
+                            ));
+                        });
+
+                        // Spawned hidden and toggled, rather than spawned on
+                        // open: no despawn race with the click that opened it.
+                        slot.spawn((
+                            Node {
+                                position_type: PositionType::Absolute,
+                                top: Val::Percent(100.0),
+                                left: Val::Px(0.0),
+                                width: Val::Percent(100.0),
+                                flex_direction: FlexDirection::Column,
+                                border: UiRect::all(Val::Px(1.0)),
+                                display: Display::None,
+                                ..default()
+                            },
+                            BackgroundColor(theme::ThemeColors::BG_VOID),
+                            BorderColor::all(theme::ThemeColors::BORDER_DEFAULT),
+                            GlobalZIndex(60),
+                            CrewDutyDropdown { crew: entity },
+                        )).with_children(|list| {
+                            for option in CrewDuty::ALL {
+                                list.spawn((
+                                    Node {
+                                        justify_content: JustifyContent::Center,
+                                        padding: UiRect::all(Val::Px(theme::ThemeSpacing::XS)),
+                                        ..default()
+                                    },
+                                    BackgroundColor(theme::ThemeColors::BG_ELEVATED),
+                                    Button,
+                                    Interaction::default(),
+                                    CrewDutyOption { crew: entity, duty: option },
+                                )).with_children(|o| {
+                                    o.spawn((
+                                        Text::new(option.label()),
+                                        TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                                        TextColor(theme::ThemeColors::TEXT_PRIMARY),
+                                    ));
+                                });
+                            }
+                        });
+                    });
                 });
             }
         });
@@ -1826,35 +1913,124 @@ fn toggle_crew_menu(
 }
 
 /// Stub for crew assignment input — press 1 to manually assign idle crew to first unstaffed weapon
-fn crew_menu_assign_input(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    crew_query: Query<(Entity, &CrewMember)>,
-    mut station_query: Query<(&mut CrewStation, &Module), With<Weapon>>,
+/// Marks the clickable duty chip on a crew row.
+#[derive(Component)]
+pub struct CrewDutyButton {
+    pub crew: Entity,
+}
+
+/// Marks the chip's text so it can be refreshed in place.
+#[derive(Component)]
+pub struct CrewDutyLabel {
+    pub crew: Entity,
+}
+
+/// The option list hanging under one crew member's chip.
+#[derive(Component)]
+pub struct CrewDutyDropdown {
+    pub crew: Entity,
+}
+
+/// One row of that list.
+#[derive(Component)]
+pub struct CrewDutyOption {
+    pub crew: Entity,
+    pub duty: CrewDuty,
+}
+
+/// Which crew member's dropdown is open, if any. At most one at a time —
+/// several open lists would overlap each other down the roster.
+#[derive(Resource, Default)]
+pub struct OpenDutyDropdown(pub Option<Entity>);
+
+/// Clicking a chip opens its list, or closes it if it was already open.
+fn crew_duty_click(
+    buttons: Query<(&Interaction, &CrewDutyButton), Changed<Interaction>>,
+    mut open: ResMut<OpenDutyDropdown>,
+) {
+    for (interaction, button) in buttons.iter() {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        open.0 = if open.0 == Some(button.crew) { None } else { Some(button.crew) };
+    }
+}
+
+/// Picking an option sets the standing order and closes the list.
+fn crew_duty_option_click(
+    mut commands: Commands,
+    options: Query<(&Interaction, &CrewDutyOption), Changed<Interaction>>,
+    mut crew_query: Query<(&CrewMember, Option<&mut CrewDuty>)>,
+    mut station_query: Query<&mut CrewStation>,
+    mut open: ResMut<OpenDutyDropdown>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    // Press 1 to assign first idle crew to first unstaffed weapon station
-    if keyboard.just_pressed(KeyCode::Digit1) {
-        // Find crew entities already assigned to any station
-        let assigned_crew: std::collections::HashSet<Entity> = station_query
-            .iter()
-            .filter_map(|(cs, _)| cs.assigned_crew)
-            .collect();
-
-        let first_idle = crew_query.iter()
-            .find(|(entity, c)| c.health > 0.0 && !assigned_crew.contains(entity));
-
-        let first_unstaffed = station_query.iter_mut()
-            .find(|(cs, _)| cs.assigned_crew.is_none());
-
-        if let (Some((crew_entity, crew)), Some((mut cs, _module))) = (first_idle, first_unstaffed) {
-            cs.assigned_crew = Some(crew_entity);
-            cs.manually_assigned = true;
-            notifications.write(ShowNotification {
-                message: format!("{} assigned to weapon", crew.name),
-                notification_type: NotificationType::Success,
-                duration: 2.0,
-            });
+    for (interaction, option) in options.iter() {
+        if *interaction != Interaction::Pressed {
+            continue;
         }
+        let Ok((crew, duty)) = crew_query.get_mut(option.crew) else { continue };
+        let changed = duty.as_deref().copied().unwrap_or_default() != option.duty;
+        match duty {
+            Some(mut d) => *d = option.duty,
+            None => {
+                commands.entity(option.crew).try_insert(option.duty);
+            }
+        }
+        open.0 = None;
+
+        if !changed {
+            continue;
+        }
+        // Drop the post they were holding so the next auto-assign pass can
+        // honour the new order instead of leaving them where they were.
+        for mut station in station_query.iter_mut() {
+            if station.assigned_crew == Some(option.crew) {
+                station.assigned_crew = None;
+                station.manually_assigned = false;
+            }
+        }
+        notifications.write(ShowNotification {
+            message: format!("{} — {}", crew.name, option.duty.label()),
+            notification_type: NotificationType::Info,
+            duration: 1.5,
+        });
+    }
+}
+
+/// Shows exactly the open list and hides the rest.
+fn sync_crew_duty_dropdowns(
+    open: Res<OpenDutyDropdown>,
+    mut lists: Query<(&CrewDutyDropdown, &mut Node)>,
+) {
+    for (dropdown, mut node) in lists.iter_mut() {
+        let wanted = if open.0 == Some(dropdown.crew) {
+            Display::Flex
+        } else {
+            Display::None
+        };
+        if node.display != wanted {
+            node.display = wanted;
+        }
+    }
+}
+
+/// Keeps the chips reading true while the window stays open.
+fn refresh_crew_duty_labels(
+    duties: Query<&CrewDuty>,
+    mut labels: Query<(&CrewDutyLabel, &mut Text, &mut TextColor)>,
+) {
+    for (label, mut text, mut color) in labels.iter_mut() {
+        let duty = duties.get(label.crew).copied().unwrap_or_default();
+        let wanted = duty.label();
+        if text.0 != wanted {
+            text.0 = wanted.to_string();
+        }
+        color.0 = if duty == CrewDuty::Auto {
+            theme::ThemeColors::TEXT_MUTED
+        } else {
+            theme::ThemeColors::TEXT_TITLE
+        };
     }
 }
 

@@ -49,6 +49,9 @@ pub fn detect_rooms(
     // Collect all hull tile positions by layer
     let mut inner_hull_positions: HashSet<IVec2> = HashSet::new();
     let mut outer_hull_positions: HashSet<IVec2> = HashSet::new();
+    // Hallways are open space, not structure: they carry air and fire and
+    // join the compartments either side of them into one room.
+    let mut hallway_positions: HashSet<IVec2> = HashSet::new();
     let mut all_hull_positions: HashSet<IVec2> = HashSet::new();
 
     for (hull, transform, parent) in hull_query.iter() {
@@ -63,6 +66,7 @@ pub fn detect_rooms(
                     inner_hull_positions.insert(grid);
                 }
             }
+            HullLayer::Hallway => { hallway_positions.insert(grid); }
             HullLayer::Outer => { outer_hull_positions.insert(grid); }
             HullLayer::Void => {}
         }
@@ -75,13 +79,18 @@ pub fn detect_rooms(
         module_positions.insert(module.grid_position);
     }
 
-    // Flood-fill from each unvisited module position
-    // Connected module positions (adjacent, not separated by inner hull) form a room
+    // Interior space is anything a person or a lungful of air can occupy:
+    // the modules themselves plus the hallways joining them.
+    let interior_positions: HashSet<IVec2> =
+        module_positions.union(&hallway_positions).copied().collect();
+
+    // Flood-fill from each unvisited interior cell. Connected interior cells
+    // (adjacent, not separated by inner hull) form a room.
     let mut visited: HashSet<IVec2> = HashSet::new();
     let mut rooms = Vec::new();
     let mut tile_to_room = HashMap::new();
 
-    for &pos in &module_positions {
+    for &pos in &interior_positions {
         if visited.contains(&pos) {
             continue;
         }
@@ -105,8 +114,8 @@ pub fn detect_rooms(
                 if inner_hull_positions.contains(&neighbor) {
                     continue;
                 }
-                // Only flood into other module positions (interior space)
-                if module_positions.contains(&neighbor) {
+                // Only flood into other interior space
+                if interior_positions.contains(&neighbor) {
                     visited.insert(neighbor);
                     queue.push_back(neighbor);
                 }
