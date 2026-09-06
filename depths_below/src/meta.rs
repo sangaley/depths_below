@@ -115,7 +115,7 @@ fn collect_save_data(
         Option<&crate::building::customization::tuning::SelectedAmmo>,
     )>,
     hull_query: &Query<(&HullSegment, &Transform)>,
-    crew_query: &Query<(Entity, &CrewMember)>,
+    crew_query: &Query<(Entity, &CrewMember, Option<&CrewDuty>)>,
     current_state: &State<GameState>,
     galaxy_map: &GalaxyMap,
     streaming: &SystemStreamingManager,
@@ -167,7 +167,7 @@ fn collect_save_data(
     // Collect crew (auto-assign restores assignments on load)
     let crew: Vec<CrewSaveData> = crew_query
         .iter()
-        .map(|(_crew_entity, member)| {
+        .map(|(_crew_entity, member, duty)| {
             CrewSaveData {
                 name: member.name.clone(),
                 health: member.health,
@@ -175,6 +175,7 @@ fn collect_save_data(
                 oxygen: member.oxygen,
                 morale: member.morale,
                 assigned_module_grid: None,
+                duty: duty.copied().unwrap_or_default(),
             }
         })
         .collect();
@@ -264,7 +265,7 @@ fn handle_save_request(
         Option<&crate::building::customization::tuning::SelectedAmmo>,
     )>,
     hull_query: Query<(&HullSegment, &Transform)>,
-    crew_query: Query<(Entity, &CrewMember)>,
+    crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>)>,
 ) {
     let (world_state, galaxy_map, streaming) = &world_galaxy;
     for event in save_events.read() {
@@ -524,8 +525,11 @@ fn rebuild_entities_from_save(
                 }, Transform::from_xyz(
                     (i as f32 - 3.5) * 20.0,
                     0.0,
-                    0.5,
+                    // Above the modules, like every other crew spawn — the
+                    // walk planner pulls them onto real deck from here.
+                    crate::crew::walking::CREW_Z,
                 )),
+            crew_data.duty,
             CrewMember {
                 name: crew_data.name.clone(),
                 health: crew_data.health,

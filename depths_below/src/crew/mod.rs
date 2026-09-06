@@ -431,7 +431,12 @@ fn auto_assign_crew(
     time: Res<Time>,
     mut timer: ResMut<AutoAssignTimer>,
     mut station_query: Query<(Entity, &Module, &mut CrewStation, Has<KeepManned>, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
-    crew_query: Query<(Entity, &CrewMember, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
+    crew_query: Query<(
+        Entity,
+        &CrewMember,
+        Option<&CrewDuty>,
+        Option<&crate::ai_ship::components::OwnedByAiShip>,
+    )>,
     ship_query: Query<Entity, With<Ship>>,
 ) {
     timer.timer.tick(time.delta());
@@ -456,7 +461,7 @@ fn auto_assign_crew(
     // Clean up dead/despawned crew from stations
     for (_, _, mut station, _, _) in station_query.iter_mut() {
         if let Some(crew_entity) = station.assigned_crew {
-            if let Ok((_, crew, _)) = crew_query.get(crew_entity) {
+            if let Ok((_, crew, _, _)) = crew_query.get(crew_entity) {
                 if crew.health <= 0.0 {
                     station.assigned_crew = None;
                     assigned_crew.remove(&crew_entity);
@@ -509,7 +514,7 @@ fn auto_assign_crew(
     }
 
     // Collect unfilled stations (priority > 0, not manually assigned), bucketed by owning ship
-    let mut unfilled_by_ship: std::collections::HashMap<Entity, Vec<(Entity, u8, bool)>> = std::collections::HashMap::new();
+    let mut unfilled_by_ship: std::collections::HashMap<Entity, Vec<(Entity, u8, bool, ModuleCategory)>> = std::collections::HashMap::new();
     for (entity, module, station, pinned, owned) in station_query.iter() {
         if station.priority > 0 && !station.manually_assigned && station.assigned_crew.is_none() {
             if let Some(ship) = owner_of(owned) {
@@ -521,14 +526,17 @@ fn auto_assign_crew(
                     }
                     *used += 1;
                 }
-                unfilled_by_ship.entry(ship).or_default().push((entity, station.priority, pinned));
+                unfilled_by_ship
+                    .entry(ship)
+                    .or_default()
+                    .push((entity, station.priority, pinned, module.module_type.category()));
             }
         }
     }
 
     // Collect available crew (alive, not panicking/unconscious, not assigned), bucketed by owning ship
-    let mut available_by_ship: std::collections::HashMap<Entity, Vec<Entity>> = std::collections::HashMap::new();
-    for (entity, crew, owned) in crew_query.iter() {
+    let mut available_by_ship: std::collections::HashMap<Entity, Vec<(Entity, CrewDuty)>> = std::collections::HashMap::new();
+    for (entity, crew, duty, owned) in crew_query.iter() {
         if crew.health > 0.0
             && crew.state != CrewState::Panicking
             && crew.state != CrewState::Unconscious
@@ -536,7 +544,10 @@ fn auto_assign_crew(
             && !assigned_crew.contains(&entity)
         {
             if let Some(ship) = owner_of(owned) {
-                available_by_ship.entry(ship).or_default().push(entity);
+                available_by_ship
+                    .entry(ship)
+                    .or_default()
+                    .push((entity, duty.copied().unwrap_or_default()));
             }
         }
     }
@@ -548,13 +559,19 @@ fn auto_assign_crew(
         // Pinned (keep-manned) posts staff first, then by priority descending
         unfilled.sort_by(|a, b| b.2.cmp(&a.2).then(b.1.cmp(&a.1)));
 
-        let mut crew_idx = 0;
-        for (station_entity, _priority, _pinned) in unfilled {
-            if crew_idx >= available_crew.len() {
-                break;
-            }
-            let crew_entity = available_crew[crew_idx];
-            crew_idx += 1;
+        // Standing orders narrow who each post can draw on. Taking the first
+        // WILLING hand rather than the first hand full stop is the whole
+        // difference: a gunner is passed over for the reactor and is still
+        // there when the post they were told to take comes up.
+        let mut taken: std::collections::HashSet<Entity> = std::collections::HashSet::new();
+        for (station_entity, _priority, _pinned, category) in unfilled {
+            let Some(&(crew_entity, _)) = available_crew
+                .iter()
+                .find(|(e, duty)| !taken.contains(e) && duty.allows(category))
+            else {
+                continue;
+            };
+            taken.insert(crew_entity);
 
             if let Ok((_, _, mut station, _, _)) = station_query.get_mut(station_entity) {
                 station.assigned_crew = Some(crew_entity);
@@ -1330,6 +1347,76 @@ mod engine_room_tests {
             let eff = app.world().get::<ModuleEfficiency>(*engine).unwrap();
             assert_eq!(eff.staffing_factor, 1.0, "an engine went dark with the room fully crewed");
         }
+    }
+
+    /// A standing order has to beat priority, or it isn't an order. The
+    /// reactor outranks the gun 10 to 6, so an unconstrained hand always takes
+    /// it; a gunner must be passed over for it and still be there for the gun.
+    #[test]
+    fn a_standing_order_outranks_station_priority() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<AutoAssignTimer>();
+        app.add_systems(Update, auto_assign_crew);
+
+        let ship = app.world_mut().spawn(Ship).id();
+        let reactor = app
+            .world_mut()
+            .spawn(post(ModuleType::StandardReactor, IVec2::new(0, 0), 10))
+            .insert(ChildOf(ship))
+            .id();
+        let gun = app
+            .world_mut()
+            .spawn(post(ModuleType::Gatling, IVec2::new(2, 0), 6))
+            .insert(ChildOf(ship))
+            .id();
+        app.world_mut()
+            .spawn((hand("Rivera"), CrewDuty::Guns))
+            .insert(ChildOf(ship));
+
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(200)));
+        for _ in 0..14 {
+            app.update();
+        }
+
+        assert!(
+            app.world().get::<CrewStation>(gun).unwrap().assigned_crew.is_some(),
+            "a gunner never reached the gun"
+        );
+        assert!(
+            app.world().get::<CrewStation>(reactor).unwrap().assigned_crew.is_none(),
+            "a gunner was drafted onto the reactor despite their orders"
+        );
+    }
+
+    /// Damage control means damage control: they hold no post at all, which is
+    /// how you commit someone to repairs on a ship with more posts than crew.
+    #[test]
+    fn damage_control_crew_take_no_post() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<AutoAssignTimer>();
+        app.add_systems(Update, auto_assign_crew);
+
+        let ship = app.world_mut().spawn(Ship).id();
+        let reactor = app
+            .world_mut()
+            .spawn(post(ModuleType::StandardReactor, IVec2::new(0, 0), 10))
+            .insert(ChildOf(ship))
+            .id();
+        app.world_mut()
+            .spawn((hand("Okafor"), CrewDuty::DamageControl))
+            .insert(ChildOf(ship));
+
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(200)));
+        for _ in 0..14 {
+            app.update();
+        }
+
+        assert!(
+            app.world().get::<CrewStation>(reactor).unwrap().assigned_crew.is_none(),
+            "a damage-control hand was drafted onto a post"
+        );
     }
 
     /// Losing the engineer must still cost you the whole bank — otherwise

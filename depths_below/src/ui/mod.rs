@@ -210,7 +210,8 @@ impl Plugin for UiPlugin {
                     toggle_crew_menu,
                     toggle_map_overlay,
                     toggle_galaxy_view,
-                    crew_menu_assign_input,
+                    crew_duty_click,
+                    refresh_crew_duty_labels,
                 ).run_if(in_state(GameState::Exploring)),
             )
             // Map-click warp destination + G-hold warp dash (while exploring)
@@ -1724,7 +1725,7 @@ fn toggle_crew_menu(
     // Without<OwnedByAiShip>: player-only — AI ships carry CrewMember/
     // CrewStation now too (see ai_ship::crew), unscoped this menu would show
     // AI crew mixed into the player's own crew roster.
-    crew_query: Query<(Entity, &CrewMember), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
     station_query: Query<(&CrewStation, &Module), Without<crate::ai_ship::components::OwnedByAiShip>>,
     staffing_state: Res<StaffingState>,
 ) {
@@ -1754,7 +1755,7 @@ fn toggle_crew_menu(
         &mut commands,
         WINDOW_ID,
         "Crew Management",
-        Vec2::new(380.0, 320.0),
+        Vec2::new(460.0, 340.0),
         Vec2::new(10.0, 60.0),
     );
 
@@ -1776,7 +1777,8 @@ fn toggle_crew_menu(
             row_gap: Val::Px(theme::ThemeSpacing::SM),
             ..default()
         }).with_children(|list| {
-            for (entity, crew) in crew_query.iter() {
+            for (entity, crew, duty) in crew_query.iter() {
+                let duty = duty.copied().unwrap_or_default();
                 let (status, dot_color) = if crew.health <= 0.0 {
                     ("DEAD".to_string(), theme::ThemeColors::STATUS_DANGER)
                 } else if crew.state == CrewState::Panicking {
@@ -1819,6 +1821,36 @@ fn toggle_crew_menu(
                             TextColor(theme::ThemeColors::TEXT_MUTED),
                         ));
                     });
+
+                    // Standing order. Click to cycle — a real dropdown is a
+                    // lot of machinery for six values, and one click per step
+                    // beats one click to open plus one to choose.
+                    row.spawn((
+                        Node {
+                            width: Val::Px(96.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            padding: UiRect::all(Val::Px(theme::ThemeSpacing::XS)),
+                            border: UiRect::all(Val::Px(1.0)),
+                            ..default()
+                        },
+                        BackgroundColor(theme::ThemeColors::BG_ELEVATED),
+                        BorderColor::all(theme::ThemeColors::BORDER_DEFAULT),
+                        Button,
+                        Interaction::default(),
+                        CrewDutyButton { crew: entity },
+                    )).with_children(|chip| {
+                        chip.spawn((
+                            Text::new(duty.label()),
+                            TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                            TextColor(if duty == CrewDuty::Auto {
+                                theme::ThemeColors::TEXT_MUTED
+                            } else {
+                                theme::ThemeColors::TEXT_TITLE
+                            }),
+                            CrewDutyLabel { crew: entity },
+                        ));
+                    });
                 });
             }
         });
@@ -1826,35 +1858,75 @@ fn toggle_crew_menu(
 }
 
 /// Stub for crew assignment input — press 1 to manually assign idle crew to first unstaffed weapon
-fn crew_menu_assign_input(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    crew_query: Query<(Entity, &CrewMember)>,
-    mut station_query: Query<(&mut CrewStation, &Module), With<Weapon>>,
+/// Marks the clickable duty chip on a crew row.
+#[derive(Component)]
+pub struct CrewDutyButton {
+    pub crew: Entity,
+}
+
+/// Marks the chip's text so it can be refreshed in place.
+#[derive(Component)]
+pub struct CrewDutyLabel {
+    pub crew: Entity,
+}
+
+/// Clicking a crew member's chip cycles their standing order.
+///
+/// Replaces a "press 1 to assign the first idle hand to the first weapon"
+/// stub that was never wired to the menu being open.
+fn crew_duty_click(
+    mut commands: Commands,
+    buttons: Query<(&Interaction, &CrewDutyButton), Changed<Interaction>>,
+    mut crew_query: Query<(&CrewMember, Option<&mut CrewDuty>)>,
+    mut station_query: Query<&mut CrewStation>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    // Press 1 to assign first idle crew to first unstaffed weapon station
-    if keyboard.just_pressed(KeyCode::Digit1) {
-        // Find crew entities already assigned to any station
-        let assigned_crew: std::collections::HashSet<Entity> = station_query
-            .iter()
-            .filter_map(|(cs, _)| cs.assigned_crew)
-            .collect();
-
-        let first_idle = crew_query.iter()
-            .find(|(entity, c)| c.health > 0.0 && !assigned_crew.contains(entity));
-
-        let first_unstaffed = station_query.iter_mut()
-            .find(|(cs, _)| cs.assigned_crew.is_none());
-
-        if let (Some((crew_entity, crew)), Some((mut cs, _module))) = (first_idle, first_unstaffed) {
-            cs.assigned_crew = Some(crew_entity);
-            cs.manually_assigned = true;
-            notifications.write(ShowNotification {
-                message: format!("{} assigned to weapon", crew.name),
-                notification_type: NotificationType::Success,
-                duration: 2.0,
-            });
+    for (interaction, button) in buttons.iter() {
+        if *interaction != Interaction::Pressed {
+            continue;
         }
+        let Ok((crew, duty)) = crew_query.get_mut(button.crew) else { continue };
+        let next = duty.as_deref().copied().unwrap_or_default().next();
+        match duty {
+            Some(mut d) => *d = next,
+            None => {
+                commands.entity(button.crew).try_insert(next);
+            }
+        }
+
+        // Drop the post they were holding so the next auto-assign pass can
+        // honour the new order instead of leaving them where they were.
+        for mut station in station_query.iter_mut() {
+            if station.assigned_crew == Some(button.crew) {
+                station.assigned_crew = None;
+                station.manually_assigned = false;
+            }
+        }
+
+        notifications.write(ShowNotification {
+            message: format!("{} — {}", crew.name, next.label()),
+            notification_type: NotificationType::Info,
+            duration: 1.5,
+        });
+    }
+}
+
+/// Keeps the chips reading true while the window stays open.
+fn refresh_crew_duty_labels(
+    duties: Query<&CrewDuty>,
+    mut labels: Query<(&CrewDutyLabel, &mut Text, &mut TextColor)>,
+) {
+    for (label, mut text, mut color) in labels.iter_mut() {
+        let duty = duties.get(label.crew).copied().unwrap_or_default();
+        let wanted = duty.label();
+        if text.0 != wanted {
+            text.0 = wanted.to_string();
+        }
+        color.0 = if duty == CrewDuty::Auto {
+            theme::ThemeColors::TEXT_MUTED
+        } else {
+            theme::ThemeColors::TEXT_TITLE
+        };
     }
 }
 

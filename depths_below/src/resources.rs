@@ -1431,6 +1431,10 @@ pub struct CrewSaveData {
     pub morale: f32,
     #[serde(default)]
     pub assigned_module_grid: Option<IVec2>,
+    /// The player's standing order for this hand. Defaulted so saves written
+    /// before duties existed load as Auto — which is what they were.
+    #[serde(default)]
+    pub duty: crate::components::CrewDuty,
 }
 
 /// Hull segment with material info for save/load
