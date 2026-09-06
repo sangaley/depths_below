@@ -714,6 +714,7 @@ fn is_reactor(module_type: ModuleType) -> bool {
 /// is a scramble to get clear, not a free win.
 pub fn tick_reactor_meltdown(
     mut commands: Commands,
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     time: Res<Time>,
     mut ai_ships: Query<(
         Entity,
@@ -747,11 +748,15 @@ pub fn tick_reactor_meltdown(
         // One flare per remaining second, brightening as it goes.
         if was.ceil() != meltdown.remaining.ceil() && meltdown.remaining > 0.0 {
             let heat = 1.0 - (meltdown.remaining / MELTDOWN_SECONDS);
-            spawn_hit_effect(
+            // The whole job of this phase is to say "get away from that ship".
+            // A flat square once a second said it very quietly; a real blast
+            // that grows and reddens each time reads as a countdown.
+            crate::combat::spawn_explosion(
                 &mut commands,
+                &fx,
                 pos,
+                14.0 + 26.0 * heat,
                 Color::srgb(1.0, 0.6 - 0.4 * heat, 0.1),
-                40.0 + 60.0 * heat,
             );
         }
 
@@ -760,8 +765,16 @@ pub fn tick_reactor_meltdown(
         state.is_destroyed = true;
         state.hull_integrity = 0.0;
         commands.entity(entity).remove::<ReactorMeltdown>();
-        spawn_hit_effect(&mut commands, pos, Color::srgb(1.0, 0.85, 0.4), 260.0);
-        spawn_hit_effect(&mut commands, pos, Color::srgb(1.0, 0.5, 0.1), 180.0);
+        // Was two stacked opaque squares, 260 and 180 units, for 200ms. This
+        // is the loudest thing that happens in a fight and it deserves the
+        // composite: the fireball reaches ~250 units on its own.
+        crate::combat::spawn_explosion(
+            &mut commands,
+            &fx,
+            pos,
+            115.0,
+            Color::srgb(1.0, 0.6, 0.15),
+        );
         destroyed_events.write(AiShipDestroyed {
             entity,
             ship_type: *ship_type,
@@ -784,6 +797,8 @@ const COOKOFF_RADIUS: f32 = 100.0;
 /// magazine the fastest kill in the game.
 pub fn ai_chain_reactions(
     mut commands: Commands,
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
+
     // ParamSet because the "what just blew up" query and the "damage the
     // neighbours" query both touch Module — one shared, one mutable.
     mut modules: ParamSet<(
@@ -819,7 +834,7 @@ pub fn ai_chain_reactions(
             neighbour.health = (neighbour.health - blast).max(0.0);
         }
 
-        spawn_hit_effect(&mut commands, pos, Color::srgb(1.0, 0.7, 0.2), 140.0);
+        crate::combat::spawn_explosion(&mut commands, &fx, pos, 60.0, Color::srgb(1.0, 0.7, 0.2));
         notifications.write(ShowNotification {
             message: "Magazine cook-off aboard the target!".into(),
             notification_type: NotificationType::Success,

@@ -92,6 +92,14 @@ pub(crate) fn spawn_hit_effect(commands: &mut Commands, position: Vec2, color: C
 /// event at different zoom levels. `radius` here is the DAMAGE radius; the
 /// visuals deliberately overshoot it, because an explosion whose fireball
 /// stops exactly at its kill radius reads as smaller than it is.
+///
+/// `color` says what KIND of detonation this is, and every layer derives from
+/// it. The core still goes near-white — anything energetic enough to matter is
+/// white-hot at its centre whatever set it off — but it cools toward `color`,
+/// so an EMP burst cools to blue and a warhead to orange. Without that a
+/// capacitor discharge and a magazine cook-off are the same orange ball, which
+/// is exactly the "colour = information, not decoration" rule the art brief is
+/// built on.
 pub(crate) fn spawn_explosion(
     commands: &mut Commands,
     fx: &crate::vfx::effect_textures::EffectTextures,
@@ -100,6 +108,19 @@ pub(crate) fn spawn_explosion(
     color: Color,
 ) {
     use crate::vfx::particles::{Blast, Particle};
+
+    let c = color.to_srgba();
+    // Toward white by `t`, for the hot end of a layer.
+    let hot_of = |t: f32, a: f32| {
+        Color::srgba(
+            c.red + (1.0 - c.red) * t,
+            c.green + (1.0 - c.green) * t,
+            c.blue + (1.0 - c.blue) * t,
+            a,
+        )
+    };
+    // Darkened toward the caller's own hue, for the cool end.
+    let cool_of = |k: f32, a: f32| Color::srgba(c.red * k, c.green * k, c.blue * k, a);
 
     // Unit-sized sprites scaled by Blast, so growth is one number.
     let core = |commands: &mut Commands, from: f32, to: f32, dur: f32, z: f32, hot: Color, cool: Color| {
@@ -110,12 +131,12 @@ pub(crate) fn spawn_explosion(
         ));
     };
 
-    // Fireball: white-hot core cooling to deep orange.
+    // Fireball: near-white core cooling to the event's own colour.
     core(commands, radius * 0.5, radius * 2.2, 0.42, 0.62,
-         Color::srgba(1.0, 0.95, 0.80, 1.0), Color::srgba(0.9, 0.25, 0.05, 0.7));
+         hot_of(0.82, 1.0), cool_of(0.55, 0.7));
     // Shock ring: wider, thinner, gone sooner — it sells the scale.
     core(commands, radius * 0.8, radius * 3.4, 0.30, 0.61,
-         Color::srgba(1.0, 0.75, 0.40, 0.55), Color::srgba(0.8, 0.4, 0.2, 0.0));
+         hot_of(0.45, 0.55), cool_of(0.5, 0.0));
 
     // Radial spray. Unlike an impact fan this is symmetric: a detonation has
     // no incoming direction to report.
@@ -128,7 +149,7 @@ pub(crate) fn spawn_explosion(
         let hot = i % 3 == 0;
         commands.spawn((
             Sprite {
-                color: if hot { Color::srgb(1.0, 0.97, 0.86) } else { Color::srgb(1.0, 0.6, 0.18) },
+                color: if hot { hot_of(0.9, 1.0) } else { hot_of(0.25, 1.0) },
                 custom_size: Some(Vec2::new(if hot { 9.0 } else { 6.0 }, 2.4)),
                 ..default()
             },
@@ -400,6 +421,7 @@ impl Plugin for CombatPlugin {
                 effects::animate_floating_damage,
                 crate::ship::damage::cleanup_hit_effects,
                 limits::enforce_projectile_limit,
+                limits::enforce_particle_limit,
                 new_projectiles::tick_burning_blocks,
             ).in_set(CombatSet::Cleanup))
             // Fire group assignment (build mode)

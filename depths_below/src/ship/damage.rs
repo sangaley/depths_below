@@ -429,6 +429,7 @@ pub fn queue_detonation(
 
 /// Ticks pending detonation timers and applies AoE damage when they finish.
 pub fn process_detonations(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut commands: Commands,
     time: Res<Time>,
     mut det_query: Query<(Entity, &mut PendingDetonation)>,
@@ -547,22 +548,21 @@ pub fn process_detonations(
             explosive_type: det.explosive_type,
         });
 
-        // Spawn explosion visual (orange HitEffect, larger and longer)
-        let world_pos = Vec3::new(
+        // Was a flat opaque orange square sitting on your own ship for half a
+        // second, sized blast_radius (in CELLS) x 66 -- up to ~264 units of
+        // solid rectangle. blast_radius is cells, so x66 converts to world;
+        // /2.2 because spawn_explosion's fireball grows to radius * 2.2.
+        let world_pos = Vec2::new(
             det.grid_position.x as f32 * 66.0,
             det.grid_position.y as f32 * 66.0 - 33.0,
-            0.8,
         );
-        commands.spawn((
-            (Sprite {
-                    color: Color::srgba(1.0, 0.6, 0.1, 0.95),
-                    custom_size: Some(Vec2::splat(det.blast_radius * 66.0)),
-                    ..default()
-                }, Transform::from_translation(world_pos)),
-            HitEffect {
-                timer: Timer::from_seconds(0.5, TimerMode::Once),
-            },
-        ));
+        crate::combat::spawn_explosion(
+            &mut commands,
+            &fx,
+            world_pos,
+            det.blast_radius * 30.0,
+            Color::srgb(1.0, 0.6, 0.1),
+        );
 
         notifications.write(ShowNotification {
             message: format!("EXPLOSION at ({}, {})!", det.grid_position.x, det.grid_position.y),
@@ -622,6 +622,7 @@ pub fn queue_ai_detonation(
 /// Ticks AI detonation fuses; on boom, damages every block of that ship in
 /// radius (with falloff) and sets survivors near the center burning.
 pub fn process_ai_detonations(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut commands: Commands,
     time: Res<Time>,
     mut det_query: Query<(Entity, &mut AiPendingDetonation)>,
@@ -684,17 +685,14 @@ pub fn process_ai_detonations(
             }
         }
 
-        // Explosion visual — reuses HitEffect like the player-side blast
-        commands.spawn((
-            (Sprite {
-                    color: Color::srgba(1.0, 0.55, 0.1, 0.95),
-                    custom_size: Some(Vec2::splat(det.blast_radius_world * 2.0)),
-                    ..default()
-                }, Transform::from_translation(det.position.extend(0.8))),
-            HitEffect {
-                timer: Timer::from_seconds(0.5, TimerMode::Once),
-            },
-        ));
+        // Same story as the player-side blast above.
+        crate::combat::spawn_explosion(
+            &mut commands,
+            &fx,
+            det.position,
+            det.blast_radius_world * 0.9,
+            Color::srgb(1.0, 0.55, 0.1),
+        );
 
         ai_damage_events.write(AiShipDamaged {
             target: det.ship,

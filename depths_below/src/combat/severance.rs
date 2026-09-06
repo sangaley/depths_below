@@ -116,6 +116,7 @@ pub fn check_section_severance(
 pub fn move_detached_sections(
     time: Res<Time>,
     mut commands: Commands,
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut section_query: Query<(Entity, &mut DetachedSection, &mut Transform, &Velocity, &GravityForce)>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
@@ -141,7 +142,7 @@ pub fn move_detached_sections(
                 });
 
                 let pos = transform.translation.truncate();
-                super::spawn_hit_effect(&mut commands, pos, Color::srgb(1.0, 0.5, 0.1), 200.0);
+                super::spawn_explosion(&mut commands, &fx, pos, 90.0, Color::srgb(1.0, 0.5, 0.1));
 
                 commands.entity(entity).despawn();
             }
@@ -150,7 +151,7 @@ pub fn move_detached_sections(
         // Ammo cook-off (random chance each second)
         if section.has_ammo && rand::random::<f32>() < 0.02 * dt {
             let pos = transform.translation.truncate();
-            super::spawn_hit_effect(&mut commands, pos, Color::srgb(1.0, 0.4, 0.1), 80.0);
+            super::spawn_explosion(&mut commands, &fx, pos, 36.0, Color::srgb(1.0, 0.4, 0.1));
             notifications.write(ShowNotification {
                 message: "Ammo cook-off in debris!".into(),
                 notification_type: NotificationType::Warning,

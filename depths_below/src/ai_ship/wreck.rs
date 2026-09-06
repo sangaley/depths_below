@@ -61,6 +61,7 @@ pub struct DeathRattle {
 pub fn update_death_rattle(
     time: Res<Time>,
     mut commands: Commands,
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut rattle_query: Query<(Entity, &mut DeathRattle, Option<&Velocity>)>,
     children_query: Query<&Children>,
     block_pos_query: Query<(&GlobalTransform, &Sprite), Or<(With<Module>, With<HullSegment>)>>,
@@ -90,14 +91,15 @@ pub fn update_death_rattle(
 
         if rattle.remaining > 1 {
             // Secondary pop: flash + chunk spray + attenuated crunch
-            crate::combat::spawn_hit_effect(&mut commands, pos, Color::srgb(1.0, 0.6, 0.15), rng.gen_range(30.0..60.0));
+            crate::combat::spawn_explosion(&mut commands, &fx, pos, rng.gen_range(14.0..26.0), Color::srgb(1.0, 0.6, 0.15));
             crate::vfx::debris::spawn_chunks(&mut commands, &mut rng, pos, color, inherited);
             boom_events.write(AiModuleExploded { position: pos, blast_damage: 20.0 });
             rattle.remaining -= 1;
             rattle.timer = Timer::from_seconds(rng.gen_range(0.15..0.4), TimerMode::Once);
         } else {
             // Final boom — big flash, big spray, deep audio layer
-            crate::combat::spawn_hit_effect(&mut commands, pos, Color::srgb(1.0, 0.5, 0.1), 140.0);
+            // The climax of every ship kill. Was one flat 140-unit square.
+            crate::combat::spawn_explosion(&mut commands, &fx, pos, 62.0, Color::srgb(1.0, 0.5, 0.1));
             for _ in 0..3 {
                 crate::vfx::debris::spawn_chunks(&mut commands, &mut rng, pos, color, inherited);
             }

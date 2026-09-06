@@ -895,6 +895,7 @@ pub fn fire_emp_missiles(
 /// module in radius regardless of owner: the player's own (half duration,
 /// "affects_friendly") and any AI ship's (full duration).
 pub fn emp_detonation(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut commands: Commands,
     missile_query: Query<(Entity, &Transform, &EmpWarhead, &super::new_projectiles::MissileProjectile)>,
     mut module_query: Query<(Entity, &Module, &GlobalTransform, &ChildOf), Without<DestroyedModule>>,
@@ -923,8 +924,17 @@ pub fn emp_detonation(
         if !detonated { continue; }
 
         // EMP DETONATION!
-        // Visual: purple-blue expanding ring
-        spawn_hit_effect(&mut commands, missile_pos, Color::srgba(0.4, 0.3, 0.9, 0.6), emp.emp_radius);
+        // The comment has always said "purple-blue expanding ring"; it was a
+        // static opaque square up to 400 units across. spawn_explosion's shock
+        // ring reaches radius * 3.4, so it now actually expands -- and stays
+        // purple, which only works because `color` is wired up.
+        super::spawn_explosion(
+            &mut commands,
+            &fx,
+            missile_pos,
+            emp.emp_radius / 3.0,
+            Color::srgb(0.45, 0.35, 0.95),
+        );
 
         let mut hit_player = false;
         for (module_entity, _module, module_gt, parent) in module_query.iter_mut() {

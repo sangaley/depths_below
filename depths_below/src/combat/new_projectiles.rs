@@ -578,6 +578,7 @@ const MAX_CREATURE_HIT_RADIUS: f32 = 90.0;
 /// Uses the creature spatial grid to only distance-check creatures near each
 /// projectile instead of every creature in the world.
 pub fn check_projectile_hits(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut commands: Commands,
     // Transform and Sprite went MUTABLE here (a bounced round is stepped clear
     // of the plate and recoloured), which collides with the &Transform in the
@@ -875,7 +876,7 @@ pub fn check_projectile_hits(
                                 &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
                                 hit_entity, hit_pos, radius, blast_damage,
                             );
-                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.5, 0.1), radius);
+                            spawn_explosion(&mut commands, &fx, hit_pos, radius, Color::srgb(1.0, 0.5, 0.1));
                         }
                         ProximityBurst { fragment_damage, fragment_radius, .. } => {
                             let radius = fragment_radius * proj.caliber;
@@ -883,7 +884,7 @@ pub fn check_projectile_hits(
                                 &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
                                 hit_entity, hit_pos, radius, fragment_damage,
                             );
-                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.9, 0.4), radius);
+                            spawn_explosion(&mut commands, &fx, hit_pos, radius, Color::srgb(1.0, 0.9, 0.4));
                         }
                         EMPDisable { disable_radius, disable_duration } => {
                             let radius = disable_radius * proj.caliber;
@@ -898,7 +899,7 @@ pub fn check_projectile_hits(
                                     }
                                 }
                             }
-                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(0.4, 0.5, 0.95), radius);
+                            spawn_explosion(&mut commands, &fx, hit_pos, radius, Color::srgb(0.4, 0.5, 0.95));
                         }
                         Ignite { fire_duration, fire_intensity } => {
                             commands.entity(hit_entity).try_insert(BlockBurning {
@@ -947,7 +948,7 @@ pub fn check_projectile_hits(
                                 &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
                                 hit_entity, hit_pos, radius, crush_damage,
                             );
-                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(0.4, 0.2, 0.6), radius);
+                            spawn_explosion(&mut commands, &fx, hit_pos, radius, Color::srgb(0.4, 0.2, 0.6));
                         }
                         Irradiate { dose, crew_affected } => {
                             // The hull is left alone on purpose. AI crew carry
@@ -1049,7 +1050,7 @@ pub fn check_projectile_hits(
                         spawn_floating_damage(&mut commands, other_pos, frag_damage, Color::srgb(1.0, 0.7, 0.3));
                     }
                 }
-                spawn_hit_effect(&mut commands, proj_pos, Color::srgb(1.0, 0.6, 0.15), radius);
+                spawn_explosion(&mut commands, &fx, proj_pos, radius, Color::srgb(1.0, 0.6, 0.15));
             }
 
             // Despawn projectile (unless it penetrates)

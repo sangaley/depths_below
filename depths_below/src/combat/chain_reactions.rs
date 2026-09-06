@@ -15,6 +15,7 @@ use crate::building::GridOccupancy;
 /// cooking off must not start fires on the player's modules that happen to
 /// share the same local coordinates.
 pub fn trigger_chain_reactions(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut commands: Commands,
     destroyed_modules: Query<(Entity, &Module, &GlobalTransform, &ChildOf), (Added<DestroyedModule>, With<DestroyedModule>)>,
     ship_query: Query<Entity, With<Ship>>,
@@ -63,7 +64,7 @@ pub fn trigger_chain_reactions(
                 }
 
                 // Big explosion visual
-                super::spawn_hit_effect(&mut commands, pos, Color::srgb(1.0, 0.5, 0.1), 100.0);
+                super::spawn_explosion(&mut commands, &fx, pos, 44.0, Color::srgb(1.0, 0.5, 0.1));
             }
 
             // === FUEL FIRE ===
@@ -87,7 +88,7 @@ pub fn trigger_chain_reactions(
                     }
                 }
 
-                super::spawn_hit_effect(&mut commands, pos, Color::srgb(0.9, 0.4, 0.05), 60.0);
+                super::spawn_explosion(&mut commands, &fx, pos, 27.0, Color::srgb(0.9, 0.4, 0.05));
             }
 
             // === CAPACITOR DISCHARGE ===
@@ -99,8 +100,9 @@ pub fn trigger_chain_reactions(
                     duration: 3.0,
                 });
 
-                // Visual: blue-white flash
-                super::spawn_hit_effect(&mut commands, pos, Color::srgb(0.5, 0.7, 1.0), 50.0);
+                // The comment always said "blue-white flash"; before the
+                // colour parameter was wired up this could not have been one.
+                super::spawn_explosion(&mut commands, &fx, pos, 22.0, Color::srgb(0.5, 0.7, 1.0));
             }
 
             // === REACTOR (handled by existing explosive system + emergency shutdown) ===
