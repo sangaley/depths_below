@@ -32,22 +32,22 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::HelmStation => "sprites/modules/navigation.png",
         // Weapons
         // Kinetic weapons
-        ModuleType::Cannon => "sprites/modules/point_defense.png",
+        ModuleType::Cannon => "sprites/modules/cannon.png",
         ModuleType::Railgun => "sprites/modules/railgun_2x1.png",
-        ModuleType::Coilgun => "sprites/modules/railgun.png",
-        ModuleType::Gatling => "sprites/modules/point_defense.png",
+        ModuleType::Coilgun => "sprites/modules/coilgun.png",
+        ModuleType::Gatling => "sprites/modules/gatling.png",
         // Energy weapons
-        ModuleType::Laser => "sprites/modules/railgun.png",
-        ModuleType::PlasmaCaster => "sprites/modules/railgun.png",
-        ModuleType::IonDisruptor => "sprites/modules/railgun.png",
+        ModuleType::Laser => "sprites/modules/laser.png",
+        ModuleType::PlasmaCaster => "sprites/modules/plasma_caster.png",
+        ModuleType::IonDisruptor => "sprites/modules/ion_disruptor.png",
         // Missile weapons
-        ModuleType::HeavyMissile => "sprites/modules/torpedo_tube.png",
-        ModuleType::GuidedMissile => "sprites/modules/torpedo_tube.png",
-        ModuleType::ClusterRocket => "sprites/modules/mine_layer.png",
+        ModuleType::HeavyMissile => "sprites/modules/heavy_missile.png",
+        ModuleType::GuidedMissile => "sprites/modules/guided_missile.png",
+        ModuleType::ClusterRocket => "sprites/modules/cluster_rocket.png",
         // Utility weapons
-        ModuleType::MiningDrill => "sprites/modules/railgun.png",
-        ModuleType::TractorBeam => "sprites/modules/mine_layer.png",
-        ModuleType::EMPPulse => "sprites/modules/railgun.png",
+        ModuleType::MiningDrill => "sprites/modules/mining_drill.png",
+        ModuleType::TractorBeam => "sprites/modules/tractor_beam.png",
+        ModuleType::EMPPulse => "sprites/modules/emp_pulse.png",
         // Detection
         ModuleType::RadarArray | ModuleType::AdvancedRadar => "sprites/modules/sonar_array.png",
         ModuleType::PassiveRadar => "sprites/modules/passive_sonar.png",
@@ -104,7 +104,7 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::AirCirculator => "sprites/modules/life_support.png",
         ModuleType::CreatureScanner => "sprites/modules/depth_sensor.png",
         ModuleType::MineralScanner => "sprites/modules/depth_sensor.png",
-        ModuleType::AmmoAutoloader => "sprites/modules/cargo_hold.png",
+        ModuleType::AmmoAutoloader => "sprites/modules/ammo_autoloader.png",
         ModuleType::EngineeringStation => "sprites/modules/repair_station.png",
         // Phase B modules
         ModuleType::ConveyorTube => "sprites/modules/battery.png",
@@ -297,6 +297,12 @@ pub fn sprite_overhang(module_type: ModuleType) -> (f32, f32) {
         // point_defense / railgun are turrets now — their barrels are separate
         // rotating sprites (see turret_barrel_sprite), so the base has no overhang.
         Some("sprites/modules/torpedo_tube.png") => (26.0, 1.0),
+        // Missile/rocket launchers: tubes lie in the play plane pointing
+        // forward and the warheads overhang the block, same 378x541 canvas
+        // as the torpedo tube above.
+        Some("sprites/modules/heavy_missile.png") => (26.0, 1.0),
+        Some("sprites/modules/guided_missile.png") => (26.0, 1.0),
+        Some("sprites/modules/cluster_rocket.png") => (26.0, 1.0),
         Some("sprites/modules/salvage_arm.png") => (34.0, 1.0),
         _ => (0.0, 0.0),
     }
@@ -309,6 +315,11 @@ pub fn turret_barrel_sprite(module_type: ModuleType) -> Option<&'static str> {
     match module_sprite_path(module_type) {
         Some("sprites/modules/point_defense.png") => Some("sprites/modules/turret_pd_barrel.png"),
         Some("sprites/modules/railgun.png") => Some("sprites/modules/turret_rg_barrel.png"),
+        Some("sprites/modules/railgun_2x1.png") => Some("sprites/modules/turret_railgun_barrel.png"),
+        Some("sprites/modules/cannon.png") => Some("sprites/modules/turret_cannon_barrel.png"),
+        Some("sprites/modules/coilgun.png") => Some("sprites/modules/turret_coilgun_barrel.png"),
+        Some("sprites/modules/gatling.png") => Some("sprites/modules/turret_gatling_barrel.png"),
+        Some("sprites/modules/mining_drill.png") => Some("sprites/modules/turret_mining_drill_barrel.png"),
         _ => None,
     }
 }
