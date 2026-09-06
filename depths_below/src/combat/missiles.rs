@@ -2,6 +2,7 @@ use bevy::prelude::*;
 use crate::celestial::components::{GravityAffected, GravityForce};
 use super::targeting::{TargetSelection, FireGroupState, FireGroup};
 use super::new_projectiles::MissileProjectile;
+use crate::vfx::particles::Particle;
 use super::*;
 
 // ============================================================================
@@ -344,6 +345,7 @@ pub fn fire_missiles_system(
                     prev_pos: weapon_pos,
                     ..default()
                 },
+                MissileTrail::default(),
                 Velocity(missile_vel),
                 GravityAffected { mass: 2.0 + size_mult },
                 GravityForce::default(),
@@ -357,6 +359,134 @@ pub fn fire_missiles_system(
                 notification_type: NotificationType::Warning,
                 duration: 1.5,
             });
+        }
+    }
+}
+
+/// Per-missile exhaust bookkeeping.
+///
+/// Kept off `MissileProjectile` so a plasma bolt — which borrows that
+/// component purely for blast resolution — does not trail rocket smoke.
+/// The timers are per-missile rather than a shared `Local`, so a volley
+/// staggers its puffs instead of emitting every particle on one frame.
+#[derive(Component)]
+pub struct MissileTrail {
+    flame: f32,
+    smoke: f32,
+    ignited: bool,
+}
+
+impl Default for MissileTrail {
+    fn default() -> Self {
+        // Staggered start so a cluster salvo does not pulse in lockstep.
+        Self { flame: rand::random::<f32>() * 0.02, smoke: rand::random::<f32>() * 0.03, ignited: false }
+    }
+}
+
+/// Distance from a missile's centre back to its nozzle.
+const NOZZLE_OFFSET: f32 = 14.0;
+
+/// Exhaust, smoke and the one-shot ignition flash.
+///
+/// The smoke is the load-bearing part: it is emitted with almost no velocity
+/// of its own, so it hangs where the missile passed and draws the whole curve
+/// on screen. Without it the flight path only exists for as long as the
+/// missile is standing on it.
+pub fn spawn_missile_trails(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut query: Query<(&MissileProjectile, &Transform, &Velocity, &mut MissileTrail)>,
+) {
+    let dt = time.delta_secs();
+
+    for (missile, transform, velocity, mut trail) in query.iter_mut() {
+        let pos = transform.translation.truncate();
+        // While ejecting the missile is pointed down the tube even though its
+        // velocity carries the ship's motion, so the plume has to follow the
+        // same heading the sprite does or it blows out of the wrong end.
+        let heading = if missile.eject_time > 0.0 {
+            missile.launch_dir
+        } else {
+            velocity.0.normalize_or_zero()
+        };
+        if heading == Vec2::ZERO {
+            continue;
+        }
+        let nozzle = pos - heading * NOZZLE_OFFSET;
+
+        // === COLD GAS: pale, slow, thin. The motor is not lit yet. ===
+        if missile.eject_time > 0.0 {
+            trail.flame -= dt;
+            if trail.flame <= 0.0 {
+                trail.flame = 0.045;
+                let drift = Vec2::from_angle((rand::random::<f32>() - 0.5) * 0.9).rotate(-heading);
+                let life = 0.3 + rand::random::<f32>() * 0.2;
+                commands.spawn((
+                    Sprite {
+                        color: Color::srgba(0.82, 0.86, 0.92, 0.5),
+                        custom_size: Some(Vec2::splat(5.0 + rand::random::<f32>() * 4.0)),
+                        ..default()
+                    },
+                    Transform::from_xyz(nozzle.x, nozzle.y, 0.45),
+                    Particle::wisp(drift * (50.0 + rand::random::<f32>() * 40.0), life, 0.5, true),
+                ));
+            }
+            continue;
+        }
+
+        // === IGNITION: one-shot flash out the back. ===
+        if !trail.ignited {
+            trail.ignited = true;
+            spawn_hit_effect(&mut commands, nozzle, Color::srgb(1.0, 0.86, 0.55), 30.0);
+            spawn_impact_sparks(&mut commands, nozzle, -heading, 0.45, 10);
+        }
+
+        // === FLAME: only while the motor is actually burning. ===
+        if missile.burn_fuel > 0.0 {
+            trail.flame -= dt;
+            if trail.flame <= 0.0 {
+                trail.flame = 0.018;
+                let spread = Vec2::from_angle((rand::random::<f32>() - 0.5) * 0.5).rotate(-heading);
+                let life = 0.12 + rand::random::<f32>() * 0.14;
+                let hot = rand::random::<f32>() < 0.4;
+                commands.spawn((
+                    Sprite {
+                        color: if hot {
+                            Color::srgba(1.0, 0.95, 0.75, 1.0)
+                        } else {
+                            Color::srgba(1.0, 0.55, 0.15, 0.95)
+                        },
+                        custom_size: Some(Vec2::splat(if hot { 7.0 } else { 10.0 })),
+                        ..default()
+                    },
+                    Transform::from_xyz(nozzle.x, nozzle.y, 0.55),
+                    Particle::wisp(spread * (200.0 + rand::random::<f32>() * 180.0), life, 1.0, true),
+                ));
+            }
+        }
+
+        // === SMOKE: hangs in place and marks the path. ===
+        trail.smoke -= dt;
+        if trail.smoke <= 0.0 {
+            trail.smoke = 0.03;
+            let life = 1.0 + rand::random::<f32>() * 0.6;
+            let grey = 0.30 + rand::random::<f32>() * 0.18;
+            commands.spawn((
+                Sprite {
+                    color: Color::srgba(grey, grey * 0.96, grey * 0.93, 0.5),
+                    custom_size: Some(Vec2::splat(6.0 + rand::random::<f32>() * 5.0)),
+                    ..default()
+                },
+                Transform::from_xyz(nozzle.x, nozzle.y, 0.44),
+                // Almost no velocity: the trail should stay where it was laid
+                // down, not chase the missile that laid it.
+                Particle::wisp(
+                    Vec2::from_angle(rand::random::<f32>() * std::f32::consts::TAU) * 14.0,
+                    life,
+                    0.5,
+                    false,
+                ),
+            ));
         }
     }
 }

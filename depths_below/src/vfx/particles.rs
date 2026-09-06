@@ -17,12 +17,38 @@ pub struct Particle {
     pub max_lifetime: f32,
     pub fade: bool,
     pub shrink: bool,
+    /// Opacity at birth.
+    ///
+    /// Fading multiplies THIS by the remaining life ratio. Reading the
+    /// sprite's current alpha instead compounded the fade every frame — the
+    /// product of sixty ratios a second collapses almost immediately, so a
+    /// particle was invisible long before its lifetime ran out and anything
+    /// meant to linger simply could not.
+    pub base_alpha: f32,
+}
+
+impl Default for Particle {
+    fn default() -> Self {
+        Self {
+            velocity: Vec2::ZERO,
+            lifetime: 0.5,
+            max_lifetime: 0.5,
+            fade: true,
+            shrink: true,
+            base_alpha: 1.0,
+        }
+    }
 }
 
 impl Particle {
-    /// A particle that fades and shrinks over `life` seconds.
+    /// A fully opaque particle that fades and shrinks over `life` seconds.
     pub fn new(velocity: Vec2, life: f32) -> Self {
-        Self { velocity, lifetime: life, max_lifetime: life, fade: true, shrink: true }
+        Self { velocity, lifetime: life, max_lifetime: life, ..default() }
+    }
+
+    /// As `new`, but starting at `alpha` and optionally holding its size.
+    pub fn wisp(velocity: Vec2, life: f32, alpha: f32, shrink: bool) -> Self {
+        Self { velocity, lifetime: life, max_lifetime: life, base_alpha: alpha, shrink, ..default() }
     }
 }
 
@@ -78,13 +104,7 @@ pub fn spawn_engine_particles(
                         custom_size: Some(Vec2::splat(size)),
                         ..default()
                     }, Transform::from_xyz(pos.x, pos.y, 0.5)),
-                Particle {
-                    velocity: vel,
-                    lifetime,
-                    max_lifetime: lifetime,
-                    fade: true,
-                    shrink: true,
-                },
+                Particle::wisp(vel, lifetime, 0.8, true),
             ));
         }
     }
@@ -124,13 +144,7 @@ pub fn spawn_breach_particles(
                         custom_size: Some(Vec2::splat(size)),
                         ..default()
                     }, Transform::from_xyz(pos.x, pos.y, 0.6)),
-                Particle {
-                    velocity: vel,
-                    lifetime,
-                    max_lifetime: lifetime,
-                    fade: true,
-                    shrink: true,
-                },
+                Particle::wisp(vel, lifetime, 0.5 * intensity, true),
             ));
         }
     }
@@ -213,8 +227,7 @@ pub fn update_particles(
 
         // Fade
         if particle.fade {
-            let current_a = sprite.color.alpha().min(1.0);
-            sprite.color.set_alpha(life_ratio.clamp(0.0, 1.0) * current_a);
+            sprite.color.set_alpha(particle.base_alpha * life_ratio.clamp(0.0, 1.0));
         }
 
         // Shrink

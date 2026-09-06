@@ -148,13 +148,7 @@ pub(crate) fn spawn_explosion(commands: &mut Commands, position: Vec2, radius: f
                 ..default()
             },
             Transform::from_xyz(position.x, position.y, 0.59),
-            Particle {
-                velocity: heading * radius * (0.5 + rand::random::<f32>()),
-                lifetime: life,
-                max_lifetime: life,
-                fade: true,
-                shrink: false,
-            },
+            Particle::wisp(heading * radius * (0.5 + rand::random::<f32>()), life, 0.75, false),
         ));
     }
 }
@@ -206,13 +200,7 @@ pub(crate) fn spawn_impact_sparks(
                 rotation: Quat::from_rotation_z(heading.y.atan2(heading.x)),
                 ..default()
             },
-            crate::vfx::particles::Particle {
-                velocity: heading * speed,
-                lifetime: life,
-                max_lifetime: life,
-                fade: true,
-                shrink: true,
-            },
+            crate::vfx::particles::Particle::new(heading * speed, life),
         ));
     }
 }
@@ -380,6 +368,9 @@ impl Plugin for CombatPlugin {
                 new_projectiles::check_projectile_hits,
                 missiles::fire_missiles_system,
                 missiles::move_missiles,
+                // After the move, so a puff is laid at the position the
+                // missile actually reached this frame rather than the last.
+                missiles::spawn_missile_trails.after(missiles::move_missiles),
                 missiles::check_missile_hits,
                 point_defense::intercept_missiles,
                 point_defense::pd_missile_collision,
