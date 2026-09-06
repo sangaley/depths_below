@@ -160,9 +160,11 @@ impl StatCalculator {
             }
         }
 
-        // Calculate crew capacity based on O2 generation
-        // Formula: crew_capacity = floor(o2_generation / 2.0)
-        stats.crew_capacity = (stats.o2_generation / 2.0).floor() as u32;
+        // How many crew this life support can actually keep breathing.
+        // Derived from the real consumption rate rather than a second
+        // hardcoded number — the two drifted apart once OXYGEN_PER_CREW moved.
+        stats.crew_capacity =
+            (stats.o2_generation / crate::resources::OXYGEN_PER_CREW).floor() as u32;
 
         stats
     }

@@ -620,6 +620,20 @@ impl Inventory {
 
 }
 
+/// Oxygen a single crew member burns per second.
+///
+/// Sized against the starter hull, which is the only ship whose numbers are
+/// fixed: two scrubbers at 30/s each, and a full complement of 20 (one per
+/// berth, see crew::spawn_starter_crew). At 1.5 that is 30/s consumed against
+/// 60/s generated, so the ship breathes comfortably intact AND exactly holds
+/// its own on a single surviving scrubber — losing one is a warning, losing
+/// both is the emergency.
+///
+/// It was 3.0, sized for a fixed roster of 8. Once the crew gate meant a ship
+/// wanted one hand per post, a full complement consumed exactly what it
+/// generated, and any scrubber damage at all started killing people.
+pub const OXYGEN_PER_CREW: f32 = 1.5;
+
 #[derive(Resource, Serialize, Deserialize, Clone)]
 pub struct Currency {
     pub credits: u32,
@@ -718,10 +732,8 @@ impl Default for GameConfig {
             radiation_damage_multiplier: 1.5,    // Higher than original — punishment for no shielding
             radiation_per_unit: 0.12,            // Slightly higher base — void isn't safe either
             // Oxygen — you NEED scrubbers. No scrubbers = crew dies fast.
-            // 3.0/crew: 8 starter crew = 24/s vs two UNSTAFFED scrubbers at 30/s
-            // (staffing halves output) — the old 6.0 made suffocation a
-            // guaranteed slow death ~100s after every launch.
-            base_oxygen_consumption_per_crew: 3.0,
+            // See OXYGEN_PER_CREW for why this number is what it is.
+            base_oxygen_consumption_per_crew: OXYGEN_PER_CREW,
             suffocation_damage_rate: 8.0,           // Fast death without air — motivates building life support
             // Movement — should feel weighty in space
             base_ship_speed: 120.0,          // Slightly faster — space is big

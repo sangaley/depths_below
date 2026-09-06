@@ -229,7 +229,12 @@ fn crew_arrive_with_quarters(
     }
 }
 
-/// Spawns the initial crew (8 crew, no skills)
+/// Spawns the initial crew, one per berth, no skills.
+///
+/// Was a fixed roster of 8 regardless of the hull. That silently undercrewed
+/// the ship the moment `weapon_is_crewed` started gating the guns: the starter
+/// carries 20 posts, so eight hands left twelve stations — most of the battery
+/// among them — dark, with no signal beyond "the guns don't fire".
 pub fn spawn_starter_crew(
     mut commands: Commands,
     ship_query: Query<Entity, With<Ship>>,
@@ -245,7 +250,20 @@ pub fn spawn_starter_crew(
         return;
     };
 
-    let crew_names = ["Jones", "Smith", "Chen", "Morgan", "Rivera", "Volkov", "Tanaka", "Okafor"];
+    // Sail with a full complement: every berth the hull provides is filled.
+    let crew_names = [
+        "Jones", "Smith", "Chen", "Morgan", "Rivera", "Volkov", "Tanaka", "Okafor",
+        "Reyes", "Okonkwo", "Falk", "Ito", "Marsh", "Deng",
+        "Ferrara", "Boone", "Ades", "Kowal", "Nyx", "Sorren",
+    ];
+
+    let complement = quarters_query
+        .iter()
+        .filter(|(_, module, parent)| {
+            parent.parent() == ship && module.is_active && module.health > 0.0
+        })
+        .map(|(quarters, _, _)| quarters.berths)
+        .sum::<u32>() as usize;
 
     // Start them in the bunks. They walk to their posts from there, which is
     // both how a watch actually changes and a free demonstration that the
@@ -257,7 +275,13 @@ pub fn spawn_starter_crew(
             .map(|(_, module, _)| module),
     );
 
-    for (i, name) in crew_names.iter().enumerate() {
+    for i in 0..complement {
+        // Past the written names, hands are numbered rather than repeated —
+        // two crew called Jones on the same roster reads as a bug.
+        let name = match crew_names.get(i) {
+            Some(n) => (*n).to_string(),
+            None => format!("Hand {}", i + 1),
+        };
         let crew = commands.spawn((
             (Sprite {
                     color: Color::srgb(0.8, 0.6, 0.5),
@@ -265,7 +289,7 @@ pub fn spawn_starter_crew(
                     ..default()
                 }, Transform::from_translation(walking::berth_position(&berths, i))),
             CrewMember {
-                name: name.to_string(),
+                name,
                 health: 100.0,
                 max_health: 100.0,
                 oxygen: 100.0,
@@ -277,7 +301,7 @@ pub fn spawn_starter_crew(
         roster.members.push(crew);
     }
 
-    info!("Spawned {} crew members", crew_names.len());
+    info!("Spawned {} crew members to fill {} berths", complement, complement);
 }
 
 /// How many nozzles one engineer can keep running by walking between them.
