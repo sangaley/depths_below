@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use crate::components::*;
 use crate::events::*;
-use crate::ai_ship::components::AiShip;
+use crate::ai_ship::components::{AiShip, AiShipWreck};
 
 // ============================================================================
 // TARGET SELECTION SYSTEM
@@ -44,7 +44,11 @@ pub fn cycle_target(
     mut selection: ResMut<TargetSelection>,
     ship_query: Query<&Transform, With<Ship>>,
     creature_query: Query<(Entity, &Transform, &Creature), Without<Ship>>,
-    ai_ship_query: Query<(Entity, &Transform), (With<AiShip>, Without<Ship>)>,
+    // Without<AiShipWreck>: a defeated hull keeps its AiShip component (see
+    // ai_ship::wreck — the wreck is the same entity), so without this filter
+    // `\` cycles onto derelicts and calls them "Hostile Ship". The creature
+    // branch below has always skipped the dead; this is the same rule.
+    ai_ship_query: Query<(Entity, &Transform), (With<AiShip>, Without<AiShipWreck>, Without<Ship>)>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     if !keyboard.just_pressed(KeyCode::Backslash) { return; }
@@ -115,7 +119,9 @@ pub fn click_select_target(
     camera_query: Query<(&Camera, &GlobalTransform)>,
     mut selection: ResMut<TargetSelection>,
     creature_query: Query<(Entity, &Transform, &Creature), Without<Ship>>,
-    ai_ship_query: Query<(Entity, &Transform), (With<AiShip>, Without<Ship>)>,
+    // Same rule as cycle_target: a wreck is still an AiShip entity, and
+    // middle-clicking one should not select it as a hostile.
+    ai_ship_query: Query<(Entity, &Transform), (With<AiShip>, Without<AiShipWreck>, Without<Ship>)>,
 ) {
     if !mouse.just_pressed(MouseButton::Middle) { return; }
 

@@ -12,7 +12,7 @@
 use bevy::prelude::*;
 use rand::Rng;
 
-use crate::ai_ship::components::AiShip;
+use crate::ai_ship::components::{AiShip, AiShipWreck};
 use crate::building::ShipGrid;
 use crate::components::*;
 
@@ -54,7 +54,12 @@ pub fn assign_auto_aim(
     aim_lock: Res<AimLock>,
     selection: Res<TargetSelection>,
     player: Query<(Entity, &Transform), With<Ship>>,
-    enemies: Query<(Entity, &Transform, &ShipGrid), (With<AiShip>, Without<Ship>)>,
+    // Without<AiShipWreck> is what makes the "still a live ship" filter below
+    // actually mean that: a wreck is the same entity as the ship that died and
+    // keeps its AiShip component, so an unfiltered query has the whole battery
+    // drilling derelicts out to AUTO_ENGAGE_RANGE without the player touching
+    // a key.
+    enemies: Query<(Entity, &Transform, &ShipGrid), (With<AiShip>, Without<AiShipWreck>, Without<Ship>)>,
     block_pos: Query<&GlobalTransform>,
     mut weapons: Query<(Entity, &ChildOf, Option<&mut AutoAimPoint>), (With<Weapon>, Without<DestroyedModule>)>,
 ) {
