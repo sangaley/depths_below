@@ -42,6 +42,7 @@ impl Plugin for CrewPlugin {
                 Update,
                 (
                     walking::plan_crew_destinations,
+                    walking::walk_engine_room_rounds,
                     // After destinations: posted crew keep their post, and
                     // only the hands nobody assigned get sent to the damage.
                     walking::plan_repair_errands,
@@ -279,6 +280,9 @@ pub fn spawn_starter_crew(
     info!("Spawned {} crew members", crew_names.len());
 }
 
+/// How many nozzles one engineer can keep running by walking between them.
+pub const ENGINES_PER_OPERATOR: usize = 3;
+
 /// Is this crew member available to work a post right now?
 fn crew_on_duty(crew: &CrewMember) -> bool {
     crew.health > 0.0
@@ -298,21 +302,40 @@ fn compute_module_efficiency(
     mut station_query: Query<(Entity, &Module, &mut CrewStation, &ChildOf)>,
     crew_query: Query<&CrewMember>,
 ) {
-    // An engine room needs an engineer, not one hand per nozzle. A ship with
-    // any manned propulsion station runs ALL of its propulsion — five engines
-    // eating five of your eight crew made thrust cost more than it was worth,
-    // and nobody staffs a thruster individually anyway.
+    // One engineer walks a bank of ENGINES_PER_OPERATOR nozzles. Not one hand
+    // each (five engines ate five of eight crew and the guns stayed dark), and
+    // not one hand for the whole ship however big it gets — a hundred-engine
+    // hull should still cost you a black gang.
     //
-    // The teeth survive: lose the engineer and the whole bank goes dark, which
-    // is a far more interesting failure than losing one nozzle in five.
-    let mut propulsion_manned: std::collections::HashSet<Entity> = std::collections::HashSet::new();
-    for (_, module, station, parent) in station_query.iter() {
-        if module.module_type.category() != ModuleCategory::Propulsion {
-            continue;
+    // Which engines a short-handed room keeps running is resolved by grid
+    // position so it's stable frame to frame; an engineer's own nozzle is
+    // always covered first.
+    let mut covered_propulsion: std::collections::HashSet<Entity> = std::collections::HashSet::new();
+    {
+        let mut by_ship: std::collections::HashMap<Entity, (Vec<(IVec2, Entity)>, usize)> =
+            std::collections::HashMap::new();
+        for (entity, module, station, parent) in station_query.iter() {
+            if module.module_type.category() != ModuleCategory::Propulsion {
+                continue;
+            }
+            let slot = by_ship.entry(parent.parent()).or_default();
+            let manned = station
+                .assigned_crew
+                .is_some_and(|c| crew_query.get(c).is_ok_and(crew_on_duty));
+            if manned {
+                slot.1 += 1;
+                covered_propulsion.insert(entity);
+            } else {
+                slot.0.push((module.grid_position, entity));
+            }
         }
-        let Some(crew_entity) = station.assigned_crew else { continue };
-        if crew_query.get(crew_entity).is_ok_and(crew_on_duty) {
-            propulsion_manned.insert(parent.parent());
+        for (_, (mut unmanned, operators)) in by_ship {
+            let capacity = operators * ENGINES_PER_OPERATOR;
+            let spare = capacity.saturating_sub(operators);
+            unmanned.sort_by_key(|(cell, _)| (cell.x, cell.y));
+            for (_, entity) in unmanned.into_iter().take(spare) {
+                covered_propulsion.insert(entity);
+            }
         }
     }
 
@@ -335,10 +358,8 @@ fn compute_module_efficiency(
 
         let staffing_factor = if manned {
             1.0
-        } else if module.module_type.category() == ModuleCategory::Propulsion
-            && propulsion_manned.contains(&parent.parent())
-        {
-            // Covered by the engine room's operator.
+        } else if covered_propulsion.contains(&entity) {
+            // Within an engineer's rounds.
             1.0
         } else {
             0.0
@@ -448,10 +469,25 @@ fn auto_assign_crew(
         }
     }
 
-    // One operator covers the whole engine room (see compute_module_efficiency).
-    // Release the surplus so five nozzles stop eating five of eight hands.
-    // Pinned posts are honoured first — a KeepManned engine is the one kept.
-    let mut engine_room_staffed: std::collections::HashSet<Entity> = std::collections::HashSet::new();
+    // One engineer per ENGINES_PER_OPERATOR nozzles (see
+    // compute_module_efficiency). Work out how many the room actually wants,
+    // then release anyone beyond that so a big bank stops eating the crew.
+    // Pinned posts are honoured first — a KeepManned engine keeps its hand.
+    let mut engine_berths_wanted: std::collections::HashMap<Entity, usize> =
+        std::collections::HashMap::new();
+    for (_, module, _, _, owned) in station_query.iter() {
+        if module.module_type.category() == ModuleCategory::Propulsion {
+            if let Some(ship) = owner_of(owned) {
+                *engine_berths_wanted.entry(ship).or_insert(0) += 1;
+            }
+        }
+    }
+    for wanted in engine_berths_wanted.values_mut() {
+        *wanted = wanted.div_ceil(ENGINES_PER_OPERATOR);
+    }
+
+    let mut engine_berths_used: std::collections::HashMap<Entity, usize> =
+        std::collections::HashMap::new();
     for pinned_pass in [true, false] {
         for (_, module, mut station, pinned, owned) in station_query.iter_mut() {
             if module.module_type.category() != ModuleCategory::Propulsion || pinned != pinned_pass {
@@ -461,8 +497,10 @@ fn auto_assign_crew(
             if station.assigned_crew.is_none() {
                 continue;
             }
-            if engine_room_staffed.insert(ship) {
-                continue; // the one we keep
+            let used = engine_berths_used.entry(ship).or_insert(0);
+            if *used < engine_berths_wanted.get(&ship).copied().unwrap_or(0) {
+                *used += 1;
+                continue;
             }
             if let Some(freed) = station.assigned_crew.take() {
                 assigned_crew.remove(&freed);
@@ -475,11 +513,13 @@ fn auto_assign_crew(
     for (entity, module, station, pinned, owned) in station_query.iter() {
         if station.priority > 0 && !station.manually_assigned && station.assigned_crew.is_none() {
             if let Some(ship) = owner_of(owned) {
-                // Don't offer a second engine berth once the room is covered.
-                if module.module_type.category() == ModuleCategory::Propulsion
-                    && !engine_room_staffed.insert(ship)
-                {
-                    continue;
+                // Don't offer more engine berths than the room needs.
+                if module.module_type.category() == ModuleCategory::Propulsion {
+                    let used = engine_berths_used.entry(ship).or_insert(0);
+                    if *used >= engine_berths_wanted.get(&ship).copied().unwrap_or(0) {
+                        continue;
+                    }
+                    *used += 1;
                 }
                 unfilled_by_ship.entry(ship).or_default().push((entity, station.priority, pinned));
             }
@@ -1235,7 +1275,7 @@ mod engine_room_tests {
         let gun_manned = app.world().get::<CrewStation>(gun).unwrap().assigned_crew.is_some();
         assert_eq!(
             manned, 1,
-            "engine bank occupied {manned} hands (gun manned: {gun_manned})"
+            "three nozzles is one engineer's round; took {manned} hands (gun manned: {gun_manned})"
         );
 
         // ...and the whole bank still runs on that one operator.
@@ -1252,6 +1292,44 @@ mod engine_room_tests {
             app.world().get::<CrewStation>(gun).unwrap().assigned_crew.is_some(),
             "freed crew never reached the weapon"
         );
+    }
+
+    /// A hand covers three nozzles, not the whole ship however big it gets.
+    /// Four engines is one too many for one engineer, so the room wants two.
+    #[test]
+    fn a_bank_bigger_than_one_round_costs_a_second_engineer() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<AutoAssignTimer>();
+        app.add_systems(Update, (auto_assign_crew, compute_module_efficiency).chain());
+
+        let ship = app.world_mut().spawn(Ship).id();
+        let engines: Vec<Entity> = (0..4)
+            .map(|i| {
+                app.world_mut()
+                    .spawn(post(ModuleType::StandardEngine, IVec2::new(-i, 0), 9))
+                    .insert(ChildOf(ship))
+                    .id()
+            })
+            .collect();
+        for name in ["Chen", "Okafor", "Rivera"] {
+            app.world_mut().spawn(hand(name)).insert(ChildOf(ship));
+        }
+
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(200)));
+        for _ in 0..14 {
+            app.update();
+        }
+
+        let manned = engines
+            .iter()
+            .filter(|e| app.world().get::<CrewStation>(**e).unwrap().assigned_crew.is_some())
+            .count();
+        assert_eq!(manned, 2, "four nozzles need two engineers, not {manned}");
+        for engine in &engines {
+            let eff = app.world().get::<ModuleEfficiency>(*engine).unwrap();
+            assert_eq!(eff.staffing_factor, 1.0, "an engine went dark with the room fully crewed");
+        }
     }
 
     /// Losing the engineer must still cost you the whole bank — otherwise

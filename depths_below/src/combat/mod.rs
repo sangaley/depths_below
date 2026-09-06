@@ -374,3 +374,20 @@ impl Plugin for CombatPlugin {
             );
     }
 }
+
+/// A gun with nobody on it does not fire.
+///
+/// Enemy ships have obeyed this since AI crew existed (`ai_weapon_fire_system`
+/// gates on the same `ModuleEfficiency`), but every one of the PLAYER's firing
+/// paths ignored it — `crew_weapon_system` only ever gated auto-fire at
+/// creatures, so pressing the trigger fired batteries no one was standing at.
+/// Crew scarcity is meant to be the cost of a big battery; it wasn't.
+///
+/// Weapons without a `CrewStation` at all fire freely — that's a property of
+/// the module, not an empty post.
+pub(super) fn weapon_is_crewed(
+    has_station: bool,
+    efficiency: Option<&crate::components::ModuleEfficiency>,
+) -> bool {
+    !has_station || efficiency.is_some_and(|e| e.staffing_factor > 0.0)
+}

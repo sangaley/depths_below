@@ -62,6 +62,21 @@ impl CrewPath {
     }
 }
 
+/// An engineer's rounds. One hand covers several nozzles by walking between
+/// them, so the post is a circuit rather than a chair — standing motionless at
+/// one engine while three others are "covered" reads as a bug, whatever the
+/// efficiency numbers say.
+#[derive(Component)]
+pub struct CrewPatrol {
+    pub stops: Vec<IVec2>,
+    pub index: usize,
+    /// Time spent working at a stop before moving to the next.
+    pub dwell: Timer,
+}
+
+/// Seconds an engineer spends at each nozzle before walking to the next.
+const PATROL_DWELL: f32 = 6.0;
+
 #[derive(Resource)]
 pub struct CrewPlanTimer(Timer);
 
@@ -99,6 +114,7 @@ pub fn plan_crew_destinations(
     stations: Query<(&Module, &CrewStation, &ChildOf), Without<OwnedByAiShip>>,
     crew: Query<(Entity, &ChildOf), (With<CrewMember>, Without<EvaSalvaging>, Without<OwnedByAiShip>)>,
     existing: Query<&CrewDestination>,
+    patrols: Query<&CrewPatrol>,
     navs: Query<&NavGrid>,
 ) {
     for (module, station, parent) in stations.iter() {
@@ -112,10 +128,69 @@ pub fn plan_crew_destinations(
         let Ok(nav) = navs.get(parent.parent()) else { continue };
         let Some(cell) = station_cell(nav, module) else { continue };
 
+        // The engine room is walked, not sat in. Hand the engineer the whole
+        // circuit and let `walk_engine_room_rounds` move them along it.
+        if module.module_type.category() == ModuleCategory::Propulsion {
+            if patrols.get(entity).is_err() {
+                let mut stops: Vec<IVec2> = stations
+                    .iter()
+                    .filter(|(m, _, p)| {
+                        p.parent() == parent.parent()
+                            && m.module_type.category() == ModuleCategory::Propulsion
+                    })
+                    .filter_map(|(m, _, _)| station_cell(nav, m))
+                    .collect();
+                stops.sort_by_key(|c| (c.x, c.y));
+                stops.dedup();
+                if stops.is_empty() {
+                    stops.push(cell);
+                }
+                let start = stops.iter().position(|c| *c == cell).unwrap_or(0);
+                commands.entity(entity).try_insert((
+                    CrewPatrol {
+                        stops,
+                        index: start,
+                        dwell: Timer::from_seconds(PATROL_DWELL, TimerMode::Repeating),
+                    },
+                    CrewDestination(cell),
+                ));
+            }
+            continue;
+        }
+
+        // Anyone who stopped being an engineer stops doing rounds.
+        if patrols.get(entity).is_ok() {
+            commands.entity(entity).try_remove::<CrewPatrol>();
+        }
         if existing.get(entity).is_ok_and(|d| d.0 == cell) {
             continue;
         }
         commands.entity(entity).try_insert(CrewDestination(cell));
+    }
+}
+
+/// Moves engineers along their rounds: work a nozzle for a while, walk to the
+/// next, repeat. Only advances once they've actually arrived, so a long walk
+/// never gets cut short by the timer.
+pub fn walk_engine_room_rounds(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut patrols: Query<
+        (Entity, &mut CrewPatrol, Option<&CrewPath>),
+        (With<CrewMember>, Without<EvaSalvaging>, Without<OwnedByAiShip>),
+    >,
+) {
+    for (entity, mut patrol, path) in patrols.iter_mut() {
+        if path.is_some() || patrol.stops.len() < 2 {
+            continue; // still walking there, or there's only one nozzle
+        }
+        patrol.dwell.tick(time.delta());
+        if !patrol.dwell.just_finished() {
+            continue;
+        }
+        patrol.index = (patrol.index + 1) % patrol.stops.len();
+        let next = patrol.stops[patrol.index];
+        commands.entity(entity).try_insert(CrewDestination(next));
     }
 }
 

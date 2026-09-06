@@ -133,7 +133,7 @@ pub fn fire_weapons_system(
     selection: Res<TargetSelection>,
     ship_query: Query<(Entity, &Transform, &ShipPhysics, &Velocity), With<Ship>>,
     mut weapon_query: Query<(
-        Entity, &Module, &mut Weapon, &mut WeaponCooldown,
+        Entity, &Module, Has<CrewStation>, Option<&ModuleEfficiency>, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
         Option<&crate::building::customization::parameters::ModuleCustomization>,
         Option<&crate::building::customization::tuning::WeaponTuning>,
@@ -179,7 +179,11 @@ pub fn fire_weapons_system(
         .map(|m| (m.grid_position, m.module_type, m.is_active))
         .collect();
 
-    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, customization, tuning, selected_ammo, temp) in weapon_query.iter_mut() {
+    for (entity, module, has_station, staffing, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, customization, tuning, selected_ammo, temp) in weapon_query.iter_mut() {
+        // A gun with nobody on it does not fire.
+        if !crate::combat::weapon_is_crewed(has_station, staffing) {
+            continue;
+        }
         // Player ship only: this query has no ownership filter on its own, and
         // AI ships carry the exact same Weapon/FireGroup/WeaponMount
         // components (shared spawn_module path). Unscoped, holding Space

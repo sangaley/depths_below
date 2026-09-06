@@ -18,7 +18,7 @@ pub fn fire_missiles_system(
     selection: Res<TargetSelection>,
     ship_query: Query<(Entity, &ShipPhysics, &Transform), With<Ship>>,
     mut weapon_query: Query<(
-        Entity, &Module, &mut Weapon, &mut WeaponCooldown,
+        Entity, &Module, Has<CrewStation>, Option<&ModuleEfficiency>, &mut Weapon, &mut WeaponCooldown,
         &GlobalTransform, &FireGroup, &WeaponMount, &ChildOf,
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&ModuleTemperature>,
@@ -53,7 +53,11 @@ pub fn fire_missiles_system(
         .map(|dir| ship_transform.translation.truncate() + dir * 2000.0)
         .or(cursor_world);
 
-    for (entity, module, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning, temp) in weapon_query.iter_mut() {
+    for (entity, module, has_station, staffing, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, tuning, temp) in weapon_query.iter_mut() {
+        // A gun with nobody on it does not fire.
+        if !crate::combat::weapon_is_crewed(has_station, staffing) {
+            continue;
+        }
         // Player ship only — see fire_weapons_system for why this matters:
         // AI ships carry identical missile-bay components and would
         // otherwise launch whenever the player fires, homing on the
