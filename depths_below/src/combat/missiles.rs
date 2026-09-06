@@ -223,36 +223,14 @@ pub fn fire_missiles_system(
         // came out of.
         let launch_dir = Vec2::from_angle(ship_physics.rotation + module.rotation.facing_angle());
 
-        // Determine missile properties based on module type and bay chain length
+        // Bay chain length is missile size — see MachineStats.
         let bay_count = machine_stats.get(entity)
-            .map(|s| s.barrel_count.max(1)) // Barrel count = bay chain length for missiles
+            .map(|s| s.barrel_count.max(1))
             .unwrap_or(1);
-
-        let size_mult = bay_count as f32;
-
-        // Base missile stats scaled by bay count. The tuning velocity slider
-        // is "thrust" for missiles — hotter engines, faster closing speed.
-        //
-        // Bigger missiles accelerate more slowly but burn for longer, so the
-        // speed budget (thrust x burn) comes out the same. What size actually
-        // costs is agility: a heavy bay throws a missile that turns wide.
-        let missile_damage = weapon.damage * size_mult;
-        let thrust_mult = tuning.map(|t| t.velocity).unwrap_or(1.0);
-        let bulk = size_mult.sqrt();
-        let missile_thrust = BOOST_THRUST * thrust_mult / bulk;
-        let burn_time = BURN_TIME * bulk;
-        let (max_lateral, eject_time, life) = match module.module_type {
-            ModuleType::GuidedMissile => (LATERAL_GUIDED / bulk, EJECT_TIME_GUIDED, LIFE_GUIDED),
-            ModuleType::HeavyMissile => (LATERAL_HEAVY / bulk, EJECT_TIME_HEAVY, LIFE_HEAVY),
-            // Cluster rockets are unguided by design (see the registry entry) —
-            // zero lateral authority, and homing_target is dropped below.
-            ModuleType::ClusterRocket => (0.0, EJECT_TIME_CLUSTER, LIFE_CLUSTER),
-            _ => (LATERAL_HEAVY / bulk, EJECT_TIME_HEAVY, LIFE_HEAVY),
-        };
-        let blast_radius = 30.0 + size_mult * 20.0;
-
-        // Fuel from ship — bigger missile needs more fuel
-        let fuel_cost = 5.0 * size_mult;
+        // Ship fuel pays for the LAUNCH; the missile's own burn and steering
+        // authority are properties of the missile, not of how much fuel the
+        // ship happened to have.
+        let fuel_cost = 5.0 * bay_count as f32;
         if fuel_state.current_fuel < fuel_cost {
             notifications.write(ShowNotification {
                 message: "No fuel for missile launch!".into(),
@@ -263,12 +241,6 @@ pub fn fire_missiles_system(
         }
         fuel_state.current_fuel -= fuel_cost;
 
-        // Ship fuel pays for the LAUNCH; the missile's own motor burn and
-        // steering authority are properties of the missile, not of how much
-        // fuel the ship happened to have. Keeping them separate is why burn
-        // duration is now tunable at all.
-
-        // Fire!
         cooldown.timer.reset();
         if !crate::combat::INFINITE_AMMO {
             weapon.ammo = weapon.ammo.saturating_sub(1);
@@ -279,78 +251,19 @@ pub fn fire_missiles_system(
             from_player: true,
         });
 
-        let direction = launch_dir;
-
-        // Visual size scales with bay count
-        let visual_w = 24.0 + size_mult * 8.0;
-        let visual_h = 10.0 + size_mult * 4.0;
-
-        let volley_count = match module.module_type {
-            ModuleType::ClusterRocket => (3.0 * size_mult).min(8.0) as u32, // More bays = more rockets
-            _ => 1,
-        };
-
-        for i in 0..volley_count {
-            // Fan the volley by ROTATING the launch heading. The old version
-            // added a fixed world-space offset built from cos/sin of the
-            // spread angle, which is not a rotation — every rocket in the
-            // salvo got shoved the same way regardless of which way the tube
-            // was pointing.
-            let spread_angle = if volley_count > 1 {
-                (i as f32 - (volley_count - 1) as f32 / 2.0) * 0.12
-            } else {
-                0.0
-            };
-            let (sin, cos) = spread_angle.sin_cos();
-            let dir = Vec2::new(
-                direction.x * cos - direction.y * sin,
-                direction.x * sin + direction.y * cos,
-            );
-            // Inherit the ship's own velocity. Without it a ship running at
-            // speed rear-ends its own salvo — the missile left the tube at
-            // 200 u/s absolute while the hull behind it was already doing more.
-            let missile_vel = dir * EJECT_SPEED + ship_velocity.0;
-            let per_missile_damage = if volley_count > 1 {
-                missile_damage / volley_count as f32
-            } else {
-                missile_damage
-            };
-
-            commands.spawn((
-                (Sprite {
-                        color: Color::srgb(0.8, 0.3, 0.2),
-                        custom_size: Some(Vec2::new(visual_w, visual_h)),
-                        ..default()
-                    }, Transform {
-                        translation: Vec3::new(weapon_pos.x, weapon_pos.y, 0.5),
-                        rotation: Quat::from_rotation_z(dir.y.atan2(dir.x)),
-                        ..default()
-                    }),
-                MissileProjectile {
-                    damage: per_missile_damage,
-                    target: if max_lateral > 0.0 { homing_target } else { None },
-                    burn_fuel: burn_time,
-                    reserve_fuel: RESERVE_TURN,
-                    thrust: missile_thrust,
-                    max_lateral,
-                    arm_distance: 80.0,
-                    blast_radius,
-                    owner: entity,
-                    eject_time,
-                    launch_dir: dir,
-                    life,
-                    terminal_range: TERMINAL_RANGE,
-                    prev_pos: weapon_pos,
-                    owner_ship: Some(player_ship),
-                    launch_cell: module.grid_position,
-                    ..default()
-                },
-                MissileTrail::default(),
-                Velocity(missile_vel),
-                GravityAffected { mass: 2.0 + size_mult },
-                GravityForce::default(),
-            ));
-        }
+        launch_missiles(&mut commands, &MissileLaunch {
+            weapon: entity,
+            ship: player_ship,
+            launch_cell: module.grid_position,
+            muzzle: weapon_pos,
+            launch_dir,
+            ship_velocity: ship_velocity.0,
+            target: homing_target,
+            module_type: module.module_type,
+            damage: weapon.damage,
+            bays: bay_count,
+            thrust_mult: tuning.map(|t| t.velocity).unwrap_or(1.0),
+        });
 
         // Launch notification for heavy missiles
         if module.module_type == ModuleType::HeavyMissile {
@@ -361,6 +274,102 @@ pub fn fire_missiles_system(
             });
         }
     }
+}
+
+/// Everything one launcher needs to put a missile in the air.
+///
+/// Shared by the player's fire_missiles_system and the AI's gunnery loop.
+/// Enemy launchers used to route through the legacy straight-line projectile
+/// path, so an "enemy missile" was a fast red bullet — none of the eject,
+/// guidance or collision behaviour applied to them at all.
+pub struct MissileLaunch {
+    pub weapon: Entity,
+    pub ship: Entity,
+    pub launch_cell: IVec2,
+    pub muzzle: Vec2,
+    /// Tube heading in WORLD space: ship rotation + the module's facing.
+    pub launch_dir: Vec2,
+    pub ship_velocity: Vec2,
+    pub target: Option<Entity>,
+    pub module_type: ModuleType,
+    pub damage: f32,
+    pub bays: u32,
+    pub thrust_mult: f32,
+}
+
+/// Spawn a launcher's salvo. Returns how many bodies left the tube.
+pub fn launch_missiles(commands: &mut Commands, l: &MissileLaunch) -> u32 {
+    let size_mult = l.bays.max(1) as f32;
+    let bulk = size_mult.sqrt();
+    let (max_lateral, eject_time, life) = match l.module_type {
+        ModuleType::GuidedMissile => (LATERAL_GUIDED / bulk, EJECT_TIME_GUIDED, LIFE_GUIDED),
+        ModuleType::HeavyMissile => (LATERAL_HEAVY / bulk, EJECT_TIME_HEAVY, LIFE_HEAVY),
+        ModuleType::ClusterRocket => (0.0, EJECT_TIME_CLUSTER, LIFE_CLUSTER),
+        _ => (LATERAL_HEAVY / bulk, EJECT_TIME_HEAVY, LIFE_HEAVY),
+    };
+    let missile_damage = l.damage * size_mult;
+    let volley = match l.module_type {
+        ModuleType::ClusterRocket => (3.0 * size_mult).min(8.0) as u32,
+        _ => 1,
+    };
+    let visual_w = 24.0 + size_mult * 8.0;
+    let visual_h = 10.0 + size_mult * 4.0;
+
+    for i in 0..volley {
+        // Fan the volley by ROTATING the launch heading, not by adding a
+        // world-space offset — that shoved every rocket the same way
+        // regardless of which way the tube pointed.
+        let spread_angle = if volley > 1 {
+            (i as f32 - (volley - 1) as f32 / 2.0) * 0.12
+        } else {
+            0.0
+        };
+        let (sin, cos) = spread_angle.sin_cos();
+        let dir = Vec2::new(
+            l.launch_dir.x * cos - l.launch_dir.y * sin,
+            l.launch_dir.x * sin + l.launch_dir.y * cos,
+        );
+        // Inherit the ship's own velocity, or a ship at speed rear-ends its
+        // own salvo.
+        let vel = dir * EJECT_SPEED + l.ship_velocity;
+        let per_missile = if volley > 1 { missile_damage / volley as f32 } else { missile_damage };
+
+        commands.spawn((
+            (Sprite {
+                    color: Color::srgb(0.8, 0.3, 0.2),
+                    custom_size: Some(Vec2::new(visual_w, visual_h)),
+                    ..default()
+                }, Transform {
+                    translation: Vec3::new(l.muzzle.x, l.muzzle.y, 0.5),
+                    rotation: Quat::from_rotation_z(dir.y.atan2(dir.x)),
+                    ..default()
+                }),
+            MissileProjectile {
+                damage: per_missile,
+                target: if max_lateral > 0.0 { l.target } else { None },
+                burn_fuel: BURN_TIME * bulk,
+                reserve_fuel: RESERVE_TURN,
+                thrust: BOOST_THRUST * l.thrust_mult / bulk,
+                max_lateral,
+                arm_distance: 80.0,
+                blast_radius: 30.0 + size_mult * 20.0,
+                owner: l.weapon,
+                eject_time,
+                launch_dir: dir,
+                life,
+                terminal_range: TERMINAL_RANGE,
+                prev_pos: l.muzzle,
+                owner_ship: Some(l.ship),
+                launch_cell: l.launch_cell,
+                ..default()
+            },
+            MissileTrail::default(),
+            Velocity(vel),
+            GravityAffected { mass: 2.0 + size_mult },
+            GravityForce::default(),
+        ));
+    }
+    volley
 }
 
 /// Per-missile exhaust bookkeeping.
@@ -644,60 +653,80 @@ pub fn check_missile_hits(
         With<crate::ai_ship::components::AiShip>,
     >,
     mut ai_module_query: Query<(&mut Module, &GlobalTransform), Without<DestroyedModule>>,
+    block_query: Query<&crate::building::Block>,
     owner_parent_query: Query<&ChildOf>,
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
     mut notifications: MessageWriter<ShowNotification>,
     parent_hulls: Query<(&GlobalTransform, &crate::building::ShipGrid)>,
     mut ship_damage_events: MessageWriter<crate::events::ShipDamaged>,
+    player_query: Query<Entity, With<Ship>>,
 ) {
     'missiles: for (missile_entity, missile, missile_transform) in missile_query.iter() {
-        // === THE PARENT HULL ===
+        // === HULLS ===
         //
         // Missiles are the exception to the rule that a round ignores the
         // ship that fired it. A warhead is a physical object leaving a tube
-        // at walking pace, and flying it through your own armour looks
-        // absurd in a way a hypersonic slug does not. So a launcher with
-        // something dead ahead does not fire a missile into the void — it
-        // detonates one against the block in the way, which is the cook-off
-        // the silo warning has been promising, arriving as plain collision
-        // rather than as a special case.
+        // at walking pace, and flying it through armour looks absurd in a way
+        // a hypersonic slug does not. The same walk serves both ends of that:
+        // against its OWN hull it is the cook-off the silo warning promises,
+        // and against the player's it is how an enemy missile lands at all —
+        // the blast branch below only ever looks at AI ships.
         //
         // Checked BEFORE arming: the whole point is the ones that never get
         // clear of the tube.
-        if let Some((ship_gt, grid)) = missile.owner_ship.and_then(|s| parent_hulls.get(s).ok()) {
-            let here = crate::building::world_to_cell(ship_gt, missile_transform.translation.truncate());
+        let player_ship = player_query.single().ok();
+        let missile_pos_now = missile_transform.translation.truncate();
+        for ship in [missile.owner_ship, player_ship].into_iter().flatten() {
+            let Ok((ship_gt, grid)) = parent_hulls.get(ship) else { continue };
+            let own = missile.owner_ship == Some(ship);
+            let here = crate::building::world_to_cell(ship_gt, missile_pos_now);
             let cell = IVec2::new(here.x.round() as i32, here.y.round() as i32);
-            if let Some(hit) = grid.get(cell) {
+            let Some(hit) = grid.get(cell) else { continue };
+
+            if own {
                 // Not the tube it is leaving, and not its own plating: one
                 // course of armour is a blow-out panel, exactly as it is for
-                // the build-mode silo check.
-                let own_tube = cell == missile.launch_cell || hit == missile.owner;
-                let panel = ai_module_query
-                    .get(hit)
-                    .is_ok_and(|(m, _)| crate::building::is_blowout_panel(m.module_type));
-                if !own_tube && !panel {
-                    let at = missile_transform.translation.truncate();
-                    spawn_explosion(&mut commands, at, missile.blast_radius, Color::srgb(1.0, 0.45, 0.1));
-                    if let Ok((mut module, _)) = ai_module_query.get_mut(hit) {
-                        module.health = (module.health - missile.damage).max(0.0);
-                    }
-                    // amount 0.0 where the block was a module (already
-                    // applied above); hull takes it through the event.
-                    ship_damage_events.write(crate::events::ShipDamaged {
-                        source: crate::events::DamageSource::Explosion,
-                        amount: 0.0,
-                        position: Some(at),
-                        direction: None,
-                    });
-                    notifications.write(ShowNotification {
-                        message: "SILO OBSTRUCTED — WARHEAD COOK-OFF".into(),
-                        notification_type: NotificationType::Danger,
-                        duration: 2.5,
-                    });
-                    commands.entity(missile_entity).despawn();
-                    continue 'missiles;
+                // the build-mode silo check. Identified by CELL, because
+                // update_ship_grids writes hull after modules and a launcher
+                // on a hull tile resolves to the hull segment.
+                if cell == missile.launch_cell || hit == missile.owner {
+                    continue;
+                }
+                if ai_module_query.get(hit).is_ok_and(|(m, _)| crate::building::is_blowout_panel(m.module_type)) {
+                    continue;
                 }
             }
+
+            spawn_explosion(&mut commands, missile_pos_now, missile.blast_radius, Color::srgb(1.0, 0.45, 0.1));
+            if let Ok((mut module, _)) = ai_module_query.get_mut(hit) {
+                module.health = (module.health - missile.damage).max(0.0);
+            }
+
+            if Some(ship) == player_ship {
+                // Direction points from the ship TOWARD the attacker — the
+                // convention process_ship_damage walks inward along.
+                let from = (missile.prev_pos - missile_pos_now).normalize_or_zero();
+                ship_damage_events.write(crate::events::ShipDamaged {
+                    source: crate::events::DamageSource::Explosion,
+                    // Real amount when it is an ENEMY warhead: the player's
+                    // damage pipeline applies it. Zero for our own cook-off,
+                    // which was already applied to the block above.
+                    amount: if own { 0.0 } else { missile.damage },
+                    position: Some(missile_pos_now),
+                    direction: Some(from),
+                });
+                notifications.write(ShowNotification {
+                    message: if own {
+                        "SILO OBSTRUCTED — WARHEAD COOK-OFF".into()
+                    } else {
+                        "MISSILE IMPACT".to_string()
+                    },
+                    notification_type: NotificationType::Danger,
+                    duration: 2.5,
+                });
+            }
+            commands.entity(missile_entity).despawn();
+            continue 'missiles;
         }
 
         if !missile.armed { continue; }
@@ -721,17 +750,47 @@ pub fn check_missile_hits(
             }
 
             if dist_to_ship < shield.radius + 60.0 {
-                // Detonate if any block is inside the blast radius
+                // Blast damage, but armour gets a say.
+                //
+                // This used to apply the FULL warhead to every module inside
+                // the radius, ignoring plating, hull and distance alike — the
+                // one place in combat where armour did not matter, so the
+                // answer to a heavily belted Pressure King was the same as
+                // for a bare Rust Swarm. Now each block soaks by its own
+                // thickness through the same resolve_impact the guns use,
+                // and damage falls off across the radius.
+                //
+                // Pass-through is high: a shaped charge is meant to defeat
+                // plate that stops a bullet. High, not total — plating you
+                // stand behind should still be worth having.
+                const WARHEAD_PASS_THROUGH: f32 = 0.65;
+                let radius = missile.blast_radius.max(50.0);
                 let mut total_damage = 0.0;
                 let mut hit_any = false;
                 for child in children.iter() {
                     if let Ok((mut module, gt)) = ai_module_query.get_mut(child) {
                         let d = missile_pos.distance(gt.translation().truncate());
-                        if d < missile.blast_radius.max(50.0) {
-                            module.health = (module.health - missile.damage).max(0.0);
-                            total_damage += missile.damage;
-                            hit_any = true;
-                        }
+                        if d >= radius { continue; }
+                        // Linear falloff: at the rim a warhead scorches, at
+                        // the centre it guts.
+                        let share = missile.damage * (1.0 - d / radius);
+                        let block = block_query.get(child).copied()
+                            .unwrap_or_else(|_| crate::building::Block::module(IVec2::ZERO));
+                        let impact = crate::combat::impact::resolve_impact(
+                            share,
+                            &block,
+                            1.0,
+                            // A detonation has no incoming angle to speak of —
+                            // it envelops the block rather than striking a
+                            // face, so it never skips off.
+                            crate::combat::impact::Obliquity::HEAD_ON,
+                            Some(WARHEAD_PASS_THROUGH),
+                        );
+                        let dealt = impact.to_block + impact.through;
+                        if dealt <= 0.0 { continue; }
+                        module.health = (module.health - dealt).max(0.0);
+                        total_damage += dealt;
+                        hit_any = true;
                     }
                 }
                 if hit_any {

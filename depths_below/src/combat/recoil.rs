@@ -19,32 +19,41 @@ pub struct RecoilAccumulator {
     pub torque: f32,
 }
 
+/// Rotational inertia, as a multiple of mass.
+///
+/// A ship is not a point, so a shot off the centreline yaws it. Tuned so a
+/// railgun ~300 units off-axis kicks about 0.15 rad/s — a visible slew that
+/// the helm shrugs off, not a spin.
+const MOMENT_OF_INERTIA: f32 = 15_000.0;
+
+/// Speed a missile actually leaves the tube at, for recoil purposes. Mirrors
+/// `missiles::EJECT_SPEED` — the gas charge is what pushes back on the ship,
+/// not the motor that lights later, well clear of the hull.
+const EJECT_RECOIL_SPEED: f32 = 200.0;
+
 /// System: when projectiles are spawned, calculate recoil and apply to ship.
 /// Uses Newton's third law: F_recoil = mass_projectile × velocity_projectile
 pub fn apply_weapon_recoil(
     mut recoil: ResMut<RecoilAccumulator>,
-    mut ship_query: Query<(&mut Velocity, &ShipPhysics, &Transform), With<Ship>>,
-    time: Res<Time>,
+    mut ship_query: Query<(&mut Velocity, &mut ShipPhysics), With<Ship>>,
 ) {
-    let Ok((mut velocity, physics, _transform)) = ship_query.single_mut() else { return };
+    let Ok((mut velocity, mut physics)) = ship_query.single_mut() else { return };
 
     if recoil.force.length_squared() < 0.001 && recoil.torque.abs() < 0.001 {
         return;
     }
 
-    let dt = time.delta_secs();
+    // The accumulator holds an IMPULSE, not a sustained force: it is filled
+    // by the rounds that spawned this frame and cleared below. Scaling it by
+    // dt made every shot's kick proportional to frame time and about sixty
+    // times too small — a railgun moved the ship 0.1 u/s instead of 7.5, so
+    // recoil existed on paper and was imperceptible in the seat.
+    velocity.0 += recoil.force / physics.mass;
 
-    // Apply linear recoil: acceleration = force / mass
-    let recoil_acceleration = recoil.force / physics.mass;
-    velocity.0 += recoil_acceleration * dt;
-
-    // Apply angular recoil (spin from off-center weapons)
-    // This modifies angular_velocity but we'd need mutable ShipPhysics
-    // For now, apply as small velocity perturbation perpendicular to recoil direction
-    if recoil.torque.abs() > 0.1 {
-        let perp = Vec2::new(-recoil.force.y, recoil.force.x).normalize_or_zero();
-        velocity.0 += perp * recoil.torque * 0.001 * dt;
-    }
+    // Real angular recoil. This used to fake spin by nudging the ship
+    // sideways, because the system had no mutable ShipPhysics to write to —
+    // so an off-centre gun shoved the hull instead of turning it.
+    physics.angular_velocity += recoil.torque / (physics.mass * MOMENT_OF_INERTIA);
 
     // Clear accumulator for next frame
     recoil.force = Vec2::ZERO;
@@ -103,11 +112,16 @@ pub fn accumulate_missile_recoil(
         .count();
     let absorber_reduction = 1.0 - (absorber_count as f32 * 0.25).min(0.75);
 
-    for (missile, missile_velocity) in new_missiles.iter() {
-        // Missile launch recoil is smaller than kinetic (slow launch)
+    for (missile, _missile_velocity) in new_missiles.iter() {
+        // Missile launch recoil is smaller than kinetic (slow launch).
+        //
+        // Off the EJECT charge and the tube's heading, not off the missile's
+        // absolute velocity: a missile inherits the ship's own motion, so
+        // reading its raw speed billed the launcher for however fast the hull
+        // was already travelling — a full-throttle salvo kicked far harder
+        // than the same salvo at rest, in whatever direction the ship was
+        // already going.
         let missile_mass = missile.damage * 0.005;
-        let proj_dir = missile_velocity.0.normalize_or_zero();
-        let recoil_force = -proj_dir * missile_mass * missile_velocity.0.length() * absorber_reduction;
-        recoil.force += recoil_force;
+        recoil.force += -missile.launch_dir * missile_mass * EJECT_RECOIL_SPEED * absorber_reduction;
     }
 }

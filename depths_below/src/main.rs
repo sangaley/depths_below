@@ -20,6 +20,7 @@ pub mod ai_ship;
 mod celestial;
 mod vfx;
 mod spatial;
+mod autoplay;
 mod demo;
 mod audio;
 mod debug;
@@ -44,6 +45,7 @@ use contracts::ContractsPlugin;
 use celestial::CelestialPlugin;
 use vfx::VfxPlugin;
 use spatial::SpatialPlugin;
+use autoplay::AutoplayPlugin;
 use demo::DemoPlugin;
 use audio::GameAudioPlugin;
 use debug::DebugPlugin;
@@ -94,6 +96,7 @@ fn main() {
         ))
         .add_plugins(SpatialPlugin)
         .add_plugins(DemoPlugin)
+        .add_plugins(AutoplayPlugin)
         .add_plugins(DebugPlugin)
         .add_plugins(GameAudioPlugin)
         .add_plugins(GamepadPlugin)

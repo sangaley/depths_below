@@ -273,6 +273,30 @@ pub fn ai_weapon_fire_system(
                 weapon.range,
             ).aim_point;
 
+            // Launchers get real missiles, not a fast red bullet. Enemy
+            // tubes routed through the legacy straight-line path, so none of
+            // the eject, guidance, channel or collision behaviour applied to
+            // anything an enemy fired.
+            if crate::building::is_launcher(module.module_type) {
+                let bays = 1;
+                crate::combat::missiles::launch_missiles(&mut commands, &crate::combat::missiles::MissileLaunch {
+                    weapon: child,
+                    ship: ai_entity,
+                    launch_cell: module.grid_position,
+                    muzzle,
+                    launch_dir: Vec2::from_angle(
+                        ai_transform.rotation.to_euler(EulerRot::ZYX).0 + module.rotation.facing_angle(),
+                    ),
+                    ship_velocity: Vec2::ZERO,
+                    target: ai_target.entity,
+                    module_type: module.module_type,
+                    damage: weapon.damage * efficiency,
+                    bays,
+                    thrust_mult: 1.0,
+                });
+                continue;
+            }
+
             crate::combat::projectiles::spawn_projectile(
                 &mut commands,
                 &asset_server,
