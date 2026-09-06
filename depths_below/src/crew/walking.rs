@@ -447,3 +447,107 @@ mod walking_tests {
         assert_eq!(crew_cell(&app, crew), IVec2::new(0, 0), "crew moved without a route");
     }
 }
+
+/// How near a hostile has to be before the crew stop doing chores and stay at
+/// their posts. Generous on purpose — you should not have damage-control teams
+/// strolling into the open while something is still shooting at you.
+const COMBAT_RANGE: f32 = 2600.0;
+
+#[derive(Resource)]
+pub struct CrewErrandTimer(Timer);
+
+impl Default for CrewErrandTimer {
+    fn default() -> Self {
+        Self(Timer::from_seconds(1.0, TimerMode::Repeating))
+    }
+}
+
+/// Out of combat, hands with no post go and fix things.
+///
+/// Only crew nobody has assigned to a station take errands — the reactor keeps
+/// its operator while the spare hands patch the hull. That is the whole reason
+/// the engine room stopped needing five people: it freed the hands this uses.
+///
+/// Nothing here touches `CrewMember::state`. An idle crew member already mends
+/// what's within reach at half rate (`IDLE_REPAIR_POWER`), so walking them to
+/// the damage is enough to get breaches sealed and plating patched between
+/// fights — basic damage control, not a full repair crew.
+pub fn plan_repair_errands(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut timer: ResMut<CrewErrandTimer>,
+    ships: Query<(Entity, &GlobalTransform, &NavGrid), (With<Ship>, Without<OwnedByAiShip>)>,
+    hostiles: Query<&GlobalTransform, With<crate::ai_ship::components::AiShip>>,
+    stations: Query<&CrewStation>,
+    hulls: Query<(&HullSegment, &ChildOf), Without<HullDestroyed>>,
+    modules: Query<(&Module, &ChildOf), Without<DestroyedModule>>,
+    crew: Query<
+        (Entity, &Transform, &ChildOf),
+        (With<CrewMember>, Without<EvaSalvaging>, Without<OwnedByAiShip>),
+    >,
+) {
+    timer.0.tick(time.delta());
+    if !timer.0.just_finished() {
+        return;
+    }
+    let Ok((ship, ship_gt, nav)) = ships.single() else { return };
+
+    let ship_pos = ship_gt.translation().truncate();
+    let in_combat = hostiles
+        .iter()
+        .any(|h| h.translation().truncate().distance(ship_pos) < COMBAT_RANGE);
+    if in_combat {
+        return;
+    }
+
+    // Breaches first — air is leaving. Then anything simply damaged.
+    let mut jobs: Vec<(u8, IVec2)> = Vec::new();
+    for (hull, parent) in hulls.iter() {
+        if parent.parent() != ship {
+            continue;
+        }
+        if hull.is_depressurized && hull.depressurization_level > 0.0 {
+            jobs.push((0, hull.grid_position));
+        } else if hull.health < hull.max_health {
+            jobs.push((1, hull.grid_position));
+        }
+    }
+    for (module, parent) in modules.iter() {
+        if parent.parent() == ship && module.health < module.max_health && module.health > 0.0 {
+            jobs.push((1, module.grid_position));
+        }
+    }
+    if jobs.is_empty() {
+        return;
+    }
+
+    let posted: std::collections::HashSet<Entity> =
+        stations.iter().filter_map(|s| s.assigned_crew).collect();
+
+    // One job per hand, nearest first — otherwise every spare crew member
+    // walks to the same breach and the rest of the damage goes untouched.
+    let mut claimed: std::collections::HashSet<IVec2> = std::collections::HashSet::new();
+    for (entity, transform, parent) in crew.iter() {
+        if parent.parent() != ship || posted.contains(&entity) {
+            continue;
+        }
+        let here = local_to_grid(transform.translation.truncate());
+
+        let best = jobs
+            .iter()
+            .filter(|(_, cell)| !claimed.contains(cell))
+            .filter_map(|(severity, cell)| {
+                // Stand next to the damage, not inside it — a breached hull
+                // cell is not somewhere a person fits.
+                nav.nearest_passable(*cell).map(|stand| {
+                    let d = (here - stand).abs();
+                    (*severity, d.x + d.y, *cell, stand)
+                })
+            })
+            .min_by_key(|(severity, dist, _, _)| (*severity, *dist));
+
+        let Some((_, _, job_cell, stand)) = best else { continue };
+        claimed.insert(job_cell);
+        commands.entity(entity).try_insert(CrewDestination(stand));
+    }
+}
