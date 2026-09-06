@@ -420,6 +420,7 @@ pub struct IonDisabled {
 
 /// System: fire ion disruptor — slow pulse projectile
 pub fn fire_ion_system(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     time: Res<Time>,
     fire_state: Res<FireGroupState>,
     selection: Res<TargetSelection>,
@@ -506,7 +507,7 @@ pub fn fire_ion_system(
         ));
 
         // Muzzle flash
-        spawn_hit_effect(&mut commands, weapon_pos + direction * 20.0, Color::srgb(0.5, 0.3, 0.9), 10.0);
+        super::spawn_muzzle_flash(&mut commands, &fx, weapon_pos + direction * 20.0, direction, 16.0, Color::srgb(0.5, 0.3, 0.9));
     }
 }
 
@@ -671,6 +672,7 @@ pub fn update_ion_disabled(
 /// left None so move_missiles never applies guidance, it just flies
 /// straight and detonates on contact).
 pub fn fire_plasma_system(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     time: Res<Time>,
     fire_state: Res<FireGroupState>,
     selection: Res<TargetSelection>,
@@ -763,7 +765,7 @@ pub fn fire_plasma_system(
             GravityForce::default(),
         ));
 
-        spawn_hit_effect(&mut commands, weapon_pos + direction * 20.0, Color::srgb(1.0, 0.5, 0.1), 10.0);
+        super::spawn_muzzle_flash(&mut commands, &fx, weapon_pos + direction * 20.0, direction, 16.0, Color::srgb(1.0, 0.5, 0.1));
     }
 }
 

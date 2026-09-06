@@ -33,6 +33,15 @@ pub struct EffectTextures {
     /// tints them by the block's colour already darkened to 0.55, and
     /// `Sprite.color` multiplies.
     debris: [Handle<Image>; 6],
+    /// The hot core of a detonation, for the `Blast` fireball layer.
+    pub fireball: Handle<Image>,
+    /// Flame variants. Three of them so a burning module can flicker between
+    /// them on a timer rather than pulsing one shape, which reads as a
+    /// throbbing sticker rather than as fire.
+    flame: [Handle<Image>; 3],
+    /// Directional gun flash, authored pointing along +X like every other
+    /// rotated sprite in the project.
+    pub muzzle: Handle<Image>,
 }
 
 impl EffectTextures {
@@ -52,6 +61,18 @@ impl EffectTextures {
         let i = rand::thread_rng().gen_range(0..self.debris.len());
         self.debris[i].clone()
     }
+
+    /// A random flame.
+    pub fn flame(&self) -> Handle<Image> {
+        let i = rand::thread_rng().gen_range(0..self.flame.len());
+        self.flame[i].clone()
+    }
+
+    /// Flame `i`, wrapping. For the burning overlay, which steps through them
+    /// in order so the flicker is a cycle rather than a random stutter.
+    pub fn flame_at(&self, i: usize) -> Handle<Image> {
+        self.flame[i % self.flame.len()].clone()
+    }
 }
 
 pub fn load_effect_textures(mut commands: Commands, assets: Res<AssetServer>) {
@@ -69,5 +90,12 @@ pub fn load_effect_textures(mut commands: Commands, assets: Res<AssetServer>) {
             assets.load("sprites/effects/debris_05.png"),
             assets.load("sprites/effects/debris_06.png"),
         ],
+        fireball: assets.load("sprites/effects/fireball.png"),
+        flame: [
+            assets.load("sprites/effects/flame_a.png"),
+            assets.load("sprites/effects/flame_b.png"),
+            assets.load("sprites/effects/flame_c.png"),
+        ],
+        muzzle: assets.load("sprites/effects/muzzle_flash.png"),
     });
 }

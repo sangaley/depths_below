@@ -29,7 +29,7 @@ def downscale(src, dst, size):
     return im
 
 
-def whiten(src, dst, alpha_mode="both"):
+def whiten(src, dst, alpha_mode="both", keep_warm=0.0):
     """Force RGB to white and carry the shape entirely in alpha.
 
     Bevy's `Sprite.color` MULTIPLIES the texture, and every spawn site already
@@ -42,6 +42,13 @@ def whiten(src, dst, alpha_mode="both"):
     `alpha_mode="both"` folds render luminance into render alpha. Volume alpha
     alone can be near-flat across a lit puff, so this is what keeps the
     internal density structure visible once RGB is thrown away.
+
+    `keep_warm` is the fire exception. Smoke goes to pure white because it is
+    multiplied by a per-puff grey and any residual hue fights it. Fire's whole
+    visual identity IS the blackbody gradient, so throwing all of it away
+    leaves a grey ball. This value-normalises the original RGB first -- so only
+    HUE survives, not brightness, and the alpha ramp still carries every bit of
+    the shape -- then lerps that far toward white. Low values stay tint-safe.
     """
     im = Image.open(src).convert("RGBA")
     r, g, b, a = im.split()
@@ -68,7 +75,25 @@ def whiten(src, dst, alpha_mode="both"):
                 av = av * (lum[y][x] / peak)
             elif alpha_mode == "lum":
                 av = lum[y][x] / peak
-            px_o[x, y] = (255, 255, 255, int(round(max(0.0, min(1.0, av)) * 255)))
+            a8 = int(round(max(0.0, min(1.0, av)) * 255))
+            if keep_warm <= 0.0:
+                px_o[x, y] = (255, 255, 255, a8)
+            else:
+                # Value-normalise: divide by the pixel's own max channel so
+                # brightness is discarded and only the hue ratio is left.
+                r0, g0, b0 = px_r[x, y], px_g[x, y], px_b[x, y]
+                m = max(r0, g0, b0)
+                if m == 0:
+                    px_o[x, y] = (255, 255, 255, a8)
+                else:
+                    hr, hg, hb = 255.0 * r0 / m, 255.0 * g0 / m, 255.0 * b0 / m
+                    k = keep_warm
+                    px_o[x, y] = (
+                        int(round(255.0 * (1.0 - k) + hr * k)),
+                        int(round(255.0 * (1.0 - k) + hg * k)),
+                        int(round(255.0 * (1.0 - k) + hb * k)),
+                        a8,
+                    )
     out.save(dst)
     return out
 
@@ -184,8 +209,12 @@ if __name__ == "__main__":
     elif cmd == "compare":
         compare(sys.argv[2:-1], sys.argv[-1])
     elif cmd == "whiten":
-        whiten(sys.argv[2], sys.argv[3],
-               sys.argv[4] if len(sys.argv) > 4 else "both")
+        kw = 0.0
+        for a in sys.argv:
+            if a.startswith("--keep-warm="):
+                kw = float(a.split("=", 1)[1])
+        mode = sys.argv[4] if len(sys.argv) > 4 and not sys.argv[4].startswith("--") else "both"
+        whiten(sys.argv[2], sys.argv[3], mode, keep_warm=kw)
     elif cmd == "normalize":
         normalize(sys.argv[2], sys.argv[3], sys.argv[4],
                   gain=float(sys.argv[5]) if len(sys.argv) > 5 else 1.0,

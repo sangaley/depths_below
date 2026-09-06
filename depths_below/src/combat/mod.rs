@@ -85,6 +85,46 @@ pub(crate) fn spawn_hit_effect(commands: &mut Commands, position: Vec2, color: C
     ));
 }
 
+/// A gun firing: a short directional flash at the muzzle.
+///
+/// `spawn_hit_effect` was standing in for this, which meant every weapon in
+/// the game -- railgun, gatling, laser -- flashed the same axis-aligned
+/// square. A flash points where the barrel does, so this rotates to `dir`,
+/// and it is wider than it is tall so the shape reads as coming *out* of
+/// something.
+pub(crate) fn spawn_muzzle_flash(
+    commands: &mut Commands,
+    fx: &crate::vfx::effect_textures::EffectTextures,
+    position: Vec2,
+    dir: Vec2,
+    size: f32,
+    color: Color,
+) {
+    let dir = dir.normalize_or_zero();
+    if dir == Vec2::ZERO {
+        return;
+    }
+    commands.spawn((
+        Sprite {
+            image: fx.muzzle.clone(),
+            color,
+            custom_size: Some(Vec2::new(size * 1.6, size)),
+            ..default()
+        },
+        Transform {
+            translation: position.extend(0.6),
+            rotation: Quat::from_rotation_z(dir.y.atan2(dir.x)),
+            ..default()
+        },
+        HitEffect {
+            // Shorter than the generic 0.2s hit flash: a muzzle flash is the
+            // shortest-lived thing in a fight and a lingering one reads as the
+            // gun still firing.
+            timer: Timer::from_seconds(0.09, TimerMode::Once),
+        },
+    ));
+}
+
 /// A warhead going off: expanding fireball, shock ring, radial spray, smoke.
 ///
 /// `spawn_hit_effect` is a static square sized to the blast radius, which
@@ -123,19 +163,26 @@ pub(crate) fn spawn_explosion(
     let cool_of = |k: f32, a: f32| Color::srgba(c.red * k, c.green * k, c.blue * k, a);
 
     // Unit-sized sprites scaled by Blast, so growth is one number.
-    let core = |commands: &mut Commands, from: f32, to: f32, dur: f32, z: f32, hot: Color, cool: Color| {
+    let core = |commands: &mut Commands, img: Option<Handle<Image>>, from: f32, to: f32, dur: f32, z: f32, hot: Color, cool: Color| {
         commands.spawn((
-            Sprite { color: hot, custom_size: Some(Vec2::ONE), ..default() },
+            Sprite {
+                image: img.unwrap_or_default(),
+                color: hot,
+                custom_size: Some(Vec2::ONE),
+                ..default()
+            },
             Transform::from_xyz(position.x, position.y, z),
             Blast { elapsed: 0.0, duration: dur, from, to, hot, cool },
         ));
     };
 
     // Fireball: near-white core cooling to the event's own colour.
-    core(commands, radius * 0.5, radius * 2.2, 0.42, 0.62,
+    core(commands, Some(fx.fireball.clone()), radius * 0.5, radius * 2.2, 0.42, 0.62,
          hot_of(0.82, 1.0), cool_of(0.55, 0.7));
-    // Shock ring: wider, thinner, gone sooner — it sells the scale.
-    core(commands, radius * 0.8, radius * 3.4, 0.30, 0.61,
+    // Shock ring stays an untextured quad on purpose: the fireball texture is
+    // a filled ball, and stretching a ball over the ring layer just draws a
+    // second, fainter fireball instead of a ring around the first.
+    core(commands, None, radius * 0.8, radius * 3.4, 0.30, 0.61,
          hot_of(0.45, 0.55), cool_of(0.5, 0.0));
 
     // Radial spray. Unlike an impact fan this is symmetric: a detonation has

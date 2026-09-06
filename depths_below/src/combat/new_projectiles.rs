@@ -186,7 +186,23 @@ impl Default for MissileProjectile {
 // ============================================================================
 
 /// Main weapon firing system: reads fire groups, aims with lead prediction, spawns projectiles
+/// Everything the gun battery needs to answer "where is the player pointing".
+///
+/// Bundled because `fire_weapons_system` sits at Bevy's 16-parameter ceiling
+/// and adding one more silently drops its `IntoSystem` impl -- which surfaces
+/// as `no method named in_set` on the whole tuple in CombatPlugin, several
+/// hundred lines away, rather than as anything about this function.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct AimInput<'w, 's> {
+    pub windows: Query<'w, 's, &'static Window>,
+    pub camera: Query<'w, 's, (&'static Camera, &'static GlobalTransform), With<crate::camera::MainCamera>>,
+    pub input_state: Res<'w, crate::resources::InputState>,
+    pub aim_lock: Res<'w, crate::combat::targeting::AimLock>,
+}
+
 pub fn fire_weapons_system(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
+    aiming: AimInput,
     time: Res<Time>,
     fire_state: Res<FireGroupState>,
     power_state: Res<crate::resources::PowerState>,
@@ -204,10 +220,6 @@ pub fn fire_weapons_system(
     target_transform_query: Query<&Transform, Without<Ship>>,
     target_velocity_query: Query<&Velocity, Without<Ship>>,
     targeting_computer_query: Query<&Module, Without<DestroyedModule>>,
-    windows_query: Query<&Window>,
-    camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::MainCamera>>,
-    input_state: Res<crate::resources::InputState>,
-    aim_lock: Res<crate::combat::targeting::AimLock>,
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
     mut commands: Commands,
     debug_tuning: Res<crate::debug::DebugTuning>,
@@ -222,16 +234,16 @@ pub fn fire_weapons_system(
     }
 
     // Cursor world position — dumb-fire fallback when no target is selected.
-    let cursor_world: Option<Vec2> = windows_query.single().ok()
+    let cursor_world: Option<Vec2> = aiming.windows.single().ok()
         .and_then(|w| w.cursor_position())
         .and_then(|c| {
-            camera_query.single().ok()
+            aiming.camera.single().ok()
                 .and_then(|(cam, gt)| cam.viewport_to_world_2d(gt, c).ok())
         });
     // Controller right-stick aim beats the mouse while it owns aim (see
     // InputState.gamepad_aim): dumb-fire at a point projected out along
     // the stick direction.
-    let cursor_world = input_state.gamepad_aim
+    let cursor_world = aiming.input_state.gamepad_aim
         .map(|dir| ship_transform.translation.truncate() + dir * 2000.0)
         .or(cursor_world);
 
@@ -298,14 +310,14 @@ pub fn fire_weapons_system(
         // A right-click lock names a specific BLOCK — that's the aim point,
         // capped to range like any other. Falls through to the ship-level
         // selection and then the cursor when nothing is locked.
-        let (target_pos, target_vel) = if let Some(point) = aim_lock.aim_point() {
+        let (target_pos, target_vel) = if let Some(point) = aiming.aim_lock.aim_point() {
             let to_point = point - weapon_pos;
             let aim = if to_point.length() > weapon.range {
                 weapon_pos + to_point.normalize_or_zero() * weapon.range
             } else {
                 point
             };
-            let vel = aim_lock.ship
+            let vel = aiming.aim_lock.ship
                 .and_then(|e| target_velocity_query.get(e).ok())
                 .map(|v| v.0)
                 .unwrap_or(Vec2::ZERO);
@@ -524,7 +536,7 @@ pub fn fire_weapons_system(
             ModuleType::Gatling => Color::srgb(1.0, 0.85, 0.2),
             _ => Color::srgb(0.8, 0.8, 0.4),
         };
-        spawn_hit_effect(&mut commands, weapon_pos + direction * 30.0, flash_color, 12.0);
+        spawn_muzzle_flash(&mut commands, &fx, weapon_pos + direction * 30.0, direction, 20.0, flash_color);
     }
 }
 

@@ -454,7 +454,7 @@ pub fn spawn_missile_trails(
         // === IGNITION: one-shot flash out the back. ===
         if !trail.ignited {
             trail.ignited = true;
-            spawn_hit_effect(&mut commands, nozzle, Color::srgb(1.0, 0.86, 0.55), 30.0);
+            spawn_muzzle_flash(&mut commands, &fx, nozzle, -heading, 30.0, Color::srgb(1.0, 0.86, 0.55));
             spawn_impact_sparks(&mut commands, nozzle, -heading, 0.45, 10);
         }
 
@@ -468,12 +468,17 @@ pub fn spawn_missile_trails(
                 let hot = rand::random::<f32>() < 0.4;
                 commands.spawn((
                     Sprite {
+                        image: fx.flame(),
                         color: if hot {
                             Color::srgba(1.0, 0.95, 0.75, 1.0)
                         } else {
                             Color::srgba(1.0, 0.55, 0.15, 0.95)
                         },
-                        custom_size: Some(Vec2::splat(if hot { 7.0 } else { 10.0 })),
+                        // Up from 7/10 for the same reason as the trail smoke:
+                        // a soft flame's low-alpha rim reads as void, so the
+                        // plume would otherwise have shrunk when it gained a
+                        // texture.
+                        custom_size: Some(Vec2::splat(if hot { 13.0 } else { 19.0 })),
                         ..default()
                     },
                     Transform::from_xyz(nozzle.x, nozzle.y, 0.55),

@@ -487,6 +487,9 @@ fn update_depth_vignette(
             Without<crate::vfx::particles::Blast>,
             Without<crate::vfx::debris::Debris>,
             Without<crate::ship::damage::HitEffect>,
+            // Burning overlays flicker their own alpha every frame off the
+            // fire's intensity, same as the effects above.
+            Without<crate::ship::fire::FireOverlay>,
         ),
     >,
     mut bg_planet_query: Query<
