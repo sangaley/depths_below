@@ -341,6 +341,7 @@ pub fn fire_missiles_system(
                     life,
                     terminal_range: TERMINAL_RANGE,
                     prev_pos: weapon_pos,
+                    owner_ship: Some(player_ship),
                     ..default()
                 },
                 MissileTrail::default(),
@@ -501,6 +502,7 @@ pub fn move_missiles(
     mut commands: Commands,
     mut missile_query: Query<(Entity, &mut MissileProjectile, &mut Transform, &mut Velocity, &GravityForce)>,
     target_query: Query<(&Transform, Option<&Velocity>), Without<MissileProjectile>>,
+    hulls: Query<(&GlobalTransform, &crate::building::ShipGrid)>,
 ) {
     let dt = time.delta_secs();
 
@@ -518,6 +520,26 @@ pub fn move_missiles(
         if !missile.armed && missile.traveled > missile.arm_distance {
             missile.armed = true;
         }
+
+        // Still threading its own ship? Then it is in a launch channel and
+        // holds its heading.
+        //
+        // This is the Forts behaviour: blocks to the LEFT and RIGHT of a tube
+        // do not stop a missile, they guide it — it keeps going forward until
+        // it is clear. Only something dead ahead stops it, and that is a
+        // collision, handled in check_missile_hits. A fixed eject timer could
+        // not express this: a tube at the bottom of a long channel would
+        // start steering while still inside the hull and turn into a wall.
+        let in_channel = missile.owner_ship.and_then(|ship| hulls.get(ship).ok())
+            .is_some_and(|(ship_gt, grid)| {
+                let cell = crate::building::world_to_cell(ship_gt, pos);
+                let c = IVec2::new(cell.x.round() as i32, cell.y.round() as i32);
+                // The cell it is in, or either shoulder of it — a missile
+                // level with the hull is still leaving, not yet away.
+                grid.contains(c)
+                    || grid.contains(c + IVec2::X) || grid.contains(c + IVec2::NEG_X)
+                    || grid.contains(c + IVec2::Y) || grid.contains(c + IVec2::NEG_Y)
+            });
 
         // === EJECT: gas charge only. Motor cold, seeker caged. ===
         let ejecting = missile.eject_time > 0.0;
@@ -542,7 +564,7 @@ pub fn move_missiles(
             // curve instead of the tail-chase the old cross-product
             // controller flew. Commanded lateral acceleration is
             // N x (LOS rate) x (closing speed).
-            if missile.reserve_fuel > 0.0 && missile.max_lateral > 0.0 {
+            if missile.reserve_fuel > 0.0 && missile.max_lateral > 0.0 && !in_channel {
                 if let Some(target) = missile.target {
                     if let Ok((target_tf, target_vel)) = target_query.get(target) {
                         let speed = velocity.0.length();
@@ -599,7 +621,7 @@ pub fn move_missiles(
         // sideways: it inherits the hull's speed, which at anything above a
         // crawl swamps the 200 u/s eject and leaves the sprite pointing where
         // the ship is going rather than where the silo is aimed.
-        let facing = if ejecting { missile.launch_dir } else { velocity.0 };
+        let facing = if ejecting || in_channel { missile.launch_dir } else { velocity.0 };
         if facing.length_squared() > 1.0e-4 {
             transform.rotation = Quat::from_rotation_z(facing.y.atan2(facing.x));
         }
@@ -623,9 +645,60 @@ pub fn check_missile_hits(
     mut ai_module_query: Query<(&mut Module, &GlobalTransform), Without<DestroyedModule>>,
     owner_parent_query: Query<&ChildOf>,
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
-    _notifications: MessageWriter<ShowNotification>,
+    mut notifications: MessageWriter<ShowNotification>,
+    parent_hulls: Query<(&GlobalTransform, &crate::building::ShipGrid)>,
+    mut ship_damage_events: MessageWriter<crate::events::ShipDamaged>,
 ) {
     'missiles: for (missile_entity, missile, missile_transform) in missile_query.iter() {
+        // === THE PARENT HULL ===
+        //
+        // Missiles are the exception to the rule that a round ignores the
+        // ship that fired it. A warhead is a physical object leaving a tube
+        // at walking pace, and flying it through your own armour looks
+        // absurd in a way a hypersonic slug does not. So a launcher with
+        // something dead ahead does not fire a missile into the void — it
+        // detonates one against the block in the way, which is the cook-off
+        // the silo warning has been promising, arriving as plain collision
+        // rather than as a special case.
+        //
+        // Checked BEFORE arming: the whole point is the ones that never get
+        // clear of the tube.
+        if let Some((ship_gt, grid)) = missile.owner_ship.and_then(|s| parent_hulls.get(s).ok()) {
+            let here = crate::building::world_to_cell(ship_gt, missile_transform.translation.truncate());
+            let cell = IVec2::new(here.x.round() as i32, here.y.round() as i32);
+            if let Some(hit) = grid.get(cell) {
+                // Not the tube it is leaving, and not its own plating: one
+                // course of armour is a blow-out panel, exactly as it is for
+                // the build-mode silo check.
+                let own_tube = hit == missile.owner;
+                let panel = ai_module_query
+                    .get(hit)
+                    .is_ok_and(|(m, _)| crate::building::is_blowout_panel(m.module_type));
+                if !own_tube && !panel {
+                    let at = missile_transform.translation.truncate();
+                    spawn_explosion(&mut commands, at, missile.blast_radius, Color::srgb(1.0, 0.45, 0.1));
+                    if let Ok((mut module, _)) = ai_module_query.get_mut(hit) {
+                        module.health = (module.health - missile.damage).max(0.0);
+                    }
+                    // amount 0.0 where the block was a module (already
+                    // applied above); hull takes it through the event.
+                    ship_damage_events.write(crate::events::ShipDamaged {
+                        source: crate::events::DamageSource::Explosion,
+                        amount: 0.0,
+                        position: Some(at),
+                        direction: None,
+                    });
+                    notifications.write(ShowNotification {
+                        message: "SILO OBSTRUCTED — WARHEAD COOK-OFF".into(),
+                        notification_type: NotificationType::Danger,
+                        duration: 2.5,
+                    });
+                    commands.entity(missile_entity).despawn();
+                    continue 'missiles;
+                }
+            }
+        }
+
         if !missile.armed { continue; }
 
         let missile_pos = missile_transform.translation.truncate();

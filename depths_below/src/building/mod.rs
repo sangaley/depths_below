@@ -407,6 +407,15 @@ pub fn entombed_launchers(
     out
 }
 
+/// Ship-local cell coordinates of a world point, given the ship's transform.
+///
+/// Blocks spawn at `grid * 66.0` with an asymmetric -33.0 y offset, which
+/// several combat systems re-type inline and which is easy to drop.
+pub fn world_to_cell(ship: &GlobalTransform, world: Vec2) -> Vec2 {
+    let p = ship.affine().inverse().transform_point3(world.extend(0.0)).truncate();
+    Vec2::new(p.x / 66.0, (p.y + 33.0) / 66.0)
+}
+
 /// One occupied cell met by `ShipGrid::walk`, in path order.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GridStep {

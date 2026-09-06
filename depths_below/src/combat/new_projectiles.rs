@@ -139,6 +139,13 @@ pub struct MissileProjectile {
     pub terminal_range: f32,
     /// Position last frame — swept-hit anchor, same role as `Projectile::prev_pos`.
     pub prev_pos: Vec2,
+    /// The ship that launched it, when it was launched by a real tube.
+    ///
+    /// Unlike every other projectile in the game, a missile is NOT allowed
+    /// through its parent hull — it is the deliberate exception. This is how
+    /// it finds the hull to test. `None` for the plasma and EMP rounds that
+    /// borrow this component, which keep the ordinary pass-through.
+    pub owner_ship: Option<Entity>,
 }
 
 impl Default for MissileProjectile {
@@ -160,6 +167,7 @@ impl Default for MissileProjectile {
             life: 6.0,
             terminal_range: 300.0,
             prev_pos: Vec2::ZERO,
+            owner_ship: None,
         }
     }
 }
