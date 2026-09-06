@@ -92,7 +92,13 @@ pub(crate) fn spawn_hit_effect(commands: &mut Commands, position: Vec2, color: C
 /// event at different zoom levels. `radius` here is the DAMAGE radius; the
 /// visuals deliberately overshoot it, because an explosion whose fireball
 /// stops exactly at its kill radius reads as smaller than it is.
-pub(crate) fn spawn_explosion(commands: &mut Commands, position: Vec2, radius: f32, color: Color) {
+pub(crate) fn spawn_explosion(
+    commands: &mut Commands,
+    fx: &crate::vfx::effect_textures::EffectTextures,
+    position: Vec2,
+    radius: f32,
+    color: Color,
+) {
     use crate::vfx::particles::{Blast, Particle};
 
     // Unit-sized sprites scaled by Blast, so growth is one number.
@@ -143,12 +149,19 @@ pub(crate) fn spawn_explosion(commands: &mut Commands, position: Vec2, radius: f
         let grey = 0.18 + rand::random::<f32>() * 0.16;
         commands.spawn((
             Sprite {
+                image: fx.puff(),
                 color: Color::srgba(grey, grey * 0.92, grey * 0.88, 0.75),
-                custom_size: Some(Vec2::splat(radius * (0.4 + rand::random::<f32>() * 0.4))),
+                // Wider than the solid quad, for the same reason as the
+                // missile trail: a soft puff's low-alpha rim reads as empty
+                // void, so its effective size is well under its footprint.
+                custom_size: Some(Vec2::splat(radius * (0.7 + rand::random::<f32>() * 0.7))),
                 ..default()
             },
             Transform::from_xyz(position.x, position.y, 0.59),
-            Particle::wisp(heading * radius * (0.5 + rand::random::<f32>()), life, 0.75, false),
+            // Alpha down from 0.75: soft puffs overlap far more smoothly than
+            // opaque squares, and ten of them at the old value stack into one
+            // flat grey disc instead of a cloud with depth.
+            Particle::wisp(heading * radius * (0.5 + rand::random::<f32>()), life, 0.5, false),
         ));
     }
 }

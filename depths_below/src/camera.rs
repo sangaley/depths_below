@@ -470,6 +470,23 @@ fn update_depth_vignette(
             Without<crate::vfx::celestial_visuals::StarFlareGlow>,
             Without<crate::vfx::celestial_visuals::PlanetAtmosphere>,
             Without<LightConeVisual>,
+            // Combat effects, for the same reason as the glow layers above:
+            // each writes its own alpha every frame (Particle fades by
+            // base_alpha * life_ratio, Blast by (1-t)^2, Debris by lifetime),
+            // and nothing orders VfxPlugin's systems against this one — so
+            // whichever the scheduler happened to put last simply won, and a
+            // fade could be overwritten wholesale.
+            //
+            // They also shouldn't be vignetted on principle. An explosion is a
+            // LIGHT SOURCE; floored to ENV_FLOOR because the flashlight was
+            // pointing elsewhere, a warhead going off 1000 units off-axis was
+            // very nearly invisible. HitEffect doesn't animate its alpha (it
+            // only ticks a timer) so it isn't in the fight, but it's a muzzle
+            // and impact flash and has the same readability claim.
+            Without<crate::vfx::particles::Particle>,
+            Without<crate::vfx::particles::Blast>,
+            Without<crate::vfx::debris::Debris>,
+            Without<crate::ship::damage::HitEffect>,
         ),
     >,
     mut bg_planet_query: Query<

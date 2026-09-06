@@ -3208,7 +3208,7 @@ fn warp_dash_input(
         }
 
         let dir = (target - ship_pos).normalize_or_zero();
-        let target_pos = target - dir * WARP_DASH_ARRIVAL_BUFFER;
+        let target_pos = target - dir * buffer;
         let charge_time = warp_dash_charge_time(jump_dist);
 
         commands.entity(entity).insert(MapWarpCharging {
