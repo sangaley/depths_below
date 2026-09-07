@@ -1455,6 +1455,13 @@ pub struct FirebreakMarker;
 #[derive(Component)]
 pub struct DamageOverlayVisible;
 
+/// Marker on the ship: the pressure overlay is on.
+///
+/// Mutually exclusive with `DamageOverlayVisible` -- both tint the same
+/// blocks, so leaving both on leaves whichever ran last on screen.
+#[derive(Component)]
+pub struct PressureOverlayVisible;
+
 /// Marker for damage overlay sprite children
 #[derive(Component)]
 pub struct DamageOverlaySprite;

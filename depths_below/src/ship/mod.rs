@@ -7,6 +7,7 @@ mod oxygen;
 mod radiation;
 mod hull;
 mod spawner;
+pub mod air;
 pub mod decompression;
 pub mod damage;
 pub mod fire;
@@ -68,6 +69,7 @@ impl Plugin for ShipPlugin {
             .init_resource::<PowerAllocation>()
             .init_resource::<PowerChannels>()
             .init_resource::<OxygenState>()
+            .init_resource::<air::AirField>()
             .init_resource::<HullState>()
             .init_resource::<NoiseState>()
             .init_resource::<GameConfig>()
@@ -160,9 +162,21 @@ impl Plugin for ShipPlugin {
                     ),
                     hull::process_hull_cascade.after(damage::process_detonations),
                     update_hull_integrity.after(hull::process_hull_cascade).after(fire::update_fire),
-                    update_decompression.after(hull::process_hull_cascade),
-                    seal_breach_system.after(update_decompression),
-                    fire::emergency_bulkhead_system.after(update_decompression),
+                    // Air is a fluid: seed tiles, vent through holes, let
+                    // neighbours equalise, then publish room air level. Every
+                    // reader below (hull sync, oxygen drain, fire, crew
+                    // dispatch) sees the result of the whole pass, never a
+                    // half-diffused field.
+                    (
+                        air::sync_air_tiles.after(hull::process_hull_cascade),
+                        air::vent_air_at_breaches.after(air::sync_air_tiles),
+                        air::diffuse_air.after(air::vent_air_at_breaches),
+                        air::sync_room_air.after(air::diffuse_air),
+                        air::tumble_ejected_bodies,
+                        update_decompression.after(air::sync_room_air),
+                        seal_breach_system.after(update_decompression),
+                        fire::emergency_bulkhead_system.after(update_decompression),
+                    ),
                     handle_bulkhead_toggle,
                     bulkhead_seal_input,
                 ).in_set(ShipSet::Hull),

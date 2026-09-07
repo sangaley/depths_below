@@ -1,0 +1,562 @@
+//! Air as a fluid: pressure per tile, flow toward holes, and the drag that
+//! flow puts on anyone standing in it.
+//!
+//! The old model drained each breached room independently at a flat rate
+//! (`room.air_level -= 0.15 * dt`), so air had no direction and a sealed
+//! compartment beside a hole in vacuum kept its air forever. Here every
+//! interior tile carries its own pressure, neighbours inside one room
+//! equalise, and holes pull to vacuum — so a hole at the bow empties the bow
+//! first and the stern feeds it. That travelling wave is the whole point.
+//!
+//! `Room::air_level` survives as the mean of its tiles: `ship::fire` and
+//! `crew_emergency_dispatch` read it and there is no reason to disturb them.
+//!
+//! Player ship only, like the `RoomMap` this is derived from. The house rule
+//! is to key cell maps by `(Entity, IVec2)` (see `HeatNetworkState`), but that
+//! buys nothing until room detection itself runs per-ship.
+
+use bevy::prelude::*;
+use std::collections::{HashMap, HashSet};
+
+use crate::building::rooms::RoomMap;
+use crate::building::local_to_grid;
+use crate::components::*;
+use crate::events::*;
+
+/// How fast a tile fully open to space empties, as a fraction per second.
+/// Exponential, so it is violent while full and tapers as it empties — which
+/// is where "the pull depends on how much air is left" comes from for free.
+const VENT_CONDUCTANCE: f32 = 0.9;
+
+/// How fast neighbouring tiles in one room equalise. Tuned against
+/// `VENT_CONDUCTANCE` so a compartment feeds a hole faster than the hole can
+/// drain a single tile — otherwise you get a dry tile at the breach and a
+/// still-full room behind it, which reads as a bug rather than as suction.
+const DIFFUSE_RATE: f32 = 2.5;
+
+/// World units per second of body drag per unit of air flow.
+///
+/// A unit conversion, not a difficulty dial. Crew walk at `CREW_WALK_SPEED`
+/// (50 u/s), and a fresh hole against full pressure produces flow near 0.9, so
+/// 70.0 puts the draught at ~63 u/s — it takes them. By half pressure it is
+/// ~31 u/s and they can walk out again.
+const SUCTION_COUPLING: f32 = 70.0;
+
+/// Flow above which being dragged starts to tell on someone.
+const PANIC_FLOW: f32 = 0.5;
+
+/// Morale lost per second while caught in a draught that strong. Sized so
+/// roughly five seconds of it breaks a crew member who started sound, which
+/// is long enough that a glancing tug on the way past costs nothing.
+const PANIC_MORALE_DRAIN: f32 = 15.0;
+
+/// Flow at a hole above which a body goes through it.
+const EJECT_FLOW: f32 = 0.6;
+
+/// Per-tile air inside the player's ship, in ship-LOCAL cells.
+#[derive(Resource, Default)]
+pub struct AirField {
+    /// 1.0 = full atmosphere, 0.0 = vacuum.
+    pub pressure: HashMap<IVec2, f32>,
+    /// Where the air is going and how hard, in pressure-fraction per second.
+    /// Rebuilt every frame by `vent_air_at_breaches` and `diffuse_air`.
+    pub flow: HashMap<IVec2, Vec2>,
+    /// Hull cells that are open, and how wide (0..1).
+    ///
+    /// Remembered rather than recomputed from what is standing, because a
+    /// destroyed plate is despawned half a second after it dies: derive this
+    /// from presence and the hole heals itself when the wreckage clears.
+    /// Cleared per cell when a live plate exists there again.
+    pub holes: HashMap<IVec2, f32>,
+    /// Interior tiles that touch a hole: which way out, and total conductance.
+    pub vents: HashMap<IVec2, (Vec2, f32)>,
+}
+
+impl AirField {
+    /// Mean pressure across a set of tiles. Empty set reads as full, so a ship
+    /// with no detected rooms never looks like it is suffocating.
+    pub fn mean(&self, tiles: &[IVec2]) -> f32 {
+        if tiles.is_empty() {
+            return 1.0;
+        }
+        let sum: f32 = tiles.iter().map(|t| self.pressure.get(t).copied().unwrap_or(1.0)).sum();
+        sum / tiles.len() as f32
+    }
+}
+
+/// Seeds new interior tiles and forgets tiles that stopped being interior.
+///
+/// Also clears `flow`, which the two systems after this one accumulate into.
+pub fn sync_air_tiles(
+    ship_query: Query<Entity, With<Ship>>,
+    hull_query: Query<(&HullSegment, Option<&HullDestroyed>, &ChildOf)>,
+    room_map: Res<RoomMap>,
+    mut air: ResMut<AirField>,
+) {
+    let Ok(player_ship) = ship_query.single() else { return };
+    air.flow.clear();
+
+    for room in room_map.rooms.iter() {
+        for &tile in &room.tiles {
+            air.pressure.entry(tile).or_insert(room.air_level);
+        }
+    }
+
+    // A tile that was shot away stops holding air. Without this the map grows
+    // forever and destroyed cells keep feeding pressure into their neighbours.
+    air.pressure.retain(|tile, _| room_map.tile_to_room.contains_key(tile));
+
+    // Holes and the vents they open are computed once here; venting, the room
+    // summary and crew suction all read the result rather than each rebuilding
+    // it from a full hull query.
+    refresh_holes(&mut air, &hull_query, player_ship);
+    air.vents = compute_vents(&room_map, &air.holes);
+}
+
+/// Refreshes the remembered holes from hull damage.
+///
+/// Deliberately NOT geometric. Treating "no block in that cell" as open space
+/// looks right and is catastrophically wrong here: the pristine starter design
+/// has 51 interior tiles with no plating beyond them, so the ship would vent
+/// from 51 places the moment it launched. Absence of a plate is not evidence
+/// of a hole on a ship that was never fully plated -- only damage is.
+///
+/// Also not keyed off `HullSegment::is_depressurized`: that flag is set from
+/// room air level by `update_decompression`, so venting through it would make
+/// every tile of a half-empty room its own hole and run away.
+fn refresh_holes(
+    air: &mut AirField,
+    hull: &Query<(&HullSegment, Option<&HullDestroyed>, &ChildOf)>,
+    player_ship: Entity,
+) {
+    for (segment, destroyed, parent) in hull.iter() {
+        if parent.parent() != player_ship {
+            continue;
+        }
+        let pos = segment.grid_position;
+        if destroyed.is_some() {
+            air.holes.insert(pos, 1.0);
+            continue;
+        }
+        let frac = if segment.max_health > 0.0 {
+            (segment.health / segment.max_health).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        // 30% is the threshold ship::damage breaches at: a weep there, wide
+        // open at zero. A plate repaired back above it stops being a hole,
+        // and a rebuilt plate replaces a despawned one the same way.
+        if frac < 0.3 {
+            air.holes.insert(pos, 1.0 - frac / 0.3);
+        } else {
+            air.holes.remove(&pos);
+        }
+    }
+}
+
+/// Which interior tiles touch a hole, which way it lies, and how wide.
+fn compute_vents(room_map: &RoomMap, holes: &HashMap<IVec2, f32>) -> HashMap<IVec2, (Vec2, f32)> {
+    let mut vents: HashMap<IVec2, (Vec2, f32)> = HashMap::new();
+    for tile in room_map.tile_to_room.keys() {
+        for offset in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
+            let neighbor = *tile + offset;
+            if room_map.tile_to_room.contains_key(&neighbor) {
+                continue; // interior, handled by diffusion
+            }
+            let Some(&conductance) = holes.get(&neighbor) else { continue };
+            let entry = vents.entry(*tile).or_insert((Vec2::ZERO, 0.0));
+            entry.0 += offset.as_vec2() * conductance;
+            // Conductance sums, so a tile with three holes on it empties three
+            // times as fast. That is where "size of the hole" enters.
+            entry.1 += conductance;
+        }
+    }
+    vents
+}
+
+/// Air leaves through holes, proportionally to how much is still there.
+pub fn vent_air_at_breaches(time: Res<Time>, mut air: ResMut<AirField>) {
+    let dt = time.delta_secs();
+    if dt <= 0.0 {
+        return;
+    }
+
+    let vents: Vec<(IVec2, Vec2, f32)> = air
+        .vents
+        .iter()
+        .map(|(&tile, &(dir, conductance))| (tile, dir, conductance))
+        .collect();
+
+    for (tile, direction, conductance) in vents {
+        let Some(pressure) = air.pressure.get_mut(&tile) else { continue };
+        if *pressure <= 0.0 {
+            continue;
+        }
+        let drained = (*pressure * VENT_CONDUCTANCE * conductance * dt).min(*pressure);
+        *pressure -= drained;
+        if let Some(dir) = direction.try_normalize() {
+            *air.flow.entry(tile).or_insert(Vec2::ZERO) += dir * (drained / dt);
+        }
+    }
+}
+
+/// Neighbouring tiles inside one room equalise.
+///
+/// Same shape as `heat::diffuse_heat`: snapshot, accumulate deltas into a
+/// `Vec`, apply afterwards — otherwise the result depends on hash iteration
+/// order. Exchange is same-room only, which is what makes a sealed bulkhead
+/// stop the flow for nothing: room detection already splits rooms at one.
+pub fn diffuse_air(time: Res<Time>, room_map: Res<RoomMap>, mut air: ResMut<AirField>) {
+    let dt = time.delta_secs();
+    if dt <= 0.0 {
+        return;
+    }
+
+    let prev = air.pressure.clone();
+    let mut deltas: Vec<(IVec2, f32)> = Vec::new();
+    let mut flows: Vec<(IVec2, Vec2)> = Vec::new();
+
+    for (&pos, &pressure) in prev.iter() {
+        let Some(&room) = room_map.tile_to_room.get(&pos) else { continue };
+        for offset in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
+            let neighbor = pos + offset;
+            // Different room means a wall between them, so nothing crosses.
+            if room_map.tile_to_room.get(&neighbor) != Some(&room) {
+                continue;
+            }
+            let Some(&neighbor_pressure) = prev.get(&neighbor) else { continue };
+            let delta = (pressure - neighbor_pressure) * DIFFUSE_RATE * dt;
+            if delta > 0.0 {
+                deltas.push((pos, -delta));
+                deltas.push((neighbor, delta));
+                flows.push((pos, offset.as_vec2() * (delta / dt)));
+            }
+        }
+    }
+
+    for (pos, delta) in deltas {
+        if let Some(pressure) = air.pressure.get_mut(&pos) {
+            *pressure = (*pressure + delta).clamp(0.0, 1.0);
+        }
+    }
+    for (pos, flow) in flows {
+        *air.flow.entry(pos).or_insert(Vec2::ZERO) += flow;
+    }
+}
+
+/// Publishes the tile field back as room air level, which is what the rest of
+/// the game reads.
+///
+/// `is_breached` is derived from whether the room actually has a hole on it
+/// rather than latched from a `RoomDepressurized` event, so it clears itself
+/// when the hull is repaired.
+pub fn sync_room_air(air: Res<AirField>, mut room_map: ResMut<RoomMap>) {
+    for room in room_map.rooms.iter_mut() {
+        room.air_level = air.mean(&room.tiles);
+        room.is_breached = room.tiles.iter().any(|t| air.vents.contains_key(t));
+    }
+}
+
+// ============================================================================
+// WHAT THE AIR DOES TO PEOPLE
+// ============================================================================
+
+/// A body on its way out of the ship, in WORLD space.
+///
+/// Not a crew member: the crew entity is despawned by `handle_crew_death` the
+/// moment it dies, precisely so no staffing or routing system has to learn to
+/// skip it. This is the stand-in that tumbles away where you can see it.
+#[derive(Component)]
+pub struct EjectedBody {
+    pub velocity: Vec2,
+    pub spin: f32,
+    pub life: f32,
+}
+
+/// Air drags anyone standing in it, and takes them out through the hole.
+///
+/// Runs after `walk_crew`, so the two compose: a crew member walking at
+/// `CREW_WALK_SPEED` into a draught of 63 u/s still loses ground, and wins it
+/// back once the compartment has partly emptied. Nothing here reads
+/// `GlobalTransform` — crew live in ship-local space and so does the air.
+pub fn crew_suction(
+    mut commands: Commands,
+    time: Res<Time>,
+    air: Res<AirField>,
+    ship_query: Query<&Velocity, With<Ship>>,
+    mut crew: Query<
+        (Entity, &mut Transform, &GlobalTransform, &mut CrewMember),
+        (
+            Without<crate::crew::eva_salvage::EvaSalvaging>,
+            Without<crate::ai_ship::components::OwnedByAiShip>,
+        ),
+    >,
+    mut deaths: MessageWriter<CrewDied>,
+) {
+    let Ok(ship_velocity) = ship_query.single() else { return };
+    let dt = time.delta_secs();
+    if dt <= 0.0 {
+        return;
+    }
+
+    for (entity, mut transform, global, mut member) in crew.iter_mut() {
+        if member.health <= 0.0 {
+            continue;
+        }
+        let cell = local_to_grid(transform.translation.truncate());
+        let Some(&flow) = air.flow.get(&cell) else { continue };
+        let strength = flow.length();
+        if strength < f32::EPSILON {
+            continue;
+        }
+
+        // Out through the hole. Only on a tile that actually has one, so a
+        // strong draught mid-corridor shoves you about but cannot delete you.
+        if strength >= EJECT_FLOW && air.vents.contains_key(&cell) {
+            let world = global.translation();
+            let outward = flow.normalize_or_zero();
+            commands.spawn((
+                Sprite {
+                    color: Color::srgb(0.8, 0.6, 0.5),
+                    custom_size: Some(Vec2::new(16.0, 16.0)),
+                    ..default()
+                },
+                Transform::from_translation(world),
+                EjectedBody {
+                    velocity: ship_velocity.0 + outward * (strength * SUCTION_COUPLING),
+                    spin: if outward.x >= 0.0 { 4.0 } else { -4.0 },
+                    life: 6.0,
+                },
+            ));
+            deaths.write(CrewDied {
+                crew: entity,
+                name: member.name.clone(),
+                cause: CrewDamageSource::Decompression,
+            });
+            // handle_crew_death despawns them, but not until it next runs.
+            // Zeroing health here is what stops this firing again next frame
+            // and spawning a second body for the same person.
+            member.health = 0.0;
+            continue;
+        }
+
+        transform.translation.x += flow.x * SUCTION_COUPLING * dt;
+        transform.translation.y += flow.y * SUCTION_COUPLING * dt;
+
+        // Being dragged toward a hole is frightening, and morale is how this
+        // game already says so: `update_crew_ai` panics anyone under 20 and
+        // calms them again over 30, and `update_crew_needs` regenerates it
+        // once they are safe.
+        //
+        // Setting `CrewState::Panicking` here directly does not work -- that
+        // same system clears it on the next frame for anyone above morale 30,
+        // which is nearly everyone, so the flag flickered on and off and
+        // `walk_crew` skipped them on alternating frames. Going through morale
+        // means a few seconds in a strong draught genuinely breaks someone,
+        // and a brief tug does not.
+        if strength >= PANIC_FLOW {
+            member.morale = (member.morale - PANIC_MORALE_DRAIN * dt).max(0.0);
+        }
+    }
+}
+
+/// Tumble ejected bodies away and fade them out.
+pub fn tumble_ejected_bodies(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut bodies: Query<(Entity, &mut Transform, &mut Sprite, &mut EjectedBody)>,
+) {
+    let dt = time.delta_secs();
+    for (entity, mut transform, mut sprite, mut body) in bodies.iter_mut() {
+        body.life -= dt;
+        if body.life <= 0.0 {
+            commands.entity(entity).try_despawn();
+            continue;
+        }
+        let velocity = body.velocity;
+        transform.translation.x += velocity.x * dt;
+        transform.translation.y += velocity.y * dt;
+        transform.rotate_z(body.spin * dt);
+        // Fade over the last two seconds rather than blinking out.
+        sprite.color.set_alpha((body.life / 2.0).min(1.0));
+    }
+}
+
+#[cfg(test)]
+mod air_tests {
+    use super::*;
+    use crate::building::rooms::Room;
+
+    /// A corridor of `len` interior cells along +X, walled by inner hull on
+    /// both ends unless `open_at` names a cell to leave open to space.
+    fn corridor(app: &mut App, len: i32, open_at: Option<i32>) -> Entity {
+        let ship = app.world_mut().spawn(Ship).id();
+
+        let tiles: Vec<IVec2> = (0..len).map(|x| IVec2::new(x, 0)).collect();
+        let mut room_map = RoomMap::default();
+        for (i, &t) in tiles.iter().enumerate() {
+            let _ = i;
+            room_map.tile_to_room.insert(t, 0);
+        }
+        room_map.rooms.push(Room {
+            id: 0,
+            tiles: tiles.clone(),
+            air_level: 1.0,
+            is_breached: false,
+            has_power: false,
+        });
+        app.insert_resource(room_map);
+
+        // Cap both ends. `open_at` names the cap to shoot out: a plate at zero
+        // health is a full-width hole, and an intact one is a wall.
+        for x in [-1, len] {
+            let breached = open_at == Some(x);
+            app.world_mut().spawn((
+                HullSegment {
+                    health: if breached { 0.0 } else { 100.0 },
+                    max_health: 100.0,
+                    radiation_shielding: 0.0,
+                    is_depressurized: false,
+                    depressurization_level: 0.0,
+                    hull_layer: HullLayer::Inner,
+                    material: HullMaterial::Steel,
+                    grid_position: IVec2::new(x, 0),
+                },
+                ChildOf(ship),
+            ));
+        }
+        ship
+    }
+
+    /// Deliberately no `MinimalPlugins`: its `TimePlugin` rewrites `Time` from
+    /// the wall clock on every update, so a hand-advanced delta is discarded
+    /// and every step runs at a few microseconds. The rates here are all
+    /// per-second, which made the whole simulation measure as nearly frozen.
+    /// These tests own the clock instead.
+    fn sim_app() -> App {
+        let mut app = App::new();
+        app.init_resource::<Time>();
+        app.init_resource::<AirField>();
+        app.add_systems(
+            Update,
+            (sync_air_tiles, vent_air_at_breaches, diffuse_air, sync_room_air).chain(),
+        );
+        app
+    }
+
+    fn step(app: &mut App, seconds: f32, steps: u32) {
+        for _ in 0..steps {
+            let delta = std::time::Duration::from_secs_f32(seconds / steps as f32);
+            app.world_mut().resource_mut::<Time>().advance_by(delta);
+            app.update();
+        }
+    }
+
+    fn pressure(app: &App, x: i32) -> f32 {
+        app.world().resource::<AirField>().pressure[&IVec2::new(x, 0)]
+    }
+
+    /// A sealed compartment must not leak. The old model drained any room
+    /// flagged breached at a flat rate regardless of whether it still had a
+    /// hole on it.
+    #[test]
+    fn sealed_room_holds_its_air() {
+        let mut app = sim_app();
+        corridor(&mut app, 4, None);
+        step(&mut app, 5.0, 50);
+
+        for x in 0..4 {
+            assert!(
+                pressure(&app, x) > 0.99,
+                "tile {x} lost air with no hole in the hull: {}",
+                pressure(&app, x)
+            );
+        }
+    }
+
+    /// The whole point: air nearest the hole goes first and the far end feeds
+    /// it, so there is a gradient rather than a uniform fade.
+    #[test]
+    fn air_empties_from_the_hole_outward() {
+        let mut app = sim_app();
+        corridor(&mut app, 5, Some(-1)); // hole past the x=0 end
+        step(&mut app, 0.5, 25);
+
+        let near = pressure(&app, 0);
+        let far = pressure(&app, 4);
+        assert!(near < far, "expected a gradient, got near={near} far={far}");
+        assert!(near < 0.95, "tile at the hole barely drained: {near}");
+        assert!(far > near + 0.02, "gradient too flat to read: near={near} far={far}");
+    }
+
+    /// Two rooms with a wall between them exchange nothing, which is what
+    /// makes sealing a bulkhead worth doing.
+    #[test]
+    fn air_does_not_cross_between_rooms() {
+        let mut app = App::new();
+        app.init_resource::<Time>();
+        app.init_resource::<AirField>();
+        app.add_systems(Update, (sync_air_tiles, diffuse_air, sync_room_air).chain());
+
+        let mut room_map = RoomMap::default();
+        room_map.tile_to_room.insert(IVec2::new(0, 0), 0);
+        room_map.tile_to_room.insert(IVec2::new(1, 0), 1);
+        room_map.rooms.push(Room {
+            id: 0, tiles: vec![IVec2::new(0, 0)],
+            air_level: 0.0, is_breached: false, has_power: false,
+        });
+        room_map.rooms.push(Room {
+            id: 1, tiles: vec![IVec2::new(1, 0)],
+            air_level: 1.0, is_breached: false, has_power: false,
+        });
+        app.insert_resource(room_map);
+        app.world_mut().spawn(Ship);
+        step(&mut app, 2.0, 20);
+
+        assert!(
+            pressure(&app, 1) > 0.99,
+            "air crossed a wall into the vacuum next door: {}",
+            pressure(&app, 1)
+        );
+    }
+
+    /// Suction has to fall off as the compartment empties -- that taper is
+    /// where "the pull depends on how much air is left" comes from, and it is
+    /// the only thing stopping a near-empty room pinning crew forever.
+    #[test]
+    fn flow_weakens_as_the_room_empties() {
+        let mut app = sim_app();
+        corridor(&mut app, 5, Some(-1));
+
+        step(&mut app, 0.1, 5);
+        let early = app.world().resource::<AirField>().flow[&IVec2::new(0, 0)].length();
+        step(&mut app, 4.0, 40);
+        let late = app.world().resource::<AirField>().flow[&IVec2::new(0, 0)].length();
+
+        assert!(
+            late < early * 0.5,
+            "flow did not taper as the room emptied: early={early} late={late}"
+        );
+    }
+
+    /// fire.rs and crew_emergency_dispatch still read Room::air_level, so it
+    /// has to keep tracking the tiles it summarises.
+    #[test]
+    fn room_air_level_tracks_the_tile_mean() {
+        let mut app = sim_app();
+        corridor(&mut app, 4, Some(-1));
+        step(&mut app, 1.0, 20);
+
+        let air = app.world().resource::<AirField>();
+        let expected: f32 =
+            (0..4).map(|x| air.pressure[&IVec2::new(x, 0)]).sum::<f32>() / 4.0;
+        let room_map = app.world().resource::<RoomMap>();
+        let actual = room_map.rooms[0].air_level;
+
+        assert!(
+            (actual - expected).abs() < 1e-5,
+            "room air_level {actual} drifted from its tile mean {expected}"
+        );
+        assert!(room_map.rooms[0].is_breached, "room with a hole on it is not flagged breached");
+    }
+}

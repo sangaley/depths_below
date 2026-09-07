@@ -48,6 +48,10 @@ impl Plugin for CrewPlugin {
                     walking::plan_repair_errands,
                     walking::plan_crew_paths,
                     walking::walk_crew,
+                    // Last in the chain: the draught is applied on top of
+                    // whatever step walking just took, so a crew member can
+                    // walk against a weak one and lose to a strong one.
+                    crate::ship::air::crew_suction,
                 )
                     .chain()
                     .after(auto_assign_crew)
@@ -635,15 +639,17 @@ fn update_crew_needs(
 /// Maps each crew member's world position to a grid position and room via RoomMap.
 fn update_crew_room_location(
     mut commands: Commands,
-    mut crew_query: Query<(Entity, &GlobalTransform, Option<&mut CrewRoomLocation>), (With<CrewMember>, Without<EvaSalvaging>)>,
+    mut crew_query: Query<(Entity, &Transform, Option<&mut CrewRoomLocation>), (With<CrewMember>, Without<EvaSalvaging>)>,
     room_map: Res<RoomMap>,
 ) {
-    for (entity, global_transform, location) in crew_query.iter_mut() {
-        let world_pos = global_transform.translation();
-        let grid = IVec2::new(
-            (world_pos.x / 66.0).round() as i32,
-            ((world_pos.y + 33.0) / 66.0).round() as i32,
-        );
+    for (entity, transform, location) in crew_query.iter_mut() {
+        // Ship-LOCAL, via the shared helper. This read GlobalTransform and did
+        // the cell arithmetic by hand, but RoomMap is keyed by ship-local
+        // cells -- so it only agreed with the room map while the ship sat at
+        // the world origin unrotated. In flight every crew member reported the
+        // wrong room, which is what stopped them sealing breaches under way.
+        // crew_repair_system already does it this way.
+        let grid = crate::building::local_to_grid(transform.translation.truncate());
         let room_id = room_map.tile_to_room.get(&grid).copied();
 
         if let Some(mut loc) = location {

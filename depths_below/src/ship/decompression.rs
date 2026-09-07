@@ -11,9 +11,8 @@ pub fn update_decompression(
     time: Res<Time>,
     ship_query: Query<Entity, With<Ship>>,
     mut hull_query: Query<(&mut HullSegment, &Transform, &ChildOf)>,
-    mut room_map: ResMut<RoomMap>,
+    room_map: Res<RoomMap>,
     mut oxygen_state: ResMut<OxygenState>,
-    mut room_depressurize_events: MessageReader<RoomDepressurized>,
     mut player_body: Query<(&GlobalTransform, &mut Velocity, &mut ShipPhysics), With<Ship>>,
 ) {
     // Player ship only: hull_query spans every ship in the world (this
@@ -25,20 +24,11 @@ pub fn update_decompression(
     // happening on a ship they've never even seen.
     let Ok(player_ship) = ship_query.single() else { return };
 
-    // Read RoomDepressurized events → mark rooms as breached
-    for event in room_depressurize_events.read() {
-        if let Some(room) = room_map.rooms.get_mut(event.room_id) {
-            room.is_breached = true;
-        }
-    }
-
-    // Progress depressurization in breached rooms (air escaping)
+    // Air level and is_breached are owned by ship::air, which runs just
+    // before this and derives both from the per-tile pressure field. What is
+    // left here is everything downstream of them: the hull sync, the oxygen
+    // drain, and vent thrust.
     let dt = time.delta_secs();
-    for room in room_map.rooms.iter_mut() {
-        if room.is_breached && room.air_level > 0.0 {
-            room.air_level = (room.air_level - 0.15 * dt).max(0.0); // ~7s to empty — build bulkheads or lose everything
-        }
-    }
 
     // Build a lookup: tile -> air_level from rooms
     let mut tile_air: std::collections::HashMap<IVec2, f32> = std::collections::HashMap::new();
@@ -141,7 +131,8 @@ pub fn seal_breach_system(
     crew_query: Query<(&CrewMember, &CrewRoomLocation)>,
     repair_bays: Query<(&Module, &RepairSystem), Without<DestroyedModule>>,
     hull_seals: Query<(&HullSealComp, &Module), Without<DestroyedModule>>,
-    mut room_map: ResMut<RoomMap>,
+    room_map: Res<RoomMap>,
+    mut air: ResMut<crate::ship::air::AirField>,
 ) {
     let dt = time.delta_secs();
 
@@ -177,17 +168,17 @@ pub fn seal_breach_system(
         }
     }
 
-    // Apply sealing to each room (restoring air)
+    // Apply sealing to each room, restoring air to its tiles. This has to
+    // write the pressure field rather than room.air_level: air::sync_room_air
+    // republishes air_level from the tiles every frame, so a write here would
+    // be gone before anything read it.
     for (room_id, seal_power) in room_seal_power.iter() {
-        if let Some(room) = room_map.rooms.get_mut(*room_id) {
-            if room.air_level >= 1.0 {
-                continue;
-            }
+        if let Some(room) = room_map.rooms.get(*room_id) {
             let boost = room_repair_boost.get(room_id).copied().unwrap_or(1.0);
             let restore = seal_power * boost * dt;
-            room.air_level = (room.air_level + restore).min(1.0);
-            if room.air_level >= 1.0 {
-                room.is_breached = false;
+            for tile in &room.tiles {
+                let pressure = air.pressure.entry(*tile).or_insert(1.0);
+                *pressure = (*pressure + restore).min(1.0);
             }
         }
     }

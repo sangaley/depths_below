@@ -1,5 +1,6 @@
 pub mod build_ui;
 pub mod damage_overlay;
+pub mod pressure_overlay;
 pub mod windows;
 pub mod theme;
 pub mod cursor;
@@ -199,11 +200,18 @@ impl Plugin for UiPlugin {
                     damage_overlay::despawn_overlay_legend.after(damage_overlay::toggle_damage_overlay),
                     damage_overlay::update_damage_overlay.after(damage_overlay::spawn_overlay_legend),
                     damage_overlay::cleanup_damage_overlay.after(damage_overlay::toggle_damage_overlay),
+                    // Pressure view rides the same shape as the damage view
+                    // and turns it off when it comes up -- both tint blocks.
+                    pressure_overlay::toggle_pressure_overlay,
+                    pressure_overlay::update_pressure_overlay
+                        .after(pressure_overlay::toggle_pressure_overlay),
+                    pressure_overlay::draw_pressure_flow
+                        .after(pressure_overlay::update_pressure_overlay),
                 ).run_if(in_state(GameState::Exploring)),
             )
             // Clean up overlay legend/sprites on state transitions
-            .add_systems(OnEnter(GameState::GameOver), damage_overlay::cleanup_overlay_on_exit)
-            .add_systems(OnEnter(GameState::MainMenu), damage_overlay::cleanup_overlay_on_exit)
+            .add_systems(OnEnter(GameState::GameOver), (damage_overlay::cleanup_overlay_on_exit, pressure_overlay::cleanup_pressure_overlay_on_exit))
+            .add_systems(OnEnter(GameState::MainMenu), (damage_overlay::cleanup_overlay_on_exit, pressure_overlay::cleanup_pressure_overlay_on_exit))
             // Crew menu toggle (while exploring)
             .add_systems(
                 Update,
