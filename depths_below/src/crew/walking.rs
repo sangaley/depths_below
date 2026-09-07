@@ -112,7 +112,16 @@ fn station_cell(nav: &NavGrid, module: &Module) -> Option<IVec2> {
 pub fn plan_crew_destinations(
     mut commands: Commands,
     stations: Query<(&Module, &CrewStation, &ChildOf), Without<OwnedByAiShip>>,
-    crew: Query<(Entity, &ChildOf), (With<CrewMember>, Without<EvaSalvaging>, Without<OwnedByAiShip>)>,
+    crew: Query<
+        (Entity, &ChildOf),
+        (
+            With<CrewMember>,
+            Without<EvaSalvaging>,
+            Without<OwnedByAiShip>,
+            // Someone running for a closing door is not available for duty.
+            Without<Fleeing>,
+        ),
+    >,
     existing: Query<&CrewDestination>,
     patrols: Query<&CrewPatrol>,
     navs: Query<&NavGrid>,
@@ -558,7 +567,14 @@ pub fn plan_repair_errands(
     modules: Query<(&Module, &ChildOf), Without<DestroyedModule>>,
     crew: Query<
         (Entity, &Transform, &ChildOf),
-        (With<CrewMember>, Without<EvaSalvaging>, Without<OwnedByAiShip>),
+        (
+            With<CrewMember>,
+            Without<EvaSalvaging>,
+            Without<OwnedByAiShip>,
+            // Don't send someone running from a closing bulkhead to go and
+            // patch the very breach they are running from.
+            Without<Fleeing>,
+        ),
     >,
 ) {
     timer.0.tick(time.delta());

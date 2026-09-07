@@ -735,6 +735,14 @@ pub enum ModuleType {
 }
 
 impl ModuleType {
+    /// Blocks that shut to isolate a compartment: the automatic bulkhead and
+    /// the flood valve. Both were inert props -- the bulkhead inserted
+    /// `BulkheadSealed` on itself and nothing read it, because room detection
+    /// only ever looked at hull segments.
+    pub fn is_containment_door(&self) -> bool {
+        matches!(self, ModuleType::EmergencyBulkhead | ModuleType::AirlockValve)
+    }
+
     pub fn category(&self) -> ModuleCategory {
         match self {
             ModuleType::SmallReactor | ModuleType::StandardReactor |
@@ -2104,6 +2112,33 @@ pub struct ComponentPiece {
 /// Marker: a BulkheadDoor hull segment that is sealed (blocks decompression/fire spread)
 #[derive(Component)]
 pub struct BulkheadSealed;
+
+/// A containment door that has decided to shut and is giving people a moment
+/// to clear the doorway first.
+///
+/// The delay is the whole point: a door that slams the instant pressure drops
+/// saves the ship without ever letting you see it coming.
+#[derive(Component)]
+pub struct BulkheadClosing {
+    pub timer: Timer,
+}
+
+/// This crew member is running for a door that is about to shut, and should
+/// not be sent back to their post until they are through it.
+///
+/// `plan_crew_destinations` reassigns a crew member to their station every
+/// frame, so without a flag that outranks it the scramble is overwritten
+/// before anyone takes a step.
+#[derive(Component)]
+pub struct Fleeing {
+    /// Hard expiry, independent of whether they reach air.
+    ///
+    /// Without it, anyone who flees into a compartment that then loses its own
+    /// pressure stays flagged forever, and every system that steps around
+    /// `Fleeing` keeps stepping around them -- a crew member permanently off
+    /// duty because of a door that shut once.
+    pub timer: Timer,
+}
 
 /// Tracks which room a crew member is currently in
 #[derive(Component)]

@@ -79,10 +79,24 @@ pub fn detect_rooms(
         module_positions.insert(module.grid_position);
     }
 
+    // Anything sealed is a wall, whatever kind of block it is. The match above
+    // only consults `sealed_positions` for BulkheadDoor hull segments, so a
+    // sealed MODULE -- which is what an emergency bulkhead and a flood valve
+    // both are -- would otherwise stay ordinary interior space and divide
+    // nothing.
+    inner_hull_positions.extend(sealed_positions.iter().copied());
+
     // Interior space is anything a person or a lungful of air can occupy:
     // the modules themselves plus the hallways joining them.
-    let interior_positions: HashSet<IVec2> =
-        module_positions.union(&hallway_positions).copied().collect();
+    // Sealed blocks are subtracted, not merely treated as walls. The flood
+    // below starts from every interior cell in turn, so a sealed valve left in
+    // the interior set seeds its own fill and rejoins the two sides it is
+    // supposed to be keeping apart -- the neighbour test never gets a say.
+    let interior_positions: HashSet<IVec2> = module_positions
+        .union(&hallway_positions)
+        .copied()
+        .filter(|p| !inner_hull_positions.contains(p))
+        .collect();
 
     // Flood-fill from each unvisited interior cell. Connected interior cells
     // (adjacent, not separated by inner hull) form a room.
@@ -147,15 +161,28 @@ pub fn update_room_map(
     hull_query: Query<(&HullSegment, &Transform, &ChildOf)>,
     module_query: Query<(&Module, &Transform, &ChildOf)>,
     sealed_query: Query<(&HullSegment, &Transform, &ChildOf), With<BulkheadSealed>>,
+    sealed_modules: Query<(&Module, &ChildOf), With<BulkheadSealed>>,
     mut room_map: ResMut<RoomMap>,
 ) {
     let Ok(player_ship) = ship_query.single() else { return };
 
-    // Build set of sealed bulkhead positions
+    // Build set of sealed bulkhead positions.
+    //
+    // Modules count as well as hull segments. Emergency bulkheads and flood
+    // valves are MODULES, and `fire::emergency_bulkhead_system` has always
+    // inserted `BulkheadSealed` on them -- but this query only ever looked at
+    // hull segments, so the marker was read by nobody and the ship's automatic
+    // containment gear did precisely nothing.
     let sealed_positions: HashSet<IVec2> = sealed_query
         .iter()
         .filter(|(_, _, parent)| parent.parent() == player_ship)
         .map(|(_, transform, _)| transform_to_grid(transform))
+        .chain(
+            sealed_modules
+                .iter()
+                .filter(|(_, parent)| parent.parent() == player_ship)
+                .map(|(module, _)| module.grid_position),
+        )
         .collect();
 
     // Save air state for every tile in every room

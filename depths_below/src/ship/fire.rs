@@ -149,43 +149,6 @@ pub fn update_fire(
     }
 }
 
-/// Emergency bulkheads auto-seal when adjacent rooms depressurize and unseal when air is restored.
-pub fn emergency_bulkhead_system(
-    mut commands: Commands,
-    bulkhead_query: Query<(Entity, &Module, Option<&BulkheadSealed>), Without<DestroyedModule>>,
-    room_map: Res<RoomMap>,
-    mut notifications: MessageWriter<ShowNotification>,
-) {
-    for (entity, module, sealed) in bulkhead_query.iter() {
-        if module.module_type != ModuleType::EmergencyBulkhead { continue; }
-        if !module.is_active { continue; }
-
-        // Check adjacent tiles for decompression
-        let mut adjacent_depressurized = false;
-        for offset in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
-            let adj_pos = module.grid_position + offset;
-            if let Some(&room_id) = room_map.tile_to_room.get(&adj_pos) {
-                if let Some(room) = room_map.rooms.get(room_id) {
-                    if room.air_level < 0.7 {
-                        adjacent_depressurized = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if adjacent_depressurized && sealed.is_none() {
-            commands.entity(entity).insert(BulkheadSealed);
-            notifications.write(ShowNotification {
-                message: "Emergency bulkhead auto-sealed — decompression detected!".into(),
-                notification_type: NotificationType::Warning,
-                duration: 3.0,
-            });
-        } else if !adjacent_depressurized && sealed.is_some() {
-            commands.entity(entity).remove::<BulkheadSealed>();
-        }
-    }
-}
 
 // ============================================================================
 // BURNING OVERLAY

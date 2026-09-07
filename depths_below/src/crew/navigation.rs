@@ -252,14 +252,15 @@ pub fn rebuild_nav_grids(
     mut commands: Commands,
     ships: Query<Entity, Or<(With<Ship>, With<AiShip>)>>,
     modules: Query<
-        (&Module, &ChildOf, Has<CrewStation>, Has<Quarters>),
+        (&Module, &ChildOf, Has<CrewStation>, Has<Quarters>, Has<BulkheadSealed>),
         Without<DestroyedModule>,
     >,
     hulls: Query<(&HullSegment, &Transform, &ChildOf, Has<BulkheadSealed>), Without<HullDestroyed>>,
     mut grids: Query<&mut NavGrid>,
     mut last_counts: Local<(usize, usize, usize, usize)>,
 ) {
-    let sealed = hulls.iter().filter(|(_, _, _, sealed)| *sealed).count();
+    let sealed = hulls.iter().filter(|(_, _, _, sealed)| *sealed).count()
+        + modules.iter().filter(|(_, _, _, _, sealed)| *sealed).count();
     let counts = (modules.iter().count(), hulls.iter().count(), ships.iter().count(), sealed);
     if counts == *last_counts && !grids.is_empty() {
         return;
@@ -288,12 +289,19 @@ pub fn rebuild_nav_grids(
     // Posts are applied in a second pass so a post always wins its cell,
     // regardless of the order the queries happen to yield modules in.
     let mut posts: Vec<(Entity, IVec2)> = Vec::new();
-    for (module, parent, is_station, is_quarters) in modules.iter() {
+    for (module, parent, is_station, is_quarters, sealed) in modules.iter() {
         let Some(cells) = per_ship.get_mut(&parent.parent()) else { continue };
         let footprint = footprints::footprint_override(module.module_type);
         let occupied =
             ShipGrid::cells_for(module.grid_position, module.size, module.rotation, footprint);
-        if is_station || is_quarters {
+        if module.module_type.is_containment_door() {
+            // A doorway, not machinery. Taking its cells off the map like any
+            // other module would wall a corridor off permanently and strand
+            // whoever was behind it -- open or shut, forever.
+            for cell in occupied {
+                cells.insert(cell, NavCell::Door { sealed });
+            }
+        } else if is_station || is_quarters {
             posts.extend(occupied.iter().map(|c| (parent.parent(), *c)));
         } else {
             for cell in occupied {

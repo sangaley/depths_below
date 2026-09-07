@@ -722,6 +722,131 @@ mod air_tests {
         assert!(drained, "hull is open and no tile lost meaningful air");
     }
 
+    /// A sealed containment door has to actually divide the ship.
+    ///
+    /// It did not before: emergency bulkheads are MODULES and
+    /// `fire::emergency_bulkhead_system` marked them `BulkheadSealed`, but
+    /// `update_room_map` only ever collected sealed HULL segments, so the
+    /// marker was read by nobody and the door held nothing back.
+    #[test]
+    fn a_sealed_door_module_splits_the_ship_in_two() {
+        let mut app = App::new();
+        app.init_resource::<Time>();
+        app.init_resource::<AirField>();
+        app.init_resource::<RoomMap>();
+        app.add_systems(Update, crate::building::rooms::update_room_map);
+
+        let ship = app.world_mut().spawn(Ship).id();
+
+        // Two hallway cells with a valve module between them.
+        for x in [0, 2] {
+            app.world_mut().spawn((
+                HullSegment {
+                    health: 100.0,
+                    max_health: 100.0,
+                    radiation_shielding: 0.0,
+                    is_depressurized: false,
+                    depressurization_level: 0.0,
+                    hull_layer: HullLayer::Hallway,
+                    material: HullMaterial::Steel,
+                    grid_position: IVec2::new(x, 0),
+                },
+                Transform::from_translation(
+                    crate::building::grid_to_local(IVec2::new(x, 0)).extend(0.0),
+                ),
+                ChildOf(ship),
+            ));
+        }
+        let valve = app
+            .world_mut()
+            .spawn((
+                Module {
+                    module_type: ModuleType::AirlockValve,
+                    health: 100.0,
+                    max_health: 100.0,
+                    power_consumption: 0.0,
+                    power_generation: 0.0,
+                    is_active: true,
+                    grid_position: IVec2::new(1, 0),
+                    size: IVec2::ONE,
+                    rotation: Rotation::North,
+                },
+                Transform::from_translation(
+                    crate::building::grid_to_local(IVec2::new(1, 0)).extend(0.0),
+                ),
+                ChildOf(ship),
+            ))
+            .id();
+
+        app.update();
+        assert_eq!(
+            app.world().resource::<RoomMap>().rooms.len(),
+            1,
+            "an open valve should join the two sides into one compartment"
+        );
+
+        app.world_mut().entity_mut(valve).insert(BulkheadSealed);
+        app.update();
+
+        let room_map = app.world().resource::<RoomMap>();
+        assert_eq!(
+            room_map.rooms.len(),
+            2,
+            "a sealed valve must divide the ship — it left {} room(s)",
+            room_map.rooms.len()
+        );
+        assert_ne!(
+            room_map.tile_to_room.get(&IVec2::new(0, 0)),
+            room_map.tile_to_room.get(&IVec2::new(2, 0)),
+            "both sides still resolve to the same compartment"
+        );
+    }
+
+    /// And once divided, air must not cross it — the reason you would ever
+    /// shut one.
+    #[test]
+    fn shutting_a_door_saves_the_compartment_behind_it() {
+        let mut app = sim_app();
+        // Six cells, holed past the x=0 end. Tiles 0..2 are the doomed side,
+        // 3..5 the side we are trying to keep.
+        corridor(&mut app, 6, Some(-1));
+        step(&mut app, 4.0, 40);
+        let unsealed_far = pressure(&app, 5);
+
+        // Same again, with the halves detached the way a shut door leaves them.
+        let mut app = sim_app();
+        corridor(&mut app, 6, Some(-1));
+        {
+            let mut room_map = app.world_mut().resource_mut::<RoomMap>();
+            room_map.tile_to_room.clear();
+            room_map.rooms.clear();
+            for (id, range) in [(0usize, 0..3), (1usize, 3..6)] {
+                let tiles: Vec<IVec2> = range.map(|x| IVec2::new(x, 0)).collect();
+                for &t in &tiles {
+                    room_map.tile_to_room.insert(t, id);
+                }
+                room_map.rooms.push(crate::building::rooms::Room {
+                    id,
+                    tiles,
+                    air_level: 1.0,
+                    is_breached: false,
+                    has_power: false,
+                });
+            }
+        }
+        step(&mut app, 4.0, 40);
+        let sealed_far = pressure(&app, 5);
+
+        assert!(
+            sealed_far > 0.99,
+            "the protected side lost air through a shut door: {sealed_far}"
+        );
+        assert!(
+            unsealed_far < sealed_far - 0.1,
+            "shutting the door made no difference: open={unsealed_far} shut={sealed_far}"
+        );
+    }
+
     /// fire.rs and crew_emergency_dispatch still read Room::air_level, so it
     /// has to keep tracking the tiles it summarises.
     #[test]
@@ -741,5 +866,176 @@ mod air_tests {
             "room air_level {actual} drifted from its tile mean {expected}"
         );
         assert!(room_map.rooms[0].is_breached, "room with a hole on it is not flagged breached");
+    }
+}
+
+// ============================================================================
+// CONTAINMENT
+// ============================================================================
+
+/// Adjacent pressure at which a containment door decides to shut.
+const SEAL_AT: f32 = 0.7;
+
+/// And the pressure it wants back before opening again. The gap is deliberate:
+/// with a live flow field the seal threshold is crossed and re-crossed
+/// constantly, and a door with one threshold flaps open and shut every frame.
+const UNSEAL_AT: f32 = 0.95;
+
+/// How long a door warns before it shuts.
+const CLOSING_DELAY: f32 = 2.0;
+
+/// How long someone stays off duty running for it. Generous enough to cross a
+/// compartment, short enough that being caught on the wrong side does not
+/// retire them.
+const FLEE_TIMEOUT: f32 = 8.0;
+
+/// Automatic bulkheads and flood valves: shut on falling pressure, having
+/// given anyone in the doomed compartment a moment to get out.
+///
+/// Replaces `fire::emergency_bulkhead_system`, which read the room-wide mean
+/// air level. A mean lags badly here -- air nearest the hole goes first, so a
+/// door beside the breach would wait for the whole compartment to average down
+/// before reacting. Reading the pressure of the tiles it actually touches
+/// makes it shut as the wave arrives.
+pub fn auto_containment(
+    mut commands: Commands,
+    time: Res<Time>,
+    air: Res<AirField>,
+    room_map: Res<RoomMap>,
+    ship_query: Query<Entity, With<Ship>>,
+    mut doors: Query<
+        (
+            Entity,
+            &Module,
+            &ChildOf,
+            Has<BulkheadSealed>,
+            Option<&mut BulkheadClosing>,
+        ),
+        Without<DestroyedModule>,
+    >,
+    crew: Query<(Entity, &Transform), (With<CrewMember>, Without<crate::crew::eva_salvage::EvaSalvaging>)>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    let Ok(player_ship) = ship_query.single() else { return };
+    let dt = time.delta();
+
+    for (entity, module, parent, sealed, closing) in doors.iter_mut() {
+        if parent.parent() != player_ship || !module.module_type.is_containment_door() {
+            continue;
+        }
+        if !module.is_active {
+            continue;
+        }
+
+        let sides = [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y];
+        let neighbours: Vec<(IVec2, f32)> = sides
+            .iter()
+            .map(|o| module.grid_position + *o)
+            .filter(|c| room_map.tile_to_room.contains_key(c))
+            .map(|c| (c, air.pressure.get(&c).copied().unwrap_or(1.0)))
+            .collect();
+        if neighbours.is_empty() {
+            continue;
+        }
+
+        let worst = neighbours
+            .iter()
+            .copied()
+            .fold((IVec2::ZERO, f32::MAX), |acc, n| if n.1 < acc.1 { n } else { acc });
+        let best = neighbours
+            .iter()
+            .copied()
+            .fold((IVec2::ZERO, f32::MIN), |acc, n| if n.1 > acc.1 { n } else { acc });
+
+        if sealed {
+            if worst.1 > UNSEAL_AT {
+                commands.entity(entity).remove::<BulkheadSealed>();
+                notifications.write(ShowNotification {
+                    message: "Bulkhead reopened - pressure restored.".into(),
+                    notification_type: NotificationType::Info,
+                    duration: 2.0,
+                });
+            }
+            continue;
+        }
+
+        if let Some(mut closing) = closing {
+            closing.timer.tick(dt);
+            if closing.timer.is_finished() {
+                commands
+                    .entity(entity)
+                    .remove::<BulkheadClosing>()
+                    .insert(BulkheadSealed);
+                notifications.write(ShowNotification {
+                    message: "Bulkhead sealed - compartment isolated.".into(),
+                    notification_type: NotificationType::Danger,
+                    duration: 3.0,
+                });
+            } else if worst.1 > UNSEAL_AT {
+                // The leak was dealt with while the clock ran; stand down.
+                commands.entity(entity).remove::<BulkheadClosing>();
+            }
+            continue;
+        }
+
+        if worst.1 >= SEAL_AT {
+            continue;
+        }
+
+        // Shutting. Anyone on the losing side gets told to run for the door,
+        // and `Fleeing` outranks their station assignment so the order sticks
+        // long enough for them to move.
+        commands.entity(entity).insert(BulkheadClosing {
+            timer: Timer::from_seconds(CLOSING_DELAY, TimerMode::Once),
+        });
+
+        let doomed_room = room_map.tile_to_room.get(&worst.0).copied();
+        let refuge = if best.1 > worst.1 { Some(best.0) } else { None };
+        let mut running = 0u32;
+        if let (Some(doomed), Some(refuge)) = (doomed_room, refuge) {
+            for (crew_entity, transform) in crew.iter() {
+                let cell = local_to_grid(transform.translation.truncate());
+                if room_map.tile_to_room.get(&cell).copied() != Some(doomed) {
+                    continue;
+                }
+                commands
+                    .entity(crew_entity)
+                    .insert((
+                        Fleeing {
+                            timer: Timer::from_seconds(FLEE_TIMEOUT, TimerMode::Once),
+                        },
+                        crate::crew::walking::CrewDestination(refuge),
+                    ));
+                running += 1;
+            }
+        }
+
+        notifications.write(ShowNotification {
+            message: if running > 0 {
+                format!("BULKHEAD CLOSING - {running} crew running for it!")
+            } else {
+                "Bulkhead closing - decompression detected.".into()
+            },
+            notification_type: NotificationType::Warning,
+            duration: CLOSING_DELAY,
+        });
+    }
+}
+
+/// Lets people stop running once they are somewhere with air.
+pub fn clear_fleeing(
+    mut commands: Commands,
+    time: Res<Time>,
+    air: Res<AirField>,
+    mut fleeing: Query<(Entity, &Transform, &mut Fleeing)>,
+) {
+    let dt = time.delta();
+    for (entity, transform, mut flee) in fleeing.iter_mut() {
+        flee.timer.tick(dt);
+        let cell = local_to_grid(transform.translation.truncate());
+        let safe = air.pressure.get(&cell).copied().unwrap_or(1.0) > UNSEAL_AT;
+        if safe || flee.timer.is_finished() {
+            commands.entity(entity).remove::<Fleeing>();
+        }
     }
 }
