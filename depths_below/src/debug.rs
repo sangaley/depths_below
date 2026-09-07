@@ -33,6 +33,7 @@ impl Plugin for DebugPlugin {
                 Update,
                 (
                     debug_actions,
+                    debug_breach_hull,
                     debug_kill_flagged,
                     draw_hitboxes,
                 )
@@ -655,4 +656,75 @@ fn draw_hitboxes(
     for (gt, missile) in missile_query.iter() {
         gizmos.circle_2d(gt.translation().truncate(), missile.blast_radius, Color::srgba(1.0, 0.85, 0.2, 0.35));
     }
+}
+
+
+/// Debug menu, `6`: punch a hole in your own hull.
+///
+/// Separate from `debug_actions` because that one is already at Bevy's raw
+/// parameter ceiling -- the two `DebugParams` bundles above exist for the same
+/// reason.
+///
+/// Breaching means what `ship::air::mark_breached_hull` means by it: the plate
+/// is holed and the air starts leaving. Setting health alone would not do it,
+/// because a breach is an edge taken from a `HullBreached` event rather than a
+/// standing condition read off health -- crew sealing has to be able to close a
+/// hole in a plate that is still damaged.
+fn debug_breach_hull(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    menu: Res<DebugMenu>,
+    ship_query: Query<Entity, With<Ship>>,
+    room_map: Res<crate::building::rooms::RoomMap>,
+    mut hull_query: Query<(&mut HullSegment, &ChildOf)>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    if !menu.open || !keyboard.just_pressed(KeyCode::Digit6) {
+        return;
+    }
+    let Ok(player_ship) = ship_query.single() else { return };
+
+    // Only plates that front a compartment are worth holing -- puncturing
+    // outboard armour with nothing behind it vents nothing and looks broken.
+    let mut candidates: Vec<IVec2> = Vec::new();
+    for (hull, parent) in hull_query.iter() {
+        if parent.parent() != player_ship || hull.is_depressurized {
+            continue;
+        }
+        let pos = hull.grid_position;
+        if room_map.tile_to_room.contains_key(&pos) {
+            continue; // hallway: interior itself, not a wall to breach
+        }
+        if [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y]
+            .iter()
+            .any(|o| room_map.tile_to_room.contains_key(&(pos + *o)))
+        {
+            candidates.push(pos);
+        }
+    }
+
+    if candidates.is_empty() {
+        notifications.write(ShowNotification {
+            message: "[debug] no hull plate borders a compartment".into(),
+            notification_type: NotificationType::Warning,
+            duration: 2.0,
+        });
+        return;
+    }
+
+    let target = candidates[rand::thread_rng().gen_range(0..candidates.len())];
+    for (mut hull, parent) in hull_query.iter_mut() {
+        if parent.parent() != player_ship || hull.grid_position != target {
+            continue;
+        }
+        hull.health = 0.0;
+        hull.is_depressurized = true;
+        hull.depressurization_level = 1.0;
+        break;
+    }
+
+    notifications.write(ShowNotification {
+        message: format!("[debug] hull breached at {}, {}", target.x, target.y),
+        notification_type: NotificationType::Danger,
+        duration: 3.0,
+    });
 }

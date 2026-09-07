@@ -55,7 +55,22 @@ pub fn spawn_starter_ship(
     // The starter destroyer is design data, not spawn calls — see
     // builtin_starter_design(). designs/starter.json overrides the built-in
     // (exported there on first run so it can be edited as JSON).
-    let design = crate::building::blueprint::load_design_file("designs/starter.json")
+    //
+    // DEPTHS_DESIGN=<path> launches some other hull instead, without touching
+    // the shipped one. designs/airlab.json is a bare three-compartment test
+    // rig for watching air, doors and force fields do their jobs.
+    let design = std::env::var("DEPTHS_DESIGN")
+        .ok()
+        .and_then(|path| {
+            let loaded = crate::building::blueprint::load_design_file(&path);
+            if loaded.is_none() {
+                warn!("DEPTHS_DESIGN={} could not be loaded; using the starter", path);
+            } else {
+                info!("Flying DEPTHS_DESIGN={}", path);
+            }
+            loaded
+        })
+        .or_else(|| crate::building::blueprint::load_design_file("designs/starter.json"))
         .unwrap_or_else(|| {
             let design = builtin_starter_design();
             if let Err(e) = crate::building::blueprint::write_design_file("designs/starter.json", &design) {
