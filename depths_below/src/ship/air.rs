@@ -16,7 +16,7 @@
 //! buys nothing until room detection itself runs per-ship.
 
 use bevy::prelude::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::building::rooms::RoomMap;
 use crate::building::local_to_grid;
