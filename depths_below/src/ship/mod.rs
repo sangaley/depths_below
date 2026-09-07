@@ -170,7 +170,8 @@ impl Plugin for ShipPlugin {
                     (
                         air::mark_breached_hull.after(hull::process_hull_cascade),
                         air::sync_air_tiles.after(air::mark_breached_hull),
-                        air::vent_air_at_breaches.after(air::sync_air_tiles),
+                        air::project_force_fields.after(air::sync_air_tiles),
+                        air::vent_air_at_breaches.after(air::project_force_fields),
                         air::diffuse_air.after(air::vent_air_at_breaches),
                         air::sync_room_air.after(air::diffuse_air),
                         air::tumble_ejected_bodies,

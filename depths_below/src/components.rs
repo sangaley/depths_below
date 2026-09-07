@@ -465,6 +465,7 @@ impl ModuleCategory {
             ],
             ModuleCategory::Utility => &[
                 ModuleType::RepairBay,
+                ModuleType::EmergencyForceField,
                 ModuleType::ManeuverThruster,
                 ModuleType::Floodlight,
                 ModuleType::Searchlight,
@@ -651,6 +652,7 @@ pub enum ModuleType {
 
     // Phase B: Damage Infrastructure
     HullSealer,
+    EmergencyForceField,
     EmergencyBulkhead,
     FirebreakWall,
     PressureSensor,
@@ -893,6 +895,7 @@ impl ModuleType {
             ModuleType::MaintenanceLocker |
             ModuleType::FuelProcessor |
             ModuleType::HullSealer |
+            ModuleType::EmergencyForceField |
             ModuleType::MineralExtractor |
             ModuleType::DockingHub |
             ModuleType::ResearchLab => ModuleCategory::Utility,
@@ -1008,6 +1011,7 @@ impl ModuleType {
             ModuleType::MaintenanceLocker => "Maintenance Locker",
             ModuleType::FuelProcessor => "Fuel Processor",
             ModuleType::HullSealer => "Hull Seal System",
+            ModuleType::EmergencyForceField => "Emergency Force Field",
             ModuleType::EmergencyBulkhead => "Emergency Bulkhead",
             ModuleType::FirebreakWall => "Firebreak Wall",
             ModuleType::PressureSensor => "Radiation Sensor",
@@ -1461,6 +1465,20 @@ pub struct FuelProcessorComp {
 #[derive(Component)]
 pub struct HullSealComp {
     pub seal_rate: f32,
+}
+
+/// Projects a containment field over nearby hull breaches.
+///
+/// It holds; it does not heal. The plate is still holed and still wants a
+/// crew member with a patch -- this only stops the air leaving while you deal
+/// with something more urgent, and it stops the moment the power does.
+#[derive(Component)]
+pub struct ForceFieldEmitter {
+    /// Reach in grid cells. A hole outside every emitter's radius still vents,
+    /// which is what makes where you bolt these a decision.
+    pub radius: f32,
+    /// Power drawn per breach tile actually held, on top of the base draw.
+    pub power_per_tile: f32,
 }
 
 /// Targeting computer — boosts weapon accuracy

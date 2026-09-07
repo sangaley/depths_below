@@ -16,12 +16,13 @@
 //! buys nothing until room detection itself runs per-ship.
 
 use bevy::prelude::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::building::rooms::RoomMap;
 use crate::building::local_to_grid;
 use crate::components::*;
 use crate::events::*;
+use crate::resources::PowerGraph;
 
 /// How fast a tile fully open to space empties, as a fraction per second.
 /// Exponential, so it is violent while full and tapers as it empties — which
@@ -53,6 +54,10 @@ const PANIC_MORALE_DRAIN: f32 = 15.0;
 /// Flow at a hole above which a body goes through it.
 const EJECT_FLOW: f32 = 0.6;
 
+/// Idle draw of a force-field emitter, matching its registry entry. Holding
+/// holes costs more on top, per hole.
+const FORCE_FIELD_BASE_POWER: f32 = 10.0;
+
 /// Per-tile air inside the player's ship, in ship-LOCAL cells.
 #[derive(Resource, Default)]
 pub struct AirField {
@@ -70,6 +75,10 @@ pub struct AirField {
     pub holes: HashMap<IVec2, f32>,
     /// Interior tiles that touch a hole: which way out, and total conductance.
     pub vents: HashMap<IVec2, (Vec2, f32)>,
+    /// Vent tiles currently held shut by a force field. Still holes -- the
+    /// plate wants patching and the room still reads as breached -- but no air
+    /// is leaving through them while the power holds.
+    pub shielded: HashSet<IVec2>,
 }
 
 impl AirField {
@@ -208,6 +217,9 @@ pub fn vent_air_at_breaches(time: Res<Time>, mut air: ResMut<AirField>) {
         .collect();
 
     for (tile, direction, conductance) in vents {
+        if air.shielded.contains(&tile) {
+            continue; // held by a force field: the hole is open, the air is not leaving
+        }
         let Some(pressure) = air.pressure.get_mut(&tile) else { continue };
         if *pressure <= 0.0 {
             continue;
@@ -332,7 +344,10 @@ pub fn crew_suction(
 
         // Out through the hole. Only on a tile that actually has one, so a
         // strong draught mid-corridor shoves you about but cannot delete you.
-        if strength >= EJECT_FLOW && air.vents.contains_key(&cell) {
+        if strength >= EJECT_FLOW
+            && air.vents.contains_key(&cell)
+            && !air.shielded.contains(&cell)
+        {
             let world = global.translation();
             let outward = flow.normalize_or_zero();
             commands.spawn((
@@ -883,6 +898,129 @@ mod air_tests {
         );
     }
 
+    /// Builds a holed corridor with an emitter in it, and returns the app plus
+    /// the emitter entity. `powered` decides whether its cell is on the grid.
+    fn corridor_with_emitter(len: i32, radius: f32, powered: bool) -> (App, Entity) {
+        let mut app = App::new();
+        app.init_resource::<Time>();
+        app.init_resource::<AirField>();
+        let mut grid = PowerGraph::default();
+        if powered {
+            grid.powered_tiles.insert(IVec2::new(0, 0));
+        }
+        app.insert_resource(grid);
+        app.add_systems(
+            Update,
+            (
+                sync_air_tiles,
+                project_force_fields,
+                vent_air_at_breaches,
+                diffuse_air,
+                sync_room_air,
+            )
+                .chain(),
+        );
+        let ship = corridor(&mut app, len, Some(-1));
+
+        let emitter = app
+            .world_mut()
+            .spawn((
+                Module {
+                    module_type: ModuleType::EmergencyForceField,
+                    health: 50.0,
+                    max_health: 50.0,
+                    power_consumption: FORCE_FIELD_BASE_POWER,
+                    power_generation: 0.0,
+                    is_active: true,
+                    grid_position: IVec2::new(0, 0),
+                    size: IVec2::ONE,
+                    rotation: Rotation::North,
+                },
+                ForceFieldEmitter { radius, power_per_tile: 12.0 },
+                ChildOf(ship),
+            ))
+            .id();
+        (app, emitter)
+    }
+
+    /// A field over the hole stops the air leaving, without repairing anything.
+    #[test]
+    fn a_force_field_holds_the_air_in() {
+        let (mut app, _) = corridor_with_emitter(5, 3.5, true);
+        step(&mut app, 4.0, 40);
+
+        let air = app.world().resource::<AirField>();
+        assert!(
+            !air.vents.is_empty(),
+            "the hull should still be open — the field holds it, it does not mend it"
+        );
+        assert!(
+            air.shielded.contains(&IVec2::new(0, 0)),
+            "the breach tile is not being held"
+        );
+        assert!(
+            pressure(&app, 0) > 0.99,
+            "air left through a held breach: {}",
+            pressure(&app, 0)
+        );
+    }
+
+    /// And it bills for it, per hole held.
+    #[test]
+    fn holding_a_breach_costs_power() {
+        let (mut app, emitter) = corridor_with_emitter(5, 3.5, true);
+        step(&mut app, 0.5, 5);
+
+        let draw = app.world().get::<Module>(emitter).unwrap().power_consumption;
+        assert!(
+            draw > FORCE_FIELD_BASE_POWER,
+            "an emitter holding a breach drew only its idle {FORCE_FIELD_BASE_POWER}"
+        );
+    }
+
+    /// Cut the power and the air goes. This is the failure mode that makes the
+    /// field a reprieve rather than a repair.
+    #[test]
+    fn an_unpowered_emitter_holds_nothing() {
+        let (mut app, _) = corridor_with_emitter(5, 3.5, false);
+        step(&mut app, 2.0, 20);
+
+        let air = app.world().resource::<AirField>();
+        assert!(air.shielded.is_empty(), "an unpowered emitter is still holding the breach");
+        assert!(
+            pressure(&app, 0) < 0.9,
+            "unpowered, yet the breach did not vent: {}",
+            pressure(&app, 0)
+        );
+    }
+
+    /// Reach is finite, so where you bolt one is a decision.
+    #[test]
+    fn a_breach_out_of_reach_still_vents() {
+        // Emitter at cell 0; the hole is past x=0, so shrink the radius below
+        // the distance from the emitter to its own breach tile.
+        let (mut app, _) = corridor_with_emitter(5, 0.5, true);
+        // Move the emitter to the far end, out of range of the hole.
+        let far = IVec2::new(4, 0);
+        let mut q = app.world_mut().query::<(&mut Module, &ForceFieldEmitter)>();
+        let world = app.world_mut();
+        for (mut module, _) in q.iter_mut(world) {
+            module.grid_position = far;
+        }
+        app.world_mut()
+            .resource_mut::<PowerGraph>()
+            .powered_tiles
+            .insert(far);
+        step(&mut app, 2.0, 20);
+
+        let air = app.world().resource::<AirField>();
+        assert!(
+            air.shielded.is_empty(),
+            "a hole four cells away was covered by a half-cell radius"
+        );
+        assert!(pressure(&app, 0) < 0.9, "out of reach, yet it did not vent");
+    }
+
     /// fire.rs and crew_emergency_dispatch still read Room::air_level, so it
     /// has to keep tracking the tiles it summarises.
     #[test]
@@ -1073,5 +1211,67 @@ pub fn clear_fleeing(
         if safe || flee.timer.is_finished() {
             commands.entity(entity).remove::<Fleeing>();
         }
+    }
+}
+
+
+// ============================================================================
+// EMERGENCY FORCE FIELDS
+// ============================================================================
+
+/// Throws a field over every breach within reach of a live emitter.
+///
+/// Runs between `sync_air_tiles` (which works out where the holes are) and
+/// `vent_air_at_breaches` (which would otherwise empty them), so covering a
+/// hole is a single skip rather than a special case threaded through the
+/// simulation.
+///
+/// The draw is per hole held, written back onto the module so the existing
+/// power system bills for it: field a colander and the ship browns out. An
+/// emitter with no power in its cell holds nothing, so losing the reactor
+/// drops every field at once and the air goes.
+pub fn project_force_fields(
+    power: Res<PowerGraph>,
+    ship_query: Query<Entity, With<Ship>>,
+    mut emitters: Query<
+        (&mut Module, &ForceFieldEmitter, &ChildOf),
+        Without<DestroyedModule>,
+    >,
+    mut air: ResMut<AirField>,
+) {
+    air.shielded.clear();
+    let Ok(player_ship) = ship_query.single() else { return };
+
+    for (mut module, emitter, parent) in emitters.iter_mut() {
+        // Base draw only until it is actually holding something.
+        module.power_consumption = FORCE_FIELD_BASE_POWER;
+
+        if parent.parent() != player_ship || !module.is_active {
+            continue;
+        }
+        if !power.powered_tiles.contains(&module.grid_position) {
+            continue;
+        }
+
+        let origin = module.grid_position.as_vec2();
+        let mut held = 0u32;
+        for tile in air.vents.keys() {
+            if tile.as_vec2().distance(origin) <= emitter.radius {
+                held += 1;
+            }
+        }
+        if held == 0 {
+            continue;
+        }
+
+        let covered: Vec<IVec2> = air
+            .vents
+            .keys()
+            .copied()
+            .filter(|t| t.as_vec2().distance(origin) <= emitter.radius)
+            .collect();
+        air.shielded.extend(covered);
+        module.power_consumption =
+            FORCE_FIELD_BASE_POWER + emitter.power_per_tile * held as f32;
     }
 }

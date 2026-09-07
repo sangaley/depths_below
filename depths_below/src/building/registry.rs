@@ -92,6 +92,7 @@ pub enum CompanionData {
     FuelProcessor { efficiency: f32 },
     /// Hull seal system: automated breach sealing
     HullSeal { seal_rate: f32 },
+    ForceField { radius: f32, power_per_tile: f32 },
     /// Targeting computer: boosts weapon accuracy
     TargetingComputer { accuracy_bonus: f32 },
     /// AI combat core: auto-targets highest threat
@@ -2296,6 +2297,22 @@ pub fn build_registry() -> ModuleRegistry {
         companion: CompanionData::HullSeal { seal_rate: 0.15 },
         customizable: false,
         cost: 45,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::EmergencyForceField, ModuleDef {
+        name: "Emergency Force Field",
+        description: "Throws a containment field over nearby hull breaches, holding the air in while the hull is still open. Costs power for every hole it holds - field a colander and you will brown out. Holds only; the plate still needs patching.",
+        category: ModuleCategory::Utility,
+        size: IVec2::new(1, 1),
+        health: 50.0,
+        power_generation: 0.0,
+        power_consumption: 10.0,
+        color: Color::srgb(0.35, 0.65, 0.85),
+        companion: CompanionData::ForceField { radius: 3.5, power_per_tile: 12.0 },
+        customizable: false,
+        cost: 70,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });

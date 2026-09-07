@@ -111,6 +111,8 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::MaintenanceLocker => "sprites/modules/repair_station.png",
         ModuleType::FuelProcessor => "sprites/modules/ballast_tank.png",
         ModuleType::HullSealer => "sprites/modules/ballast_tank.png",
+        // Placeholder art: the VFX/art pass has not reached this block yet.
+        ModuleType::EmergencyForceField => "sprites/modules/ballast_tank.png",
         ModuleType::EmergencyBulkhead => "sprites/modules/hull_beam.png",
         ModuleType::FirebreakWall => "sprites/modules/hull_beam.png",
         ModuleType::PressureSensor => "sprites/modules/depth_sensor.png",
