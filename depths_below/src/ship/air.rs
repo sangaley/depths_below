@@ -909,6 +909,9 @@ mod air_tests {
             grid.powered_tiles.insert(IVec2::new(0, 0));
         }
         app.insert_resource(grid);
+        // project_force_fields announces engaging and collapsing, and a
+        // MessageWriter for an unregistered type panics the whole system.
+        app.add_message::<ShowNotification>();
         app.add_systems(
             Update,
             (
@@ -936,7 +939,7 @@ mod air_tests {
                     size: IVec2::ONE,
                     rotation: Rotation::North,
                 },
-                ForceFieldEmitter { radius, power_per_tile: 12.0 },
+                ForceFieldEmitter { radius, power_per_tile: 12.0, holding: 0 },
                 ChildOf(ship),
             ))
             .id();
@@ -1019,6 +1022,51 @@ mod air_tests {
             "a hole four cells away was covered by a half-cell radius"
         );
         assert!(pressure(&app, 0) < 0.9, "out of reach, yet it did not vent");
+    }
+
+    /// The test rig has to actually be the rig it claims to be, as the real
+    /// room detection sees it -- not as a model of it.
+    ///
+    /// One ship with the doors open, three compartments with them shut. If the
+    /// doorways stop dividing it, every containment demo run on this hull is
+    /// quietly measuring nothing.
+    #[test]
+    fn the_air_lab_rig_divides_into_three_compartments() {
+        let design = crate::building::blueprint::load_design_file("designs/airlab.json")
+            .expect("designs/airlab.json missing or unparseable");
+        let mut app = app_from_design(&design);
+        app.update();
+
+        assert_eq!(
+            app.world().resource::<RoomMap>().rooms.len(),
+            1,
+            "doors open, so the rig should be one connected volume"
+        );
+
+        // Shut both doorways.
+        let doors: Vec<Entity> = {
+            let mut q = app.world_mut().query::<(Entity, &Module)>();
+            q.iter(app.world())
+                .filter(|(_, m)| m.module_type.is_containment_door())
+                .map(|(e, _)| e)
+                .collect()
+        };
+        assert_eq!(doors.len(), 2, "the rig should carry exactly two doors");
+        for door in doors {
+            app.world_mut().entity_mut(door).insert(BulkheadSealed);
+        }
+        app.update();
+
+        let rooms = &app.world().resource::<RoomMap>().rooms;
+        assert_eq!(
+            rooms.len(),
+            3,
+            "both doors shut should leave three compartments, got {}",
+            rooms.len()
+        );
+        let mut sizes: Vec<usize> = rooms.iter().map(|r| r.tiles.len()).collect();
+        sizes.sort_unstable();
+        assert_eq!(sizes, vec![12, 12, 15], "compartments came out {sizes:?}");
     }
 
     /// fire.rs and crew_emergency_dispatch still read Room::air_level, so it
@@ -1234,15 +1282,16 @@ pub fn project_force_fields(
     power: Res<PowerGraph>,
     ship_query: Query<Entity, With<Ship>>,
     mut emitters: Query<
-        (&mut Module, &ForceFieldEmitter, &ChildOf),
+        (&mut Module, &mut ForceFieldEmitter, &ChildOf),
         Without<DestroyedModule>,
     >,
     mut air: ResMut<AirField>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     air.shielded.clear();
     let Ok(player_ship) = ship_query.single() else { return };
 
-    for (mut module, emitter, parent) in emitters.iter_mut() {
+    for (mut module, mut emitter, parent) in emitters.iter_mut() {
         // Base draw only until it is actually holding something.
         module.power_consumption = FORCE_FIELD_BASE_POWER;
 
@@ -1250,6 +1299,14 @@ pub fn project_force_fields(
             continue;
         }
         if !power.powered_tiles.contains(&module.grid_position) {
+            if emitter.holding > 0 {
+                notifications.write(ShowNotification {
+                    message: "Force field lost power - the air is going.".into(),
+                    notification_type: NotificationType::Danger,
+                    duration: 4.0,
+                });
+                emitter.holding = 0;
+            }
             continue;
         }
 
@@ -1261,6 +1318,14 @@ pub fn project_force_fields(
             }
         }
         if held == 0 {
+            if emitter.holding > 0 {
+                notifications.write(ShowNotification {
+                    message: "Force field collapsed - the hull is open.".into(),
+                    notification_type: NotificationType::Danger,
+                    duration: 3.0,
+                });
+                emitter.holding = 0;
+            }
             continue;
         }
 
@@ -1273,5 +1338,18 @@ pub fn project_force_fields(
         air.shielded.extend(covered);
         module.power_consumption =
             FORCE_FIELD_BASE_POWER + emitter.power_per_tile * held as f32;
+
+        if emitter.holding != held {
+            notifications.write(ShowNotification {
+                message: format!(
+                    "Force field holding {held} breach{} - {:.0} power drawn.",
+                    if held == 1 { "" } else { "es" },
+                    module.power_consumption
+                ),
+                notification_type: NotificationType::Warning,
+                duration: 3.0,
+            });
+            emitter.holding = held;
+        }
     }
 }

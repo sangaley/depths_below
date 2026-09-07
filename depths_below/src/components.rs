@@ -1479,6 +1479,10 @@ pub struct ForceFieldEmitter {
     pub radius: f32,
     /// Power drawn per breach tile actually held, on top of the base draw.
     pub power_per_tile: f32,
+    /// How many holes it held last frame, so engaging and collapsing can be
+    /// announced. Until the field has any art, this is the only way to tell
+    /// from the cockpit that it is doing something.
+    pub holding: u32,
 }
 
 /// Targeting computer — boosts weapon accuracy

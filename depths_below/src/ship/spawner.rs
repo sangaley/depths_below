@@ -976,6 +976,7 @@ fn insert_companion_components(commands: &mut Commands, entity: Entity, companio
             commands.entity(entity).insert(ForceFieldEmitter {
                 radius: *radius,
                 power_per_tile: *power_per_tile,
+                holding: 0,
             });
         }
         CompanionData::TargetingComputer { accuracy_bonus } => {
