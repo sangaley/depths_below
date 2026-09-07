@@ -10,9 +10,10 @@ use crate::building::rooms::RoomMap;
 pub fn update_decompression(
     time: Res<Time>,
     ship_query: Query<Entity, With<Ship>>,
-    mut hull_query: Query<(&mut HullSegment, &Transform, &ChildOf)>,
+    hull_query: Query<(&HullSegment, &Transform, &ChildOf)>,
     room_map: Res<RoomMap>,
     mut oxygen_state: ResMut<OxygenState>,
+    air: Res<crate::ship::air::AirField>,
     mut player_body: Query<(&GlobalTransform, &mut Velocity, &mut ShipPhysics), With<Ship>>,
 ) {
     // Player ship only: hull_query spans every ship in the world (this
@@ -30,29 +31,19 @@ pub fn update_decompression(
     // drain, and vent thrust.
     let dt = time.delta_secs();
 
-    // Build a lookup: tile -> air_level from rooms
-    let mut tile_air: std::collections::HashMap<IVec2, f32> = std::collections::HashMap::new();
-    for room in room_map.rooms.iter() {
-        if room.air_level < 1.0 {
-            for tile in &room.tiles {
-                tile_air.insert(*tile, room.air_level);
-            }
-        }
-    }
-
-    // Sync hull segments with their room's depressurization level
+    // Hull breach state is NOT derived from room air any more. It used to be
+    // `is_depressurized = air < 1.0` for every tile of the room, which meant a
+    // single hole flagged all 64 plates around it as holed: 64 fog plumes, and
+    // 64 tiles of vent thrust that never stopped because a partially-pressured
+    // room never reaches the "fully drained" state the old model always got to
+    // within seconds. `mark_breached_hull` sets it from HullBreached instead,
+    // and crew sealing clears it, which is the loop the repair code expects.
     let mut total_air_loss = 0.0;
-    for (mut hull, _transform, parent) in hull_query.iter_mut() {
+    for (hull, _transform, parent) in hull_query.iter() {
         if parent.parent() != player_ship { continue; }
-        if let Some(&air) = tile_air.get(&hull.grid_position) {
-            hull.depressurization_level = 1.0 - air;  // 0 air = fully depressurized
-            hull.is_depressurized = air < 1.0;
+        if hull.is_depressurized {
+            total_air_loss += hull.depressurization_level;
         }
-        // Also progress existing hull-level decompression (segments breached directly)
-        if hull.is_depressurized && hull.depressurization_level < 1.0 && !tile_air.contains_key(&hull.grid_position) {
-            hull.depressurization_level = (hull.depressurization_level + 0.15 * dt).min(1.0);
-        }
-        total_air_loss += hull.depressurization_level;
     }
 
     // Decompression drains oxygen — air escaping into the void
@@ -66,58 +57,50 @@ pub fn update_decompression(
     let oxygen_drain = total_air_loss * 3.0 * dt;
     oxygen_state.current_oxygen = (oxygen_state.current_oxygen - oxygen_drain).max(0.0);
 
-    // VENT THRUST — air jetting out of a breach is reaction mass. While a
-    // room is actively draining, each breached hull tile bordering it pushes
-    // the ship away from the hole (jet goes out, ship goes the other way)
-    // and, being off-center, slowly yaws it. Subtle by design: a full 7s
-    // vent adds roughly a hundred u/s of drift, not a spin-out — but it
-    // makes WHERE you got holed matter.
+    // VENT THRUST — air jetting out of a breach is reaction mass, so the ship
+    // gets pushed the other way and, the hole being off-centre, slowly yaws.
+    //
+    // Driven by the air actually leaving (ship::air's vent map) rather than by
+    // a count of flagged plates. The old version summed one unit of thrust per
+    // "depressurized" tile and stopped only once a room hit exactly zero air,
+    // which under a diffusing field never happens — a partly-drained
+    // compartment shoved the ship at a constant 153 u/s2 indefinitely. Thrust
+    // now falls with the pressure behind it and reaches zero when the air is
+    // gone, which is also what makes it feel like a jet running out.
     let mut vent_accel_local = Vec2::ZERO;
     let mut vent_torque = 0.0_f32;
-    let mut vent_tiles = 0u32;
-    for (hull, _t, parent) in hull_query.iter() {
-        if parent.parent() != player_ship { continue; }
-        if !hull.is_depressurized { continue; }
-        // Air still escaping from this hole? Either an adjacent detected
-        // room is actively draining, or the segment's own direct
-        // depressurization is still in progress (ships without enclosed
-        // rooms never populate tile_to_room, which made venting silently
-        // impossible on open layouts).
-        let room_draining = [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y].iter().any(|off| {
-            room_map.tile_to_room.get(&(hull.grid_position + *off))
-                .and_then(|id| room_map.rooms.get(*id))
-                .map(|room| room.is_breached && room.air_level > 0.0)
-                .unwrap_or(false)
-        });
-        let segment_draining = hull.depressurization_level < 1.0;
-        if !room_draining && !segment_draining { continue; }
-        vent_tiles += 1;
+    let mut total_flow = 0.0_f32;
+    for (&tile, &(outward, conductance)) in air.vents.iter() {
+        let pressure = air.pressure.get(&tile).copied().unwrap_or(0.0);
+        if pressure <= 0.01 { continue; }
+        let Some(out_dir) = outward.try_normalize() else { continue };
 
-        // Ship-local tile offset from the ship origin (grid_y*66-33 layout)
-        let tile_local = Vec2::new(
-            hull.grid_position.x as f32 * 66.0,
-            hull.grid_position.y as f32 * 66.0 - 33.0,
-        );
-        if let Some(inward) = (-tile_local).try_normalize() {
-            vent_accel_local += inward;
-            // Off-center hole = slight yaw (2D cross of position × force)
-            vent_torque += tile_local.x * inward.y - tile_local.y * inward.x;
-        }
+        // Mass leaving here per second, in the same units the vent system
+        // drains with.
+        let rate = pressure * conductance;
+        total_flow += rate;
+
+        let tile_local = crate::building::grid_to_local(tile);
+        let thrust = -out_dir * rate; // jet goes out, ship goes the other way
+        vent_accel_local += thrust;
+        vent_torque += tile_local.x * thrust.y - tile_local.y * thrust.x;
     }
 
-    if vent_tiles > 0 {
+    if total_flow > 0.001 {
         if let Ok((gt, mut velocity, mut physics)) = player_body.single_mut() {
-            // Per-tile force flattens out past a few holes — a colander
-            // doesn't vent harder than a puncture, it just empties faster.
-            let strength = 45.0 * (vent_tiles as f32).sqrt() / vent_tiles as f32;
-            let world_accel = gt.rotation() * (vent_accel_local * strength).extend(0.0);
+            // sqrt keeps a colander from out-thrusting a puncture: more holes
+            // empty the ship faster, they do not push it harder in proportion.
+            let strength = 45.0 * total_flow.sqrt();
+            let direction = vent_accel_local.normalize_or_zero();
+            let world_accel = gt.rotation() * (direction * strength).extend(0.0);
             velocity.0 += world_accel.truncate() * dt;
-            physics.angular_velocity += (vent_torque * 0.00008).clamp(-0.25, 0.25) * dt;
+            physics.angular_velocity += (vent_torque * 0.0008).clamp(-0.25, 0.25) * dt;
 
-            // Throttled trace so playtests can confirm venting actually
-            // fires (it silently never triggered on room-less layouts).
             if (time.elapsed_secs() % 1.0) < dt {
-                info!("[VENT] {} hole(s) venting, accel {:.1} u/s²", vent_tiles, (vent_accel_local * strength).length());
+                info!(
+                    "[VENT] {} tile(s) venting, flow {:.2}, accel {:.1} u/s2",
+                    air.vents.len(), total_flow, strength
+                );
             }
         }
     }

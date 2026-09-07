@@ -138,19 +138,39 @@ fn refresh_holes(
             air.holes.insert(pos, 1.0);
             continue;
         }
-        let frac = if segment.max_health > 0.0 {
-            (segment.health / segment.max_health).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
-        // 30% is the threshold ship::damage breaches at: a weep there, wide
-        // open at zero. A plate repaired back above it stops being a hole,
-        // and a rebuilt plate replaces a despawned one the same way.
-        if frac < 0.3 {
-            air.holes.insert(pos, 1.0 - frac / 0.3);
+        // The segment's own breach state, set by `mark_breached_hull` from a
+        // HullBreached event and worn down by crew sealing
+        // (`crew_repair_system` drives depressurization_level to zero, then
+        // clears the flag and starts paying scrap for the plate itself).
+        //
+        // Deriving this from health instead would deadlock that loop: hull
+        // repair is gated behind the breach being sealed, so a hole computed
+        // from low health could never close.
+        if segment.is_depressurized && segment.depressurization_level > 0.0 {
+            air.holes.insert(pos, segment.depressurization_level.clamp(0.0, 1.0));
         } else {
             air.holes.remove(&pos);
         }
+    }
+}
+
+/// Opens a hole when `ship::damage` reports one.
+///
+/// A breach has to be an edge, not a standing condition. Recomputing it from
+/// "health is under 30%" re-opens the hole the frame after crew finish sealing
+/// it, because sealing is free damage control and does not restore the plate --
+/// the crew patch the hole first and only then start spending scrap on health.
+pub fn mark_breached_hull(
+    mut breaches: MessageReader<HullBreached>,
+    mut hull: Query<&mut HullSegment>,
+) {
+    for breach in breaches.read() {
+        let Ok(mut segment) = hull.get_mut(breach.segment) else { continue };
+        if segment.is_depressurized {
+            continue; // already open; don't undo the crew's progress on it
+        }
+        segment.is_depressurized = true;
+        segment.depressurization_level = 1.0;
     }
 }
 
@@ -407,8 +427,9 @@ mod air_tests {
         });
         app.insert_resource(room_map);
 
-        // Cap both ends. `open_at` names the cap to shoot out: a plate at zero
-        // health is a full-width hole, and an intact one is a wall.
+        // Cap both ends. `open_at` names the cap that has been holed -- the
+        // breached state `mark_breached_hull` would have put on it, since
+        // these tests drive the field directly rather than through damage.
         for x in [-1, len] {
             let breached = open_at == Some(x);
             app.world_mut().spawn((
@@ -416,8 +437,8 @@ mod air_tests {
                     health: if breached { 0.0 } else { 100.0 },
                     max_health: 100.0,
                     radiation_shielding: 0.0,
-                    is_depressurized: false,
-                    depressurization_level: 0.0,
+                    is_depressurized: breached,
+                    depressurization_level: if breached { 1.0 } else { 0.0 },
                     hull_layer: HullLayer::Inner,
                     material: HullMaterial::Steel,
                     grid_position: IVec2::new(x, 0),
@@ -546,10 +567,12 @@ mod air_tests {
         app.init_resource::<Time>();
         app.init_resource::<AirField>();
         app.init_resource::<RoomMap>();
+        app.add_message::<HullBreached>();
         app.add_systems(
             Update,
             (
                 crate::building::rooms::update_room_map,
+                mark_breached_hull,
                 sync_air_tiles,
                 vent_air_at_breaches,
                 diffuse_air,
@@ -678,7 +701,12 @@ mod air_tests {
         }
         let (plate, plate_cell) = target.expect("no hull plate borders any room");
 
+        // Through the real path: ship::damage lowers the plate and reports a
+        // HullBreached, and mark_breached_hull is what opens the hole.
         app.world_mut().get_mut::<HullSegment>(plate).unwrap().health = 0.0;
+        app.world_mut()
+            .resource_mut::<Messages<HullBreached>>()
+            .write(HullBreached { segment: plate, severity: 1.0 });
         step(&mut app, 2.0, 20);
 
         let air = app.world().resource::<AirField>();
