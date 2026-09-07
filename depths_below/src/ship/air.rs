@@ -847,6 +847,42 @@ mod air_tests {
         );
     }
 
+    /// Armour plating is not a room.
+    ///
+    /// Every module counted as interior space, and plating is a module, so the
+    /// ship kept its atmosphere in its armour: 32 of the starter's 84 interior
+    /// tiles were exterior plating and 7 of its 11 compartments contained
+    /// nothing else. Once air became a fluid those pockets started venting
+    /// compartments nobody could ever have stood in, and they inflated the air
+    /// volume the whole simulation balances against.
+    #[test]
+    fn armour_plating_is_not_breathable_space() {
+        let design = crate::building::blueprint::load_design_file("designs/starter.json")
+            .expect("designs/starter.json missing or unparseable");
+        let mut app = app_from_design(&design);
+        step(&mut app, 0.1, 1);
+
+        let plating: Vec<IVec2> = design
+            .modules
+            .iter()
+            .filter(|m| !m.module_type.holds_atmosphere())
+            .map(|m| m.grid_pos)
+            .collect();
+        assert!(!plating.is_empty(), "starter has no plating — test proves nothing");
+
+        let room_map = app.world().resource::<RoomMap>();
+        let leaked: Vec<&IVec2> = plating
+            .iter()
+            .filter(|c| room_map.tile_to_room.contains_key(c))
+            .collect();
+        assert!(
+            leaked.is_empty(),
+            "{} armour plates are being counted as room space: {:?}",
+            leaked.len(),
+            leaked.iter().take(6).collect::<Vec<_>>()
+        );
+    }
+
     /// fire.rs and crew_emergency_dispatch still read Room::air_level, so it
     /// has to keep tracking the tiles it summarises.
     #[test]

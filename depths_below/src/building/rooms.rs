@@ -72,10 +72,14 @@ pub fn detect_rooms(
         }
     }
 
-    // Collect all module positions as "interior" cells
+    // Collect module positions as "interior" cells -- but only the ones that
+    // actually enclose breathable volume. Armour plating is a module too, and
+    // counting it made most of every ship's "rooms" out of exterior hull
+    // plating. See `ModuleType::holds_atmosphere`.
     let mut module_positions: HashSet<IVec2> = HashSet::new();
     for (module, _transform, parent) in module_query.iter() {
         if parent.parent() != player_ship { continue; }
+        if !module.module_type.holds_atmosphere() { continue; }
         module_positions.insert(module.grid_position);
     }
 

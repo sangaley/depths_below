@@ -735,6 +735,32 @@ pub enum ModuleType {
 }
 
 impl ModuleType {
+    /// Whether this block encloses breathable volume.
+    ///
+    /// Plating is bolted to the OUTSIDE of the hull. Room detection counts
+    /// every module as interior space, which made armour the largest single
+    /// source of "room" on every ship in the game -- 32 of the starter's 84
+    /// interior tiles, and 7 of its 11 compartments were pockets of air with
+    /// nothing in them but plating. The ship was storing its atmosphere in its
+    /// armour, and once air became a fluid that plating was venting
+    /// compartments nobody could ever have stood in.
+    ///
+    /// The nav grid has always known better (see
+    /// `outboard_armour_is_not_walkable`); this is what lets rooms agree
+    /// with it.
+    pub fn holds_atmosphere(&self) -> bool {
+        !matches!(
+            self,
+            ModuleType::AblativeArmor
+                | ModuleType::AngledArmorPlate
+                | ModuleType::AngledHullPlate
+                | ModuleType::ArmorPlate
+                | ModuleType::CornerArmorPlate
+                | ModuleType::HullReinforcePlate
+                | ModuleType::StaggeredArmorPlate
+        )
+    }
+
     /// Blocks that shut to isolate a compartment: the automatic bulkhead and
     /// the flood valve. Both were inert props -- the bulkhead inserted
     /// `BulkheadSealed` on itself and nothing read it, because room detection
