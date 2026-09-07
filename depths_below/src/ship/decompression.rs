@@ -157,6 +157,15 @@ pub fn seal_breach_system(
     // be gone before anything read it.
     for (room_id, seal_power) in room_seal_power.iter() {
         if let Some(room) = room_map.rooms.get(*room_id) {
+            // Re-pressurising is only possible once the hull is actually shut.
+            // Against a live hole this was manufacturing air out of nothing at
+            // roughly the rate it was leaving, so a breached compartment sat
+            // at a permanent stalemate and never emptied -- damage control as
+            // an infinite atmosphere supply. Patching the plate itself is
+            // crew_repair_system's job, via depressurization_level.
+            if room.tiles.iter().any(|t| air.vents.contains_key(t)) {
+                continue;
+            }
             let boost = room_repair_boost.get(room_id).copied().unwrap_or(1.0);
             let restore = seal_power * boost * dt;
             for tile in &room.tiles {
