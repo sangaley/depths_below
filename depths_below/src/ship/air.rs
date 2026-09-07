@@ -539,6 +539,161 @@ mod air_tests {
         );
     }
 
+    /// Spawns a design as real entities under a ship and runs room detection
+    /// plus the whole air pass over it.
+    fn app_from_design(design: &crate::building::blueprint::Blueprint) -> App {
+        let mut app = App::new();
+        app.init_resource::<Time>();
+        app.init_resource::<AirField>();
+        app.init_resource::<RoomMap>();
+        app.add_systems(
+            Update,
+            (
+                crate::building::rooms::update_room_map,
+                sync_air_tiles,
+                vent_air_at_breaches,
+                diffuse_air,
+                sync_room_air,
+            )
+                .chain(),
+        );
+
+        let ship = app.world_mut().spawn(Ship).id();
+        for cell in &design.hull_cells {
+            app.world_mut().spawn((
+                HullSegment {
+                    health: 100.0,
+                    max_health: 100.0,
+                    radiation_shielding: 0.0,
+                    is_depressurized: false,
+                    depressurization_level: 0.0,
+                    hull_layer: cell.layer,
+                    material: cell.material,
+                    grid_position: cell.grid_pos,
+                },
+                Transform::from_translation(
+                    crate::building::grid_to_local(cell.grid_pos).extend(0.0),
+                ),
+                ChildOf(ship),
+            ));
+        }
+        for module in &design.modules {
+            app.world_mut().spawn((
+                Module {
+                    module_type: module.module_type,
+                    health: 100.0,
+                    max_health: 100.0,
+                    power_consumption: 0.0,
+                    power_generation: 0.0,
+                    is_active: true,
+                    grid_position: module.grid_pos,
+                    size: IVec2::ONE,
+                    rotation: module.rotation,
+                },
+                Transform::from_translation(
+                    crate::building::grid_to_local(module.grid_pos).extend(0.0),
+                ),
+                ChildOf(ship),
+            ));
+        }
+        app
+    }
+
+    /// The ship the player actually launches in must not be venting before a
+    /// shot is fired.
+    ///
+    /// This is here because the obvious way to find a hole -- "no block in the
+    /// cell next door means open space" -- is wrong on this ship. The shipped
+    /// starter has 51 interior tiles with nothing plated beyond them, so that
+    /// reading would have opened 51 holes at spawn and emptied the ship on the
+    /// way out of the dock. Holes come from damage instead, and this is the
+    /// test that says so.
+    #[test]
+    fn the_shipped_starter_design_is_airtight_at_spawn() {
+        let design = crate::building::blueprint::load_design_file("designs/starter.json")
+            .expect("designs/starter.json missing or unparseable");
+        let mut app = app_from_design(&design);
+        step(&mut app, 3.0, 30);
+
+        let air = app.world().resource::<AirField>();
+        assert!(
+            !air.pressure.is_empty(),
+            "no interior tiles detected — the test proves nothing"
+        );
+        assert!(
+            air.vents.is_empty(),
+            "{} tiles are venting on an undamaged ship: {:?}",
+            air.vents.len(),
+            air.vents.keys().take(8).collect::<Vec<_>>()
+        );
+
+        let worst = air
+            .pressure
+            .iter()
+            .min_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .map(|(cell, p)| (*cell, *p))
+            .unwrap();
+        assert!(
+            worst.1 > 0.999,
+            "tile {:?} lost air with the hull intact: {}",
+            worst.0,
+            worst.1
+        );
+    }
+
+    /// The other half of airtight-at-spawn: once a plate is actually shot
+    /// out, that ship had better start losing air through the gap.
+    #[test]
+    fn shooting_out_a_plate_vents_the_starter_ship() {
+        let design = crate::building::blueprint::load_design_file("designs/starter.json")
+            .expect("designs/starter.json missing or unparseable");
+        let mut app = app_from_design(&design);
+        step(&mut app, 0.1, 1); // one pass to detect rooms
+
+        // Find a plate that actually borders interior space, so the test is
+        // not silently holing an outboard armour slab that fronts nothing.
+        let interior: Vec<IVec2> = app
+            .world()
+            .resource::<RoomMap>()
+            .tile_to_room
+            .keys()
+            .copied()
+            .collect();
+        assert!(!interior.is_empty(), "no rooms detected on the starter ship");
+
+        let mut target = None;
+        let mut hulls = app.world_mut().query::<(Entity, &HullSegment)>();
+        for (entity, segment) in hulls.iter(app.world()) {
+            let pos = segment.grid_position;
+            if interior.contains(&pos) {
+                continue; // hallways are interior, not a wall to breach
+            }
+            if [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y]
+                .iter()
+                .any(|o| interior.contains(&(pos + *o)))
+            {
+                target = Some((entity, pos));
+                break;
+            }
+        }
+        let (plate, plate_cell) = target.expect("no hull plate borders any room");
+
+        app.world_mut().get_mut::<HullSegment>(plate).unwrap().health = 0.0;
+        step(&mut app, 2.0, 20);
+
+        let air = app.world().resource::<AirField>();
+        assert!(
+            air.holes.contains_key(&plate_cell),
+            "a plate at zero health did not register as a hole"
+        );
+        assert!(
+            !air.vents.is_empty(),
+            "hull open at {plate_cell:?} but nothing is venting"
+        );
+        let drained = air.pressure.values().any(|p| *p < 0.95);
+        assert!(drained, "hull is open and no tile lost meaningful air");
+    }
+
     /// fire.rs and crew_emergency_dispatch still read Room::air_level, so it
     /// has to keep tracking the tiles it summarises.
     #[test]
