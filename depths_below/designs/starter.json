@@ -1762,6 +1762,17 @@
       "custom_name": null,
       "subcomponents": null,
       "extras": null
+    },
+    {
+      "module_type": "AirlockChamber",
+      "grid_pos": [
+        9,
+        0
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
     }
   ],
   "created_at": "builtin",

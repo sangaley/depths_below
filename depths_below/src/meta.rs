@@ -119,6 +119,7 @@ fn collect_save_data(
     current_state: &State<GameState>,
     galaxy_map: &GalaxyMap,
     streaming: &SystemStreamingManager,
+    drifting_dead: &crate::crew::burial::DriftingDead,
 ) -> SaveData {
     let position = ship_query
         .single()
@@ -209,6 +210,7 @@ fn collect_save_data(
         was_exploring: *current_state.get() == GameState::Exploring,
         current_system_id: streaming.loaded_system.unwrap_or(0),
         galaxy_seed: galaxy_map.galaxy_seed,
+        drifting_dead: drifting_dead.bodies.clone(),
         galaxy_systems: galaxy_map.systems.iter().map(|s| SystemSaveData {
             id: s.id,
             discovery: s.discovery.as_u8(),
@@ -254,8 +256,15 @@ fn handle_save_request(
     currency: Res<Currency>,
     unlocks: Res<Unlocks>,
     discovered_locations: Res<DiscoveredLocations>,
-    // Bundled to stay under Bevy's 16-param cap: local world seed + galaxy state.
-    world_galaxy: (Res<WorldState>, Res<GalaxyMap>, Res<SystemStreamingManager>),
+    // Bundled to stay under Bevy's 16-param cap: local world seed + galaxy state
+    // + the drifting dead. This system is AT the cap; anything else new has to
+    // join a tuple too.
+    world_galaxy: (
+        Res<WorldState>,
+        Res<GalaxyMap>,
+        Res<SystemStreamingManager>,
+        Res<crate::crew::burial::DriftingDead>,
+    ),
     current_state: Res<State<GameState>>,
     ship_query: Query<&Transform, With<Ship>>,
     module_query: Query<(
@@ -267,7 +276,7 @@ fn handle_save_request(
     hull_query: Query<(&HullSegment, &Transform)>,
     crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>)>,
 ) {
-    let (world_state, galaxy_map, streaming) = &world_galaxy;
+    let (world_state, galaxy_map, streaming, drifting_dead) = &world_galaxy;
     for event in save_events.read() {
         let save_data = collect_save_data(
             event.slot,
@@ -286,6 +295,7 @@ fn handle_save_request(
             &current_state,
             galaxy_map,
             streaming,
+            drifting_dead,
         );
 
         // Tier 3 customization is saved via customization_params field
@@ -417,6 +427,7 @@ fn rebuild_entities_from_save(
     crew_entities: Query<Entity, With<CrewMember>>,
     mut galaxy_map: ResMut<GalaxyMap>,
     mut streaming: ResMut<SystemStreamingManager>,
+    mut drifting_dead: ResMut<crate::crew::burial::DriftingDead>,
 ) {
     let Some(save) = pending.save_data.take() else { return };
     let slot = pending.slot;
@@ -457,12 +468,14 @@ fn rebuild_entities_from_save(
     // ---- Respawn hull segments ----
     for hull_data in &save.hull_segments {
         let hull_texture = asset_server.load(
-            crate::sprite_map::hull_sprite_path(hull_data.material)
+            crate::sprite_map::hull_layer_sprite_path(hull_data.material, hull_data.hull_layer)
         );
         commands.spawn((
             (Sprite {
                     image: hull_texture,
-                    custom_size: Some(Vec2::new(64.0, 64.0)),
+                    // Full cell, matching blueprint.rs -- a loaded save used to
+                    // come back with the old 2-unit gap between every plate.
+                    custom_size: Some(Vec2::new(66.0, 66.0)),
                     ..default()
                 }, Transform::from_xyz(
                     hull_data.grid_position.x as f32 * 66.0,
@@ -543,6 +556,13 @@ fn rebuild_entities_from_save(
     }
     commands.insert_resource(CrewRoster { members: roster_members });
     // Auto-assign will re-staff stations on next tick
+
+    // ---- Restore the drifting dead ----
+    // Positions are world-space per system; the entities for whichever system
+    // the player lands in are spawned by burial::sync_drifting_dead on its
+    // next run, so nothing is spawned here.
+    drifting_dead.bodies = save.drifting_dead.clone();
+    drifting_dead.reseed();
 
     // ---- Restore galaxy state ----
     // Regenerate the deterministic layout from the saved seed, then overlay the

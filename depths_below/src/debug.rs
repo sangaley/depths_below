@@ -44,6 +44,10 @@ impl Plugin for DebugPlugin {
             )
             .add_systems(
                 Update,
+                debug_kill_crew.run_if(in_state(GameState::Exploring)),
+            )
+            .add_systems(
+                Update,
                 (tuning_button_system, update_tuning_value_text)
                     .run_if(in_state(GameState::Exploring)),
             );
@@ -118,6 +122,13 @@ enum TuningValueText {
 #[derive(Component)]
 struct DebugKillNextFrame;
 
+/// Factions the debug menu can spawn.
+///
+/// Note that two of these -- GlassEye and Leviathan -- are excluded by
+/// `faction_fights`, so they will never shoot at anything. That is by design
+/// for them, but it means the "spawn hostile ship" key has to filter them out
+/// or it lies one time in four: you get a ship that closes, tracks you, and
+/// then just watches.
 const SPAWNABLE: [AiShipType; 8] = [
     AiShipType::IronTide,
     AiShipType::Blackwater,
@@ -213,7 +224,7 @@ fn spawn_tuning_panel(commands: &mut Commands) {
         ))
         .with_children(|panel| {
             panel.spawn((
-                Text::new("TUNING — see the limits"),
+                Text::new("TUNING - see the limits"),
                 TextFont { font_size: FontSize::Px(12.0), ..default() },
                 TextColor(Color::srgb(0.75, 0.9, 1.0)),
             ));
@@ -354,7 +365,7 @@ fn tuning_button_system(
             TuningButton::Teleport => {
                 let Some(target) = pending.0 else {
                     notifications.write(ShowNotification {
-                        message: "[debug] no map target set — open the map (M) and click one first".into(),
+                        message: "[debug] no map target set - open the map (M) and click one first".into(),
                         notification_type: NotificationType::Warning,
                         duration: 2.5,
                     });
@@ -456,7 +467,12 @@ fn debug_actions(
     }
 
     if keyboard.just_pressed(KeyCode::Digit8) {
-        let ship_type = SPAWNABLE[rng.gen_range(0..SPAWNABLE.len())];
+        // "Hostile" has to mean hostile: pick only from factions that fight.
+        let fighters: Vec<AiShipType> = SPAWNABLE
+            .into_iter()
+            .filter(|f| crate::ai_ship::components::faction_fights(*f))
+            .collect();
+        let ship_type = fighters[rng.gen_range(0..fighters.len())];
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
         let pos = ship_pos + Vec2::new(angle.cos(), angle.sin()) * 700.0;
         crate::ai_ship::spawner::spawn_ai_ship(ship_type, pos, &mut commands, &registry, &asset_server);
@@ -655,4 +671,61 @@ fn draw_hitboxes(
     for (gt, missile) in missile_query.iter() {
         gizmos.circle_2d(gt.translation().truncate(), missile.blast_radius, Color::srgba(1.0, 0.85, 0.2, 0.35));
     }
+}
+
+/// `6` — kill one living crew member outright.
+///
+/// A TEST HOOK, not a damage source. Everything downstream of a death — the
+/// notification, the body left on the deck, a spare hand carrying it to the
+/// airlock, the drifting corpse that stays in the system forever — is nearly
+/// impossible to see in play, because as of writing only boarding parasites
+/// and EVA blasts can injure anybody at all. This makes the whole chain
+/// reachable in one keypress so it can be watched end to end.
+///
+/// Delete this once crew take damage from fire, breaches and shrapnel for
+/// real; at that point the chain tests itself in any serious fight.
+///
+/// Its own system rather than another arm of `debug_actions`, which is already
+/// at Bevy's 16-parameter ceiling.
+fn debug_kill_crew(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    menu: Res<DebugMenu>,
+    mut crew: Query<
+        (Entity, &mut CrewMember),
+        Without<crate::ai_ship::components::OwnedByAiShip>,
+    >,
+    mut damage_events: MessageWriter<CrewDamaged>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    if !menu.open || !keyboard.just_pressed(KeyCode::Digit6) {
+        return;
+    }
+
+    let Some((entity, mut member)) = crew.iter_mut().find(|(_, m)| m.health > 0.0) else {
+        notifications.write(ShowNotification {
+            message: "[debug] nobody left alive aboard".into(),
+            notification_type: NotificationType::Warning,
+            duration: 2.0,
+        });
+        return;
+    };
+
+    let name = member.name.clone();
+    let fatal = member.health;
+    member.health = 0.0;
+
+    // Go through the real damage event rather than only zeroing health, so the
+    // death is reported with a cause exactly as a genuine one would be
+    // (crew::report_crew_deaths reads these to name what killed someone).
+    damage_events.write(CrewDamaged {
+        crew: entity,
+        amount: fatal,
+        source: CrewDamageSource::Explosion,
+    });
+
+    notifications.write(ShowNotification {
+        message: format!("[debug] killed {name}"),
+        notification_type: NotificationType::Info,
+        duration: 2.0,
+    });
 }

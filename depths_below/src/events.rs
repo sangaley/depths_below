@@ -161,6 +161,26 @@ pub enum CrewDamageSource {
     Fire,
     Creature,
     Explosion,
+    Boarders,
+    /// Nobody claimed it. A death still gets announced — losing a hand and
+    /// not being told is worse than being told imprecisely.
+    Unknown,
+}
+
+impl CrewDamageSource {
+    /// How the cause reads in a notification. The derived `Debug` was going
+    /// straight into player-facing text as "Cause: Explosion".
+    pub fn describe(&self) -> &'static str {
+        match self {
+            CrewDamageSource::Suffocation => "asphyxiation",
+            CrewDamageSource::Decompression => "decompression",
+            CrewDamageSource::Fire => "fire",
+            CrewDamageSource::Creature => "hostile boarders",
+            CrewDamageSource::Explosion => "blast trauma",
+            CrewDamageSource::Boarders => "parasites",
+            CrewDamageSource::Unknown => "unknown causes",
+        }
+    }
 }
 
 /// Crew member died
