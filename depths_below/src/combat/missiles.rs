@@ -37,17 +37,47 @@ const BURN_TIME: f32 = 1.4;
 const MISSILE_MAX_SPEED: f32 = 1200.0;
 
 /// Radians of steering authority a fresh missile carries. Every radian it
-/// turns is deducted; at zero it coasts. Enough for ~8s of hard cornering,
-/// so only a missile genuinely fighting an evasive target runs itself dry.
-const RESERVE_TURN: f32 = 25.0;
-
-/// Hard ceiling on turn RATE, independent of the lateral-acceleration cap.
+/// turns is deducted; at zero it coasts, so only a missile genuinely fighting
+/// an evasive target runs itself dry.
 ///
-/// Turn rate is lateral accel / speed, so a missile that has just lit its
-/// motor — still only doing eject speed — could legally pull 7 rad/s. That is
-/// a donut, not a course correction, and it spent the entire steering budget
-/// in the first second and a half of flight.
-const MAX_TURN_RATE: f32 = 4.0;
+/// Raised alongside the launch agility bump: at LAUNCH_TURN_RATE a missile
+/// held at full deflection burns ~7 rad/s, which would bankrupt the old 25
+/// budget inside the agility window and leave it coasting exactly when it
+/// should be dangerous. The hard turn is meant to be affordable once, not
+/// free forever.
+const RESERVE_TURN: f32 = 34.0;
+
+/// Turn-rate ceiling the instant the motor lights, in rad/s.
+///
+/// A missile is at its most agile right after it clears the tube: slow, and
+/// carrying every bit of its control authority. This is the "hard turn off
+/// the rail" — it leaves straight down the silo heading, then cranks over
+/// onto the target.
+const LAUNCH_TURN_RATE: f32 = 7.0;
+
+/// Turn-rate ceiling once the missile has been flying a while.
+///
+/// Late in flight it is fast and has spent its authority, so corrections come
+/// out wide and lazy. This is what makes a missile dodgeable: survive the
+/// first seconds and its turning circle keeps growing.
+const CRUISE_TURN_RATE: f32 = 1.4;
+
+/// Seconds over which agility decays from LAUNCH_TURN_RATE to
+/// CRUISE_TURN_RATE. Short enough that a knife-fight launch is a real threat
+/// and a long-range shot can be out-turned.
+const AGILITY_FALLOFF: f32 = 3.5;
+
+/// The turn-rate ceiling for a missile that has been flying `age` seconds.
+///
+/// Independent of the lateral-acceleration cap, which already widens turns
+/// with speed. This adds the TIME axis the user asked for: straight off the
+/// rail, hard over early, progressively wider the longer it stays up.
+fn turn_ceiling(age: f32) -> f32 {
+    let t = (age / AGILITY_FALLOFF).clamp(0.0, 1.0);
+    // Ease-out so the loss of agility is felt early rather than as a cliff.
+    let t = t * t * (3.0 - 2.0 * t);
+    LAUNCH_TURN_RATE + (CRUISE_TURN_RATE - LAUNCH_TURN_RATE) * t
+}
 
 /// Heading-error gain for the pure-pursuit fallback. Proportional, so a
 /// missile only slightly off the target eases on instead of slamming full
@@ -351,6 +381,7 @@ pub fn launch_missiles(commands: &mut Commands, l: &MissileLaunch) -> u32 {
                     ..default()
                 }),
             MissileProjectile {
+                age: 0.0,
                 damage: per_missile,
                 target: if max_lateral > 0.0 { l.target } else { None },
                 burn_fuel: BURN_TIME * bulk,
@@ -526,6 +557,7 @@ pub fn move_missiles(
         let pos = transform.translation.truncate();
         missile.prev_pos = pos;
 
+        missile.age += dt;
         missile.life -= dt;
         if missile.life <= 0.0 {
             commands.entity(entity).despawn();
@@ -595,7 +627,7 @@ pub fn move_missiles(
                             } else {
                                 missile.max_lateral
                             };
-                            let max_turn = (cap / speed).min(MAX_TURN_RATE);
+                            let max_turn = (cap / speed).min(turn_ceiling(missile.age));
 
                             let turn_rate = if closing > 1.0 {
                                 let los_rate = los_dir.perp_dot(rel_vel) / range;
@@ -723,7 +755,7 @@ pub fn check_missile_hits(
                 });
                 notifications.write(ShowNotification {
                     message: if own {
-                        "SILO OBSTRUCTED — WARHEAD COOK-OFF".into()
+                        "SILO OBSTRUCTED - WARHEAD COOK-OFF".into()
                     } else {
                         "MISSILE IMPACT".to_string()
                     },

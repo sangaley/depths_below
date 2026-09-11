@@ -127,7 +127,7 @@ pub fn update_decompression(
             // Throttled trace so playtests can confirm venting actually
             // fires (it silently never triggered on room-less layouts).
             if (time.elapsed_secs() % 1.0) < dt {
-                info!("[VENT] {} hole(s) venting, accel {:.1} u/s²", vent_tiles, (vent_accel_local * strength).length());
+                info!("[VENT] {} hole(s) venting, accel {:.1} u/s2", vent_tiles, (vent_accel_local * strength).length());
             }
         }
     }
@@ -211,7 +211,7 @@ pub fn handle_bulkhead_toggle(
             commands.entity(event.segment).insert(BulkheadSealed);
             sprite.color = Color::srgb(0.8, 0.2, 0.2); // Red = sealed
             notifications.write(ShowNotification {
-                message: "Bulkhead sealed — section airtight!".into(),
+                message: "Bulkhead sealed - section airtight!".into(),
                 notification_type: NotificationType::Warning,
                 duration: 2.0,
             });

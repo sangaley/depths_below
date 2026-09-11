@@ -213,14 +213,14 @@ pub fn spawn_radial_on_right_click(
                 if pinned {
                     commands.entity(entity).remove::<crate::components::KeepManned>();
                     notifications.write(crate::events::ShowNotification {
-                        message: format!("{} unpinned — its crew may leave for salvage.", name),
+                        message: format!("{} unpinned - its crew may leave for salvage.", name),
                         notification_type: crate::events::NotificationType::Info,
                         duration: 2.5,
                     });
                 } else {
                     commands.entity(entity).insert(crate::components::KeepManned);
                     notifications.write(crate::events::ShowNotification {
-                        message: format!("{} pinned — will stay manned during salvage.", name),
+                        message: format!("{} pinned - will stay manned during salvage.", name),
                         notification_type: crate::events::NotificationType::Success,
                         duration: 2.5,
                     });
@@ -316,25 +316,25 @@ pub fn space_radial_options() -> Vec<RadialOption> {
     vec![
         RadialOption {
             label: "Radar Ping".into(),
-            icon: "◎".into(),
+            icon: "o".into(),
             action: RadialAction::RadarPing,
             color: ThemeColors::ACCENT_CYAN,
         },
         RadialOption {
             label: "Warp".into(),
-            icon: "⟐".into(),
+            icon: ">".into(),
             action: RadialAction::WarpCharge,
             color: ThemeColors::ACCENT_PURPLE,
         },
         RadialOption {
             label: "System Map".into(),
-            icon: "◈".into(),
+            icon: "#".into(),
             action: RadialAction::ToggleMap,
             color: ThemeColors::ACCENT_BLUE,
         },
         RadialOption {
             label: "Event Log".into(),
-            icon: "☰".into(),
+            icon: "=".into(),
             action: RadialAction::ToggleLog,
             color: ThemeColors::TEXT_SECONDARY,
         },
@@ -346,25 +346,25 @@ pub fn module_radial_options(module_entity: Entity) -> Vec<RadialOption> {
     vec![
         RadialOption {
             label: "Inspect".into(),
-            icon: "⚙".into(),
+            icon: "*".into(),
             action: RadialAction::InspectModule(module_entity),
             color: ThemeColors::ACCENT_BLUE,
         },
         RadialOption {
             label: "Power".into(),
-            icon: "⚡".into(),
+            icon: "!".into(),
             action: RadialAction::PowerToggle(module_entity),
             color: ThemeColors::ACCENT_YELLOW,
         },
         RadialOption {
             label: "Repair".into(),
-            icon: "🔧".into(),
+            icon: "+".into(),
             action: RadialAction::RepairModule(module_entity),
             color: ThemeColors::ACCENT_GREEN,
         },
         RadialOption {
             label: "Close".into(),
-            icon: "✕".into(),
+            icon: "X".into(),
             action: RadialAction::Dismiss,
             color: ThemeColors::TEXT_MUTED,
         },

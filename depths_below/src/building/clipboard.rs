@@ -182,7 +182,7 @@ pub fn clipboard_input(
     if ctrl && keyboard.just_pressed(KeyCode::KeyV) && !clipboard.copied.is_empty() {
         clipboard.paste_mode = true;
         notifications.write(ShowNotification {
-            message: "Paste mode — click to place, R to rotate, Escape to cancel".into(),
+            message: "Paste mode - click to place, R to rotate, Escape to cancel".into(),
             notification_type: NotificationType::Info,
             duration: 3.0,
         });
@@ -287,7 +287,7 @@ pub fn clipboard_paste(
 
     if !all_free {
         notifications.write(ShowNotification {
-            message: "Cannot paste — some positions are occupied".into(),
+            message: "Cannot paste - some positions are occupied".into(),
             notification_type: NotificationType::Warning,
             duration: 2.0,
         });

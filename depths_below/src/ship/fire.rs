@@ -172,7 +172,7 @@ pub fn emergency_bulkhead_system(
         if adjacent_depressurized && sealed.is_none() {
             commands.entity(entity).insert(BulkheadSealed);
             notifications.write(ShowNotification {
-                message: "Emergency bulkhead auto-sealed — decompression detected!".into(),
+                message: "Emergency bulkhead auto-sealed - decompression detected!".into(),
                 notification_type: NotificationType::Warning,
                 duration: 3.0,
             });

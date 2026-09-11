@@ -58,10 +58,12 @@ impl Plugin for UiPlugin {
             .add_systems(OnExit(GameState::Paused), menu_buttons::close_settings_on_exit)
             // HUD toolbar: synthesize the key while a button is held (PreUpdate
             // after InputSystems, like the gamepad bridge); recolor on hover.
-            .add_systems(PreUpdate, hud_action_button_press.after(InputSystems).run_if(in_state(GameState::Exploring)))
+            .add_systems(PreUpdate, hud_action_button_press.after(InputSystems).run_if(
+                in_state(GameState::Exploring).or_else(in_state(GameState::StationDocked))))
             .add_systems(Update, (
                 hud_action_button_hover,
                 toggle_flight_toolbar_visibility,
+                rebuild_action_toolbar,
                 weapon_rack_visibility,
                 update_weapon_rack.run_if(in_state(GameState::Exploring)),
             ))
@@ -312,6 +314,82 @@ struct HudRoot;
 #[derive(Component)]
 struct HudActionButton {
     key: KeyCode,
+    /// Held alongside `key` for chorded shortcuts (Ctrl+Z). Synthesized the
+    /// same way, so Undo can be a button instead of folklore.
+    modifier: Option<KeyCode>,
+}
+
+/// One entry in the contextual action bar.
+struct ToolbarAction {
+    label: &'static str,
+    key_disp: &'static str,
+    key: KeyCode,
+    modifier: Option<KeyCode>,
+}
+
+const fn act(label: &'static str, key_disp: &'static str, key: KeyCode) -> ToolbarAction {
+    ToolbarAction { label, key_disp, key, modifier: None }
+}
+
+const fn act_mod(label: &'static str, key_disp: &'static str, key: KeyCode,
+                 modifier: KeyCode) -> ToolbarAction {
+    ToolbarAction { label, key_disp, key, modifier: Some(modifier) }
+}
+
+/// What the action bar offers right now.
+///
+/// Every keyboard shortcut a player would otherwise have to memorize appears
+/// here as a labelled button. Only continuous inputs (move, aim, fire, brake)
+/// stay keyboard-only, because a button cannot express "hold".
+fn toolbar_actions(game: &GameState, build: &BuildState) -> &'static [ToolbarAction] {
+    use KeyCode as K;
+    const FLYING: [ToolbarAction; 8] = [
+        act("Map", "M", K::KeyM),
+        act("Systems", "N", K::KeyN),
+        act("Radar", "Tab", K::Tab),
+        act("Crew", "C", K::KeyC),
+        act("Power", "U", K::KeyU),
+        act("Log", "L", K::KeyL),
+        act("Ping", "Z", K::KeyZ),
+        act("Dock", "F", K::KeyF),
+    ];
+    const DOCKED: [ToolbarAction; 5] = [
+        act("Build", "B", K::KeyB),
+        act("Shop", "U", K::KeyU),
+        act("Jobs", "J", K::KeyJ),
+        act("Hire", "H", K::KeyH),
+        act("Launch", "Enter", K::Enter),
+    ];
+    const PLACING: [ToolbarAction; 8] = [
+        act("Category", "Tab", K::Tab),
+        act("Rotate", "R", K::KeyR),
+        act("Material", "M", K::KeyM),
+        act("Erase", "X", K::KeyX),
+        act_mod("Undo", "Ctrl+Z", K::KeyZ, K::ControlLeft),
+        act("Costs", "I", K::KeyI),
+        act("Power", "F2", K::F2),
+        act("Done", "Esc", K::Escape),
+    ];
+    const DELETING: [ToolbarAction; 3] = [
+        act_mod("Undo", "Ctrl+Z", K::KeyZ, K::ControlLeft),
+        act("Place", "X", K::KeyX),
+        act("Done", "Esc", K::Escape),
+    ];
+    const COMPONENT: [ToolbarAction; 2] = [
+        act("Finalize", "Enter", K::Enter),
+        act("Cancel", "Esc", K::Escape),
+    ];
+
+    match (game, build) {
+        (GameState::Exploring, _) => &FLYING,
+        (GameState::StationDocked, BuildState::Inactive) => &DOCKED,
+        (GameState::StationDocked, BuildState::Placing) => &PLACING,
+        (GameState::StationDocked, BuildState::Deleting) => &DELETING,
+        (GameState::StationDocked, BuildState::PlacingComponent)
+        | (GameState::StationDocked, BuildState::CustomizingPiece) => &COMPONENT,
+        (GameState::StationDocked, _) => &DOCKED,
+        _ => &[],
+    }
 }
 
 /// The in-flight action toolbar (Map/Sys/Radar/Crew). Only shown while flying
@@ -530,6 +608,31 @@ fn spawn_hud_separator(parent: &mut ChildSpawnerCommands) {
     parent.spawn((Node { width: Val::Px(1.0), height: Val::Px(28.0), ..default() }, BackgroundColor(theme::ThemeColors::HUD_SEPARATOR)));
 }
 
+/// Status colour for a 0..1 reading where LOW is bad (hull, fuel).
+///
+/// Neutral until it matters. ART_BRIEF's rule -- saturation is reserved for
+/// meaning -- applies to the interface as much as the sprites: if every meter
+/// is permanently a different bright colour, none of them can raise an alarm.
+fn severity_low_bad(frac: f32) -> Color {
+    use theme::ThemeColors as C;
+    if frac < 0.20 {
+        C::STATUS_CRITICAL
+    } else if frac < 0.50 {
+        C::STATUS_WARN
+    } else {
+        C::TEXT_PRIMARY
+    }
+}
+
+/// Slow pulse for a critical reading, between the danger colour and a dim
+/// version of it. The old version snapped between pure red and near-black,
+/// which read as a rendering fault rather than an alarm.
+fn critical_pulse(t: f32) -> Color {
+    use theme::ThemeColors as C;
+    let k = 0.5 + 0.5 * (t * 3.0).sin();
+    C::STATUS_CRITICAL.mix(&C::BG_ELEVATED, 0.55 * (1.0 - k))
+}
+
 /// A vital meter for the redesigned top bar: a "LABEL  value" row over a thin
 /// severity-colored bar. `value` spawns the value node (so the caller attaches
 /// the right marker, e.g. HullText); the bar fill carries HudBar so the existing
@@ -625,17 +728,17 @@ fn setup_ui(mut commands: Commands) {
                 padding: UiRect::axes(Val::Px(12.0), Val::Px(6.0)),
                 ..default()
             }).with_children(|c| {
-                spawn_meter(c, "HULL", HudBarKind::Hull, ThemeColors::ACCENT_GREEN, |r| {
-                    r.spawn((Text::new("100%"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::ACCENT_GREEN), HullText));
+                spawn_meter(c, "HULL", HudBarKind::Hull, ThemeColors::STATUS_OK, |r| {
+                    r.spawn((Text::new("100%"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::TEXT_PRIMARY), HullText));
                 });
-                spawn_meter(c, "PWR", HudBarKind::Power, ThemeColors::ACCENT_YELLOW, |r| {
-                    r.spawn((Text::new("0/0"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::ACCENT_YELLOW), PowerText));
+                spawn_meter(c, "PWR", HudBarKind::Power, ThemeColors::ACCENT_CYAN, |r| {
+                    r.spawn((Text::new("0/0"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::TEXT_PRIMARY), PowerText));
                 });
-                spawn_meter(c, "FUEL", HudBarKind::Fuel, ThemeColors::ACCENT_ORANGE, |r| {
-                    r.spawn((Text::new("100%"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::ACCENT_ORANGE), FuelText));
+                spawn_meter(c, "FUEL", HudBarKind::Fuel, ThemeColors::ACCENT_CYAN, |r| {
+                    r.spawn((Text::new("100%"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::TEXT_PRIMARY), FuelText));
                 });
-                spawn_meter(c, "THRS", HudBarKind::Thrust, ThemeColors::ACCENT_BLUE, |r| {
-                    r.spawn((Text::new("0%"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::ACCENT_BLUE), ThrusterText));
+                spawn_meter(c, "THRS", HudBarKind::Thrust, ThemeColors::ACCENT_CYAN, |r| {
+                    r.spawn((Text::new("0%"), TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() }, TextColor(ThemeColors::TEXT_PRIMARY), ThrusterText));
                 });
             });
 
@@ -714,72 +817,31 @@ fn setup_ui(mut commands: Commands) {
             ));
         });
 
-        // Clickable action toolbar — one button per common shortcut so the
-        // player can click instead of memorizing keys. Absolute-positioned just
-        // above the controls strip. Each button synthesizes its KeyCode (see
-        // hud_action_button_press), so every existing toggle/action reacts with
-        // no changes, exactly like the gamepad bridge.
+        // Contextual action bar. Every shortcut worth knowing shows up here as
+        // a labelled button for the current state, so the player never has to
+        // memorize a key. Buttons synthesize their KeyCode (see
+        // hud_action_button_press), so existing handlers fire unchanged.
+        // Children are rebuilt by rebuild_action_toolbar on state change.
         parent.spawn((
             Node {
                 position_type: PositionType::Absolute,
-                bottom: Val::Px(34.0),
-                left: Val::Px(10.0),
+                bottom: Val::Px(30.0),
+                left: Val::Px(12.0),
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
-                column_gap: Val::Px(6.0),
+                column_gap: Val::Px(4.0),
                 ..default()
             },
             FlightToolbar,
-        )).with_children(|toolbar| {
-            // Only actions that open a panel/window belong here — momentary
-            // actions (ping/warp/dock/shield) stay on their keys.
-            // Only actions usable WHILE FLYING belong here. Build (docked-only)
-            // and Jobs/mission board (a station service) move to the dock window.
-            let actions: [(&str, &str, KeyCode); 5] = [
-                ("Map",   "M",   KeyCode::KeyM),
-                ("Sys",   "N",   KeyCode::KeyN),
-                ("Radar", "Tab", KeyCode::Tab),
-                ("Crew",  "C",   KeyCode::KeyC),
-                ("Pwr",   "U",   KeyCode::KeyU),
-            ];
-            for (label, key_disp, key) in actions {
-                toolbar.spawn((
-                    Node {
-                        padding: UiRect::new(Val::Px(16.0), Val::Px(16.0), Val::Px(10.0), Val::Px(10.0)),
-                        border: UiRect::all(Val::Px(1.0)),
-                        flex_direction: FlexDirection::Column,
-                        align_items: AlignItems::Center,
-                        row_gap: Val::Px(2.0),
-                        ..default()
-                    },
-                    BackgroundColor(ThemeColors::BG_ELEVATED),
-                    BorderColor::all(ThemeColors::BORDER_DEFAULT),
-                    Button,
-                    Interaction::default(),
-                    HudActionButton { key },
-                )).with_children(|b| {
-                    b.spawn((
-                        Text::new(label),
-                        TextFont { font_size: FontSize::Px(ThemeFonts::H3), ..default() },
-                        TextColor(ThemeColors::TEXT_PRIMARY),
-                    ));
-                    b.spawn((
-                        Text::new(key_disp),
-                        TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() },
-                        TextColor(ThemeColors::TEXT_MUTED),
-                    ));
-                });
-            }
-        });
+        ));
 
         // ===== WEAPON RACK (bottom-center, flight only) =====
         parent.spawn((
             Node {
                 position_type: PositionType::Absolute,
                 bottom: Val::Px(12.0),
-                left: Val::Percent(50.0),
-                margin: UiRect::left(Val::Px(-230.0)),
-                width: Val::Px(460.0),
+                right: Val::Px(12.0),
+                width: Val::Px(420.0),
                 flex_direction: FlexDirection::Column,
                 border: UiRect::all(Val::Px(1.0)),
                 ..default()
@@ -821,6 +883,11 @@ fn hud_action_button_press(
     for (interaction, btn) in buttons.iter() {
         if *interaction == Interaction::Pressed {
             desired.insert(btn.key);
+            // Chorded shortcuts need the modifier held in the same frame, or
+            // the handler sees a bare Z and undoes nothing.
+            if let Some(m) = btn.modifier {
+                desired.insert(m);
+            }
         }
     }
     for &key in emulated.iter() {
@@ -843,8 +910,9 @@ fn hud_action_button_hover(
     }
 }
 
-/// Show the flight toolbar only while flying — hide it when docked or in menus,
-/// where Map/Sys/Radar/Crew aren't the relevant controls. Runs on state change.
+/// Show the action bar wherever it has something to offer — flying, docked,
+/// and throughout build mode. Hidden only in menus and on the pause/death
+/// screens, where it would sit under a fullscreen overlay.
 fn toggle_flight_toolbar_visibility(
     state: Res<State<GameState>>,
     mut panels: Query<&mut Node, With<FlightToolbar>>,
@@ -852,9 +920,66 @@ fn toggle_flight_toolbar_visibility(
     if !state.is_changed() {
         return;
     }
-    let show = *state.get() == GameState::Exploring;
+    let show = matches!(*state.get(), GameState::Exploring | GameState::StationDocked);
     for mut node in panels.iter_mut() {
         node.display = if show { Display::Flex } else { Display::None };
+    }
+}
+
+/// Rebuild the action bar's buttons whenever the relevant state changes.
+///
+/// The set of useful actions differs sharply between flying, sitting docked,
+/// and each build sub-mode, so the bar is rebuilt rather than filtered.
+fn rebuild_action_toolbar(
+    mut commands: Commands,
+    game_state: Res<State<GameState>>,
+    build_state: Res<State<BuildState>>,
+    bars: Query<(Entity, Option<&Children>), With<FlightToolbar>>,
+) {
+    use theme::*;
+    if !game_state.is_changed() && !build_state.is_changed() {
+        return;
+    }
+    let actions = toolbar_actions(game_state.get(), build_state.get());
+    for (bar, children) in bars.iter() {
+        if let Some(children) = children {
+            for child in children.iter() {
+                commands.entity(child).despawn();
+            }
+        }
+        commands.entity(bar).with_children(|toolbar| {
+            for a in actions {
+                toolbar.spawn((
+                    Node {
+                        padding: UiRect::new(Val::Px(11.0), Val::Px(11.0),
+                                             Val::Px(6.0), Val::Px(5.0)),
+                        border: UiRect::all(Val::Px(1.0)),
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Center,
+                        row_gap: Val::Px(1.0),
+                        ..default()
+                    },
+                    BackgroundColor(ThemeColors::BG_ELEVATED),
+                    BorderColor::all(ThemeColors::BORDER_SUBTLE),
+                    Button,
+                    Interaction::default(),
+                    HudActionButton { key: a.key, modifier: a.modifier },
+                )).with_children(|b| {
+                    b.spawn((
+                        Text::new(a.label),
+                        TextFont { font_size: FontSize::Px(ThemeFonts::BODY_SMALL), ..default() },
+                        TextColor(ThemeColors::TEXT_PRIMARY),
+                    ));
+                    // The key stays visible but recessive: available to learn,
+                    // never required to act.
+                    b.spawn((
+                        Text::new(a.key_disp),
+                        TextFont { font_size: FontSize::Px(ThemeFonts::TINY), ..default() },
+                        TextColor(ThemeColors::TEXT_MUTED),
+                    ));
+                });
+            }
+        });
     }
 }
 
@@ -1129,6 +1254,7 @@ pub fn update_hud(
     mut hull_query: Query<(&mut Text, &mut TextColor), (With<HullText>, Without<DepthText>, Without<PowerText>, Without<OxygenText>, Without<DepthZoneText>)>,
     mut bar_query: Query<(&HudBar, &mut Node, &mut BackgroundColor)>,
 ) {
+    use theme::*;
     // Range from Haven Station
     if let Ok((mut text, mut text_color)) = depth_query.single_mut() {
         text.0 = format_range_km(depth_state.current_depth);
@@ -1148,14 +1274,15 @@ pub fn update_hud(
     if let Ok((mut text, mut text_color)) = power_query.single_mut() {
         let gen = power_state.total_power_generation;
         let con = power_state.total_power_consumption;
-        text.0 = format!("{:.0}/{:.0}", gen, con);
-        if power_state.power_balance < 0.0 {
-            // Blink red when power deficit
-            let blink = (time.elapsed_secs() * 4.0).sin() > 0.0;
-            text_color.0 = if blink { Color::srgb(1.0, 0.0, 0.0) } else { Color::srgb(0.6, 0.2, 0.2) };
+        // Used / available, in that order. Printing generation first read as
+        // "1000 out of 484" -- nonsense against the universal X/Y convention,
+        // and backwards from the bar below it, which fills with con/gen.
+        text.0 = format!("{:.0}/{:.0}", con, gen);
+        text_color.0 = if power_state.power_balance < 0.0 {
+            critical_pulse(time.elapsed_secs())
         } else {
-            text_color.0 = Color::srgb(1.0, 1.0, 0.0);
-        }
+            ThemeColors::TEXT_PRIMARY
+        };
     }
 
     // Hull
@@ -1163,21 +1290,24 @@ pub fn update_hud(
     let hull_pct_i = (hull_pct * 100.0) as i32;
     if let Ok((mut text, mut text_color)) = hull_query.single_mut() {
         text.0 = format!("{}%", hull_pct_i);
-        if hull_pct_i < 20 {
-            let blink = (time.elapsed_secs() * 5.0).sin() > 0.0;
-            text_color.0 = if blink { Color::srgb(1.0, 0.0, 0.0) } else { Color::srgb(0.5, 0.1, 0.1) };
-        } else if hull_pct_i < 50 {
-            text_color.0 = Color::srgb(1.0, 1.0, 0.0);
+        text_color.0 = if hull_pct_i < 20 {
+            critical_pulse(time.elapsed_secs())
         } else {
-            text_color.0 = Color::srgb(0.0, 1.0, 0.0);
-        }
+            severity_low_bad(hull_pct)
+        };
     }
 
     // Update HUD bars
     for (bar, mut style, mut bg) in bar_query.iter_mut() {
         let (pct, color) = match bar.kind {
             HudBarKind::Hull => {
-                let c = if hull_pct < 0.3 { Color::srgb(1.0, 0.0, 0.0) } else if hull_pct < 0.6 { Color::srgb(1.0, 1.0, 0.0) } else { Color::srgb(0.0, 1.0, 0.0) };
+                let c = if hull_pct < 0.3 {
+                    ThemeColors::STATUS_DANGER
+                } else if hull_pct < 0.6 {
+                    ThemeColors::STATUS_WARN
+                } else {
+                    ThemeColors::STATUS_OK
+                };
                 (hull_pct, c)
             }
             HudBarKind::Power => {
@@ -1185,7 +1315,11 @@ pub fn update_hud(
                 // the budget is used); red when in deficit, yellow otherwise.
                 let gen = power_state.total_power_generation.max(0.001);
                 let frac = (power_state.total_power_consumption / gen).clamp(0.0, 1.0);
-                let c = if power_state.power_balance < 0.0 { Color::srgb(0.9, 0.2, 0.2) } else { Color::srgb(0.9, 0.75, 0.25) };
+                let c = if power_state.power_balance < 0.0 {
+                    ThemeColors::STATUS_DANGER
+                } else {
+                    ThemeColors::ACCENT_CYAN
+                };
                 (frac, c)
             }
             // Oxygen bar removed with crew O2 (its HUD group no longer spawns)
@@ -1222,6 +1356,7 @@ pub fn update_hud_secondary(
     // 16-param ceiling (see the ammo_ui tuple above for the same reason).
     mut cargo_ui: (Res<Inventory>, Query<(&mut Text, &mut TextColor), (With<CargoText>, Without<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>),
 ) {
+    use theme::*;
     let (ammo_container_query, ammo_line_query, mut commands, mut last_ammo_snapshot) = ammo_ui;
     let (inventory, mut cargo_query) = cargo_ui;
     let Ok((player_ship, physics)) = ship_query.single() else { return };
@@ -1233,14 +1368,11 @@ pub fn update_hud_secondary(
     let fuel_pct_i = (fuel_pct * 100.0) as i32;
     if let Ok((mut text, mut text_color)) = fuel_query.single_mut() {
         text.0 = format!("{}%", fuel_pct_i);
-        if fuel_pct_i < 15 {
-            let blink = (time.elapsed_secs() * 4.0).sin() > 0.0;
-            text_color.0 = if blink { Color::srgb(1.0, 0.0, 0.0) } else { Color::srgb(0.5, 0.1, 0.1) };
-        } else if fuel_pct_i < 30 {
-            text_color.0 = Color::srgb(1.0, 1.0, 0.0);
+        text_color.0 = if fuel_pct_i < 15 {
+            critical_pulse(time.elapsed_secs())
         } else {
-            text_color.0 = Color::srgb(1.0, 0.6, 0.2);
-        }
+            severity_low_bad(fuel_pct_i as f32 / 100.0)
+        };
     }
 
     // Main-drive throttle for the THRS meter + text. This used to read the
@@ -1271,10 +1403,10 @@ pub fn update_hud_secondary(
         let pct = (thrust_avg * 100.0).round() as i32;
         if throttle < -0.02 {
             text.0 = format!("{}% REV", pct);
-            text_color.0 = Color::srgb(1.0, 0.6, 0.2);
+            text_color.0 = ThemeColors::ACCENT_ORANGE;
         } else {
             text.0 = format!("{}%", pct);
-            text_color.0 = Color::srgb(0.3, 0.5, 1.0);
+            text_color.0 = ThemeColors::TEXT_PRIMARY;
         }
     }
 
@@ -1499,7 +1631,7 @@ fn spawn_station_cargo_panel(mut commands: Commands) {
                 BackgroundColor(ThemeColors::BORDER_SUBTLE),
             ));
             panel.spawn((
-                Text::new("— empty —"),
+                Text::new("- empty -"),
                 TextFont { font_size: FontSize::Px(ThemeFonts::BODY_SMALL), ..default() },
                 TextColor(ThemeColors::TEXT_SECONDARY),
                 StationCargoBodyText,
@@ -1542,7 +1674,7 @@ fn update_station_cargo_panel(
         .map(|(item, count)| format!("{}  x{}", item.name(), count))
         .collect();
     lines.sort();
-    let body = if lines.is_empty() { "— empty —".to_string() } else { lines.join("\n") };
+    let body = if lines.is_empty() { "- empty -".to_string() } else { lines.join("\n") };
 
     if let Ok(mut text) = body_q.single_mut() {
         if text.0 != body {
@@ -1753,6 +1885,20 @@ fn toggle_crew_menu(
     // AI crew mixed into the player's own crew roster.
     crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
     station_query: Query<(&CrewStation, &Module), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    // What each hand is actually doing. `CrewMember::state` cannot answer
+    // this: `walking` deliberately never writes to it and `CrewState::Working`
+    // is assigned nowhere in the codebase, so it reads `Idle` for almost
+    // everyone no matter what they are up to. The components ARE the truth.
+    activity: Query<
+        (
+            Entity,
+            Has<crate::crew::walking::CrewPath>,
+            Has<crate::crew::walking::SeekingTreatment>,
+            Has<crate::crew::burial::BurialDetail>,
+            Has<crate::crew::eva_salvage::EvaSalvaging>,
+        ),
+        With<CrewMember>,
+    >,
     staffing_state: Res<StaffingState>,
     mut open_dropdown: ResMut<OpenDutyDropdown>,
 ) {
@@ -1773,11 +1919,17 @@ fn toggle_crew_menu(
     // Opening fresh: never inherit an order list left open from last time.
     open_dropdown.0 = None;
 
-    // Build a map: crew entity -> assigned module grid position
-    let mut crew_assignments: std::collections::HashMap<Entity, IVec2> = std::collections::HashMap::new();
+    let doing: std::collections::HashMap<Entity, (bool, bool, bool, bool)> = activity
+        .iter()
+        .map(|(e, path, care, burial, eva)| (e, (path, care, burial, eva)))
+        .collect();
+
+    // Build a map: crew entity -> the post they hold. Named, not numbered:
+    // "On station - Railgun" tells you something, "-> (7,2)" does not.
+    let mut crew_assignments: std::collections::HashMap<Entity, ModuleType> = std::collections::HashMap::new();
     for (cs, module) in station_query.iter() {
         if let Some(crew_entity) = cs.assigned_crew {
-            crew_assignments.insert(crew_entity, module.grid_position);
+            crew_assignments.insert(crew_entity, module.module_type);
         }
     }
 
@@ -1791,7 +1943,7 @@ fn toggle_crew_menu(
 
     commands.entity(content).with_children(|parent| {
         parent.spawn((
-            Text::new(format!("{}/{} berths — {}/{} stations staffed",
+            Text::new(format!("{}/{} berths - {}/{} stations staffed",
                 staffing_state.total_crew, staffing_state.total_berths,
                 staffing_state.staffed_stations, staffing_state.total_stations)),
             TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() },
@@ -1809,14 +1961,36 @@ fn toggle_crew_menu(
         }).with_children(|list| {
             for (entity, crew, duty) in crew_query.iter() {
                 let duty = duty.copied().unwrap_or_default();
+                let (walking, to_medbay, burial, eva) = doing
+                    .get(&entity)
+                    .copied()
+                    .unwrap_or((false, false, false, false));
+
                 let (status, dot_color) = if crew.health <= 0.0 {
-                    ("DEAD".to_string(), theme::ThemeColors::STATUS_DANGER)
+                    ("Dead".to_string(), theme::ThemeColors::STATUS_DANGER)
                 } else if crew.state == CrewState::Panicking {
-                    (format!("{:?}", crew.state), theme::ThemeColors::STATUS_WARN)
-                } else if let Some(grid) = crew_assignments.get(&entity) {
-                    (format!("{:?} → ({},{})", crew.state, grid.x, grid.y), theme::ThemeColors::STATUS_OK)
+                    ("Panicking".to_string(), theme::ThemeColors::STATUS_WARN)
+                } else if eva {
+                    ("Outside - salvaging".to_string(), theme::ThemeColors::STATUS_WARN)
+                } else if burial {
+                    ("Burial detail".to_string(), theme::ThemeColors::STATUS_WARN)
+                } else if to_medbay {
+                    ("Wounded - to the med bay".to_string(), theme::ThemeColors::STATUS_WARN)
+                } else if crew.state == CrewState::Repairing {
+                    ("Damage control".to_string(), theme::ThemeColors::STATUS_OK)
+                } else if let Some(post) = crew_assignments.get(&entity) {
+                    let label = if walking {
+                        format!("Walking to the {}", post.name())
+                    } else {
+                        format!("On station - {}", post.name())
+                    };
+                    (label, theme::ThemeColors::STATUS_OK)
+                } else if walking {
+                    ("Moving".to_string(), theme::ThemeColors::TEXT_MUTED)
                 } else {
-                    ("Idle".to_string(), theme::ThemeColors::TEXT_MUTED)
+                    // Genuinely nothing to do — with stand-down, a peacetime
+                    // gunner is OFF DUTY rather than idle-because-broken.
+                    ("Off duty".to_string(), theme::ThemeColors::TEXT_MUTED)
                 };
 
                 list.spawn((
@@ -1841,7 +2015,7 @@ fn toggle_crew_menu(
                         ..default()
                     }).with_children(|info| {
                         info.spawn((
-                            Text::new(format!("{}  —  {}", crew.name, status)),
+                            Text::new(format!("{}  -  {}", crew.name, status)),
                             TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() },
                             TextColor(if crew.health <= 0.0 { theme::ThemeColors::TEXT_MUTED } else { theme::ThemeColors::TEXT_PRIMARY }),
                         ));
@@ -2014,7 +2188,7 @@ fn crew_duty_option_click(
             }
         }
         notifications.write(ShowNotification {
-            message: format!("{} — {}", crew.name, option.duty.label()),
+            message: format!("{} - {}", crew.name, option.duty.label()),
             notification_type: NotificationType::Info,
             duration: 1.5,
         });
@@ -2180,12 +2354,12 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
                 ..default()
             }).with_children(|left| {
                 left.spawn((
-                    Text::new(format!("LOCAL MAP — {}", snap.system_name.to_uppercase())),
+                    Text::new(format!("LOCAL MAP - {}", snap.system_name.to_uppercase())),
                     TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() },
                     TextColor(theme::ThemeColors::TEXT_TITLE),
                 ));
                 let sub = match &snap.nearest_station {
-                    Some((name, dist)) => format!("Nearest station: {} · {}", name, format_range_km(*dist)),
+                    Some((name, dist)) => format!("Nearest station: {} - {}", name, format_range_km(*dist)),
                     None => "No station in this system".to_string(),
                 };
                 left.spawn((
@@ -2195,7 +2369,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
                 ));
             });
             head.spawn((
-                Text::new("TAB: GALAXY VIEW   ·   CLICK: SET WARP TARGET   ·   M: CLOSE"),
+                Text::new("TAB: GALAXY VIEW   -   CLICK: SET WARP TARGET   -   M: CLOSE"),
                 TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
                 TextColor(theme::ThemeColors::TEXT_MUTED),
             ));
@@ -2910,7 +3084,7 @@ fn spawn_galaxy_map_overlay(
                     }
                 }
             });
-            col.spawn((Text::new("GALAXY MAP — Tab: local view | M: close"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
+            col.spawn((Text::new("GALAXY MAP - Tab: local view | M: close"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
 
             // Faction color reference — Visited systems are colored by
             // whose territory they are (see faction_map_color); Located
@@ -3069,7 +3243,7 @@ fn map_click_system(
 
     let dist = player_pos.distance(target);
     notifications.write(ShowNotification {
-        message: format!("Warp target set — {:.0} units away.", dist),
+        message: format!("Warp target set - {:.0} units away.", dist),
         notification_type: NotificationType::Info,
         duration: 2.5,
     });
@@ -3134,7 +3308,7 @@ fn galaxy_map_click_system(
 
     let dist = streaming.current_galaxy_pos.distance(clicked_pos);
     notifications.write(ShowNotification {
-        message: format!("Warp target set — {} ({:.0} units away).", desc, dist),
+        message: format!("Warp target set - {} ({:.0} units away).", desc, dist),
         notification_type: NotificationType::Info,
         duration: 2.5,
     });
@@ -3208,7 +3382,7 @@ fn warp_dash_input(
         }
 
         let dir = (target - ship_pos).normalize_or_zero();
-        let target_pos = target - dir * WARP_DASH_ARRIVAL_BUFFER;
+        let target_pos = target - dir * buffer;
         let charge_time = warp_dash_charge_time(jump_dist);
 
         commands.entity(entity).insert(MapWarpCharging {
@@ -3218,7 +3392,7 @@ fn warp_dash_input(
         });
 
         notifications.write(ShowNotification {
-            message: format!("Warp dash charging: {:.0} fuel, {:.0}s — hold G!", fuel_cost, charge_time),
+            message: format!("Warp dash charging: {:.0} fuel, {:.0}s - hold G!", fuel_cost, charge_time),
             notification_type: NotificationType::Info,
             duration: charge_time + 1.0,
         });
@@ -3331,7 +3505,7 @@ fn spawn_main_menu(mut commands: Commands) {
                     let key = if *slot == 99 { "L+0" } else { match slot { 0 => "L+1", 1 => "L+2", 2 => "L+3", _ => "L+?" } };
                     let time_min = (info.play_time / 60.0) as i32;
                     let time_sec = (info.play_time % 60.0) as i32;
-                    let label = format!("LOAD — {} ({} · {}:{:02})", name, format_range_km(info.depth), time_min, time_sec);
+                    let label = format!("LOAD - {} ({} - {}:{:02})", name, format_range_km(info.depth), time_min, time_sec);
                     spawn_menu_button(actions, &label, Some(key), ThemeColors::ACCENT_GREEN, MenuAction::LoadSlot(*slot));
                 }
             }
@@ -3586,7 +3760,7 @@ fn spawn_pause_menu(
         });
 
         // Hint
-        parent.spawn((Text::new("Esc: Resume  •  P: Modules  •  F1-F3 / L+1-3: quick save & load"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.5, 0.5, 0.5)), Node { margin: UiRect::top(Val::Px(theme::ThemeSpacing::MD)), ..default() }));
+        parent.spawn((Text::new("Esc: Resume  *  P: Modules  *  F1-F3 / L+1-3: quick save & load"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.5, 0.5, 0.5)), Node { margin: UiRect::top(Val::Px(theme::ThemeSpacing::MD)), ..default() }));
     });
 }
 
@@ -3896,13 +4070,13 @@ fn sell_row(inventory: &Inventory, station_idx: usize, choice: Option<ItemType>,
             for (item, count) in &inventory.items {
                 total += crate::resources::live_item_price(market, station_idx, *item) * count;
             }
-            (format!("ALL cargo — {}c  (Left/Right: pick a single stack)", total), total)
+            (format!("ALL cargo - {}c  (Left/Right: pick a single stack)", total), total)
         }
         Some(item) => {
             let count = inventory.items.get(&item).copied().unwrap_or(0);
             let price = crate::resources::live_item_price(market, station_idx, item);
             let value = price * count;
-            let tag = if market.multiplier(station_idx, item) > 1.0 { "  ★ SHORTAGE" } else { "" };
+            let tag = if market.multiplier(station_idx, item) > 1.0 { "  * SHORTAGE" } else { "" };
             (format!("{}x {} @ {}c each = {}c{}  (Left/Right: cycle)", count, item.name(), price, value, tag), value)
         }
     }
@@ -4056,7 +4230,7 @@ fn spawn_docking_menu(
     )).with_children(|parent| {
         let s_type = crate::world::station_types::station_type(station_idx);
         let title = format!(
-            "{} — {}",
+            "{} - {}",
             crate::world::home_base::station_display_name(station_idx).to_uppercase(),
             crate::world::station_types::station_type_name(s_type).to_uppercase()
         );
@@ -4075,7 +4249,7 @@ fn spawn_docking_menu(
         if discounts.ammo < 1.0 { perks.push(format!("Ammo -{:.0}%", (1.0 - discounts.ammo) * 100.0)); }
         if !perks.is_empty() {
             parent.spawn((
-                Text::new(perks.join("  •  ")),
+                Text::new(perks.join("  *  ")),
                 TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
                 TextColor(theme::ThemeColors::TEXT_MUTED),
             ));
@@ -4184,6 +4358,9 @@ fn despawn_docking_menu(
 }
 
 fn docking_menu_input(
+    // Bevy caps a system at 16 params and this one was exactly at it, so the
+    // additions are grouped -- same trick `econ_state` below already uses.
+    crew_art: (Res<AssetServer>, Res<crate::crew::animation::CrewAtlases>),
     keyboard: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
     mut menu_query: Query<&mut DockingMenuSelection, With<DockingOverlay>>,
@@ -4198,9 +4375,10 @@ fn docking_menu_input(
     staffing_state: Res<StaffingState>,
     mut module_query: Query<&mut Module>,
     ship_query: Query<&Transform, With<Ship>>,
-    market: Res<MarketEvents>,
-    stations: Res<crate::world::home_base::SystemStations>,
+    world_ctx: (Res<MarketEvents>, Res<crate::world::home_base::SystemStations>),
 ) {
+    let (assets, crew_atlases) = crew_art;
+    let (market, stations) = world_ctx;
     let (mut hull_state, mut oxygen_state, mut fuel_state, mut currency, mut inventory) = econ_state;
     let Ok(mut selection) = menu_query.single_mut() else { return };
 
@@ -4483,15 +4661,12 @@ fn docking_menu_input(
                         // Spawn with SpriteBundle; reconcile_hired_crew system
                         // will parent to ship and add to CrewRoster
                         commands.spawn((
-                            (Sprite {
-                                    color: Color::srgb(0.8, 0.6, 0.5),
-                                    custom_size: Some(Vec2::new(16.0, 16.0)),
-                                    ..default()
-                                }, Transform::from_xyz(
-                                    (crew_count as f32 - 3.5) * 20.0,
-                                    0.0,
-                                    0.5,
-                                )),
+                            crate::crew::animation::crew_sprite(&assets, &crew_atlases),
+                            Transform::from_xyz(
+                                (crew_count as f32 - 3.5) * 20.0,
+                                0.0,
+                                crate::crew::walking::CREW_Z,
+                            ),
                             CrewMember {
                                 name: name.clone(),
                                 health: 100.0,

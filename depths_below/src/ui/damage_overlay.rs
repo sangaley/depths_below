@@ -29,7 +29,7 @@ pub fn toggle_damage_overlay(
     } else {
         commands.entity(entity).insert(DamageOverlayVisible);
         notifications.write(ShowNotification {
-            message: "Damage overlay ON — green=OK, yellow=damaged, red=critical, gray=destroyed".into(),
+            message: "Damage overlay ON - green=OK, yellow=damaged, red=critical, gray=destroyed".into(),
             notification_type: NotificationType::Info,
             duration: 2.5,
         });

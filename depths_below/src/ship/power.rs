@@ -223,7 +223,7 @@ pub fn update_reactor_heat(
             if module.health > 0.0 && reactor.heat <= reactor.max_heat * REACTOR_RESTART_THRESHOLD {
                 module.is_active = true;
                 notifications.write(ShowNotification {
-                    message: "Reactor back online — heat dissipated.".into(),
+                    message: "Reactor back online - heat dissipated.".into(),
                     notification_type: NotificationType::Success,
                     duration: 3.0,
                 });

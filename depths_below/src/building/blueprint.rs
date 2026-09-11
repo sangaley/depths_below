@@ -279,7 +279,7 @@ pub fn save_blueprint_system(
 
     if hull_cells.is_empty() && modules.is_empty() {
         notifications.write(ShowNotification {
-            message: "Nothing to save — build some hull/modules first.".into(),
+            message: "Nothing to save - build some hull/modules first.".into(),
             notification_type: NotificationType::Warning,
             duration: 2.0,
         });
@@ -508,18 +508,24 @@ pub fn spawn_ship_from_design(
         let color = match cell.layer {
             HullLayer::Outer => Color::WHITE,
             HullLayer::Inner => Color::srgb(0.9, 0.9, 0.9),
-            HullLayer::Hallway => Color::srgb(0.42, 0.48, 0.52),
+            // Decking has its own sprite now, so it needs no tint -- the old
+            // 45% darkening was what made a corridor look like a burnt plate.
+            HullLayer::Hallway => Color::WHITE,
             HullLayer::Void => Color::srgb(0.5, 0.5, 0.6),
             HullLayer::BulkheadDoor => Color::srgb(0.9, 0.8, 0.7),
         };
-        let texture = asset_server.load(crate::sprite_map::hull_sprite_path(cell.material));
+        let texture = asset_server
+            .load(crate::sprite_map::hull_layer_sprite_path(cell.material, cell.layer));
         let health = 100.0 * cell.material.health_multiplier();
 
         commands.spawn((
             (Sprite {
                     image: texture,
                     color,
-                    custom_size: Some(Vec2::new(64.0, 64.0)),
+                    // Full cell. At 64 in a 66-unit cell every hull plate had
+                    // a 2-unit gap on each side and you could see open space
+                    // between the blocks of your own ship.
+                    custom_size: Some(Vec2::new(66.0, 66.0)),
                     ..default()
                 }, Transform::from_xyz(
                     cell.grid_pos.x as f32 * 66.0,

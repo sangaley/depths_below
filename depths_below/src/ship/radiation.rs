@@ -113,7 +113,7 @@ pub fn check_radiation_damage(
 
     if took_damage {
         death_cause.last_damage = Some((
-            "radiation (hull shielding exceeded — too far from Haven, or too close to a star)".to_string(),
+            "radiation (hull shielding exceeded - too far from Haven, or too close to a star)".to_string(),
             time.elapsed_secs_f64(),
         ));
     }

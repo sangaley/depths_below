@@ -212,9 +212,9 @@ pub fn ai_ship_death_system(
             0.0
         };
         let (loot, condition) = if intact_frac >= 0.7 {
-            (((base_loot as f32) * 1.5).ceil() as u32, "Pristine wreck — bonus salvage!")
+            (((base_loot as f32) * 1.5).ceil() as u32, "Pristine wreck - bonus salvage!")
         } else if intact_frac < 0.3 {
-            (((base_loot as f32) * 0.5).ceil() as u32, "Shattered hulk — little left to take.")
+            (((base_loot as f32) * 0.5).ceil() as u32, "Shattered hulk - little left to take.")
         } else {
             (base_loot, "Wreck can be salvaged.")
         };
@@ -257,8 +257,8 @@ pub fn ai_ship_death_system(
         };
 
         let headline = match event.cause {
-            ShipDeathCause::Struck => format!("{} vessel struck colors — crew abandoned it", type_name),
-            ShipDeathCause::Meltdown => format!("{} vessel lost containment — core detonation", type_name),
+            ShipDeathCause::Struck => format!("{} vessel struck colors - crew abandoned it", type_name),
+            ShipDeathCause::Meltdown => format!("{} vessel lost containment - core detonation", type_name),
             ShipDeathCause::Gutted => format!("{} vessel destroyed!", type_name),
         };
         notifications.write(ShowNotification {

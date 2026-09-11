@@ -158,7 +158,7 @@ pub fn spawn_floating_window(
     )).id();
 
     let collapse_text = commands.spawn(
-        (Text::new("—"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(WindowStyle::COLLAPSE_COLOR)),
+        (Text::new("-"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(WindowStyle::COLLAPSE_COLOR)),
     ).id();
 
     // Close button (×). Same as the collapse button: it needs its own
@@ -178,7 +178,7 @@ pub fn spawn_floating_window(
     )).id();
 
     let close_text = commands.spawn(
-        (Text::new("×"), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(WindowStyle::CLOSE_COLOR)),
+        (Text::new("x"), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(WindowStyle::CLOSE_COLOR)),
     ).id();
 
     // Content area

@@ -153,16 +153,37 @@ pub fn spawn_star_system(
 /// assets/sprites/celestial/CREDITS.txt). Picked independent of world size —
 /// custom_size scales whatever image lands here to the rolled asteroid size,
 /// so a "tiny" sprite blown up to a big asteroid's size looks fine.
-const METEOR_SPRITES: &[&str] = &[
-    "meteorBrown_big1.png", "meteorBrown_big2.png", "meteorBrown_big3.png", "meteorBrown_big4.png",
-    "meteorBrown_med1.png", "meteorBrown_med3.png",
-    "meteorBrown_small1.png", "meteorBrown_small2.png",
-    "meteorBrown_tiny1.png", "meteorBrown_tiny2.png",
-    "meteorGrey_big1.png", "meteorGrey_big2.png", "meteorGrey_big3.png", "meteorGrey_big4.png",
-    "meteorGrey_med1.png", "meteorGrey_med2.png",
-    "meteorGrey_small1.png", "meteorGrey_small2.png",
-    "meteorGrey_tiny1.png", "meteorGrey_tiny2.png",
-];
+/// Shape variants per (size class, ore type). See tools/art/pixel/asteroids.py.
+const ASTEROID_VARIANTS: usize = 3;
+
+/// Sprite for one rock.
+///
+/// The art is procedural pixel work (tools/art/pixel/asteroids.py): granular
+/// grain-by-grain rock with ore running through it as thin seams. Resolution
+/// tracks size class so a PIXEL is ~4 world units at every size -- a big rock
+/// is more grains, not bigger grains.
+///
+/// Ore is baked into the sprite, so what a rock is worth mining for is
+/// legible from the rock itself instead of from a flat colour wash.
+fn asteroid_sprite(size: f32, resource: ResourceNodeType, variant: usize) -> String {
+    let class = if size < 350.0 {
+        "small"
+    } else if size < 550.0 {
+        "medium"
+    } else {
+        "large"
+    };
+    let ore = match resource {
+        ResourceNodeType::MetalOre => "metal",
+        ResourceNodeType::RareCrystal => "crystal",
+        ResourceNodeType::FuelDeposit => "fuel",
+        ResourceNodeType::ExoticMatter => "exotic",
+    };
+    format!(
+        "sprites/celestial/asteroids/ast_{}_{}_{}.png",
+        class, ore, variant % ASTEROID_VARIANTS
+    )
+}
 
 /// Spawn asteroid field at a position (decorative gravity bodies, each
 /// mineable — see MineableResource). Every asteroid the player actually
@@ -211,25 +232,49 @@ pub fn spawn_asteroid_field(
             2 => ResourceNodeType::FuelDeposit,
             _ => ResourceNodeType::ExoticMatter,
         };
-        // Tinted by resource type (was a flat gray) so a glance at an
-        // asteroid field hints at what's worth mining.
-        let color = match resource_type {
-            ResourceNodeType::MetalOre => Color::srgb(0.45, 0.40, 0.35),
-            ResourceNodeType::RareCrystal => Color::srgb(0.40, 0.50, 0.70),
-            ResourceNodeType::FuelDeposit => Color::srgb(0.50, 0.40, 0.20),
-            ResourceNodeType::ExoticMatter => Color::srgb(0.50, 0.35, 0.60),
-        };
+        // Gameplay rolls first, cosmetics last, so art changes can never
+        // disturb what a system actually contains.
+        let resource_amount = size * rng.gen_range(0.5..1.2);
 
-        let sprite_path = format!(
-            "sprites/celestial/asteroids/{}",
-            METEOR_SPRITES[rng.gen_range(0..METEOR_SPRITES.len())]
-        );
+        // ONE fixed-width draw for everything cosmetic. gen::<u32>() consumes
+        // exactly one word; gen_range uses rejection sampling, so its
+        // consumption depends on the range -- which would mean that changing
+        // the variant count later silently reshuffled every existing system's
+        // asteroid layout. Deriving all the jitter from the bits of a single
+        // word makes the art independent of the gameplay stream for good.
+        let art: u32 = rng.gen();
+        let variant = (art % ASTEROID_VARIANTS as u32) as usize;
+        let flip_x = (art >> 8) & 1 == 1;
+        // The old flat per-resource wash is gone: the sprite carries its own
+        // ore seams now, and a hue tint multiplied over pixel art just muds
+        // the ore ladder. A neutral brightness wobble is all that is left, so
+        // a field doesn't read as one rock stamped twenty times.
+        let shade = 0.88 + ((art >> 16) & 0xff) as f32 / 255.0 * 0.12;
+        let color = Color::srgb(shade, shade, shade);
+        let sprite_path = asteroid_sprite(size, resource_type, variant);
 
         commands.spawn((
             (Sprite {
-                    image: asset_server.load(sprite_path),
+                    // NEAREST, not the project default. Sprites are sampled
+                    // linear globally (main.rs never sets
+                    // ImagePlugin::default_nearest), and these textures are
+                    // blown up ~4x from texel to world size -- bilinear would
+                    // smear the grain into mush and throw away the entire
+                    // point of the pixel art. Set per-asset rather than
+                    // globally so the ~100 smooth module/weapon renders keep
+                    // their filtering.
+                    image: asset_server
+                        .load_builder()
+                        .with_settings(|s: &mut bevy::image::ImageLoaderSettings| {
+                            s.sampler = bevy::image::ImageSampler::nearest();
+                        })
+                        .load(sprite_path),
                     color,
                     custom_size: Some(Vec2::splat(size)),
+                    // Free second silhouette per variant, and safe here: the
+                    // baked light is straight-down, so a mirror leaves the
+                    // lighting consistent across the field.
+                    flip_x,
                     ..default()
                 }, Transform::from_xyz(pos.x, pos.y, -0.5)),
             CelestialBody {
@@ -246,11 +291,45 @@ pub fn spawn_asteroid_field(
             },
             MineableResource {
                 // Bigger rock = more to mine (size ranges 200-800).
-                resource_remaining: size * rng.gen_range(0.5..1.2) * depletion_mult,
+                resource_remaining: resource_amount * depletion_mult,
                 resource_type,
                 extraction_rate: 5.0,
             },
             StarSystemMember { system_id },
         ));
+    }
+}
+
+#[cfg(test)]
+mod asteroid_art_tests {
+    use super::*;
+
+    /// Every (size class x ore type x variant) combination must resolve to a
+    /// file that actually exists.
+    ///
+    /// `asteroid_sprite` builds paths with `format!` rather than indexing a
+    /// const table, so a typo or a missing render fails silently in game as an
+    /// invisible asteroid -- and 36 files is far too many to check by eye.
+    #[test]
+    fn every_asteroid_sprite_exists() {
+        let sizes = [250.0_f32, 450.0, 700.0];
+        let ores = [
+            ResourceNodeType::MetalOre,
+            ResourceNodeType::RareCrystal,
+            ResourceNodeType::FuelDeposit,
+            ResourceNodeType::ExoticMatter,
+        ];
+        let mut checked = 0;
+        for size in sizes {
+            for ore in ores {
+                for variant in 0..ASTEROID_VARIANTS {
+                    let rel = asteroid_sprite(size, ore, variant);
+                    let path = std::path::Path::new("assets").join(&rel);
+                    assert!(path.exists(), "missing asteroid sprite: {}", rel);
+                    checked += 1;
+                }
+            }
+        }
+        assert_eq!(checked, sizes.len() * ores.len() * ASTEROID_VARIANTS);
     }
 }

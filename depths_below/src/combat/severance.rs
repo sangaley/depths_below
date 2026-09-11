@@ -144,6 +144,13 @@ pub fn move_detached_sections(
                 super::spawn_hit_effect(&mut commands, pos, Color::srgb(1.0, 0.5, 0.1), 200.0);
 
                 commands.entity(entity).despawn();
+                // This section is gone; don't fall through to the ammo
+                // cook-off below and queue a second despawn for the same
+                // entity. A severed reactor section usually has ammo aboard
+                // too, so both branches fired on the same debris and the
+                // second one errored ("Entity despawned") in the middle of a
+                // fight.
+                continue;
             }
         }
 

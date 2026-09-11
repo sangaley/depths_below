@@ -80,7 +80,7 @@ impl AtmosphericEventType {
                 0 => "Radar picks up a faint contact... then nothing.",
                 1 => "A phantom blip appears on radar and vanishes.",
                 2 => "Radar echo returns something massive... probably an asteroid.",
-                _ => "Brief radar contact — too fast to identify.",
+                _ => "Brief radar contact - too fast to identify.",
             },
             Self::InstrumentGlitch => match rng.gen_range(0..3) {
                 0 => "Navigation instruments flicker momentarily.",
@@ -90,7 +90,7 @@ impl AtmosphericEventType {
             Self::HullBump => match rng.gen_range(0..4) {
                 0 => "Something bumps against the hull!",
                 1 => "A heavy thud reverberates through the ship.",
-                2 => "Impact detected — external contact on the starboard side.",
+                2 => "Impact detected - external contact on the starboard side.",
                 _ => "The ship shudders from an unseen collision.",
             },
             Self::CosmicFlash => match rng.gen_range(0..3) {
@@ -101,7 +101,7 @@ impl AtmosphericEventType {
             Self::LightsFlicker => match rng.gen_range(0..3) {
                 0 => "Interior lights flicker and dim briefly.",
                 1 => "The lights cut out for a heartbeat, then return.",
-                _ => "Electrical systems stutter — lights blink twice.",
+                _ => "Electrical systems stutter - lights blink twice.",
             },
         }
     }

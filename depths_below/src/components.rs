@@ -1664,12 +1664,11 @@ pub struct WorldDecoration {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DecorationType {
-    Rock,
-    SporeGrowth,
-    Crystal,
-    EnergySpot,
-    ThermalVentSmoke,
-    RockDebris,
+    /// Fine drifting particulate — a plain tinted quad, no sprite. The only
+    /// near-field decoration left: rock is handled at the celestial layer
+    /// (celestial::spawning::spawn_asteroid_field), which gives it collision
+    /// and mining rather than making it scenery.
+    Dust,
 }
 
 // ============================================================================

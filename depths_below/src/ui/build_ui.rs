@@ -5,7 +5,7 @@ use crate::resources::*;
 use crate::components::*;
 use crate::building::{GridOccupancy, ModuleRegistry};
 use crate::events::*;
-use crate::ui::theme::ThemeColors;
+use crate::ui::theme::{ThemeColors, ThemeFonts};
 
 // ============================================================================
 // BUILD UI COLOR PALETTE — aliases into theme.rs (several of these were
@@ -91,6 +91,11 @@ pub(crate) struct CategoryTab {
 
 #[derive(Component)]
 pub(crate) struct CategoryTabBg;
+
+/// The icon image inside a category tab, so the highlight system can tint it
+/// along with the label.
+#[derive(Component)]
+pub(crate) struct CategoryTabIcon;
 
 #[derive(Component)]
 pub(crate) struct ItemSlot {
@@ -732,6 +737,24 @@ fn category_color(cat: BuildCategory) -> Color {
 }
 
 /// Short label for each category (fits in tab)
+/// Icon for a build category. Rendered from tools/art/icons (Inkscape SVG),
+/// monochrome so the UI can tint them per state.
+fn category_icon(cat: BuildCategory) -> &'static str {
+    match cat {
+        BuildCategory::Hull => "ui/icons/cat_structural.png",
+        BuildCategory::Power => "ui/icons/cat_power.png",
+        BuildCategory::Propulsion => "ui/icons/cat_propulsion.png",
+        BuildCategory::LifeSupport => "ui/icons/cat_lifesupport.png",
+        BuildCategory::Control => "ui/icons/cat_control.png",
+        BuildCategory::Weapons => "ui/icons/cat_weapons.png",
+        BuildCategory::Detection => "ui/icons/cat_detection.png",
+        BuildCategory::Storage => "ui/icons/cat_storage.png",
+        BuildCategory::Crew => "ui/icons/cat_crew.png",
+        BuildCategory::Utility => "ui/icons/cat_utility.png",
+        BuildCategory::Custom => "ui/icons/cat_custom.png",
+    }
+}
+
 fn category_short_name(cat: BuildCategory) -> &'static str {
     match cat {
         BuildCategory::Hull => "HULL",
@@ -757,6 +780,7 @@ const SLOT_PAD: f32 = 8.0;
 pub fn spawn_build_panel(
     mut commands: Commands,
     registry: Res<ModuleRegistry>,
+    assets: Res<AssetServer>,
 ) {
     // === ROOT: full-width bottom bar ===
     commands
@@ -803,18 +827,33 @@ pub fn spawn_build_panel(
                     tabs_row.spawn((
                         (Node {
                                 padding: UiRect::new(
-                                    Val::Px(10.0), Val::Px(10.0),
-                                    Val::Px(6.0), Val::Px(6.0),
+                                    Val::Px(9.0), Val::Px(9.0),
+                                    Val::Px(3.0), Val::Px(3.0),
                                 ),
                                 margin: UiRect::right(Val::Px(2.0)),
+                                flex_direction: FlexDirection::Row,
+                                align_items: AlignItems::Center,
+                                column_gap: Val::Px(5.0),
+                                border: UiRect::bottom(Val::Px(2.0)),
                                 ..default()
-                            }, BackgroundColor(Color::srgba(0.08, 0.10, 0.18, 0.85))),
+                            },
+                            BackgroundColor(ThemeColors::BG_CARD),
+                            BorderColor::all(Color::NONE)),
                         CategoryTab { index: i },
                         CategoryTabBg,
                         Interaction::default(),
                     ))
                     .with_children(|tab| {
-                        tab.spawn((Text::new(category_short_name(*cat)), TextFont { font_size: FontSize::Px(13.0), ..default() }, TextColor(Color::srgb(0.7, 0.7, 0.7))));
+                        tab.spawn((
+                            ImageNode::new(assets.load(category_icon(*cat))),
+                            Node { width: Val::Px(18.0), height: Val::Px(18.0), ..default() },
+                            CategoryTabIcon,
+                        ));
+                        tab.spawn((
+                            Text::new(category_short_name(*cat)),
+                            TextFont { font_size: FontSize::Px(ThemeFonts::BODY_SMALL), ..default() },
+                            TextColor(ThemeColors::TEXT_MUTED),
+                        ));
                     });
                 }
             });
@@ -974,7 +1013,7 @@ fn spawn_single_slot(
         slot.spawn((Text::new(label), TextFont { font_size: FontSize::Px(11.0), ..default() }, TextColor(Color::WHITE)));
         if cost > 0 {
             // Build cost — the mockup's "◆ cost" tag on each module.
-            slot.spawn((Text::new(format!("\u{25c6}{}", cost)), TextFont { font_size: FontSize::Px(9.0), ..default() }, TextColor(Color::srgb(0.95, 0.85, 0.4))));
+            slot.spawn((Text::new(format!("*{}", cost)), TextFont { font_size: FontSize::Px(9.0), ..default() }, TextColor(Color::srgb(0.95, 0.85, 0.4))));
         }
     });
 }
@@ -1071,9 +1110,14 @@ pub fn update_build_panel(
     mat_q: Query<Entity, With<BuildMaterialText>>,
     mut text_query: Query<(&mut Text, &mut TextColor)>,
     // Tab highlighting
-    mut tab_query: Query<(&CategoryTab, &mut BackgroundColor, &Children), With<CategoryTabBg>>,
+    mut tabs: (
+        Query<(&CategoryTab, &mut BackgroundColor, &mut BorderColor, &Children),
+              (With<CategoryTabBg>, Without<ItemSlotBg>)>,
+        Query<&mut ImageNode, With<CategoryTabIcon>>,
+    ),
     // Item slot highlighting
-    mut slot_query: Query<(&ItemSlot, &mut BorderColor), With<ItemSlotBg>>,
+    mut slot_query: Query<(&ItemSlot, &mut BorderColor),
+                          (With<ItemSlotBg>, Without<CategoryTabBg>)>,
     // Item slots container (for rebuilding)
     container_query: Query<(Entity, &Children), With<ItemSlotsContainer>>,
     mut last_category: Local<Option<usize>>,
@@ -1095,23 +1139,26 @@ pub fn update_build_panel(
     }
 
     // Category tab highlighting
-    for (tab, mut bg, children) in tab_query.iter_mut() {
+    let (ref mut tab_query, ref mut tab_icon_q) = tabs;
+    for (tab, mut bg, mut border, children) in tab_query.iter_mut() {
         let is_active = tab.index == cat_index;
         let cat = BuildCategory::ALL[tab.index];
-        if is_active {
-            *bg = category_color(cat).into();
-            // Update child text to white
-            for child in children.iter() {
-                if let Ok((_, mut text_color)) = text_query.get_mut(child) {
-                    text_color.0 = Color::WHITE;
-                }
-            }
+        // The icon carries the category's identity, so the tab itself only has
+        // to say "selected" -- an accent underline rather than a slab of
+        // saturated colour per category.
+        let (bg_col, fg, under) = if is_active {
+            (ThemeColors::BG_ELEVATED, ThemeColors::TEXT_PRIMARY, category_color(cat))
         } else {
-            *bg = Color::srgba(0.08, 0.10, 0.18, 0.85).into();
-            for child in children.iter() {
-                if let Ok((_, mut text_color)) = text_query.get_mut(child) {
-                    text_color.0 = Color::srgb(0.5, 0.5, 0.55);
-                }
+            (ThemeColors::BG_CARD, ThemeColors::TEXT_MUTED, Color::NONE)
+        };
+        *bg = bg_col.into();
+        *border = BorderColor::all(under);
+        for child in children.iter() {
+            if let Ok((_, mut text_color)) = text_query.get_mut(child) {
+                text_color.0 = fg;
+            }
+            if let Ok(mut icon) = tab_icon_q.get_mut(child) {
+                icon.color = fg;
             }
         }
     }
@@ -1230,7 +1277,7 @@ pub fn update_build_info(
                     match layer {
                         HullLayer::Outer => "Primary hull plating. First line of defense against radiation and debris.",
                         HullLayer::Inner => "Secondary hull layer. Adds redundancy.",
-                        HullLayer::Hallway => "Walkable decking. The ONLY surface crew can cross \u{2014} every post needs a hallway route or it goes unmanned.",
+                        HullLayer::Hallway => "Walkable decking. The ONLY surface crew can cross - every post needs a hallway route or it goes unmanned.",
                         HullLayer::Void => "Empty space between hulls. Absorbs damage.",
                         HullLayer::BulkheadDoor => "Airtight door. Isolates depressurized sections.",
                     }.to_string()
@@ -1308,33 +1355,27 @@ pub fn update_controls_help(
         return;
     };
 
-    // In flight the bar shows flight controls — it used to keep displaying
-    // the docked hints ("Enter: Launch") for the whole run, so nobody could
-    // discover the brake or the shield toggle.
+    // This strip used to carry a thirteen-item keyboard reference card, which
+    // meant the interface taught itself by asking players to memorize it.
+    // Every discrete action now has a labelled button in the action bar, so
+    // all that belongs here are the CONTINUOUS inputs a button cannot express
+    // — holding a direction, holding a trigger — plus what the mouse does.
     if *game_state.get() == crate::states::GameState::Exploring {
-        // Flight controls only — no B: Build (docked-only), and Map/Sys/Radar/
-        // Crew live on the clickable toolbar now, so they're dropped from here.
-        text.0 = "Mouse: Aim | WASD: Move | Shift: Brake | Space: Fire | Z: Ping | R: Shield | T: Look | F: Dock | K: Guns | L: Log | Shift+J: Contracts".to_string();
+        text.0 = "WASD  thrust and strafe      Shift  brake      Mouse  aim      Space  fire".to_string();
         return;
     }
 
     text.0 = match current_build_state.get() {
-        BuildState::Inactive => {
-            "B: Build Mode | U: Shop | J: Contracts | Enter: Launch | ESC: Pause".to_string()
-        }
+        BuildState::Inactive => String::new(),
         BuildState::Placing => {
-            "Tab: Category | [/]: Item | R: Rotate | Click/Drag: Place | RMB: Remove | Ctrl+Z: Undo | Ctrl+Click, Ctrl+C/V: Copy/Paste | X: Delete | G: Customize | I: Costs | F2: Power | F3: Heat | Esc/B: Exit".to_string()
+            "Click to place      Drag to paint      Right-click to remove".to_string()
         }
-        BuildState::Deleting => {
-            "Click or Drag: Remove | Ctrl+Z: Undo | X: Place Mode | Esc/B: Exit".to_string()
-        }
+        BuildState::Deleting => "Click or drag to remove".to_string(),
         BuildState::PlacingComponent => {
-            "Click Piece → Click Grid: Place | Right-Click: Remove/Customize | Enter: Finalize | ESC: Cancel".to_string()
+            "Click a piece, then click the grid      Right-click for options".to_string()
         }
-        BuildState::CustomizingPiece => {
-            "Adjust Properties | Enter: Apply | ESC: Cancel".to_string()
-        }
-        _ => "B: Build Mode | Enter: Launch | ESC: Pause".to_string(),
+        BuildState::CustomizingPiece => "Arrow keys adjust".to_string(),
+        _ => String::new(),
     };
 }
 
@@ -2398,7 +2439,7 @@ pub fn spawn_piece_customization_panel(
     )).with_children(|panel| {
         // Title
         let title = if customization_state.customize_group {
-            format!("Customize {} × {} pieces", piece_type.name(), customization_state.connected_pieces.len())
+            format!("Customize {} x {} pieces", piece_type.name(), customization_state.connected_pieces.len())
         } else {
             format!("Customize {}", piece_type.name())
         };

@@ -487,14 +487,14 @@ fn radar_ping_system(
     }
     if newly_found > 0 {
         notifications.write(ShowNotification {
-            message: format!("Scan: {} new system{} detected — check the galaxy map (M).",
+            message: format!("Scan: {} new system{} detected - check the galaxy map (M).",
                 newly_found, if newly_found == 1 { "" } else { "s" }),
             notification_type: NotificationType::Success,
             duration: 3.0,
         });
     } else {
         notifications.write(ShowNotification {
-            message: "Scan complete — no new systems in range.".into(),
+            message: "Scan complete - no new systems in range.".into(),
             notification_type: NotificationType::Info,
             duration: 2.0,
         });

@@ -170,7 +170,7 @@ fn spawn_tuning_window(
     module_type: ModuleType,
     position: Vec2,
 ) {
-    let title = format!("{:?} — WEAPON TUNING", module_type).to_uppercase();
+    let title = format!("{:?} - WEAPON TUNING", module_type).to_uppercase();
     let content = spawn_floating_window(
         commands,
         &format!("tuning_{:?}", module_entity),
@@ -216,7 +216,7 @@ fn spawn_tuning_window(
                     // from being a straight upgrade, so it belongs on the
                     // button rather than buried in the docking bill.
                     detail: Some(format!(
-                        "{:.0}c/round  ·  {:.0}% weight  ·  {:.0}% muzzle vel",
+                        "{:.0}c/round  -  {:.0}% weight  -  {:.0}% muzzle vel",
                         crate::combat::ammo_types::rearm_price(Some(ammo), 1),
                         ammo.weight_mult() * 100.0,
                         ammo.velocity_mult() * 100.0,
@@ -266,7 +266,7 @@ fn spawn_tuning_window(
     spawn_window_section(commands, content, "POWER");
 
     let power_text = commands.spawn((
-        Text::new("DRAW: —"),
+        Text::new("DRAW: -"),
         TextFont { font_size: FontSize::Px(12.0), ..default() },
         TextColor(ACCENT),
         PowerReadoutText,
@@ -297,7 +297,7 @@ fn spawn_tuning_window(
     commands.entity(content).add_child(bar_bg);
 
     let ship_power_text = commands.spawn((
-        Text::new("SHIP: —"),
+        Text::new("SHIP: -"),
         TextFont { font_size: FontSize::Px(10.0), ..default() },
         TextColor(WindowStyle::TEXT_DIM),
         ShipPowerText,
@@ -335,7 +335,7 @@ fn spawn_tuning_window(
         Interaction::None,
         Button,
         ResetTuningButton,
-        Tooltip { text: "Reset all sliders to 1.0×".into(), detail: None },
+        Tooltip { text: "Reset all sliders to 1.0x".into(), detail: None },
     )).id();
     let reset_label = commands.spawn((
         Text::new("RESET"),
@@ -377,7 +377,7 @@ fn spawn_slider_row(
         TextColor(WindowStyle::TEXT_COLOR),
     )).id();
     let value_text = commands.spawn((
-        Text::new("1.00×"),
+        Text::new("1.00x"),
         TextFont { font_size: FontSize::Px(11.0), ..default() },
         TextColor(ACCENT),
         TuningValueText { field },
@@ -565,11 +565,11 @@ pub fn tuning_window_refresh(
         node.width = Val::Percent(mult_to_fraction(tuning.get(fill.field)) * 100.0);
     }
     for (vt, mut text) in value_texts.iter_mut() {
-        text.0 = format!("{:.2}×", tuning.get(vt.field));
+        text.0 = format!("{:.2}x", tuning.get(vt.field));
     }
 
     if let Ok(mut text) = power_text.single_mut() {
-        text.0 = format!("DRAW: {:.0} MW  ({:.2}× base)", module.power_consumption, tuning.power_factor());
+        text.0 = format!("DRAW: {:.0} MW  ({:.2}x base)", module.power_consumption, tuning.power_factor());
     }
 
     let gen = power.total_power_generation.max(1.0);
@@ -601,7 +601,7 @@ pub fn tuning_window_refresh(
         // can't sustain fire — it will thermally throttle mid-fight.
         let heat = weapon_heat_per_second(tuning.power_factor());
         if heat > AMBIENT_COOLING_RATE {
-            line.push_str(&format!("\nHEAT {:.1}/s — OVERHEATS UNDER SUSTAINED FIRE", heat));
+            line.push_str(&format!("\nHEAT {:.1}/s - OVERHEATS UNDER SUSTAINED FIRE", heat));
         } else {
             line.push_str(&format!("\nHEAT {:.1}/s (sustainable)", heat));
         }

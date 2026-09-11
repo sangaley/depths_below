@@ -100,7 +100,7 @@ fn spawn_power_window(commands: &mut Commands) {
     // Reactor / demand header.
     let header = commands
         .spawn((
-            Text::new("REACTOR — · DEMAND —"),
+            Text::new("REACTOR - - DEMAND -"),
             TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() },
             TextColor(ThemeColors::TEXT_MUTED),
             Node { margin: UiRect::bottom(Val::Px(4.0)), ..default() },
@@ -116,7 +116,7 @@ fn spawn_power_window(commands: &mut Commands) {
     // Presets.
     let hint = commands
         .spawn((
-            Text::new("PRESETS · drag a bar for fine control"),
+            Text::new("PRESETS - drag a bar for fine control"),
             TextFont { font_size: FontSize::Px(ThemeFonts::TINY), ..default() },
             TextColor(ThemeColors::TEXT_MUTED),
             Node { margin: UiRect::top(Val::Px(8.0)), ..default() },
@@ -202,7 +202,7 @@ fn spawn_channel_row(commands: &mut Commands, content: Entity, channel: PowerCha
         .id();
     let value = commands
         .spawn((
-            Text::new("200W · 20% · ×1.0"),
+            Text::new("200W - 20% - x1.0"),
             TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() },
             TextColor(ThemeColors::TEXT_PRIMARY),
             PowerValueText { channel },
@@ -363,22 +363,22 @@ pub fn power_window_refresh(
         let effect = if m < 0.4 {
             "OFF".to_string()
         } else {
-            format!("×{:.1}", m)
+            format!("x{:.1}", m)
         };
-        text.0 = format!("{:.0}W · {} · {}", watts, reactor_pct, effect);
+        text.0 = format!("{:.0}W - {} - {}", watts, reactor_pct, effect);
         color.0 = perf_color(marker.channel, m);
     }
 
     if let Ok((mut text, mut color)) = reactor.single_mut() {
         if channels.brownout {
             text.0 = format!(
-                "REACTOR {:.0} · DEMAND {:.0} · BROWNOUT",
+                "REACTOR {:.0} - DEMAND {:.0} - BROWNOUT",
                 channels.supply, channels.demand
             );
             color.0 = ThemeColors::ACCENT_RED;
         } else {
             text.0 = format!(
-                "REACTOR {:.0} · DEMAND {:.0}",
+                "REACTOR {:.0} - DEMAND {:.0}",
                 channels.supply, channels.demand
             );
             color.0 = ThemeColors::TEXT_MUTED;

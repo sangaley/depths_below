@@ -745,6 +745,7 @@ pub fn fire_plasma_system(
                     ..default()
                 }),
             super::new_projectiles::MissileProjectile {
+                age: 0.0,
                 damage: weapon.damage,
                 target: None, // dumb-fire — not a guided missile
                 // No motor, no seeker, no eject phase: a plasma bolt launches
@@ -856,6 +857,7 @@ pub fn fire_emp_missiles(
                     ..default()
                 }),
             super::new_projectiles::MissileProjectile {
+                age: 0.0,
                 damage: 5.0, // Low physical damage
                 target: Some(target_entity),
                 // A short pop clear of the hull, then a modest burn — an EMP

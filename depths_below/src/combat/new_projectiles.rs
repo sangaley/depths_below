@@ -131,6 +131,10 @@ pub struct MissileProjectile {
     pub eject_time: f32,
     /// The silo heading it was ejected along — held rigidly during the coast.
     pub launch_dir: Vec2,
+    /// Seconds this body has been in flight. Drives the agility curve: a
+    /// missile is at its most manoeuvrable just after the motor lights and
+    /// turns progressively wider the longer it flies.
+    pub age: f32,
     /// Seconds until self-destruct. Replaces the old trick of running
     /// `burn_fuel` negative and using it as a coast timer, which fought any
     /// attempt to give the motor a real burn duration.
@@ -170,6 +174,7 @@ impl Default for MissileProjectile {
             traveled: 0.0,
             blast_radius: 40.0,
             owner: Entity::PLACEHOLDER,
+            age: 0.0,
             eject_time: 0.0,
             launch_dir: Vec2::X,
             life: 6.0,

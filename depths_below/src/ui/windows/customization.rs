@@ -68,7 +68,7 @@ pub fn spawn_deep_customization_window(
     position: Vec2,
 ) {
     let window_id = format!("deep_{}_{:?}", slot_name, module_entity);
-    let title = format!("{} — {}", slot_name, option.name);
+    let title = format!("{} - {}", slot_name, option.name);
 
     let content = spawn_floating_window(
         commands,
@@ -290,9 +290,9 @@ fn spawn_parameter_slider(
     if !is_optimal {
         let warning = commands.spawn((
             (Text::new(if current_value < param_def.optimal_min {
-                    format!("⚠ Below recommended ({:.0}{})", param_def.optimal_min, param_def.unit)
+                    format!("! Below recommended ({:.0}{})", param_def.optimal_min, param_def.unit)
                 } else {
-                    format!("⚠ Above recommended ({:.0}{})", param_def.optimal_max, param_def.unit)
+                    format!("! Above recommended ({:.0}{})", param_def.optimal_max, param_def.unit)
                 }), TextFont { font_size: FontSize::Px(9.0), ..default() }, TextColor(Color::srgb(0.9, 0.6, 0.2))),
             ParameterWarning { param_key: param_key_str },
         )).id();
