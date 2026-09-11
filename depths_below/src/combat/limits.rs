@@ -40,3 +40,38 @@ pub fn enforce_projectile_limit(
         commands.entity(*entity).despawn();
     }
 }
+
+/// Max effect particles alive at once.
+///
+/// Nothing bounded these before, which was survivable while an explosion was
+/// one flat square. Routing the game's detonations through `spawn_explosion`
+/// turned each of ~18 of those call sites into a ~34-entity composite, and a
+/// ship's death rattle fires up to a dozen of them a second apart — so a
+/// three-ship pile-up can now ask for well over a thousand short-lived
+/// sprites at once. They all expire inside ~2s on their own; this only stops
+/// a pathological frame from turning into a stall.
+pub const MAX_PARTICLES: usize = 1600;
+
+/// System: despawn the nearest-to-death particles if over the limit.
+///
+/// Culling by *lowest remaining lifetime* means the ones about to vanish go
+/// first, so a cull is much harder to see than dropping the newest — which
+/// would delete the explosion that just happened.
+pub fn enforce_particle_limit(
+    mut commands: Commands,
+    particle_query: Query<(Entity, &crate::vfx::particles::Particle)>,
+) {
+    let total = particle_query.iter().count();
+    if total <= MAX_PARTICLES { return; }
+
+    let excess = total - MAX_PARTICLES;
+    let mut to_remove: Vec<(Entity, f32)> = particle_query
+        .iter()
+        .map(|(e, p)| (e, p.lifetime))
+        .collect();
+    to_remove.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    for (entity, _) in to_remove.iter().take(excess) {
+        commands.entity(*entity).despawn();
+    }
+}

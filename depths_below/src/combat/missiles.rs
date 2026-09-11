@@ -441,6 +441,7 @@ const NOZZLE_OFFSET: f32 = 14.0;
 pub fn spawn_missile_trails(
     time: Res<Time>,
     mut commands: Commands,
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut query: Query<(&MissileProjectile, &Transform, &Velocity, &mut MissileTrail)>,
 ) {
     let dt = time.delta_secs();
@@ -469,8 +470,9 @@ pub fn spawn_missile_trails(
                 let life = 0.3 + rand::random::<f32>() * 0.2;
                 commands.spawn((
                     Sprite {
+                        image: fx.puff(),
                         color: Color::srgba(0.82, 0.86, 0.92, 0.5),
-                        custom_size: Some(Vec2::splat(5.0 + rand::random::<f32>() * 4.0)),
+                        custom_size: Some(Vec2::splat(10.0 + rand::random::<f32>() * 7.0)),
                         ..default()
                     },
                     Transform::from_xyz(nozzle.x, nozzle.y, 0.45),
@@ -483,8 +485,8 @@ pub fn spawn_missile_trails(
         // === IGNITION: one-shot flash out the back. ===
         if !trail.ignited {
             trail.ignited = true;
-            spawn_hit_effect(&mut commands, nozzle, Color::srgb(1.0, 0.86, 0.55), 30.0);
-            spawn_impact_sparks(&mut commands, nozzle, -heading, 0.45, 10);
+            spawn_muzzle_flash(&mut commands, &fx, nozzle, -heading, 30.0, Color::srgb(1.0, 0.86, 0.55));
+            spawn_impact_sparks(&mut commands, &fx, nozzle, -heading, 0.45, 10);
         }
 
         // === FLAME: only while the motor is actually burning. ===
@@ -497,12 +499,17 @@ pub fn spawn_missile_trails(
                 let hot = rand::random::<f32>() < 0.4;
                 commands.spawn((
                     Sprite {
+                        image: fx.flame(),
                         color: if hot {
                             Color::srgba(1.0, 0.95, 0.75, 1.0)
                         } else {
                             Color::srgba(1.0, 0.55, 0.15, 0.95)
                         },
-                        custom_size: Some(Vec2::splat(if hot { 7.0 } else { 10.0 })),
+                        // Up from 7/10 for the same reason as the trail smoke:
+                        // a soft flame's low-alpha rim reads as void, so the
+                        // plume would otherwise have shrunk when it gained a
+                        // texture.
+                        custom_size: Some(Vec2::splat(if hot { 13.0 } else { 19.0 })),
                         ..default()
                     },
                     Transform::from_xyz(nozzle.x, nozzle.y, 0.55),
@@ -519,8 +526,14 @@ pub fn spawn_missile_trails(
             let grey = 0.30 + rand::random::<f32>() * 0.18;
             commands.spawn((
                 Sprite {
+                    image: fx.puff(),
+                    // Bigger than the solid quad this replaced. A soft puff's
+                    // visible core is roughly the inner half of its footprint
+                    // -- the rest is low-alpha rim that vanishes against the
+                    // void -- so matched sizes would read as a fainter,
+                    // thinner trail than the squares, not a softer one.
                     color: Color::srgba(grey, grey * 0.96, grey * 0.93, 0.5),
-                    custom_size: Some(Vec2::splat(6.0 + rand::random::<f32>() * 5.0)),
+                    custom_size: Some(Vec2::splat(13.0 + rand::random::<f32>() * 10.0)),
                     ..default()
                 },
                 Transform::from_xyz(nozzle.x, nozzle.y, 0.44),
@@ -683,6 +696,7 @@ const MAX_CREATURE_HIT_RADIUS: f32 = 100.0;
 /// Uses the creature spatial grid to only distance-check nearby creatures.
 pub fn check_missile_hits(
     mut commands: Commands,
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     missile_query: Query<(Entity, &MissileProjectile, &Transform)>,
     mut creature_query: Query<(&Transform, &mut Creature), Without<Ship>>,
     creature_grid: Res<crate::spatial::CreatureGrid>,
@@ -735,7 +749,7 @@ pub fn check_missile_hits(
                 }
             }
 
-            spawn_explosion(&mut commands, missile_pos_now, missile.blast_radius, Color::srgb(1.0, 0.45, 0.1));
+            spawn_explosion(&mut commands, &fx, missile_pos_now, missile.blast_radius, Color::srgb(1.0, 0.45, 0.1));
             if let Ok((mut module, _)) = ai_module_query.get_mut(hit) {
                 module.health = (module.health - missile.damage).max(0.0);
             }
@@ -782,7 +796,7 @@ pub fn check_missile_hits(
 
             if shield.is_up() && dist_to_ship < shield.radius && shield.covers_arc(missile_pos - center) {
                 shield.absorb(missile.damage);
-                spawn_explosion(&mut commands, missile_pos, missile.blast_radius * 0.7, Color::srgb(0.5, 0.8, 1.0));
+                spawn_explosion(&mut commands, &fx, missile_pos, missile.blast_radius * 0.7, Color::srgb(0.5, 0.8, 1.0));
                 commands.entity(missile_entity).despawn();
                 continue 'missiles;
             }
@@ -832,7 +846,7 @@ pub fn check_missile_hits(
                     }
                 }
                 if hit_any {
-                    spawn_explosion(&mut commands, missile_pos, missile.blast_radius, Color::srgb(1.0, 0.5, 0.1));
+                    spawn_explosion(&mut commands, &fx, missile_pos, missile.blast_radius, Color::srgb(1.0, 0.5, 0.1));
                     spawn_floating_damage(&mut commands, missile_pos, total_damage, Color::srgb(1.0, 0.4, 0.1));
                     // amount: 0.0 — damage already applied directly above to
                     // every module in the blast radius. process_ai_ship_damage_system
@@ -874,7 +888,7 @@ pub fn check_missile_hits(
             // (handled by the explosion effect — could expand later)
 
             // Explosion visual
-            spawn_explosion(&mut commands, missile_pos, missile.blast_radius, Color::srgb(1.0, 0.5, 0.1));
+            spawn_explosion(&mut commands, &fx, missile_pos, missile.blast_radius, Color::srgb(1.0, 0.5, 0.1));
             spawn_floating_damage(&mut commands, missile_pos, missile.damage, Color::srgb(1.0, 0.3, 0.1));
 
             commands.entity(missile_entity).despawn();

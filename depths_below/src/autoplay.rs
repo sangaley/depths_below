@@ -655,6 +655,15 @@ fn director_brain(
                 d.go(Phase::Board);
                 return;
             }
+            // Don't wait on the overlay forever. Without this the phase sits
+            // here until the stall watchdog fires, which sends us Home, which
+            // sees us docked and routes straight back into Trade - a loop with
+            // a four-minute period that looks like a hang.
+            if d.phase_elapsed > 20.0 {
+                d.log("trade", "services menu never came up - skipping to the board");
+                d.go(Phase::Board);
+                return;
+            }
             let Ok(sel) = w.dock_menu.single() else {
                 // Overlay hasn't spawned yet - wait a frame.
                 return;
@@ -950,6 +959,11 @@ fn director_brain(
                 d.system_dry = false;
                 d.jump_seen = false;
                 d.jump_for = 0.0;
+                // Drop the target we just used. Left set, the next dry system
+                // would re-target where we already are, the drive would answer
+                // "Already there", and Jump would burn its whole timeout doing
+                // nothing before falling through to Hunt.
+                warp.galaxy_target.0 = None;
                 d.go(Phase::Hunt);
                 return;
             }

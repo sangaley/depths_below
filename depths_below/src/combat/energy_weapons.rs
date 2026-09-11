@@ -420,6 +420,7 @@ pub struct IonDisabled {
 
 /// System: fire ion disruptor — slow pulse projectile
 pub fn fire_ion_system(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     time: Res<Time>,
     fire_state: Res<FireGroupState>,
     selection: Res<TargetSelection>,
@@ -506,7 +507,7 @@ pub fn fire_ion_system(
         ));
 
         // Muzzle flash
-        spawn_hit_effect(&mut commands, weapon_pos + direction * 20.0, Color::srgb(0.5, 0.3, 0.9), 10.0);
+        super::spawn_muzzle_flash(&mut commands, &fx, weapon_pos + direction * 20.0, direction, 16.0, Color::srgb(0.5, 0.3, 0.9));
     }
 }
 
@@ -671,6 +672,7 @@ pub fn update_ion_disabled(
 /// left None so move_missiles never applies guidance, it just flies
 /// straight and detonates on contact).
 pub fn fire_plasma_system(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     time: Res<Time>,
     fire_state: Res<FireGroupState>,
     selection: Res<TargetSelection>,
@@ -764,7 +766,7 @@ pub fn fire_plasma_system(
             GravityForce::default(),
         ));
 
-        spawn_hit_effect(&mut commands, weapon_pos + direction * 20.0, Color::srgb(1.0, 0.5, 0.1), 10.0);
+        super::spawn_muzzle_flash(&mut commands, &fx, weapon_pos + direction * 20.0, direction, 16.0, Color::srgb(1.0, 0.5, 0.1));
     }
 }
 
@@ -897,6 +899,7 @@ pub fn fire_emp_missiles(
 /// module in radius regardless of owner: the player's own (half duration,
 /// "affects_friendly") and any AI ship's (full duration).
 pub fn emp_detonation(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut commands: Commands,
     missile_query: Query<(Entity, &Transform, &EmpWarhead, &super::new_projectiles::MissileProjectile)>,
     mut module_query: Query<(Entity, &Module, &GlobalTransform, &ChildOf), Without<DestroyedModule>>,
@@ -925,8 +928,17 @@ pub fn emp_detonation(
         if !detonated { continue; }
 
         // EMP DETONATION!
-        // Visual: purple-blue expanding ring
-        spawn_hit_effect(&mut commands, missile_pos, Color::srgba(0.4, 0.3, 0.9, 0.6), emp.emp_radius);
+        // The comment has always said "purple-blue expanding ring"; it was a
+        // static opaque square up to 400 units across. spawn_explosion's shock
+        // ring reaches radius * 3.4, so it now actually expands -- and stays
+        // purple, which only works because `color` is wired up.
+        super::spawn_explosion(
+            &mut commands,
+            &fx,
+            missile_pos,
+            emp.emp_radius / 3.0,
+            Color::srgb(0.45, 0.35, 0.95),
+        );
 
         let mut hit_player = false;
         for (module_entity, _module, module_gt, parent) in module_query.iter_mut() {

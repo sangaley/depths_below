@@ -191,7 +191,23 @@ impl Default for MissileProjectile {
 // ============================================================================
 
 /// Main weapon firing system: reads fire groups, aims with lead prediction, spawns projectiles
+/// Everything the gun battery needs to answer "where is the player pointing".
+///
+/// Bundled because `fire_weapons_system` sits at Bevy's 16-parameter ceiling
+/// and adding one more silently drops its `IntoSystem` impl -- which surfaces
+/// as `no method named in_set` on the whole tuple in CombatPlugin, several
+/// hundred lines away, rather than as anything about this function.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct AimInput<'w, 's> {
+    pub windows: Query<'w, 's, &'static Window>,
+    pub camera: Query<'w, 's, (&'static Camera, &'static GlobalTransform), With<crate::camera::MainCamera>>,
+    pub input_state: Res<'w, crate::resources::InputState>,
+    pub aim_lock: Res<'w, crate::combat::targeting::AimLock>,
+}
+
 pub fn fire_weapons_system(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
+    aiming: AimInput,
     time: Res<Time>,
     fire_state: Res<FireGroupState>,
     power_state: Res<crate::resources::PowerState>,
@@ -209,10 +225,6 @@ pub fn fire_weapons_system(
     target_transform_query: Query<&Transform, Without<Ship>>,
     target_velocity_query: Query<&Velocity, Without<Ship>>,
     targeting_computer_query: Query<&Module, Without<DestroyedModule>>,
-    windows_query: Query<&Window>,
-    camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::MainCamera>>,
-    input_state: Res<crate::resources::InputState>,
-    aim_lock: Res<crate::combat::targeting::AimLock>,
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
     mut commands: Commands,
     debug_tuning: Res<crate::debug::DebugTuning>,
@@ -227,16 +239,16 @@ pub fn fire_weapons_system(
     }
 
     // Cursor world position — dumb-fire fallback when no target is selected.
-    let cursor_world: Option<Vec2> = windows_query.single().ok()
+    let cursor_world: Option<Vec2> = aiming.windows.single().ok()
         .and_then(|w| w.cursor_position())
         .and_then(|c| {
-            camera_query.single().ok()
+            aiming.camera.single().ok()
                 .and_then(|(cam, gt)| cam.viewport_to_world_2d(gt, c).ok())
         });
     // Controller right-stick aim beats the mouse while it owns aim (see
     // InputState.gamepad_aim): dumb-fire at a point projected out along
     // the stick direction.
-    let cursor_world = input_state.gamepad_aim
+    let cursor_world = aiming.input_state.gamepad_aim
         .map(|dir| ship_transform.translation.truncate() + dir * 2000.0)
         .or(cursor_world);
 
@@ -303,14 +315,14 @@ pub fn fire_weapons_system(
         // A right-click lock names a specific BLOCK — that's the aim point,
         // capped to range like any other. Falls through to the ship-level
         // selection and then the cursor when nothing is locked.
-        let (target_pos, target_vel) = if let Some(point) = aim_lock.aim_point() {
+        let (target_pos, target_vel) = if let Some(point) = aiming.aim_lock.aim_point() {
             let to_point = point - weapon_pos;
             let aim = if to_point.length() > weapon.range {
                 weapon_pos + to_point.normalize_or_zero() * weapon.range
             } else {
                 point
             };
-            let vel = aim_lock.ship
+            let vel = aiming.aim_lock.ship
                 .and_then(|e| target_velocity_query.get(e).ok())
                 .map(|v| v.0)
                 .unwrap_or(Vec2::ZERO);
@@ -529,7 +541,7 @@ pub fn fire_weapons_system(
             ModuleType::Gatling => Color::srgb(1.0, 0.85, 0.2),
             _ => Color::srgb(0.8, 0.8, 0.4),
         };
-        spawn_hit_effect(&mut commands, weapon_pos + direction * 30.0, flash_color, 12.0);
+        spawn_muzzle_flash(&mut commands, &fx, weapon_pos + direction * 30.0, direction, 20.0, flash_color);
     }
 }
 
@@ -582,7 +594,22 @@ const MAX_CREATURE_HIT_RADIUS: f32 = 90.0;
 /// Check projectile collisions with creatures and ships.
 /// Uses the creature spatial grid to only distance-check creatures near each
 /// projectile instead of every creature in the world.
+/// Shrink factor from an explosive round's DAMAGE radius to the radius handed
+/// to `spawn_explosion`.
+///
+/// spawn_explosion deliberately overshoots what it is given -- the fireball
+/// grows to 2.2x and the shock ring to 3.4x -- because a blast that stops
+/// exactly at its kill radius reads as smaller than it is. That overshoot was
+/// tuned against missiles, whose blast_radius is ~30-70. Explosive shells
+/// carry 75-160, so feeding them their raw radius put the shock ring out past
+/// 500 units and swallowed the screen on every HE hit.
+///
+/// At 0.32 the fireball sits well inside the damage radius and the ring close
+/// to it — tightened by eye from 0.4, which still read as too much on screen.
+const IMPACT_BLAST_SCALE: f32 = 0.32;
+
 pub fn check_projectile_hits(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut commands: Commands,
     // Transform and Sprite went MUTABLE here (a bounced round is stepped clear
     // of the plate and recoloured), which collides with the &Transform in the
@@ -718,7 +745,7 @@ pub fn check_projectile_hits(
                         spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.6, 0.2), 12.0);
                         // Biting hits spray back along the round's own path —
                         // debris coming out of the hole, not off it.
-                        spawn_impact_sparks(&mut commands, hit_pos, -dir_local_world, 0.2, 5);
+                        spawn_impact_sparks(&mut commands, &fx, hit_pos, -dir_local_world, 0.2, 5);
                         spawn_floating_damage(&mut commands, hit_pos, impact.to_block, Color::srgb(1.0, 0.8, 0.3));
                         (step.entity, hit_pos)
                     })
@@ -746,7 +773,7 @@ pub fn check_projectile_hits(
                         hull.health = (hull.health - impact.to_block).max(0.0);
                         let hit_pos = gt.translation().truncate();
                         spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.5, 0.2), 16.0);
-                        spawn_impact_sparks(&mut commands, hit_pos, -dir_local_world, 0.2, 6);
+                        spawn_impact_sparks(&mut commands, &fx, hit_pos, -dir_local_world, 0.2, 6);
                         spawn_floating_damage(&mut commands, hit_pos, impact.to_block, Color::srgb(1.0, 0.3, 0.3));
                         (step.entity, hit_pos)
                     });
@@ -773,7 +800,8 @@ pub fn check_projectile_hits(
                 let spall = crate::combat::ammo_types::spall(proj.ammo);
                 if penetrated || spall.through_solid {
                     spall_blocks(
-                        &mut commands, grid, &mut ai_module_query, &mut ai_hull_query,
+                        &mut commands,
+                        &fx, grid, &mut ai_module_query, &mut ai_hull_query,
                         spall, step.cell, dir_local, proj.damage, hit_entity,
                         hit_pos, dir_local_world,
                     );
@@ -827,7 +855,7 @@ pub fn check_projectile_hits(
                         // small pale flash gave no way to see that it had, so
                         // a deflection looked like a shot that simply failed.
                         let graze = 1.0 - obl.cos_impact;
-                        spawn_impact_sparks(&mut commands, hit_pos, out, graze, 9 + (graze * 7.0) as usize);
+                        spawn_impact_sparks(&mut commands, &fx, hit_pos, out, graze, 9 + (graze * 7.0) as usize);
                         // ...and the round itself goes hot, so it can be
                         // followed off the plate instead of vanishing into the
                         // background as a dim shape travelling somewhere new.
@@ -880,7 +908,7 @@ pub fn check_projectile_hits(
                                 &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
                                 hit_entity, hit_pos, radius, blast_damage,
                             );
-                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.5, 0.1), radius);
+                            spawn_explosion(&mut commands, &fx, hit_pos, radius * IMPACT_BLAST_SCALE, Color::srgb(1.0, 0.5, 0.1));
                         }
                         ProximityBurst { fragment_damage, fragment_radius, .. } => {
                             let radius = fragment_radius * proj.caliber;
@@ -888,7 +916,7 @@ pub fn check_projectile_hits(
                                 &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
                                 hit_entity, hit_pos, radius, fragment_damage,
                             );
-                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.9, 0.4), radius);
+                            spawn_explosion(&mut commands, &fx, hit_pos, radius * IMPACT_BLAST_SCALE, Color::srgb(1.0, 0.9, 0.4));
                         }
                         EMPDisable { disable_radius, disable_duration } => {
                             let radius = disable_radius * proj.caliber;
@@ -903,7 +931,7 @@ pub fn check_projectile_hits(
                                     }
                                 }
                             }
-                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(0.4, 0.5, 0.95), radius);
+                            spawn_explosion(&mut commands, &fx, hit_pos, radius * IMPACT_BLAST_SCALE, Color::srgb(0.4, 0.5, 0.95));
                         }
                         Ignite { fire_duration, fire_intensity } => {
                             commands.entity(hit_entity).try_insert(BlockBurning {
@@ -952,7 +980,7 @@ pub fn check_projectile_hits(
                                 &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
                                 hit_entity, hit_pos, radius, crush_damage,
                             );
-                            spawn_hit_effect(&mut commands, hit_pos, Color::srgb(0.4, 0.2, 0.6), radius);
+                            spawn_explosion(&mut commands, &fx, hit_pos, radius * IMPACT_BLAST_SCALE, Color::srgb(0.4, 0.2, 0.6));
                         }
                         Irradiate { dose, crew_affected } => {
                             // The hull is left alone on purpose. AI crew carry
@@ -1054,7 +1082,7 @@ pub fn check_projectile_hits(
                         spawn_floating_damage(&mut commands, other_pos, frag_damage, Color::srgb(1.0, 0.7, 0.3));
                     }
                 }
-                spawn_hit_effect(&mut commands, proj_pos, Color::srgb(1.0, 0.6, 0.15), radius);
+                spawn_explosion(&mut commands, &fx, proj_pos, radius * IMPACT_BLAST_SCALE, Color::srgb(1.0, 0.6, 0.15));
             }
 
             // Despawn projectile (unless it penetrates)
@@ -1096,6 +1124,7 @@ pub fn caliber_scale(module_type: ModuleType) -> f32 {
 /// respects the ship's actual layout rather than a distance check.
 fn spall_blocks(
     commands: &mut Commands,
+    fx: &crate::vfx::effect_textures::EffectTextures,
     grid: &crate::building::ShipGrid,
     module_query: &mut Query<(&mut Module, &GlobalTransform), Without<DestroyedModule>>,
     hull_query: &mut Query<(&mut HullSegment, &GlobalTransform), Without<crate::components::HullDestroyed>>,
@@ -1140,7 +1169,7 @@ fn spall_blocks(
     }
     // Sparks blowing INWARD, so a breach reads differently from a bounce
     // (which sprays back out along the round's new heading).
-    spawn_impact_sparks(commands, world_at, world_dir, 0.5, 4 + profile.fragments as usize);
+    spawn_impact_sparks(commands, fx, world_at, world_dir, 0.5, 4 + profile.fragments as usize);
 }
 
 fn splash_blocks(

@@ -92,6 +92,7 @@ pub(super) fn projectile_movement(
 /// Check projectile collisions — ammo-type aware.
 /// Torpedo/Bullet: single target. Charge: AoE hits all creatures in radius.
 pub(super) fn projectile_collision(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut commands: Commands,
     // Transform and Sprite are MUTABLE here now (a deflected round is moved and
     // recoloured), which puts them up against the &Transform in the creature
@@ -327,7 +328,7 @@ pub(super) fn projectile_collision(
                             proj_transform.translation.y += out.y * 70.0;
                             projectile.prev_pos = proj_transform.translation.truncate();
                             let graze = 1.0 - obl.cos_impact;
-                            super::spawn_impact_sparks(&mut commands, at, out, graze, 9 + (graze * 7.0) as usize);
+                            super::spawn_impact_sparks(&mut commands, &fx, at, out, graze, 9 + (graze * 7.0) as usize);
                             spawn_hit_effect(&mut commands, at, Color::srgb(0.95, 0.95, 0.85), 10.0);
                         }
                         // Tell the shooter. A ship that can't see its own
@@ -352,7 +353,7 @@ pub(super) fn projectile_collision(
                     // this, hits on the player registered only as a hull-bar
                     // twitch and a notification line.
                     spawn_hit_effect(&mut commands, block_pos, Color::srgb(1.0, 0.55, 0.2), 14.0);
-                    super::spawn_impact_sparks(&mut commands, block_pos, -projectile.direction, 0.25, 6);
+                    super::spawn_impact_sparks(&mut commands, &fx, block_pos, -projectile.direction, 0.25, 6);
                     damage_events.write(ShipDamaged {
                         source: DamageSource::Creature(Entity::PLACEHOLDER),
                         amount: projectile.damage,

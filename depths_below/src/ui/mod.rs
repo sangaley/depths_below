@@ -538,8 +538,10 @@ const WARP_DASH_DISTANCE_PER_SECOND: f32 = 15_000.0;
 const WARP_DASH_MIN_BUFFER: f32 = 800.0;
 const WARP_DASH_MAX_BUFFER: f32 = 3000.0;
 const WARP_DASH_BUFFER_FRACTION: f32 = 0.15;
-/// Below this, fly it. The buffer alone would eat most of the distance.
-const WARP_DASH_MIN_DISTANCE: f32 = 1200.0;
+/// Below this, fly it. The buffer alone would eat most of the distance: at
+/// 1200 the minimum 800 standoff leaves 400 units of travel for a two-second
+/// spin-up, which is a worse deal than the thrusters.
+const WARP_DASH_MIN_DISTANCE: f32 = 2000.0;
 
 fn warp_dash_arrival_buffer(distance: f32) -> f32 {
     (distance * WARP_DASH_BUFFER_FRACTION).clamp(WARP_DASH_MIN_BUFFER, WARP_DASH_MAX_BUFFER)
@@ -3422,6 +3424,7 @@ fn warp_dash_input(
 /// spend the fuel locked in at charge-start, clear the destination.
 fn execute_warp_dash(
     mut commands: Commands,
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut ship_query: Query<(Entity, &mut Transform, &mut Velocity, &MapWarpCharging), With<Ship>>,
     mut fuel_state: ResMut<FuelState>,
     mut pending: ResMut<PendingWarpTarget>,
@@ -3432,9 +3435,22 @@ fn execute_warp_dash(
         return;
     }
 
+    // Both ends of a dash are inside the same loaded system, so unlike an
+    // interstellar jump the departure flash is genuinely visible -- it marks
+    // where you left, which is the only cue that you moved rather than that
+    // the camera cut.
+    let from = transform.translation.truncate();
+    crate::vfx::particles::spawn_warp_flash(
+        &mut commands, &fx, from, 150.0, Color::srgb(0.45, 0.70, 1.0),
+    );
+
     transform.translation.x = charging.target_pos.x;
     transform.translation.y = charging.target_pos.y;
     velocity.0 = Vec2::ZERO;
+
+    crate::vfx::particles::spawn_warp_flash(
+        &mut commands, &fx, charging.target_pos, 150.0, Color::srgb(0.55, 0.78, 1.0),
+    );
     fuel_state.current_fuel = (fuel_state.current_fuel - charging.fuel_cost).max(0.0);
     pending.0 = None;
 

@@ -150,6 +150,14 @@ impl Plugin for ShipPlugin {
                     damage::explosion_shockwaves.after(damage::process_ai_detonations),
                     fire::apply_fire_ignition.after(damage::process_detonations),
                     fire::update_fire.after(fire::apply_fire_ignition),
+                    // Nested so the outer tuple stays inside Bevy's 20-element
+                    // limit for system tuples -- past it, the whole block
+                    // silently loses IntoSystemConfigs and the error lands on
+                    // `.in_set` rather than on the systems that overflowed it.
+                    (
+                        fire::sync_fire_overlays.after(fire::update_fire),
+                        fire::animate_fire_overlays.after(fire::sync_fire_overlays),
+                    ),
                     hull::process_hull_cascade.after(damage::process_detonations),
                     update_hull_integrity.after(hull::process_hull_cascade).after(fire::update_fire),
                     update_decompression.after(hull::process_hull_cascade),

@@ -5,6 +5,7 @@ pub mod block_visuals;
 pub mod starfield;
 pub mod procedural_textures;
 pub mod debris;
+pub mod effect_textures;
 
 use bevy::prelude::*;
 use crate::states::GameState;
@@ -14,7 +15,10 @@ pub struct VfxPlugin;
 impl Plugin for VfxPlugin {
     fn build(&self, app: &mut App) {
         app
-            .add_systems(Startup, procedural_textures::generate_celestial_textures)
+            .add_systems(Startup, (
+                procedural_textures::generate_celestial_textures,
+                effect_textures::load_effect_textures,
+            ))
             .add_systems(
                 Update,
                 (

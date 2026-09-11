@@ -85,6 +85,46 @@ pub(crate) fn spawn_hit_effect(commands: &mut Commands, position: Vec2, color: C
     ));
 }
 
+/// A gun firing: a short directional flash at the muzzle.
+///
+/// `spawn_hit_effect` was standing in for this, which meant every weapon in
+/// the game -- railgun, gatling, laser -- flashed the same axis-aligned
+/// square. A flash points where the barrel does, so this rotates to `dir`,
+/// and it is wider than it is tall so the shape reads as coming *out* of
+/// something.
+pub(crate) fn spawn_muzzle_flash(
+    commands: &mut Commands,
+    fx: &crate::vfx::effect_textures::EffectTextures,
+    position: Vec2,
+    dir: Vec2,
+    size: f32,
+    color: Color,
+) {
+    let dir = dir.normalize_or_zero();
+    if dir == Vec2::ZERO {
+        return;
+    }
+    commands.spawn((
+        Sprite {
+            image: fx.muzzle.clone(),
+            color,
+            custom_size: Some(Vec2::new(size * 1.6, size)),
+            ..default()
+        },
+        Transform {
+            translation: position.extend(0.6),
+            rotation: Quat::from_rotation_z(dir.y.atan2(dir.x)),
+            ..default()
+        },
+        HitEffect {
+            // Shorter than the generic 0.2s hit flash: a muzzle flash is the
+            // shortest-lived thing in a fight and a lingering one reads as the
+            // gun still firing.
+            timer: Timer::from_seconds(0.09, TimerMode::Once),
+        },
+    ));
+}
+
 /// A warhead going off: expanding fireball, shock ring, radial spray, smoke.
 ///
 /// `spawn_hit_effect` is a static square sized to the blast radius, which
@@ -92,24 +132,57 @@ pub(crate) fn spawn_hit_effect(commands: &mut Commands, position: Vec2, color: C
 /// event at different zoom levels. `radius` here is the DAMAGE radius; the
 /// visuals deliberately overshoot it, because an explosion whose fireball
 /// stops exactly at its kill radius reads as smaller than it is.
-pub(crate) fn spawn_explosion(commands: &mut Commands, position: Vec2, radius: f32, color: Color) {
+///
+/// `color` says what KIND of detonation this is, and every layer derives from
+/// it. The core still goes near-white — anything energetic enough to matter is
+/// white-hot at its centre whatever set it off — but it cools toward `color`,
+/// so an EMP burst cools to blue and a warhead to orange. Without that a
+/// capacitor discharge and a magazine cook-off are the same orange ball, which
+/// is exactly the "colour = information, not decoration" rule the art brief is
+/// built on.
+pub(crate) fn spawn_explosion(
+    commands: &mut Commands,
+    fx: &crate::vfx::effect_textures::EffectTextures,
+    position: Vec2,
+    radius: f32,
+    color: Color,
+) {
     use crate::vfx::particles::{Blast, Particle};
 
+    let c = color.to_srgba();
+    // Toward white by `t`, for the hot end of a layer.
+    let hot_of = |t: f32, a: f32| {
+        Color::srgba(
+            c.red + (1.0 - c.red) * t,
+            c.green + (1.0 - c.green) * t,
+            c.blue + (1.0 - c.blue) * t,
+            a,
+        )
+    };
+    // Darkened toward the caller's own hue, for the cool end.
+    let cool_of = |k: f32, a: f32| Color::srgba(c.red * k, c.green * k, c.blue * k, a);
+
     // Unit-sized sprites scaled by Blast, so growth is one number.
-    let core = |commands: &mut Commands, from: f32, to: f32, dur: f32, z: f32, hot: Color, cool: Color| {
+    let core = |commands: &mut Commands, img: Option<Handle<Image>>, from: f32, to: f32, dur: f32, z: f32, hot: Color, cool: Color| {
         commands.spawn((
-            Sprite { color: hot, custom_size: Some(Vec2::ONE), ..default() },
+            Sprite {
+                image: img.unwrap_or_default(),
+                color: hot,
+                custom_size: Some(Vec2::ONE),
+                ..default()
+            },
             Transform::from_xyz(position.x, position.y, z),
             Blast { elapsed: 0.0, duration: dur, from, to, hot, cool },
         ));
     };
 
-    // Fireball: white-hot core cooling to deep orange.
-    core(commands, radius * 0.5, radius * 2.2, 0.42, 0.62,
-         Color::srgba(1.0, 0.95, 0.80, 1.0), Color::srgba(0.9, 0.25, 0.05, 0.7));
-    // Shock ring: wider, thinner, gone sooner — it sells the scale.
-    core(commands, radius * 0.8, radius * 3.4, 0.30, 0.61,
-         Color::srgba(1.0, 0.75, 0.40, 0.55), Color::srgba(0.8, 0.4, 0.2, 0.0));
+    // Fireball: near-white core cooling to the event's own colour.
+    core(commands, Some(fx.fireball.clone()), radius * 0.5, radius * 2.2, 0.42, 0.62,
+         hot_of(0.82, 1.0), cool_of(0.55, 0.7));
+    // Shock ring: an actual annulus, so it reads as a front travelling
+    // outward rather than as a second fireball behind the first.
+    core(commands, Some(fx.ring.clone()), radius * 0.8, radius * 3.4, 0.30, 0.61,
+         hot_of(0.45, 0.55), cool_of(0.5, 0.0));
 
     // Radial spray. Unlike an impact fan this is symmetric: a detonation has
     // no incoming direction to report.
@@ -122,8 +195,11 @@ pub(crate) fn spawn_explosion(commands: &mut Commands, position: Vec2, radius: f
         let hot = i % 3 == 0;
         commands.spawn((
             Sprite {
-                color: if hot { Color::srgb(1.0, 0.97, 0.86) } else { Color::srgb(1.0, 0.6, 0.18) },
-                custom_size: Some(Vec2::new(if hot { 9.0 } else { 6.0 }, 2.4)),
+                image: fx.spark.clone(),
+                color: if hot { hot_of(0.9, 1.0) } else { hot_of(0.25, 1.0) },
+                // Longer than the solid quad: the texture's tail is mostly
+                // low alpha, so its visible length is well under its footprint.
+                custom_size: Some(Vec2::new(if hot { 16.0 } else { 11.0 }, 3.6)),
                 ..default()
             },
             Transform {
@@ -143,12 +219,19 @@ pub(crate) fn spawn_explosion(commands: &mut Commands, position: Vec2, radius: f
         let grey = 0.18 + rand::random::<f32>() * 0.16;
         commands.spawn((
             Sprite {
+                image: fx.puff(),
                 color: Color::srgba(grey, grey * 0.92, grey * 0.88, 0.75),
-                custom_size: Some(Vec2::splat(radius * (0.4 + rand::random::<f32>() * 0.4))),
+                // Wider than the solid quad, for the same reason as the
+                // missile trail: a soft puff's low-alpha rim reads as empty
+                // void, so its effective size is well under its footprint.
+                custom_size: Some(Vec2::splat(radius * (0.7 + rand::random::<f32>() * 0.7))),
                 ..default()
             },
             Transform::from_xyz(position.x, position.y, 0.59),
-            Particle::wisp(heading * radius * (0.5 + rand::random::<f32>()), life, 0.75, false),
+            // Alpha down from 0.75: soft puffs overlap far more smoothly than
+            // opaque squares, and ten of them at the old value stack into one
+            // flat grey disc instead of a cloud with depth.
+            Particle::wisp(heading * radius * (0.5 + rand::random::<f32>()), life, 0.5, false),
         ));
     }
 }
@@ -164,6 +247,7 @@ pub(crate) fn spawn_explosion(commands: &mut Commands, position: Vec2, radius: f
 /// streak, a near-square one that barely turned throws a short hot burst.
 pub(crate) fn spawn_impact_sparks(
     commands: &mut Commands,
+    fx: &crate::vfx::effect_textures::EffectTextures,
     position: Vec2,
     dir: Vec2,
     energy: f32,
@@ -185,12 +269,13 @@ pub(crate) fn spawn_impact_sparks(
         let hot = i % 3 == 0;
         commands.spawn((
             Sprite {
+                image: fx.spark.clone(),
                 color: if hot {
                     Color::srgb(1.0, 0.97, 0.86)
                 } else {
                     Color::srgb(1.0, 0.68, 0.24)
                 },
-                custom_size: Some(Vec2::new(if hot { 6.0 } else { 4.0 }, 1.8)),
+                custom_size: Some(Vec2::new(if hot { 11.0 } else { 8.0 }, 2.8)),
                 ..default()
             },
             Transform {
@@ -387,6 +472,7 @@ impl Plugin for CombatPlugin {
                 effects::animate_floating_damage,
                 crate::ship::damage::cleanup_hit_effects,
                 limits::enforce_projectile_limit,
+                limits::enforce_particle_limit,
                 new_projectiles::tick_burning_blocks,
             ).in_set(CombatSet::Cleanup))
             // Fire group assignment (build mode)

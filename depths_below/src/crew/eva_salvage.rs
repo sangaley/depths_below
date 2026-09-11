@@ -154,11 +154,15 @@ pub fn order_salvage_detail(
     // both things and position is the only way to tell them apart, so the
     // nearer one wins - otherwise parking on a wreck inside a station's dock
     // radius flung a detail out AND berthed the ship, stranding them.
-    if let Some(idx) = stations.nearest_index(ship_pos) {
-        if let Some(site) = stations.sites.get(idx) {
-            if ship_pos.distance(site.pos) < wreck_dist {
-                return;
-            }
+    //
+    // Only yield to a station that can actually take the press, though.
+    // ORDER_RANGE (3000) reaches well past DOCK_RANGE (1800), so "nearer" on
+    // its own left a dead band: a station at 2000 with a wreck at 2500 beat
+    // the wreck here and was then out of range to dock, and F did nothing at
+    // all.
+    if let Some(site) = stations.nearest_in_range(ship_pos) {
+        if ship_pos.distance(site.pos) < wreck_dist {
+            return;
         }
     }
     if !press.claim() {
@@ -346,6 +350,7 @@ pub fn order_salvage_detail(
 /// hulk to their claimed block → pry it loose (block pops off as debris)
 /// → haul it home around the hull → deposit → claim the next block.
 pub fn run_salvage_detail(
+    fx: Res<crate::vfx::effect_textures::EffectTextures>,
     time: Res<Time>,
     mut commands: Commands,
     ship_query: Query<(Entity, &GlobalTransform), With<Ship>>,
@@ -504,6 +509,7 @@ pub fn run_salvage_detail(
                             );
                             crate::vfx::debris::spawn_chunks(
                                 &mut commands,
+                                &fx,
                                 &mut rng,
                                 block_pos,
                                 block_sprite.color,

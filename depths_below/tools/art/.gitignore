@@ -5,3 +5,6 @@ pix2/
 pixroom/
 __pycache__/
 *.pyc
+cache/
+preview/
+effects_out/
