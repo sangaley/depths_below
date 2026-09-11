@@ -47,7 +47,7 @@ def build_small_reactor(m):
 
 def build_large_reactor_2x1(m):
     """Twin-vessel plant: two cores sharing one exchanger."""
-    armour_base(m, w=1.94)
+    armour_base(m, w=2.0)
     for sx in (-1, 1):
         cyl("shield", 0.290, 0.050, (sx * 0.470, 0.02, 0.096), m["dark"],
             bevel=0.014, verts=48)
@@ -69,7 +69,7 @@ def build_large_reactor_2x1(m):
 def build_large_reactor_3x3(m):
     """Fusion torus: magnetic confinement coils around a bright core. The
     biggest, brightest thing on any ship -- it should look like it."""
-    armour_base(m, w=2.90, h=2.90)
+    armour_base(m, w=3.0, h=3.0)
     cyl("outer", 1.150, 0.050, (0.0, 0.0, 0.096), m["dark"], bevel=0.020, verts=64)
     cyl("ring", 0.960, 0.055, (0.0, 0.0, 0.118), m["light"], bevel=0.030, verts=64)
     cyl("cham", 0.720, 0.050, (0.0, 0.0, 0.150), m["dark"], verts=64)
@@ -131,7 +131,7 @@ def build_standard_engine(m):
 def build_standard_engine_2x1(m):
     """Twin-nozzle engine on a 2x1 footprint. No overhang registered for this
     sprite, so the bells stay inside the canvas."""
-    armour_base(m, w=1.94)
+    armour_base(m, w=2.0)
     box("chamber", (1.60, 0.34, 0.055), (0.0, 0.230, 0.100), m["dark"], bevel=0.014)
     for i in range(15):
         box("rib", (0.070, 0.28, 0.028), (-0.49 + i * 0.07, 0.230, 0.128), m["light"])
@@ -174,48 +174,63 @@ def build_silent_drive(m):
 # QUIET -- structure reads through shape, not detail. Anything busy here turns
 # a large hull into visual noise, which is probably why the original is bare.
 def build_hull_beam(m):
-    """Reinforced structural bay: I-beam spine with corner gussets."""
+    """Reinforced structural bay: I-beam, web stopping short of the flanges.
+
+    The web and flanges must NOT overlap. Coincident coplanar faces render as
+    transparent holes in Cycles -- an earlier version punched two black gaps
+    straight through the plate.
+    """
     armour_base(m, hazard=False)
-    box("spine", (0.20, 0.86, 0.045), (0.0, 0.0, 0.096), m["dark"], bevel=0.010)
+    # Flanges top and bottom.
     for sy in (-1, 1):
-        box("flange", (0.74, 0.135, 0.045), (0.0, sy * 0.355, 0.096), m["dark"],
+        box("flange", (0.76, 0.130, 0.042), (0.0, sy * 0.355, 0.098), m["dark"],
             bevel=0.010)
+    # Web spans only the gap BETWEEN them.
+    box("web", (0.190, 0.560, 0.042), (0.0, 0.0, 0.098), m["dark"], bevel=0.010)
+    # Quiet detail: a few stiffeners, nothing more. This block tiles 23 ways
+    # across a hull and anything busier turns a large ship into noise.
+    for sy in (-1, 1):
+        box("stiff", (0.150, 0.026, 0.022), (0.0, sy * 0.170, 0.124), m["light"])
     for sx in (-1, 1):
         for sy in (-1, 1):
-            g = box("gusset", (0.22, 0.075, 0.030), (sx * 0.245, sy * 0.245, 0.104),
-                    m["light"])
-            g.rotation_euler = (0.0, 0.0, -0.7854 * sx * sy)
-    for sy in (-1, 1):
-        for i in range(3):
-            box("web", (0.135, 0.028, 0.024), (0.0, sy * (0.14 + i * 0.075), 0.122),
-                m["light"])
+            box("gusset", (0.105, 0.105, 0.024), (sx * 0.290, sy * 0.290, 0.098),
+                m["light"], bevel=0.008)
 
 
 def build_hull_beam_2x2(m):
-    """Four-cell structural block: cross bracing across the full span."""
-    armour_base(m, hazard=False, w=1.94, h=1.94)
-    box("spine_v", (0.22, 1.86, 0.045), (0.0, 0.0, 0.096), m["dark"], bevel=0.010)
-    box("spine_h", (1.86, 0.22, 0.045), (0.0, 0.0, 0.096), m["dark"], bevel=0.010)
+    """Four-cell structural block: ring frame with four separate spokes."""
+    armour_base(m, hazard=False, w=2.0, h=2.0)
+    # Perimeter frame, four bars that meet only at the corners.
+    for sy in (-1, 1):
+        box("rail", (1.76, 0.130, 0.042), (0.0, sy * 0.815, 0.098), m["dark"],
+            bevel=0.010)
     for sx in (-1, 1):
-        for sy in (-1, 1):
-            d = box("brace", (0.115, 1.05, 0.030), (sx * 0.470, sy * 0.470, 0.108),
-                    m["light"])
-            d.rotation_euler = (0.0, 0.0, -0.7854 * sx * sy)
-    cyl("boss", 0.150, 0.050, (0.0, 0.0, 0.116), m["light"], bevel=0.012, verts=32)
+        box("post", (0.130, 1.50, 0.042), (sx * 0.815, 0.0, 0.098), m["dark"],
+            bevel=0.010)
+    # Central boss with four spokes that stop short of it.
+    cyl("boss", 0.185, 0.046, (0.0, 0.0, 0.100), m["dark"], bevel=0.012, verts=32)
+    for i in range(4):
+        a = i * (math.pi / 2.0)
+        sp = box("spoke", (0.110, 0.440, 0.038), (math.cos(a) * 0.420,
+                 math.sin(a) * 0.420, 0.098), m["dark"], bevel=0.008)
+        sp.rotation_euler = (0.0, 0.0, a + 1.5708)
+    cyl("cap", 0.105, 0.042, (0.0, 0.0, 0.124), m["light"], verts=28)
 
 
 def build_hull_beam_3x2(m):
-    """Six-cell staggered armour: offset plates, no bright accents."""
-    armour_base(m, hazard=False, w=2.90, h=1.94)
+    """Six-cell staggered armour: offset plates with recessed joints."""
+    armour_base(m, hazard=False, w=3.0, h=2.0)
     for r in range(2):
-        y = -0.470 + r * 0.940
-        off = 0.235 if r else -0.235
+        y = -0.455 + r * 0.910
+        off = 0.230 if r else -0.230
         for i in range(3):
-            box("plate", (0.86, 0.80, 0.040), (-0.940 + i * 0.940 + off, y, 0.098),
-                m["dark"], bevel=0.014)
-    box("spine_h", (2.82, 0.16, 0.040), (0.0, 0.0, 0.112), m["light"], bevel=0.008)
-    for i in range(9):
-        box("stud", (0.070, 0.070, 0.024), (-1.12 + i * 0.28, 0.0, 0.130), m["light"])
+            x = -0.920 + i * 0.920 + off
+            box("plate", (0.840, 0.790, 0.042), (x, y, 0.098), m["dark"], bevel=0.014)
+            # Four fixings per plate -- the only detail these get.
+            for sx in (-1, 1):
+                for sy in (-1, 1):
+                    cyl("stud", 0.030, 0.026, (x + sx * 0.320, y + sy * 0.295, 0.122),
+                        m["light"], verts=14)
 
 
 # ------------------------------------------------------------ life support
@@ -254,7 +269,7 @@ def build_oxygen_scrubber(m):
 
 def build_oxygen_scrubber_2x1(m):
     """Twin-column oxygenator on a 2x1 footprint."""
-    armour_base(m, w=1.94)
+    armour_base(m, w=2.0)
     for sx in (-1, 1):
         box("col", (0.72, 0.62, 0.045), (sx * 0.470, 0.045, 0.096), m["dark"],
             bevel=0.012)
@@ -300,7 +315,7 @@ def build_passive_sonar(m):
 def build_passive_sonar_2x1(m):
     """Long-baseline array -- a wider baseline gives a better bearing, so it
     spreads across both cells."""
-    armour_base(m, w=1.94)
+    armour_base(m, w=2.0)
     box("bed", (1.78, 0.60, 0.045), (0.0, 0.040, 0.096), m["dark"], bevel=0.012)
     for c in range(10):
         x = -0.765 + c * 0.170
@@ -311,18 +326,27 @@ def build_passive_sonar_2x1(m):
 
 
 def build_depth_sensor(m):
-    """Compact sensor head: graduated aperture around a glowing eye."""
+    """Ranging head pointing FORWARD. The aperture is a slot at the leading
+    edge, not an eye on the top face staring at the player."""
     armour_base(m)
-    cyl("ring", 0.290, 0.050, (0.0, 0.03, 0.096), m["dark"], bevel=0.014, verts=48)
-    cyl("iris", 0.205, 0.048, (0.0, 0.03, 0.112), m["light"], verts=40)
-    cyl("well", 0.140, 0.046, (0.0, 0.03, 0.124), m["recess"], verts=40)
-    glow_disc("eye", 0.088, 0.044, (0.0, 0.03, 0.136), verts=32, strength=4.0)
-    for i in range(12):
-        a = i * (math.pi / 6.0)
-        t = box("tick", (0.026, 0.055, 0.022), (math.cos(a) * 0.245,
-                0.03 + math.sin(a) * 0.245, 0.116),
-                m["ion"] if i % 3 == 0 else m["light"])
-        t.rotation_euler = (0.0, 0.0, a + 1.5708)
+    # Body and cooling stack at the rear.
+    box("body", (0.62, 0.40, 0.050), (0.0, -0.130, 0.098), m["dark"], bevel=0.012)
+    for i in range(5):
+        box("fin", (0.56, 0.026, 0.026), (0.0, -0.265 + i * 0.068, 0.128), m["light"])
+    # Forward emitter head.
+    box("head", (0.50, 0.30, 0.070), (0.0, 0.215, 0.104), m["dark"], bevel=0.014)
+    for sx in (-1, 1):
+        box("cheek", (0.070, 0.26, 0.075), (sx * 0.235, 0.225, 0.104), m["light"],
+            bevel=0.010)
+    # Aperture slot, end-on at the front.
+    box("slot", (0.34, 0.060, 0.050), (0.0, 0.335, 0.132), m["recess"])
+    box("beam", (0.30, 0.030, 0.030), (0.0, 0.338, 0.150), m["ion_lit"])
+    # Range graduations along the head.
+    for i in range(5):
+        box("tick", (0.022, 0.055, 0.024), (-0.16 + i * 0.08, 0.120, 0.144),
+            m["ion"] if i % 2 == 0 else m["light"])
+
+
 
 
 # ----------------------------------------------------------------- storage
@@ -346,13 +370,13 @@ def build_cargo_hold(m):
 
 
 def build_cargo_hold_2x1(m):
-    armour_base(m, w=1.94)
+    armour_base(m, w=2.0)
     box("floor", (1.80, 0.66, 0.040), (0.0, 0.045, 0.094), m["dark"], bevel=0.012)
     crates(m, 0.0, 0.045, 7, 2, 0.245, 0.265)
 
 
 def build_cargo_hold_2x2(m):
-    armour_base(m, w=1.94, h=1.94)
+    armour_base(m, w=2.0, h=2.0)
     box("floor", (1.80, 1.66, 0.040), (0.0, 0.0, 0.094), m["dark"], bevel=0.012)
     crates(m, 0.0, 0.0, 7, 6, 0.245, 0.265)
 
@@ -396,7 +420,7 @@ def build_basic_quarters(m):
 
 
 def build_basic_quarters_2x1(m):
-    armour_base(m, hazard=False, w=1.94)
+    armour_base(m, hazard=False, w=2.0)
     box("deck", (1.80, 0.72, 0.038), (0.0, 0.0, 0.094), m["dark"], bevel=0.012)
     bunks(m, 0.0, 0.075, 6, 1)
     box("locker", (1.70, 0.135, 0.040), (0.0, -0.290, 0.110), m["light"], bevel=0.010)
@@ -404,7 +428,7 @@ def build_basic_quarters_2x1(m):
 
 def build_basic_quarters_2x2(m):
     """Galley/mess: tables rather than bunks."""
-    armour_base(m, hazard=False, w=1.94, h=1.94)
+    armour_base(m, hazard=False, w=2.0, h=2.0)
     box("deck", (1.80, 1.80, 0.038), (0.0, 0.0, 0.094), m["dark"], bevel=0.012)
     for sx in (-1, 1):
         for sy in (-1, 1):
@@ -419,7 +443,7 @@ def build_basic_quarters_2x2(m):
 
 def build_basic_quarters_3x3(m):
     """Wellness hub: a green space at the centre of the ship."""
-    armour_base(m, hazard=False, w=2.90, h=2.90)
+    armour_base(m, hazard=False, w=3.0, h=3.0)
     box("deck", (2.76, 2.76, 0.038), (0.0, 0.0, 0.094), m["dark"], bevel=0.014)
     cyl("garden", 0.900, 0.048, (0.0, 0.0, 0.108), m["light"], bevel=0.020, verts=48)
     cyl("bed", 0.700, 0.046, (0.0, 0.0, 0.124), m["utility"], verts=48)
@@ -449,7 +473,7 @@ def build_medical_bay(m):
 
 def build_medical_bay_3x2(m):
     """Surgical suite: table under a lamp array, instrument carts either side."""
-    armour_base(m, hazard=False, w=2.90, h=1.94)
+    armour_base(m, hazard=False, w=3.0, h=2.0)
     box("deck", (2.76, 1.80, 0.038), (0.0, 0.0, 0.094), m["dark"], bevel=0.014)
     box("table", (0.520, 1.10, 0.048), (0.0, -0.060, 0.112), m["light"], bevel=0.014)
     box("sheet", (0.420, 0.860, 0.026), (0.0, -0.090, 0.140), m["highlight"])
@@ -485,7 +509,7 @@ def build_research_lab(m):
 
 def build_research_lab_2x1(m):
     """Containment lab: one large cell plus analysis benches."""
-    armour_base(m, w=1.94)
+    armour_base(m, w=2.0)
     box("frame", (1.80, 0.68, 0.040), (0.0, 0.035, 0.094), m["dark"], bevel=0.012)
     cyl("cell", 0.300, 0.055, (-0.470, 0.035, 0.112), m["light"], bevel=0.016, verts=44)
     glow_disc("subject", 0.205, 0.046, (-0.470, 0.035, 0.140),
@@ -521,7 +545,7 @@ def build_repair_station(m):
 
 def build_repair_station_2x1(m):
     """Drone bay: cradles plus the gantry."""
-    armour_base(m, w=1.94)
+    armour_base(m, w=2.0)
     box("rail", (1.80, 0.070, 0.030), (0.0, 0.320, 0.100), m["light"])
     for i, x in enumerate((-0.620, 0.0, 0.620)):
         box("cradle", (0.480, 0.480, 0.042), (x, -0.045, 0.098), m["dark"], bevel=0.012)
@@ -551,7 +575,7 @@ def build_navigation(m):
 
 def build_navigation_2x1(m):
     """Combat core: paired displays and a processor stack."""
-    armour_base(m, w=1.94)
+    armour_base(m, w=2.0)
     box("desk", (1.82, 0.62, 0.045), (0.0, -0.040, 0.096), m["dark"], bevel=0.014)
     for sx in (-1, 1):
         box("bezel", (0.62, 0.380, 0.040), (sx * 0.540, 0.085, 0.116), m["light"],
@@ -568,7 +592,7 @@ def build_navigation_2x1(m):
 
 def build_navigation_3x2(m):
     """Bridge wing: a bank of stations along the forward edge."""
-    armour_base(m, w=2.90, h=1.94)
+    armour_base(m, w=3.0, h=2.0)
     box("desk", (2.76, 0.72, 0.045), (0.0, 0.420, 0.096), m["dark"], bevel=0.014)
     for i in range(4):
         x = -1.020 + i * 0.680
@@ -584,54 +608,107 @@ def build_navigation_3x2(m):
 
 
 def build_floodlight(m):
-    """Lamp. The one module whose job is emitting visible light, so the lens
-    is the brightest thing in the whole sprite set."""
+    """Searchlight aimed FORWARD (+Y), seen from above.
+
+    A lens drawn flat on the top face lights the sky, not the void ahead. From
+    directly above you see the housing side-on and the lens end-on: a bright
+    bar at the leading edge with the hood flaring around it.
+    """
     armour_base(m)
-    box("yoke", (0.72, 0.24, 0.045), (0.0, -0.250, 0.098), m["dark"], bevel=0.012)
-    cyl("housing", 0.310, 0.055, (0.0, 0.075, 0.104), m["dark"], bevel=0.018, verts=48)
-    cyl("reflector", 0.250, 0.050, (0.0, 0.075, 0.124), m["highlight"], verts=48)
-    glow_disc("lens", 0.190, 0.046, (0.0, 0.075, 0.142),
-              stops=[(0.0, "#3a3320"), (0.45, "amber"), (0.8, "#ffe9b0"),
-                     (1.0, "#ffffff")], strength=8.0, verts=44)
+    # Yoke and pivot at the rear.
+    box("yoke", (0.62, 0.16, 0.045), (0.0, -0.330, 0.098), m["dark"], bevel=0.010)
     for sx in (-1, 1):
-        cyl("pivot", 0.055, 0.055, (sx * 0.310, 0.075, 0.116), m["light"], verts=20)
+        cyl("pivot", 0.058, 0.055, (sx * 0.265, -0.245, 0.112), m["light"], verts=20)
+    # Lamp housing running forward.
+    box("housing", (0.42, 0.46, 0.070), (0.0, -0.020, 0.104), m["dark"], bevel=0.014)
+    for i in range(4):
+        box("rib", (0.36, 0.028, 0.026), (0.0, -0.175 + i * 0.100, 0.136), m["light"])
+    # Hood flaring open toward the front.
+    for sx in (-1, 1):
+        hood = box("hood", (0.070, 0.300, 0.080), (sx * 0.245, 0.230, 0.102),
+                   m["light"], bevel=0.010)
+        hood.rotation_euler = (0.0, 0.0, sx * 0.30)
+    # The lens, end-on at the leading edge. This is the only bright thing.
+    box("lensbed", (0.40, 0.075, 0.060), (0.0, 0.335, 0.104), m["dark"], bevel=0.010)
+    glow_disc("lens", 0.150, 0.050, (0.0, 0.345, 0.140),
+              stops=[(0.0, "#3a3320"), (0.45, "amber"), (0.82, "#ffe9b0"),
+                     (1.0, "#ffffff")], strength=8.0, verts=36)
 
 
 def build_docking_port(m):
-    """Airlock: clamp ring around a sealed hatch."""
+    """Airlock opening at the FORWARD edge.
+
+    Ships approach in the play plane, so the port is a tunnel mouth on the
+    hull's edge -- a deck hatch would mean docking from directly above, which
+    nothing in this game does.
+    """
     armour_base(m)
-    cyl("collar", 0.335, 0.050, (0.0, 0.0, 0.096), m["dark"], bevel=0.016, verts=48)
-    cyl("ring", 0.270, 0.052, (0.0, 0.0, 0.114), m["light"], bevel=0.014, verts=48)
-    cyl("hatch", 0.195, 0.048, (0.0, 0.0, 0.130), m["dark"], verts=48)
-    # Radial dogs -- what actually locks a hatch.
-    for i in range(8):
-        a = i * (math.pi / 4.0)
-        d = box("dog", (0.080, 0.145, 0.030), (math.cos(a) * 0.235,
-                math.sin(a) * 0.235, 0.134), m["highlight"])
-        d.rotation_euler = (0.0, 0.0, a + 1.5708)
-    cyl("wheel", 0.075, 0.046, (0.0, 0.0, 0.146), m["brass"], verts=24)
+    # Recessed tunnel throat running to the leading edge.
+    box("throat", (0.52, 0.56, 0.050), (0.0, 0.200, 0.094), m["recess"])
+    box("mouth", (0.46, 0.48, 0.040), (0.0, 0.235, 0.104), m["dark"], bevel=0.010)
+    # Split doors, parted down the middle.
+    for sx in (-1, 1):
+        box("door", (0.195, 0.42, 0.045), (sx * 0.118, 0.250, 0.122), m["light"],
+            bevel=0.010)
+        for i in range(3):
+            box("rib", (0.150, 0.028, 0.022), (sx * 0.118, 0.130 + i * 0.120, 0.148),
+                m["dark"])
+    # Clamp arms either side of the mouth.
+    for sx in (-1, 1):
+        box("clamp", (0.105, 0.40, 0.055), (sx * 0.330, 0.230, 0.104), m["dark"],
+            bevel=0.010)
+        for i in range(3):
+            cyl("dog", 0.032, 0.040, (sx * 0.330, 0.110 + i * 0.120, 0.134),
+                m["highlight"], verts=14)
+    # Approach markers flanking the entry.
+    for sx in (-1, 1):
+        glow_disc("mark%d" % sx, 0.055, 0.044, (sx * 0.330, 0.430, 0.126),
+                  stops=[(0.0, "#0e2418"), (0.6, "utility"), (1.0, "utility_lit")],
+                  strength=4.5, verts=20)
+    # Machinery aft of the lock.
+    box("gear", (0.62, 0.16, 0.045), (0.0, -0.230, 0.098), m["dark"], bevel=0.010)
+    for i in range(4):
+        cyl("ram", 0.030, 0.040, (-0.21 + i * 0.14, -0.230, 0.126), m["brass"],
+            verts=14)
 
 
 def build_docking_port_3x3(m):
-    """Docking hub: a berth big enough to take a ship."""
-    armour_base(m, w=2.90, h=2.90)
-    cyl("collar", 1.180, 0.050, (0.0, 0.0, 0.096), m["dark"], bevel=0.020, verts=64)
-    cyl("apron", 1.000, 0.048, (0.0, 0.0, 0.110), m["light"], verts=64)
-    cyl("well", 0.780, 0.046, (0.0, 0.0, 0.122), m["dark"], verts=64)
-    cyl("hatch", 0.520, 0.046, (0.0, 0.0, 0.134), m["light"], verts=64)
-    box("split", (0.045, 1.04, 0.026), (0.0, 0.0, 0.150), m["recess"])
-    for i in range(12):
-        a = i * (math.pi / 6.0)
-        d = box("dog", (0.130, 0.230, 0.032), (math.cos(a) * 0.640,
-                math.sin(a) * 0.640, 0.140), m["highlight"])
-        d.rotation_euler = (0.0, 0.0, a + 1.5708)
-    # Approach lights around the rim.
+    """Docking hub: a berth open at the forward edge, big enough to take a
+    ship nose-in."""
+    armour_base(m, w=3.0, h=3.0)
+    # The berth: a wide recess cut back from the leading edge.
+    box("bay", (1.90, 1.85, 0.050), (0.0, 0.510, 0.094), m["recess"])
+    box("floor", (1.74, 1.70, 0.036), (0.0, 0.530, 0.104), m["dark"], bevel=0.014)
+    # Guide rails converging into the berth.
+    for sx in (-1, 1):
+        r = box("guide", (0.115, 1.60, 0.055), (sx * 0.830, 0.500, 0.108),
+                m["light"], bevel=0.010)
+        r.rotation_euler = (0.0, 0.0, sx * 0.10)
+        for i in range(5):
+            glow_disc("gl%d%d" % (sx, i), 0.048, 0.042,
+                      (sx * 0.830, -0.180 + i * 0.360, 0.140),
+                      stops=[(0.0, "#0e2418"), (0.6, "utility"), (1.0, "utility_lit")],
+                      strength=4.0, verts=16)
+    # Clamp collar at the back of the berth where a ship seats.
+    cyl("collar", 0.470, 0.050, (0.0, -0.150, 0.108), m["dark"], bevel=0.016, verts=48)
+    cyl("seal", 0.330, 0.046, (0.0, -0.150, 0.124), m["light"], verts=40)
+    box("split", (0.040, 0.62, 0.026), (0.0, -0.150, 0.140), m["recess"])
     for i in range(8):
-        a = i * (math.pi / 4.0) + 0.39
-        glow_disc("marker%d" % i, 0.070, 0.044, (math.cos(a) * 1.090,
-                  math.sin(a) * 1.090, 0.126),
-                  stops=[(0.0, "#0e2418"), (0.6, "utility"), (1.0, "utility_lit")],
-                  strength=4.0, verts=20)
+        a = i * (math.pi / 4.0)
+        dg = box("dog", (0.090, 0.150, 0.030), (math.cos(a) * 0.400,
+                 -0.150 + math.sin(a) * 0.400, 0.134), m["highlight"])
+        dg.rotation_euler = (0.0, 0.0, a + 1.5708)
+    # Service gantries down the flanks, outside the berth.
+    for sx in (-1, 1):
+        box("gantry", (0.30, 2.30, 0.045), (sx * 1.230, 0.240, 0.098), m["dark"],
+            bevel=0.012)
+        for i in range(7):
+            box("step", (0.24, 0.075, 0.024), (sx * 1.230, -0.760 + i * 0.330, 0.126),
+                m["light"])
+    box("aft", (2.70, 0.30, 0.045), (0.0, -1.190, 0.098), m["dark"], bevel=0.012)
+    for i in range(9):
+        cyl("ram", 0.052, 0.042, (-1.04 + i * 0.26, -1.190, 0.126), m["brass"],
+            verts=16)
 
 
 def build_salvage_arm(m):

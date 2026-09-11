@@ -1,4 +1,4 @@
-use crate::components::{ModuleType, CreatureType, HullMaterial, PoiType, DecorationType};
+use crate::components::{ModuleType, CreatureType, HullMaterial, HullLayer, PoiType};
 
 /// Maps ModuleType to sprite asset path. Returns None for unmapped types (colored rect fallback).
 pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
@@ -180,6 +180,21 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
     })
 }
 
+/// Sprite for a hull cell, given both its material and its layer.
+///
+/// Hallways get their own art rather than a tint of the armour plate. They
+/// used to be that plate darkened to ~45%, which read as a burnt block and
+/// sat within a few percent of the Void tint -- bad for the one layer crew
+/// can actually walk on (crew/navigation.rs), where a player needs to trace a
+/// route across the ship at a glance. Decking is material-independent: it is
+/// the floor inside the hull, not the hull.
+pub fn hull_layer_sprite_path(material: HullMaterial, layer: HullLayer) -> &'static str {
+    match layer {
+        HullLayer::Hallway => "sprites/hull/hull_hallway.png",
+        _ => hull_sprite_path(material),
+    }
+}
+
 pub fn hull_sprite_path(material: HullMaterial) -> &'static str {
     match material {
         HullMaterial::Steel => "sprites/hull/hull_steel.png",
@@ -208,16 +223,6 @@ pub fn poi_sprite_path(poi_type: PoiType) -> &'static str {
     }
 }
 
-pub fn decoration_sprite_path(decoration_type: DecorationType) -> Option<&'static str> {
-    match decoration_type {
-        DecorationType::Rock => Some("sprites/environment/rock.png"),
-        DecorationType::SporeGrowth => Some("sprites/environment/spore_growth.png"),
-        DecorationType::Crystal => Some("sprites/environment/crystal_formation.png"),
-        DecorationType::EnergySpot => Some("sprites/environment/bioluminescent_spot.png"),
-        DecorationType::ThermalVentSmoke => None, // No sprite — keep as colored rect for smoke effect
-        DecorationType::RockDebris => Some("sprites/environment/rock_debris.png"),
-    }
-}
 
 /// Effect sprite paths for combat visuals
 pub fn effect_sprite_path(effect: &str) -> &'static str {
