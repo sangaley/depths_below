@@ -124,6 +124,8 @@ pub fn plan_crew_destinations(
             Without<SeekingTreatment>,
             // Nor is one carrying a body to the lock.
             Without<crate::crew::burial::BurialDetail>,
+            // Nor one on their way to the suit locker.
+            Without<SuitingUp>,
         ),
     >,
     existing: Query<&CrewDestination>,
@@ -927,6 +929,8 @@ pub fn plan_repair_errands(
             Without<Fleeing>,
             Without<SeekingTreatment>,
             Without<crate::crew::burial::BurialDetail>,
+            // Nor one on their way to the suit locker.
+            Without<SuitingUp>,
         ),
     >,
 ) {
@@ -1121,6 +1125,8 @@ pub fn plan_off_duty_errands(
             Without<OwnedByAiShip>,
             Without<SeekingTreatment>,
             Without<crate::crew::burial::BurialDetail>,
+            // Nor one on their way to the suit locker.
+            Without<SuitingUp>,
         ),
     >,
 ) {

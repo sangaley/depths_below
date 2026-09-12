@@ -1001,6 +1001,9 @@ fn insert_companion_components(commands: &mut Commands, entity: Entity, companio
                 seal_rate: *seal_rate,
             });
         }
+        CompanionData::Airlock { suits } => {
+            commands.entity(entity).insert(AirlockComp { suits: *suits });
+        }
         CompanionData::ForceField { radius, power_per_tile } => {
             commands.entity(entity).insert(ForceFieldEmitter {
                 radius: *radius,

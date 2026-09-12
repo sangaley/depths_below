@@ -537,7 +537,7 @@
    "extras": null
   },
   {
-   "module_type": "BasicQuarters",
+   "module_type": "AirlockChamber",
    "grid_pos": [
     3,
     3

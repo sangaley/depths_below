@@ -93,6 +93,7 @@ pub enum CompanionData {
     /// Hull seal system: automated breach sealing
     HullSeal { seal_rate: f32 },
     ForceField { radius: f32, power_per_tile: f32 },
+    Airlock { suits: u32 },
     /// Targeting computer: boosts weapon accuracy
     TargetingComputer { accuracy_bonus: f32 },
     /// AI combat core: auto-targets highest threat
@@ -981,14 +982,14 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::AirlockChamber, ModuleDef {
         name: "Airlock Chamber",
-        description: "Pressurized chamber for suited EVA operations. The crew draws straws for who goes outside.",
+        description: "Pressurized chamber for suited EVA operations, and the rack the suits hang on. Four of them - a breach with more crew than suits is a choice about who gets one. Also the lock the dead go out of.",
         category: ModuleCategory::Utility,
         size: IVec2::new(1, 1),
         health: 80.0,
         power_generation: 0.0,
         power_consumption: 5.0,
         color: Color::srgb(0.5, 0.5, 0.6),
-        companion: CompanionData::None,
+        companion: CompanionData::Airlock { suits: 4 },
         customizable: false,
         cost: 45,
         base_stats: CalculatedStats::default(),

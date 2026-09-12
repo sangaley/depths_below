@@ -7,6 +7,7 @@ use crate::building::rooms::RoomMap;
 
 pub mod animation;
 pub mod burial;
+pub mod suits;
 pub mod eva_salvage;
 pub mod hiring;
 pub mod navigation;
@@ -40,6 +41,7 @@ impl Plugin for CrewPlugin {
             // assignments it just made.
             .init_resource::<walking::CrewPlanTimer>()
             .init_resource::<walking::CrewErrandTimer>()
+            .init_resource::<suits::SuitErrandTimer>()
             .init_resource::<walking::CrewMedicalTimer>()
             .init_resource::<walking::CrewOffDutyTimer>()
             .init_resource::<burial::DriftingDead>()
@@ -69,8 +71,13 @@ impl Plugin for CrewPlugin {
                     // damage control, only spare hands carry them.
                     burial::plan_burial_detail,
                     burial::advance_burial.after(burial::plan_burial_detail),
+                    // Before path planning: the locker is a destination like
+                    // any other, and has to be set before routes are laid.
+                    suits::plan_suit_errands,
                     walking::plan_crew_paths,
                     walking::walk_crew,
+                    suits::issue_suits,
+                    suits::suit_air,
                     // Last in the chain: the draught is applied on top of
                     // whatever step walking just took, so a crew member can
                     // walk against a weak one and lose to a strong one.

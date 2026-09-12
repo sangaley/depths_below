@@ -2170,6 +2170,28 @@ pub struct BulkheadClosing {
     pub timer: Timer,
 }
 
+/// This crew member is in a pressure suit and can survive vacuum, for as long
+/// as `CrewMember::oxygen` holds out.
+#[derive(Component)]
+pub struct Suited;
+
+/// On their way to an airlock to get into one.
+///
+/// Like `SeekingTreatment` and `BurialDetail`, this outranks their station:
+/// a hand walking to the suit locker is not also manning a gun.
+#[derive(Component)]
+pub struct SuitingUp;
+
+/// Pressure suits racked in an airlock chamber.
+///
+/// The lock is already where the dead go out (`crew::burial`), so it is also
+/// where the living get dressed -- one block, both jobs, rather than a second
+/// piece of furniture that means the same thing.
+#[derive(Component)]
+pub struct AirlockComp {
+    pub suits: u32,
+}
+
 /// This crew member is running for a door that is about to shut, and should
 /// not be sent back to their post until they are through it.
 ///

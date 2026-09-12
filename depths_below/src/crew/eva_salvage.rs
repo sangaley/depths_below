@@ -102,6 +102,11 @@ pub fn order_salvage_detail(
     reactor_marker: Query<(), With<Reactor>>,
     children_query: Query<&Children>,
     block_query: BlockQuery,
+    airlocks: Query<(&Module, &AirlockComp, &ChildOf), Without<DestroyedModule>>,
+    already_suited: Query<
+        (),
+        (With<Suited>, Without<crate::ai_ship::components::OwnedByAiShip>),
+    >,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     if !press.pending() {
@@ -272,12 +277,46 @@ pub fn order_salvage_detail(
         .unwrap_or_default();
     blocks.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
+    // Nobody goes outside without a suit on.
+    //
+    // The fiction always said they had one -- eva_salvage's own comment says
+    // "the suit keeps them alive out there" and the tutorial says crew suit up
+    // before crossing -- but nothing backed it. Now the same rack that keeps
+    // people alive through a breach is what a salvage detail draws from, so one
+    // rule covers both instead of two contradictory ones.
+    let racked: u32 = airlocks
+        .iter()
+        .filter(|(module, _, parent)| {
+            parent.parent() == ship_entity && module.is_active && module.health > 0.0
+        })
+        .map(|(_, rack, _)| rack.suits)
+        .sum();
+    let mut free_suits = racked.saturating_sub(already_suited.iter().count() as u32);
+    if free_suits == 0 {
+        if !press.claim() {
+            return;
+        }
+        notifications.write(ShowNotification {
+            message: if racked == 0 {
+                "No airlock aboard - nowhere to suit up for EVA.".into()
+            } else {
+                format!("All {racked} suits are already out. Nobody can go EVA.")
+            },
+            notification_type: NotificationType::Warning,
+            duration: 3.0,
+        });
+        return;
+    }
+
     // Everyone not holding a post ships out.
     let mut dispatched = 0usize;
     let (mut panicking, mut busy, mut held) = (0u32, 0u32, 0u32);
     for (entity, mut crew, mut transform, gt, mut sprite) in crew_query.iter_mut() {
         if crew.health <= 0.0 {
             continue;
+        }
+        if free_suits == 0 {
+            break; // rack is empty; the rest stay aboard
         }
         // Tally WHY nobody is available — a bare "no idle crew" hides
         // whether the problem is panic, emergencies, or manned posts.
@@ -304,6 +343,9 @@ pub fn order_salvage_detail(
         transform.translation = Vec3::new(world.x, world.y, world.z + 1.0);
         transform.rotation = Quat::IDENTITY;
         crew.state = CrewState::Salvaging;
+        crew.oxygen = 100.0;
+        commands.entity(entity).try_insert(Suited);
+        free_suits -= 1;
         let base_color = sprite.color;
         sprite.color = EVA_TINT;
 
