@@ -17,7 +17,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import (  # noqa: E402
     new_scene, metal, light_rig, ortho_camera, configure, render_to,
-    box, cyl, cone, argv_after_ddash,
+    box, cyl, cone, armour_base, frame, argv_after_ddash,
 )
 
 CELL = 1.0
@@ -25,7 +25,7 @@ CELL = 1.0
 # Launchers whose art protrudes forward past the block, on a 378x541 canvas
 # matching the existing torpedo_tube convention.
 OVERHANG = {"heavy_missile", "guided_missile", "cluster_rocket"}
-OVERHANG_H = 541.0
+OVERHANG_UNITS = 26.0   # sprite_overhang() in sprite_map.rs
 
 # Modules whose registry footprint is 2 cells wide.
 WIDE = {"railgun_2x1"}
@@ -52,31 +52,6 @@ def materials():
         "utility_lit": metal("utility_lit", "utility_lit", metallic=0.24, roughness=0.33),
         "amber": metal("amber", "amber", metallic=0.45, roughness=0.42),
     }
-
-
-def armour_base(m, hazard=True, w=0.94):
-    """Shared chassis every weapon sits on: bevelled plate, corner bolts,
-    and a hazard strip along the mounting edge."""
-    box("plate", (w, 0.94, 0.08), (0.0, 0.0, 0.04), m["body"], bevel=0.013)
-
-    bx = w / 2.0 - 0.085
-    for sx in (-1, 1):
-        for sy in (-1, 1):
-            cyl("bolt", 0.021, 0.024, (sx * bx, sy * 0.385, 0.086),
-                m["light"], bevel=0.006)
-
-    if hazard:
-        # Alternating gold/dark blocks. Gold is the only saturated colour in
-        # the palette and ART_BRIEF reserves it for caution striping.
-        hw = w - 0.22
-        box("hazbed", (hw, 0.070, 0.018), (0.0, -0.375, 0.083), m["recess"])
-        # Chevrons sized so their rotated bounding box stays inside the bed --
-        # an earlier pass had them spilling off the plate and burying a bolt.
-        n = int(hw / 0.060) + 1
-        for i in range(n):
-            x = -(n - 1) * 0.030 + i * 0.060
-            ch = box("haz", (0.024, 0.062, 0.010), (x, -0.375, 0.094), m["gold"])
-            ch.rotation_euler = (0.0, 0.0, -0.7854)   # 45deg = hazard tape
 
 
 def turret_ring(m, radius=0.22):
@@ -167,7 +142,7 @@ def build_railgun_2x1(m):
     Twice the plate means twice the capacitor store, which is the honest read
     for the game's heaviest kinetic gun.
     """
-    armour_base(m, w=1.94)
+    armour_base(m, w=2.0)
     cyl("race", 0.185, 0.055, (0.0, 0.03, 0.098), m["light"], verts=64)
     for i in range(20):
         a = i * (math.pi * 2.0 / 20.0)
@@ -357,22 +332,41 @@ def build_laser(m):
 
 
 def build_plasma_caster(m):
-    """Containment sphere feeding a forward nozzle. PLASMA ORANGE = thermal."""
+    """Containment vessel feeding a large FORWARD nozzle.
+
+    An earlier version made the vessel a big glowing disc on the top face,
+    which read as an eye pointing at the camera. The vessel is now smaller and
+    pushed aft; the nozzle at the leading edge is the dominant shape, so the
+    weapon reads as firing across the plane.
+    """
     emitter_base(m)
-    # Containment vessel sits at the rear.
-    cyl("cradle", 0.265, 0.050, (0.0, -0.13, 0.095), m["dark"], bevel=0.012, verts=48)
-    cyl("s1", 0.200, 0.060, (0.0, -0.13, 0.118), m["light"], bevel=0.030, verts=48)
-    cyl("s2", 0.135, 0.055, (0.0, -0.13, 0.140), m["plasma"], bevel=0.030, verts=48)
-    cyl("core", 0.070, 0.050, (0.0, -0.13, 0.158), m["plasma_lit"], bevel=0.020, verts=32)
-    # Feed throat running forward to the nozzle.
-    box("throat", (0.145, 0.34, 0.055), (0.0, 0.155, 0.100), m["dark"], bevel=0.010)
-    # Flared nozzle, aperture facing +Y.
-    box("nozzle", (0.30, 0.13, 0.080), (0.0, 0.355, 0.104), m["light"], bevel=0.016)
-    box("mouth", (0.165, 0.050, 0.050), (0.0, 0.398, 0.130), m["plasma_lit"])
+    # Containment vessel, aft and deliberately compact.
+    cyl("cradle", 0.190, 0.050, (0.0, -0.265, 0.095), m["dark"], bevel=0.012, verts=40)
+    cyl("vessel", 0.140, 0.055, (0.0, -0.265, 0.116), m["light"], bevel=0.024, verts=40)
+    cyl("core", 0.082, 0.050, (0.0, -0.265, 0.136), m["plasma"], verts=32)
+    cyl("hot", 0.040, 0.048, (0.0, -0.265, 0.150), m["plasma_lit"], verts=24)
+
+    # Feed throat running forward, with pressure collars.
+    box("throat", (0.175, 0.42, 0.055), (0.0, 0.030, 0.100), m["dark"], bevel=0.010)
+    for i in range(4):
+        box("collar", (0.215, 0.030, 0.062), (0.0, -0.110 + i * 0.095, 0.100),
+            m["light"], bevel=0.006)
+
+    # The nozzle: wide, flared, and the biggest thing on the plate.
+    for i in range(5):
+        t = i / 4.0
+        w = 0.20 + t * 0.26
+        box("flare", (w, 0.052, 0.078), (0.0, 0.250 + i * 0.048, 0.102),
+            m["light"] if i % 2 else m["dark"])
+    # Muzzle glow, end-on at the leading edge.
+    box("mouth", (0.30, 0.055, 0.050), (0.0, 0.408, 0.134), m["plasma"])
+    box("hotlip", (0.22, 0.030, 0.034), (0.0, 0.412, 0.152), m["plasma_lit"])
+
+    # Coolant bottles flanking the throat.
     for sx in (-1, 1):
-        cyl("vent", 0.050, 0.065, (sx * 0.315, -0.13, 0.108), m["dark"],
-            bevel=0.008, verts=20)
-        cyl("vhole", 0.026, 0.05, (sx * 0.315, -0.13, 0.134), m["plasma"], verts=16)
+        cyl("bottle", 0.062, 0.060, (sx * 0.310, 0.020, 0.108), m["dark"],
+            bevel=0.010, verts=24)
+        cyl("cap", 0.032, 0.050, (sx * 0.310, 0.020, 0.136), m["plasma"], verts=16)
 
 
 def build_ion_disruptor(m):
@@ -464,38 +458,52 @@ def build_heavy_missile(m):
 
 
 def build_guided_missile(m):
-    """Four slim tubes side by side, noses forward. DANGER RED."""
+    """Two large guided missiles: few, big, finned, with ION BLUE seeker heads.
+
+    Previously four medium tubes, which read almost identically to the cluster
+    rocket pod beside it. The distinction that matters in play is guidance, so
+    it is now the visible one: fewer and larger, prominent steering fins, and a
+    sensor head in ion blue -- the palette's "this thing tracks you" colour.
+    """
     emitter_base(m)
-    box("block", (0.86, 0.60, 0.050), (0.0, 0.14, 0.096), m["dark"], bevel=0.012)
-    for i in range(4):
-        x = -0.285 + i * 0.19
-        box("cradle", (0.155, 0.58, 0.055), (x, 0.145, 0.104), m["recess"])
-        cyl("body", 0.062, 0.60, (x, 0.235, 0.128), m["light"], verts=20
+    box("block", (0.86, 0.58, 0.050), (0.0, 0.13, 0.096), m["dark"], bevel=0.012)
+    for sx in (-1, 1):
+        x = sx * 0.215
+        box("cradle", (0.255, 0.56, 0.055), (x, 0.135, 0.104), m["recess"])
+        cyl("body", 0.098, 0.62, (x, 0.245, 0.132), m["light"], verts=24
             ).rotation_euler = (1.5708, 0.0, 0.0)
         for j in range(3):
-            box("band", (0.135, 0.022, 0.026), (x, 0.070 + j * 0.170, 0.148),
+            box("band", (0.210, 0.026, 0.028), (x, 0.070 + j * 0.185, 0.156),
                 m["danger"])
-        cone("nose", 0.062, 0.165, (x, 0.615, 0.128), m["danger_lit"], verts=20)
-        # Fins, visible from above as small tabs.
-        for sx in (-1, 1):
-            box("fin", (0.045, 0.075, 0.020), (x + sx * 0.075, 0.010, 0.140),
+        # Big steering fins -- the give-away that this one manoeuvres.
+        for fx in (-1, 1):
+            fin = box("fin", (0.075, 0.190, 0.024), (x + fx * 0.115, 0.055, 0.146),
+                      m["light"])
+            fin.rotation_euler = (0.0, 0.0, fx * 0.22)
+            box("canard", (0.055, 0.120, 0.022), (x + fx * 0.098, 0.430, 0.150),
                 m["light"])
+        # Seeker head: sensor, not warhead, so it reads ion blue.
+        cone("nose", 0.098, 0.215, (x, 0.640, 0.132), m["ion"], verts=24)
+        cyl("seeker", 0.046, 0.040, (x, 0.700, 0.150), m["ion_lit"], verts=16)
     box("spine", (0.86, 0.075, 0.040), (0.0, -0.245, 0.100), m["dark"], bevel=0.008)
 
 
 def build_cluster_rocket(m):
-    """Dense pod of many small rockets, all pointing forward. DANGER RED."""
+    """A dense pod of many small unguided rockets -- the opposite read to the
+    guided pair: numerous, tiny, finless, uniform, all warhead red."""
     emitter_base(m)
-    box("pod", (0.88, 0.56, 0.050), (0.0, 0.13, 0.096), m["dark"], bevel=0.012)
-    # Two staggered ranks so it reads as "many" without becoming mush.
-    for rank, (ycell, n, y0) in enumerate(((0.055, 6, 0.44), (0.245, 5, 0.60))):
-        for i in range(n):
-            x = -((n - 1) * 0.5) * 0.155 + i * 0.155
-            cyl("body", 0.045, 0.34, (x, ycell + 0.09, 0.124 + rank * 0.006),
-                m["light"], verts=16).rotation_euler = (1.5708, 0.0, 0.0)
-            box("tube", (0.115, 0.34, 0.048), (x, ycell + 0.06, 0.100), m["recess"])
-            cone("nose", 0.045, 0.115, (x, y0, 0.124 + rank * 0.006),
-                 m["danger_lit"] if i % 2 else m["danger"], verts=16)
+    box("pod", (0.88, 0.60, 0.050), (0.0, 0.115, 0.096), m["dark"], bevel=0.012)
+    # Three tight ranks of five. Density is the whole identity, so the tubes
+    # are small and evenly packed with no fins to break the grid.
+    for rank in range(3):
+        ycell = -0.075 + rank * 0.185
+        for i in range(5):
+            x = -0.30 + i * 0.15
+            box("tube", (0.112, 0.150, 0.046), (x, ycell, 0.102), m["recess"])
+            cyl("body", 0.040, 0.130, (x, ycell, 0.126), m["light"], verts=14
+                ).rotation_euler = (1.5708, 0.0, 0.0)
+            cone("nose", 0.040, 0.075, (x, ycell + 0.098, 0.126), m["danger"],
+                 verts=14)
     box("mani", (0.88, 0.085, 0.042), (0.0, -0.235, 0.100), m["dark"], bevel=0.008)
     for i in range(6):
         box("valve", (0.070, 0.050, 0.024), (-0.28 + i * 0.112, -0.235, 0.124),
@@ -583,29 +591,13 @@ def main():
         # cell (spawner.rs), so their image spans TWO cells. Framing them at
         # one cell renders a barrel that appears half length in game.
         ortho_camera(scene, CELL * 2.0)
-    elif which in WIDE:
-        # 2x1 footprint. spawner.rs draws a module at (60 + bounds*66) world
-        # units per axis, where bounds is the cell-span DIFFERENCE: a 2x1 is
-        # 126 x 60, i.e. 2.1:1 -- not 2:1. The shipped railgun_2x1.png is
-        # 576x378 (1.52:1) and is therefore stretched ~38% in game.
-        aspect = 126.0 / 60.0
-        ortho_camera(scene, CELL * aspect)
-        scene.render.resolution_x = res
-        scene.render.resolution_y = int(round(res / aspect))
-        render_to(scene, out)
-        return
     elif which in OVERHANG:
-        # Launchers protrude forward past their block, exactly like the
-        # existing torpedo_tube art (378x541). The plate stays centred on the
-        # cell and the tubes reach into the extra canvas, so the camera is
-        # offset rather than the geometry.
-        span = CELL * (OVERHANG_H / 378.0)
-        cam = ortho_camera(scene, span)
-        cam.location = (0.0, span * 0.5 - 0.5, 6.0)
-        scene.render.resolution_x = int(res * 378.0 / OVERHANG_H)
-        scene.render.resolution_y = res
-        render_to(scene, out)
-        return
+        # Launchers protrude forward past their block. Same cell-aligned
+        # framing every other sprite uses; the overhang lengthens the canvas.
+        frame(scene, res, cells_w=1, cells_h=1, overhang=OVERHANG_UNITS,
+              protrude=1.0)
+    elif which in WIDE:
+        frame(scene, res, cells_w=2, cells_h=1)
     else:
         ortho_camera(scene, CELL)
     render_to(scene, out)

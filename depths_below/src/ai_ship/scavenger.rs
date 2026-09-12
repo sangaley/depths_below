@@ -107,7 +107,7 @@ pub fn spawn_scavenger_waves(
             );
         }
         notifications.write(ShowNotification {
-            message: "Scavenger swarm inbound — they smell the wreck!".into(),
+            message: "Scavenger swarm inbound - they smell the wreck!".into(),
             notification_type: NotificationType::Warning,
             duration: 4.0,
         });

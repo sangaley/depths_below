@@ -174,7 +174,6 @@ impl Plugin for ShipPlugin {
                         air::vent_air_at_breaches.after(air::project_force_fields),
                         air::diffuse_air.after(air::vent_air_at_breaches),
                         air::sync_room_air.after(air::diffuse_air),
-                        air::tumble_ejected_bodies,
                         update_decompression.after(air::sync_room_air),
                         seal_breach_system.after(update_decompression),
                         air::auto_containment.after(air::sync_room_air),

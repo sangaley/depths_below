@@ -112,7 +112,7 @@ pub fn aim_lock_input(
             selection.target = Some(ship);
             selection.target_type = TargetType::Ship;
             notifications.write(ShowNotification {
-                message: format!("Guns on {} — right-click empty space to release.", name),
+                message: format!("Guns on {} - right-click empty space to release.", name),
                 notification_type: NotificationType::Info,
                 duration: 2.5,
             });
@@ -124,7 +124,7 @@ pub fn aim_lock_input(
                 selection.target = None;
                 selection.target_type = TargetType::None;
                 notifications.write(ShowNotification {
-                    message: "Weapons free — manual fire.".into(),
+                    message: "Weapons free - manual fire.".into(),
                     notification_type: NotificationType::Info,
                     duration: 2.0,
                 });
@@ -157,7 +157,7 @@ pub fn maintain_aim_lock(
         selection.target = None;
         selection.target_type = TargetType::None;
         notifications.write(ShowNotification {
-            message: "Target out of the fight — weapons free.".into(),
+            message: "Target out of the fight - weapons free.".into(),
             notification_type: NotificationType::Info,
             duration: 2.0,
         });
@@ -360,13 +360,13 @@ pub fn draw_aim_lock(
 
     let degrees = obl.cos_impact.clamp(-1.0, 1.0).acos().to_degrees();
     let (label, label_color) = if obl.ricochet {
-        (format!("{degrees:.0}\u{00b0} BOUNCE"), Color::srgb(0.55, 0.8, 1.0))
+        (format!("{degrees:.0}deg BOUNCE"), Color::srgb(0.55, 0.8, 1.0))
     } else if Some(first_hit) != lock.block {
         // Something is in the way — the reticle is on a block the shot can't
         // reach from here.
-        (format!("{degrees:.0}\u{00b0} COVERED"), Color::srgb(1.0, 0.75, 0.3))
+        (format!("{degrees:.0}deg COVERED"), Color::srgb(1.0, 0.75, 0.3))
     } else {
-        (format!("{degrees:.0}\u{00b0}"), Color::srgb(0.75, 0.85, 0.8))
+        (format!("{degrees:.0}deg"), Color::srgb(0.75, 0.85, 0.8))
     };
 
     commands.spawn((

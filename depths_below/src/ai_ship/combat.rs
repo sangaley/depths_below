@@ -646,7 +646,7 @@ pub fn check_ai_cripple(
         state.is_destroyed = true;
         let pos = transform.translation.truncate();
         notifications.write(ShowNotification {
-            message: format!("{:?} strikes colors — derelict adrift, ripe for salvage.", ship_type),
+            message: format!("{:?} strikes colors - derelict adrift, ripe for salvage.", ship_type),
             notification_type: NotificationType::Success,
             duration: 4.0,
         });
@@ -694,7 +694,7 @@ pub fn check_ai_reactor_destruction(
         }
         commands.entity(owned.root).try_insert(ReactorMeltdown { remaining: MELTDOWN_SECONDS });
         notifications.write(ShowNotification {
-            message: format!("REACTOR BREACH — detonation in {:.0}s. Get clear.", MELTDOWN_SECONDS),
+            message: format!("REACTOR BREACH - detonation in {:.0}s. Get clear.", MELTDOWN_SECONDS),
             notification_type: NotificationType::Danger,
             duration: 4.0,
         });
@@ -903,7 +903,7 @@ pub fn ai_adapt_ammo(
         }
         if changed > 0 {
             notifications.write(ShowNotification {
-                message: format!("Enemy switching ammunition — {}", answer.name()),
+                message: format!("Enemy switching ammunition - {}", answer.name()),
                 notification_type: NotificationType::Warning,
                 duration: 3.0,
             });
@@ -1009,15 +1009,15 @@ pub fn announce_kills(
             // The cleanest kill and the best salvage — worth naming as a win,
             // not just as a death.
             ShipDeathCause::Struck => (
-                format!("{} struck colors — intact derelict", faction_name(event.ship_type)),
+                format!("{} struck colors - intact derelict", faction_name(event.ship_type)),
                 NotificationType::Success,
             ),
             ShipDeathCause::Meltdown => (
-                format!("{} reactor breach — she's gone", faction_name(event.ship_type)),
+                format!("{} reactor breach - she's gone", faction_name(event.ship_type)),
                 NotificationType::Warning,
             ),
             ShipDeathCause::Gutted => (
-                format!("{} gutted — little left to salvage", faction_name(event.ship_type)),
+                format!("{} gutted - little left to salvage", faction_name(event.ship_type)),
                 NotificationType::Info,
             ),
         };

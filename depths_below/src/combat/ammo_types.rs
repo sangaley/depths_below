@@ -98,19 +98,19 @@ impl KineticAmmoType {
     pub fn description(&self) -> &'static str {
         match self {
             Self::AP => "Just metal, no filler. Goes through the plate and hits whatever is behind it. Wasted if nothing is.",
-            Self::APHE => "Punches in, then opens up inside. Devastating — but a thin target lets it through before it can arm.",
+            Self::APHE => "Punches in, then opens up inside. Devastating - but a thin target lets it through before it can arm.",
             Self::HEFrag => "Bursts on the skin and throws fragments. Shreds anything unarmoured. Skips off heavy plate.",
-            Self::Incendiary => "Starts fires that keep burning. Needs air in the compartment — a depressurised target won't light.",
+            Self::Incendiary => "Starts fires that keep burning. Needs air in the compartment - a depressurised target won't light.",
             Self::EMPShell => "Kills every system in reach and scratches nothing. No physical damage at all, so no use on creatures.",
             Self::Flak => "Bursts short and fills the space with fragments. Puts a wall in front of missiles and swarms; wasted on armour.",
-            Self::HEAT => "A focused jet that eats plate — but only square on. Hit at an angle and almost nothing gets through.",
+            Self::HEAT => "A focused jet that eats plate - but only square on. Hit at an angle and almost nothing gets through.",
             Self::HESH => "Doesn't penetrate. Rings the plate hard enough that its inner face lets go, and the scab kills what's behind. Needs solid hull to ring.",
             Self::APFSDS => "A long rod at absurd speed. Through everything, and often out the far side without hitting much.",
             Self::PlasmaSlug => "Bottled star-stuff. Melts a hole going in and keeps burning inside. Hotter and shorter-lived than incendiary.",
             Self::Antimatter => "A microgram of anti-hydrogen in a bottle that fails on impact. Nothing survives the blast. Costs more than the gun.",
             Self::Singularity => "Collapses to a pinpoint well and drags the compartment into it. Gravity does not care what angle you hit at.",
             Self::NaniteCanister => "A canister of disassemblers. Barely dents the plate, then eats the block from inside for half a minute.",
-            Self::PhaseSlug => "Held out of phase. Shields have nothing to grab and armour barely does either — but it re-materialises with little left.",
+            Self::PhaseSlug => "Held out of phase. Shields have nothing to grab and armour barely does either - but it re-materialises with little left.",
             Self::NeutronShell => "Fast neutrons through the plate. Leaves the hull intact and the crew behind it dead.",
         }
     }
@@ -530,7 +530,7 @@ pub fn default_magazines() -> Vec<(&'static str, Vec<KineticAmmoType>, &'static 
         // expensive round is the payload, the AP is what pays for the trip.
         ("Breach & Burn", vec![KineticAmmoType::AP, KineticAmmoType::PlasmaSlug], "Open the plate, then pour a star in through the hole."),
         ("Long Game", vec![KineticAmmoType::AP, KineticAmmoType::AP, KineticAmmoType::NaniteCanister], "Seed disassemblers early. Let the fight last long enough for them to finish."),
-        ("Shield Breaker", vec![KineticAmmoType::PhaseSlug], "Ignores bubbles entirely. Weak per hit — this is how you hurt something you otherwise can't."),
+        ("Shield Breaker", vec![KineticAmmoType::PhaseSlug], "Ignores bubbles entirely. Weak per hit - this is how you hurt something you otherwise can't."),
         ("Boarding Prep", vec![KineticAmmoType::NeutronShell, KineticAmmoType::NeutronShell, KineticAmmoType::AP], "Kill the crew, keep the hull. Walk aboard a ship that still works."),
         ("Grave Digger", vec![KineticAmmoType::AP, KineticAmmoType::AP, KineticAmmoType::AP, KineticAmmoType::Singularity], "Three to strip the plate, one to fold the compartment inward."),
         ("Blank Cheque", vec![KineticAmmoType::Antimatter], "Every trigger pull costs more than a hull plate. Nothing survives one."),
@@ -805,7 +805,7 @@ mod spall_tests {
         ] {
             assert_eq!(
                 serde_json::to_string(&ammo).unwrap(), on_disk,
-                "{ammo:?} changed on disk — existing ship designs would fail to load",
+                "{ammo:?} changed on disk - existing ship designs would fail to load",
             );
         }
         // And the display name really has moved off the identifier, which is

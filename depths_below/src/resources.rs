@@ -1550,6 +1550,10 @@ pub struct SaveData {
     /// the galaxy then regenerates fresh from `galaxy_seed`.
     #[serde(default)]
     pub galaxy_systems: Vec<SystemSaveData>,
+    /// Everyone ever put out of an airlock, wherever they have drifted to.
+    /// Never pruned — see crew::burial. Empty on legacy saves.
+    #[serde(default)]
+    pub drifting_dead: Vec<crate::crew::burial::DriftingBody>,
 }
 
 impl Default for SaveData {
@@ -1578,6 +1582,7 @@ impl Default for SaveData {
             current_system_id: 0,
             galaxy_seed: 0,
             galaxy_systems: Vec::new(),
+            drifting_dead: Vec::new(),
         }
     }
 }

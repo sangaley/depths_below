@@ -98,7 +98,7 @@ fn spawn_structural_section(commands: &mut Commands, content: Entity, info: &Str
     ).id();
 
     let status_text = commands.spawn(
-        (Text::new(format!("{} — {}% cascade chance on hit", risk_label, pct)), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(risk_color)),
+        (Text::new(format!("{} - {}% cascade chance on hit", risk_label, pct)), TextFont { font_size: FontSize::Px(12.0), ..default() }, TextColor(risk_color)),
     ).id();
 
     let detail_text = commands.spawn(
@@ -132,7 +132,7 @@ pub fn spawn_inspection_window(
     position: Vec2,
 ) {
     let window_id = format!("inspect_{:?}", module_entity);
-    let title = format!("{} — Configuration", module_type.name());
+    let title = format!("{} - Configuration", module_type.name());
 
     let content = spawn_floating_window(
         commands,
@@ -228,7 +228,7 @@ pub fn spawn_inspection_window(
         ).id();
 
         let dropdown_arrow = commands.spawn(
-            (Text::new("▼"), TextFont { font_size: FontSize::Px(10.0), ..default() }, TextColor(WindowStyle::TEXT_DIM)),
+            (Text::new("v"), TextFont { font_size: FontSize::Px(10.0), ..default() }, TextColor(WindowStyle::TEXT_DIM)),
         ).id();
 
         commands.entity(selection_btn).add_children(&[selection_text, dropdown_arrow]);
@@ -248,13 +248,13 @@ pub fn spawn_inspection_window(
                     module_entity,
                 },
                 Tooltip {
-                    text: format!("Deep customize {} — {} parameters", slot_def.slot_name, current_option.parameters.len()),
+                    text: format!("Deep customize {} - {} parameters", slot_def.slot_name, current_option.parameters.len()),
                     detail: None,
                 },
             )).id();
 
             let customize_text = commands.spawn(
-                (Text::new("⚙"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.5, 0.7, 1.0))),
+                (Text::new("*"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.5, 0.7, 1.0))),
             ).id();
 
             commands.entity(customize_btn).add_child(customize_text);
@@ -452,7 +452,7 @@ pub fn slot_button_click(
 
                 let option_name = &slot_def.options[next].name;
                 notifications.write(crate::events::ShowNotification {
-                    message: format!("{}: {} — close and reopen to see updated stats", slot_btn.slot_name, option_name),
+                    message: format!("{}: {} - close and reopen to see updated stats", slot_btn.slot_name, option_name),
                     notification_type: crate::events::NotificationType::Info,
                     duration: 2.0,
                 });
@@ -511,7 +511,7 @@ pub fn preset_button_click(
                 preset.apply(&mut customization);
 
                 notifications.write(crate::events::ShowNotification {
-                    message: format!("Preset applied: {} — close and reopen to see updated stats", preset.name),
+                    message: format!("Preset applied: {} - close and reopen to see updated stats", preset.name),
                     notification_type: crate::events::NotificationType::Info,
                     duration: 2.0,
                 });
@@ -555,7 +555,7 @@ pub fn custom_preset_button_click(
                 preset.apply(&mut customization);
 
                 notifications.write(crate::events::ShowNotification {
-                    message: format!("Build applied: {} — close and reopen to see updated stats", preset.name),
+                    message: format!("Build applied: {} - close and reopen to see updated stats", preset.name),
                     notification_type: crate::events::NotificationType::Info,
                     duration: 2.0,
                 });
@@ -607,7 +607,7 @@ pub fn save_build_button_click(
             crate::building::customization::custom_presets::save_custom_presets(&library);
 
             notifications.write(crate::events::ShowNotification {
-                message: format!("Saved as \"{}\" — close and reopen to see it under My Builds", name),
+                message: format!("Saved as \"{}\" - close and reopen to see it under My Builds", name),
                 notification_type: crate::events::NotificationType::Success,
                 duration: 2.5,
             });

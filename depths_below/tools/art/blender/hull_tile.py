@@ -14,7 +14,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lib import (  # noqa: E402
-    new_scene, metal, light_rig, ortho_camera, configure, render_to,
+    new_scene, materials, light_rig, ortho_camera, configure, render_to,
     box, cyl, argv_after_ddash,
 )
 
@@ -71,6 +71,46 @@ def build_cell_full(cx, cy, mats):
     rib.rotation_euler = (0.0, 0.0, -0.7854)
 
 
+def build_cell_hallway(cx, cy, mats):
+    """Walkable decking.
+
+    Hallways were the same armour plate darkened to ~45%, which read as a
+    burnt or shadowed block rather than a floor -- and sat within a few
+    percent of the Void tint, so a corridor was hard to tell from empty space.
+    That matters more than looks: hallway is the ONLY surface crew can cross
+    (crew/navigation.rs), so a player has to be able to trace a route across
+    the ship at a glance.
+
+    So this is deliberately the BRIGHTEST thing on the hull, and textured
+    across its whole face rather than framed like a plate: continuous decking
+    reads as somewhere you walk, a bordered plate reads as armour.
+    """
+    # Deck panel, nearly the full cell so runs read as continuous decking
+    # with a shallow joint between panels rather than as separate tiles.
+    box("deck", (0.98, 0.98, 0.07), (cx, cy, 0.075), mats["light"], bevel=0.008)
+
+    # Raised tread. Diamonds on a 4x4 lattice, period 0.25, so the pattern
+    # continues unbroken across the joint into the next cell.
+    for gx in range(4):
+        for gy in range(4):
+            d = box("tread", (0.085, 0.085, 0.022),
+                    (cx - 0.375 + gx * 0.25, cy - 0.375 + gy * 0.25, 0.118),
+                    mats["highlight"])
+            d.rotation_euler = (0.0, 0.0, 0.7854)
+
+    # No edge striping. A stripe down two sides is directional, and hallways
+    # run both ways -- on a horizontal corridor the same tile would draw its
+    # markings straight across the walking direction. Brightness and tread
+    # carry the read instead, and they work at any orientation.
+    #
+    # Corner studs instead: rotationally symmetric, and they pick out the
+    # panel joints so a long run still has rhythm.
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            cyl("stud", 0.030, 0.024, (cx + sx * 0.425, cy + sy * 0.425, 0.116),
+                mats["gold"], bevel=0.006)
+
+
 def main():
     args = argv_after_ddash()
     variant = args[0] if args else "restrained"
@@ -78,19 +118,16 @@ def main():
     res = int(args[2]) if len(args) > 2 else 512
 
     scene = new_scene()
-    mats = {
-        "recess": metal("recess", "recess", metallic=0.6, roughness=0.75),
-        "dark": metal("dark", "dark", metallic=0.85, roughness=0.55),
-        "body": metal("body", "body", metallic=0.85, roughness=0.50),
-        "light": metal("light", "light", metallic=0.90, roughness=0.42),
-        "highlight": metal("highlight", "highlight", metallic=0.92, roughness=0.35),
-    }
+    mats = materials()
 
     # Backing slab spans past the framed area so every rendered pixel is
     # opaque -- no semi-transparent edge pixels to seam against.
     box("backing", (3.6, 3.6, 0.08), (0.0, 0.0, 0.0), mats["recess"])
 
-    builder = build_cell_full if variant == "full" else build_cell_restrained
+    builder = {
+        "full": build_cell_full,
+        "hallway": build_cell_hallway,
+    }.get(variant, build_cell_restrained)
     for ix in NEIGHBOURS:
         for iy in NEIGHBOURS:
             builder(ix * CELL, iy * CELL, mats)

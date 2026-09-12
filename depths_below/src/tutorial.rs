@@ -75,11 +75,11 @@ struct TutorialStep {
 const STEPS: &[TutorialStep] = &[
     TutorialStep {
         advance: Advance::Launch,
-        body: "Welcome aboard, captain. You're docked at your home station — safe here. Press [B] to rebuild your ship anytime; press [ENTER] when you're ready to launch into the void.",
+        body: "Welcome aboard, captain. You're docked at your home station - safe here. Use the Build button below to rebuild your ship anytime, and Launch when you're ready for the void. Every button shows its shortcut key if you'd rather use those.",
     },
     TutorialStep {
         advance: Advance::Continue,
-        body: "That bar across the top is your ship's life. HULL is your armor, PWR is power — reactors make it, every module spends it — and FUEL burns whenever you thrust. Let PWR fall short and systems start to fail.",
+        body: "That bar across the top is your ship's life. HULL is your armor, PWR is power - reactors make it, every module spends it - and FUEL burns whenever you thrust. Let PWR fall short and systems start to fail.",
     },
     TutorialStep {
         advance: Advance::Thrust,
@@ -87,23 +87,23 @@ const STEPS: &[TutorialStep] = &[
     },
     TutorialStep {
         advance: Advance::Continue,
-        body: "Your ship is built from modules locked to a grid — reactor, engines, guns, radar, cargo. Take a hit and individual modules break, and whatever they did stops working. All of it is repairable back home.",
+        body: "Your ship is built from modules locked to a grid - reactor, engines, guns, radar, cargo. Take a hit and individual modules break, and whatever they did stops working. All of it is repairable back home.",
     },
     TutorialStep {
         advance: Advance::Scan,
-        body: "The void is dark — you can't see far. Press [Z] to ping radar; the sweep lights up contacts around you. But a ping is loud, spiking your NOISE and drawing hunters. See what it reveals out there.",
+        body: "The void is dark - you can't see far. Hit the Ping button (or [Z]) to sweep radar; the sweep lights up contacts around you. But a ping is loud, spiking your NOISE and drawing hunters. See what it reveals out there.",
     },
     TutorialStep {
         advance: Advance::Kill,
-        body: "That contact is a raider, holding position at range. Thrust out to it, put your nose on it, and hold [SPACE] to fire. Your guns shoot where you aim and burn AMMO — so aim, don't just spray.",
+        body: "That contact is a raider, holding position at range. Thrust out to it, put your nose on it, and hold [SPACE] to fire. Your guns shoot where you aim and burn AMMO - so aim, don't just spray.",
     },
     TutorialStep {
         advance: Advance::Salvage,
-        body: "Destroyed — but a kill pays nothing by itself. The reward is the wreck it leaves. Fly in close and press [F]: idle crew suit up, cross over, and strip its cargo into your hold. [F] again recalls them.",
+        body: "Destroyed - but a kill pays nothing by itself. The reward is the wreck it leaves. Fly in close and use Dock: idle crew suit up, cross over, and strip its cargo into your hold. Dock again recalls them.",
     },
     TutorialStep {
         advance: Advance::Continue,
-        body: "That cargo isn't credits yet — you sell it at a station. That's the whole loop out here: hunt, salvage, sell, and pour it back into a stronger ship. Time to head home.",
+        body: "That cargo isn't credits yet - you sell it at a station. That's the whole loop out here: hunt, salvage, sell, and pour it back into a stronger ship. Time to head home.",
     },
     TutorialStep {
         advance: Advance::Dock,
@@ -111,23 +111,23 @@ const STEPS: &[TutorialStep] = &[
     },
     TutorialStep {
         advance: Advance::Continue,
-        body: "Docked. This is where you spend what you earn — rebuild the ship, take on contracts, and manage your crew. Let's walk each one.",
+        body: "Docked. This is where you spend what you earn - rebuild the ship, take on contracts, and manage your crew. Let's walk each one.",
     },
     TutorialStep {
         advance: Advance::Build,
-        body: "Press [B] to open the shipyard. Place modules on the grid — but keep it balanced: every module draws power, so add reactors to match, and wrap the whole thing in hull so it can take hits.",
+        body: "Use the Build button to open the shipyard. Place modules on the grid - but keep it balanced: every module draws power, so add reactors to match, and wrap the whole thing in hull so it can take hits.",
     },
     TutorialStep {
         advance: Advance::Contracts,
-        body: "Press [J] for the bounty board. Contracts pay credits and shift your standing with the factions — reputation decides who meets you with guns and who meets you with trade.",
+        body: "Use the Jobs button for the bounty board. Contracts pay credits and shift your standing with the factions - reputation decides who meets you with guns and who meets you with trade.",
     },
     TutorialStep {
         advance: Advance::Crew,
-        body: "Press [C] to manage crew. Hire hands and post them to stations — an unmanned reactor or gun runs at a fraction of its output. Crew are what actually bring the ship to life.",
+        body: "Use the Crew button to manage crew. Hire hands and post them to stations - an unmanned reactor or gun runs at a fraction of its output. Crew are what actually bring the ship to life.",
     },
     TutorialStep {
         advance: Advance::Continue,
-        body: "That's the loop, captain: explore, fight, salvage, upgrade, and push deeper. Press [M] anytime for the star map, [TAB] there for the whole galaxy. The void is yours now.",
+        body: "That's the loop, captain: explore, fight, salvage, upgrade, and push deeper. Use the Map button anytime for the star map, then Radar there for the whole galaxy. The void is yours now.",
     },
 ];
 
@@ -432,7 +432,7 @@ fn advance_tutorial(
     if tutorial.step >= STEPS.len() {
         tutorial.active = false;
         notifications.write(ShowNotification {
-            message: "Training complete — good luck out there, captain.".into(),
+            message: "Training complete - good luck out there, captain.".into(),
             notification_type: NotificationType::Success,
             duration: 6.0,
         });

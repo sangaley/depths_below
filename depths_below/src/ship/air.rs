@@ -293,18 +293,6 @@ pub fn sync_room_air(air: Res<AirField>, mut room_map: ResMut<RoomMap>) {
 // WHAT THE AIR DOES TO PEOPLE
 // ============================================================================
 
-/// A body on its way out of the ship, in WORLD space.
-///
-/// Not a crew member: the crew entity is despawned by `handle_crew_death` the
-/// moment it dies, precisely so no staffing or routing system has to learn to
-/// skip it. This is the stand-in that tumbles away where you can see it.
-#[derive(Component)]
-pub struct EjectedBody {
-    pub velocity: Vec2,
-    pub spin: f32,
-    pub life: f32,
-}
-
 /// Air drags anyone standing in it, and takes them out through the hole.
 ///
 /// Runs after `walk_crew`, so the two compose: a crew member walking at
@@ -323,7 +311,9 @@ pub fn crew_suction(
             Without<crate::ai_ship::components::OwnedByAiShip>,
         ),
     >,
-    mut deaths: MessageWriter<CrewDied>,
+    streaming: Res<crate::celestial::resources::SystemStreamingManager>,
+    mut dead: ResMut<crate::crew::burial::DriftingDead>,
+    mut wounds: MessageWriter<CrewDamaged>,
 ) {
     let Ok(ship_velocity) = ship_query.single() else { return };
     let dt = time.delta_secs();
@@ -350,6 +340,20 @@ pub fn crew_suction(
         {
             let world = global.translation();
             let outward = flow.normalize_or_zero();
+            let velocity = ship_velocity.0 + outward * (strength * SUCTION_COUPLING);
+
+            // Straight onto the drifting-dead register, the same one
+            // `burial::advance_burial` writes when a pallbearer works the lock.
+            // Going out through a hole skips the ceremony, not the bookkeeping:
+            // the body persists across systems and saves like any other, and
+            // could be recovered later.
+            let id = dead.add(
+                streaming.loaded_system.unwrap_or(u32::MAX),
+                world.truncate(),
+                velocity,
+                0.0,
+                member.name.clone(),
+            );
             commands.spawn((
                 Sprite {
                     color: Color::srgb(0.8, 0.6, 0.5),
@@ -357,20 +361,19 @@ pub fn crew_suction(
                     ..default()
                 },
                 Transform::from_translation(world),
-                EjectedBody {
-                    velocity: ship_velocity.0 + outward * (strength * SUCTION_COUPLING),
-                    spin: if outward.x >= 0.0 { 4.0 } else { -4.0 },
-                    life: 6.0,
-                },
+                crate::crew::burial::DriftingCorpse { id, velocity, spin: 3.0 },
             ));
-            deaths.write(CrewDied {
+
+            // Report the wound, not the death. `report_crew_deaths` sweeps for
+            // anyone at zero health and raises `CrewDied` itself, naming the
+            // cause from the last `CrewDamaged` it saw -- so writing `CrewDied`
+            // here as well would kill the same person twice, decrementing the
+            // roster twice and leaving two bodies.
+            wounds.write(CrewDamaged {
                 crew: entity,
-                name: member.name.clone(),
-                cause: CrewDamageSource::Decompression,
+                amount: member.health,
+                source: CrewDamageSource::Decompression,
             });
-            // handle_crew_death despawns them, but not until it next runs.
-            // Zeroing health here is what stops this firing again next frame
-            // and spawning a second body for the same person.
             member.health = 0.0;
             continue;
         }
@@ -395,27 +398,11 @@ pub fn crew_suction(
     }
 }
 
-/// Tumble ejected bodies away and fade them out.
-pub fn tumble_ejected_bodies(
-    mut commands: Commands,
-    time: Res<Time>,
-    mut bodies: Query<(Entity, &mut Transform, &mut Sprite, &mut EjectedBody)>,
-) {
-    let dt = time.delta_secs();
-    for (entity, mut transform, mut sprite, mut body) in bodies.iter_mut() {
-        body.life -= dt;
-        if body.life <= 0.0 {
-            commands.entity(entity).try_despawn();
-            continue;
-        }
-        let velocity = body.velocity;
-        transform.translation.x += velocity.x * dt;
-        transform.translation.y += velocity.y * dt;
-        transform.rotate_z(body.spin * dt);
-        // Fade over the last two seconds rather than blinking out.
-        sprite.color.set_alpha((body.life / 2.0).min(1.0));
-    }
-}
+// Ejected bodies are moved and kept in step with their saved rows by
+// `burial::drift_dead`, which owns every drifting corpse however it got out
+// there. An earlier version of this file tumbled its own short-lived body and
+// faded it after six seconds; that fought the burial system for the same job
+// and, worse, quietly threw the dead away.
 
 #[cfg(test)]
 mod air_tests {

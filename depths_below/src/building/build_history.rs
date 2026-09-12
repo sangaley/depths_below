@@ -107,7 +107,7 @@ pub fn undo_input(
                 if power_count <= 1 {
                     history.undo_stack.push(action);
                     notifications.write(ShowNotification {
-                        message: "Cannot undo — last power source".into(),
+                        message: "Cannot undo - last power source".into(),
                         notification_type: NotificationType::Warning,
                         duration: 2.0,
                     });

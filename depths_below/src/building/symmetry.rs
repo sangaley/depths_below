@@ -45,7 +45,7 @@ pub fn toggle_symmetry(
                 SymmetryCenterLine,
             ));
             notifications.write(ShowNotification {
-                message: "Symmetry mode ON — modules mirror across center".into(),
+                message: "Symmetry mode ON - modules mirror across center".into(),
                 notification_type: NotificationType::Info,
                 duration: 2.0,
             });

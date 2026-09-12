@@ -99,7 +99,7 @@ pub fn toggle_hiring_board(
         .and_then(|t| stations.nearest_index(t.translation.truncate()));
     let Some(station) = station else {
         notifications.write(ShowNotification {
-            message: "No station in range — recruits wait at stations.".into(),
+            message: "No station in range - recruits wait at stations.".into(),
             notification_type: NotificationType::Warning,
             duration: 3.0,
         });
@@ -124,7 +124,7 @@ pub fn toggle_hiring_board(
         HiringPanel,
     )).with_children(|parent| {
         parent.spawn((
-            Text::new(format!("CREW FOR HIRE — STATION {}", station)),
+            Text::new(format!("CREW FOR HIRE - STATION {}", station)),
             TextFont { font_size: FontSize::Px(ThemeFonts::H2), ..default() },
             TextColor(ThemeColors::TEXT_TITLE),
             Node { margin: UiRect::bottom(Val::Px(ThemeSpacing::LG)), ..default() },
@@ -149,6 +149,8 @@ pub fn toggle_hiring_board(
 
 pub fn hiring_board_input(
     mut commands: Commands,
+    assets: Res<AssetServer>,
+    crew_atlases: Res<crate::crew::animation::CrewAtlases>,
     keyboard: Res<ButtonInput<KeyCode>>,
     open: Res<HiringBoardOpen>,
     mut pool: ResMut<HiringPool>,
@@ -182,7 +184,7 @@ pub fn hiring_board_input(
     let alive = crew_query.iter().filter(|c| c.health > 0.0).count() as u32;
     if alive >= staffing.total_berths {
         notifications.write(ShowNotification {
-            message: "No empty bunks — build more quarters first.".into(),
+            message: "No empty bunks - build more quarters first.".into(),
             notification_type: NotificationType::Warning,
             duration: 3.0,
         });
@@ -204,14 +206,11 @@ pub fn hiring_board_input(
 
     let crew = commands
         .spawn((
-            (
-                Sprite {
-                    color: Color::srgb(0.8, 0.6, 0.5),
-                    custom_size: Some(Vec2::new(16.0, 16.0)),
-                    ..default()
-                },
-                Transform::from_xyz(alive as f32 * 14.0 - 40.0, -20.0, 0.5),
-            ),
+            crate::crew::animation::crew_sprite(&assets, &crew_atlases),
+            // CREW_Z, not the 0.5 this site used to hardcode - crew belong
+            // above modules and the damage overlay.
+            Transform::from_xyz(alive as f32 * 14.0 - 40.0, -20.0,
+                                crate::crew::walking::CREW_Z),
             CrewMember {
                 name: candidate.name.clone(),
                 health: 100.0,

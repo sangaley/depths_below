@@ -297,8 +297,15 @@ pub fn parasite_boarding(
 pub fn boarded_parasite_damage(
     time: Res<Time>,
     mut parasite_query: Query<(Entity, &mut BoardedParasite)>,
-    mut crew_query: Query<&mut CrewMember>,
+    // Our crew, not everybody's: unfiltered, parasites chewing through the
+    // player's corridors were also eating the crew of every hostile on the
+    // map, which is both wrong and invisible.
+    mut crew_query: Query<
+        (Entity, &mut CrewMember),
+        Without<crate::ai_ship::components::OwnedByAiShip>,
+    >,
     mut notifications: MessageWriter<ShowNotification>,
+    mut damage_events: MessageWriter<CrewDamaged>,
     mut damage_timer: Local<f32>,
 ) {
     let dt = time.delta_secs();
@@ -316,15 +323,21 @@ pub fn boarded_parasite_damage(
     if boarded_count == 0 { return; }
 
     // Damage random crew member
-    let crew_count = crew_query.iter().filter(|c| c.health > 0.0).count();
+    let crew_count = crew_query.iter().filter(|(_, c)| c.health > 0.0).count();
     if crew_count > 0 {
         let damage_per_parasite = 1.5;
         let total_damage = boarded_count as f32 * damage_per_parasite;
 
         // Distribute damage across crew
-        for mut crew in crew_query.iter_mut() {
+        let share = total_damage / crew_count as f32;
+        for (entity, mut crew) in crew_query.iter_mut() {
             if crew.health <= 0.0 { continue; }
-            crew.health -= total_damage / crew_count as f32;
+            crew.health = (crew.health - share).max(0.0);
+            damage_events.write(CrewDamaged {
+                crew: entity,
+                amount: share,
+                source: CrewDamageSource::Boarders,
+            });
         }
 
         if boarded_count >= 3 {

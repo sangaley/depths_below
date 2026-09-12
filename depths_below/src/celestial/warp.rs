@@ -75,7 +75,7 @@ pub fn warp_input_system(
         } else if let Ok(ship_entity) = ship_query.single() {
             let Some(target) = pending.0 else {
                 notifications.write(ShowNotification {
-                    message: "No warp destination set — open the map (M), Tab to the galaxy view, and click anywhere.".into(),
+                    message: "No warp destination set - open the map (M), Tab to the galaxy view, and click anywhere.".into(),
                     notification_type: NotificationType::Warning,
                     duration: 3.0,
                 });

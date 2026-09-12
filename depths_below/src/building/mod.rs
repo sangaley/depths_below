@@ -805,7 +805,7 @@ fn handle_build_input(
             if module_def.customizable {
                 customization_state.start_customizing(module_type);
                 notifications.write(ShowNotification {
-                    message: format!("⚙ Quick Customizing {}", module_type.name()),
+                    message: format!("* Quick Customizing {}", module_type.name()),
                     notification_type: NotificationType::Info,
                     duration: 2.0,
                 });
@@ -827,7 +827,7 @@ fn handle_build_input(
                 placement_state.start_placing(module_type);
                 next_state.set(BuildState::PlacingComponent);
                 notifications.write(ShowNotification {
-                    message: format!("🔧 Component Builder: {} - Click pieces to assemble", module_type.name()),
+                    message: format!("+ Component Builder: {} - Click pieces to assemble", module_type.name()),
                     notification_type: NotificationType::Info,
                     duration: 3.0,
                 });
@@ -1346,18 +1346,20 @@ fn process_hull_placement(
         let color = match event.layer {
             HullLayer::Outer => Color::WHITE,
             HullLayer::Inner => Color::srgb(0.9, 0.9, 0.9),
-            HullLayer::Hallway => Color::srgb(0.42, 0.48, 0.52),
+            // Decking carries its own sprite now; tinting it just dimmed it.
+            HullLayer::Hallway => Color::WHITE,
             HullLayer::Void => Color::srgb(0.5, 0.5, 0.6),
             HullLayer::BulkheadDoor => Color::srgb(0.9, 0.8, 0.7),
         };
 
-        let texture = asset_server.load(sprite_map::hull_sprite_path(material));
+        let texture = asset_server
+            .load(sprite_map::hull_layer_sprite_path(material, event.layer));
 
         let hull_entity = commands.spawn((
             (Sprite {
                     image: texture,
                     color,
-                    custom_size: Some(Vec2::new(64.0, 64.0)),
+                    custom_size: Some(Vec2::new(66.0, 66.0)),
                     ..default()
                 }, Transform::from_xyz(
                     grid_pos.x as f32 * 66.0,

@@ -32,9 +32,18 @@ pub fn transform_to_grid(t: &Transform) -> IVec2 {
     )
 }
 
-/// Flood-fill to detect enclosed rooms from inner hull tiles.
-/// A "room" is a connected group of empty interior cells bounded by inner hull.
-/// For now: any Module grid_position that is surrounded by hull = part of a room.
+/// Flood-fill room detection.
+///
+/// A room is a connected group of cells that CARRY SOMETHING — a module or a
+/// hallway. It is not "space enclosed by walls", and nothing here tests for
+/// enclosure. Bare space is never interior however much wall you ring it with:
+/// no id, no air, no fire, nowhere a crew member can stand. Laying decking is
+/// what turns a gap into a place. (See room_shape_tests.)
+///
+/// Inner hull only ever SEPARATES two groups that would otherwise touch; a
+/// sealed bulkhead does the same for as long as it stays shut. Outer hull and
+/// Void are not walls at all to this fill — they are simply not interior, so
+/// it never reaches them.
 /// PLAYER SHIP ONLY: hull/module queries span every ship in the world (grid
 /// positions are ship-local, so an AI ship's tiles routinely collide
 /// numerically with the player's). Unscoped, AI hull/modules leaked into the
@@ -227,5 +236,144 @@ pub fn update_room_power(
 ) {
     for room in room_map.rooms.iter_mut() {
         room.has_power = room.tiles.iter().any(|t| power_graph.powered_tiles.contains(t));
+    }
+}
+
+#[cfg(test)]
+mod room_shape_tests {
+    use super::*;
+    use crate::building::grid_to_local;
+
+    fn app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<RoomMap>();
+        app.add_systems(Update, update_room_map);
+        app
+    }
+
+    fn hull(app: &mut App, ship: Entity, cell: IVec2, layer: HullLayer) {
+        app.world_mut()
+            .spawn((
+                HullSegment { grid_position: cell, hull_layer: layer, ..default() },
+                Transform::from_translation(grid_to_local(cell).extend(0.1)),
+            ))
+            .insert(ChildOf(ship));
+    }
+
+    fn room_of(app: &App, cell: IVec2) -> Option<usize> {
+        app.world().resource::<RoomMap>().tile_to_room.get(&cell).copied()
+    }
+
+    fn room_count(app: &App) -> usize {
+        app.world().resource::<RoomMap>().rooms.len()
+    }
+
+    /// The rule the flood fill actually implements is NOT "space enclosed by
+    /// walls". Interior space is the set of cells that carry a module or a
+    /// hallway; the fill starts only from those and only spreads into those.
+    /// Enclosure never enters into it. A bare cell ringed by wall on every
+    /// side is not a room, it is nothing — no id, no air, no fire, and no
+    /// crew member can be in it.
+    #[test]
+    fn a_bare_cell_ringed_by_walls_is_not_a_room() {
+        let mut app = app();
+        let ship = app.world_mut().spawn(Ship).id();
+
+        // Eight inner-hull cells around a bare centre.
+        for y in 0..3 {
+            for x in 0..3 {
+                if (x, y) == (1, 1) {
+                    continue;
+                }
+                hull(&mut app, ship, IVec2::new(x, y), HullLayer::Inner);
+            }
+        }
+
+        app.update();
+
+        assert_eq!(room_of(&app, IVec2::new(1, 1)), None, "bare space became a room");
+        assert_eq!(room_count(&app), 0, "walls alone produced a room");
+    }
+
+    /// Lay decking in that same hole and it becomes a room — a one-tile one,
+    /// walled off from everything. The decking is what makes it a place.
+    #[test]
+    fn decking_in_the_hole_is_what_makes_it_a_room() {
+        let mut app = app();
+        let ship = app.world_mut().spawn(Ship).id();
+
+        for y in 0..3 {
+            for x in 0..3 {
+                if (x, y) == (1, 1) {
+                    continue;
+                }
+                hull(&mut app, ship, IVec2::new(x, y), HullLayer::Inner);
+            }
+        }
+        hull(&mut app, ship, IVec2::new(1, 1), HullLayer::Hallway);
+
+        app.update();
+
+        assert_eq!(room_count(&app), 1, "decking did not make a room");
+        assert!(room_of(&app, IVec2::new(1, 1)).is_some());
+    }
+
+    /// The roundabout: a closed loop of corridor with a hole in the middle.
+    /// The whole ring is ONE room — the fill goes round it — and the hole is
+    /// not part of it, because nothing was ever laid there. The ring does not
+    /// "enclose" anything as far as room detection is concerned.
+    #[test]
+    fn a_loop_of_corridor_is_one_room_and_its_hole_is_nothing() {
+        let mut app = app();
+        let ship = app.world_mut().spawn(Ship).id();
+
+        // 3x3 ring of decking, bare centre.
+        for y in 0..3 {
+            for x in 0..3 {
+                if (x, y) == (1, 1) {
+                    continue;
+                }
+                hull(&mut app, ship, IVec2::new(x, y), HullLayer::Hallway);
+            }
+        }
+
+        app.update();
+
+        assert_eq!(room_count(&app), 1, "the loop did not close into one room");
+        let ring = room_of(&app, IVec2::new(0, 0)).expect("no room on the ring");
+        // Every corridor cell is the same room, all the way round.
+        for (x, y) in [(2, 0), (2, 2), (0, 2), (1, 0), (1, 2)] {
+            assert_eq!(
+                room_of(&app, IVec2::new(x, y)),
+                Some(ring),
+                "cell ({x},{y}) was not part of the same loop"
+            );
+        }
+        assert_eq!(room_of(&app, IVec2::new(1, 1)), None, "the hole became interior");
+    }
+
+    /// Outer hull is not a wall to the flood fill — it is simply not interior.
+    /// Only Inner (and a SEALED bulkhead) separate one room from another, which
+    /// is why a hallway running between two module clusters merges them.
+    #[test]
+    fn only_inner_hull_divides_rooms() {
+        let mut app = app();
+        let ship = app.world_mut().spawn(Ship).id();
+
+        // A corridor of five, cut in the middle by one inner-hull cell.
+        for x in [0, 1, 3, 4] {
+            hull(&mut app, ship, IVec2::new(x, 0), HullLayer::Hallway);
+        }
+        hull(&mut app, ship, IVec2::new(2, 0), HullLayer::Inner);
+
+        app.update();
+
+        assert_eq!(room_count(&app), 2, "an inner-hull wall did not split the corridor");
+        assert_ne!(
+            room_of(&app, IVec2::new(0, 0)),
+            room_of(&app, IVec2::new(4, 0)),
+            "both sides of the wall ended up in one room"
+        );
     }
 }

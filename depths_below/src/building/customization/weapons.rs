@@ -175,7 +175,7 @@ fn cannon_customization() -> ModuleCustomizationDef {
                         description: "Dense metal, no filler. Hits the hull hard, splashes almost nothing.".into(),
                         stat_modifiers: { let mut m = HashMap::new(); m.insert("hull_damage".into(), 1.5); m.insert("area_damage".into(), 0.2); m },
                         parameters: vec![
-                            param("caliber", "Projectile diameter — must be ≤ bore diameter", "Damage", 15.0, 200.0, 75.0, "mm"),
+                            param("caliber", "Projectile diameter - must be <= bore diameter", "Damage", 15.0, 200.0, 75.0, "mm"),
                             param("propellant_charge", "More propellant = faster muzzle velocity, more barrel wear", "Velocity, Barrel Wear", 10.0, 100.0, 50.0, "g"),
                             param_stepped("magazine_capacity", "More rounds = heavier magazine, slower reload", "Ammo, Reload Time", 5.0, 60.0, 20.0, "rounds", 5.0),
                             param("penetrator_length", "Longer penetrator = more armor piercing", "Penetration", 50.0, 500.0, 200.0, "mm"),
@@ -190,7 +190,7 @@ fn cannon_customization() -> ModuleCustomizationDef {
                             param("propellant_charge", "Propellant amount", "Velocity", 10.0, 80.0, 40.0, "g"),
                             param_stepped("magazine_capacity", "Magazine size", "Ammo", 5.0, 40.0, 15.0, "rounds", 5.0),
                             param("explosive_filler", "More filler = bigger explosion, less penetration", "Blast Radius", 10.0, 200.0, 80.0, "g"),
-                            param("fuse_delay", "Delay before detonation — 0 = impact, higher = penetrate then explode", "Detonation", 0.0, 50.0, 5.0, "ms"),
+                            param("fuse_delay", "Delay before detonation - 0 = impact, higher = penetrate then explode", "Detonation", 0.0, 50.0, 5.0, "ms"),
                         ],
                     },
                     SubComponentOption {
@@ -201,7 +201,7 @@ fn cannon_customization() -> ModuleCustomizationDef {
                             param("caliber", "Shell diameter", "Damage", 20.0, 150.0, 70.0, "mm"),
                             param("propellant_charge", "Propellant amount", "Velocity", 10.0, 70.0, 35.0, "g"),
                             param_stepped("magazine_capacity", "Magazine size", "Ammo", 5.0, 50.0, 25.0, "rounds", 5.0),
-                            param("incendiary_compound", "Burn intensity — more = hotter fire, shorter burn", "Fire Damage", 10.0, 100.0, 50.0, "g"),
+                            param("incendiary_compound", "Burn intensity - more = hotter fire, shorter burn", "Fire Damage", 10.0, 100.0, 50.0, "g"),
                             param("burn_duration", "How long the fire lasts", "Fire Duration", 1.0, 15.0, 5.0, "s"),
                         ],
                     },
@@ -238,7 +238,7 @@ fn cannon_customization() -> ModuleCustomizationDef {
                         description: "Continuous belt feed. Good sustained fire, can jam.".into(),
                         stat_modifiers: { let mut m = HashMap::new(); m.insert("fire_rate".into(), 1.2); m.insert("reliability".into(), 0.85); m },
                         parameters: vec![
-                            param("belt_speed", "Feed speed — faster = higher fire rate, more jams", "Fire Rate, Jam Chance", 50.0, 500.0, 200.0, "rpm"),
+                            param("belt_speed", "Feed speed - faster = higher fire rate, more jams", "Fire Rate, Jam Chance", 50.0, 500.0, 200.0, "rpm"),
                             param("belt_tension", "Tighter belt = fewer jams, more wear", "Reliability, Wear", 10.0, 100.0, 50.0, "N"),
                         ],
                     },
@@ -249,7 +249,7 @@ fn cannon_customization() -> ModuleCustomizationDef {
                         parameters: vec![
                             param("loader_speed", "Mechanical cycle rate", "Fire Rate", 100.0, 800.0, 400.0, "rpm"),
                             param("power_consumption", "Power draw of the autoloader motor", "Power Draw", 5.0, 50.0, 20.0, "MW"),
-                            param("buffer_size", "Ready rounds in the loader — more = sustained bursts", "Burst Length", 1.0, 10.0, 3.0, "rounds"),
+                            param("buffer_size", "Ready rounds in the loader - more = sustained bursts", "Burst Length", 1.0, 10.0, 3.0, "rounds"),
                         ],
                     },
                 ],
@@ -258,14 +258,14 @@ fn cannon_customization() -> ModuleCustomizationDef {
             // COOLING SLOT
             SubComponentSlotDef {
                 slot_name: "Cooling".into(),
-                description: "Heat management. Sustained fire generates heat — too much and the weapon shuts down.".into(),
+                description: "Heat management. Sustained fire generates heat - too much and the weapon shuts down.".into(),
                 options: vec![
                     SubComponentOption {
                         name: "Passive Radiator".into(),
                         description: "No power, no weight, slow cooling. Fine for occasional fire.".into(),
                         stat_modifiers: HashMap::new(),
                         parameters: vec![
-                            param("surface_area", "More area = faster passive cooling", "Cooling Rate", 100.0, 1000.0, 400.0, "cm²"),
+                            param("surface_area", "More area = faster passive cooling", "Cooling Rate", 100.0, 1000.0, 400.0, "cm2"),
                             param("emissivity", "Material thermal emissivity", "Cooling Rate", 0.3, 1.0, 0.7, ""),
                         ],
                     },
@@ -275,7 +275,7 @@ fn cannon_customization() -> ModuleCustomizationDef {
                         stat_modifiers: { let mut m = HashMap::new(); m.insert("cooling_rate".into(), 2.5); m },
                         parameters: vec![
                             param("coolant_flow_rate", "Faster flow = more cooling, more power", "Cooling Rate, Power", 1.0, 20.0, 8.0, "L/s"),
-                            param("coolant_temperature", "Lower base temp = more cooling headroom", "Heat Capacity", -50.0, 20.0, -10.0, "°C"),
+                            param("coolant_temperature", "Lower base temp = more cooling headroom", "Heat Capacity", -50.0, 20.0, -10.0, "degC"),
                             param("pump_power", "Power draw of the coolant pump", "Power Draw", 2.0, 30.0, 10.0, "MW"),
                         ],
                     },
@@ -285,7 +285,7 @@ fn cannon_customization() -> ModuleCustomizationDef {
                         stat_modifiers: { let mut m = HashMap::new(); m.insert("burst_cooling".into(), 3.0); m },
                         parameters: vec![
                             param("sink_capacity", "Total heat absorbable before replacement", "Heat Budget", 500.0, 5000.0, 2000.0, "kJ"),
-                            param("sink_count", "Number of sinks — more = longer sustained fire", "Sustained Fire", 1.0, 8.0, 3.0, "units"),
+                            param("sink_count", "Number of sinks - more = longer sustained fire", "Sustained Fire", 1.0, 8.0, 3.0, "units"),
                             param("eject_speed", "How fast spent sinks are swapped", "Recovery Time", 0.5, 5.0, 2.0, "s"),
                         ],
                     },
@@ -299,7 +299,7 @@ fn cannon_customization() -> ModuleCustomizationDef {
                 options: vec![
                     SubComponentOption {
                         name: "Fixed Mount".into(),
-                        description: "Bolted to the hull. No traverse — aim by turning the ship. Lightest, cheapest.".into(),
+                        description: "Bolted to the hull. No traverse - aim by turning the ship. Lightest, cheapest.".into(),
                         stat_modifiers: { let mut m = HashMap::new(); m.insert("traverse_speed".into(), 0.0); m.insert("accuracy".into(), 1.2); m },
                         parameters: vec![
                             param("vibration_damping", "Reduces fire-induced vibration", "Accuracy", 0.0, 100.0, 30.0, "%"),
@@ -310,9 +310,9 @@ fn cannon_customization() -> ModuleCustomizationDef {
                         description: "Motorized rotation. Tracks targets independently. Standard choice.".into(),
                         stat_modifiers: { let mut m = HashMap::new(); m.insert("traverse_speed".into(), 1.0); m },
                         parameters: vec![
-                            param("traverse_speed", "Rotation speed of the turret", "Target Tracking", 10.0, 180.0, 60.0, "°/s"),
-                            param("elevation_range", "Vertical aim range", "Coverage", 10.0, 90.0, 45.0, "°"),
-                            param("stabilization", "Gyro stabilization — counters ship movement", "Moving Accuracy", 0.0, 100.0, 50.0, "%"),
+                            param("traverse_speed", "Rotation speed of the turret", "Target Tracking", 10.0, 180.0, 60.0, "deg/s"),
+                            param("elevation_range", "Vertical aim range", "Coverage", 10.0, 90.0, 45.0, "deg"),
+                            param("stabilization", "Gyro stabilization - counters ship movement", "Moving Accuracy", 0.0, 100.0, 50.0, "%"),
                             param("motor_power", "Turret motor power draw", "Power Draw", 2.0, 20.0, 8.0, "MW"),
                         ],
                     },
@@ -374,7 +374,7 @@ fn railgun_customization() -> ModuleCustomizationDef {
                         stat_modifiers: HashMap::new(),
                         parameters: vec![
                             param("rail_length", "Longer rails = higher muzzle velocity", "Range, Damage", 500.0, 4000.0, 2000.0, "mm"),
-                            param("rail_gap", "Gap between rails — affects field strength", "Velocity", 10.0, 80.0, 30.0, "mm"),
+                            param("rail_gap", "Gap between rails - affects field strength", "Velocity", 10.0, 80.0, 30.0, "mm"),
                             param("rail_material_conductivity", "Better conductivity = less energy loss", "Efficiency", 50.0, 100.0, 75.0, "%"),
                         ],
                     },
@@ -474,9 +474,9 @@ fn laser_customization() -> ModuleCustomizationDef {
                         description: "Reliable, moderate power. Standard choice.".into(),
                         stat_modifiers: HashMap::new(),
                         parameters: vec![
-                            param("beam_power", "Output wattage — more = more damage, more heat", "DPS, Heat", 50.0, 1000.0, 300.0, "kW"),
+                            param("beam_power", "Output wattage - more = more damage, more heat", "DPS, Heat", 50.0, 1000.0, 300.0, "kW"),
                             param("wavelength", "Shorter wavelength = better focus at range", "Range", 200.0, 1200.0, 500.0, "nm"),
-                            param("pulse_frequency", "Continuous vs pulsed — pulsed does burst damage", "Damage Profile", 0.0, 1000.0, 0.0, "Hz"),
+                            param("pulse_frequency", "Continuous vs pulsed - pulsed does burst damage", "Damage Profile", 0.0, 1000.0, 0.0, "Hz"),
                         ],
                     },
                 ],
@@ -492,7 +492,7 @@ fn laser_customization() -> ModuleCustomizationDef {
                         stat_modifiers: HashMap::new(),
                         parameters: vec![
                             param("lens_diameter", "Bigger lens = tighter focus at range, heavier", "Range, Weight", 50.0, 500.0, 150.0, "mm"),
-                            param("focal_length", "Distance of optimal focus — damage drops outside", "Optimal Range", 100.0, 2000.0, 600.0, "units"),
+                            param("focal_length", "Distance of optimal focus - damage drops outside", "Optimal Range", 100.0, 2000.0, 600.0, "units"),
                             param("coating_reflectivity", "Anti-reflective coating quality", "Efficiency", 80.0, 99.9, 95.0, "%"),
                         ],
                     },
@@ -508,8 +508,8 @@ fn laser_customization() -> ModuleCustomizationDef {
                         description: "Passive heat radiation. Limits sustained fire time.".into(),
                         stat_modifiers: HashMap::new(),
                         parameters: vec![
-                            param("radiator_area", "Surface area for heat dumping", "Sustained Fire", 200.0, 2000.0, 800.0, "cm²"),
-                            param("max_operating_temp", "Shut-down temperature threshold", "Overheat Limit", 200.0, 800.0, 400.0, "°C"),
+                            param("radiator_area", "Surface area for heat dumping", "Sustained Fire", 200.0, 2000.0, 800.0, "cm2"),
+                            param("max_operating_temp", "Shut-down temperature threshold", "Overheat Limit", 200.0, 800.0, 400.0, "degC"),
                         ],
                     },
                 ],
@@ -533,7 +533,7 @@ fn torpedo_customization() -> ModuleCustomizationDef {
                         parameters: vec![
                             param("explosive_mass", "More explosive = bigger boom, heavier missile", "Damage, Weight", 50.0, 1000.0, 300.0, "kg"),
                             param("blast_radius", "Damage falloff radius", "Area", 100.0, 1000.0, 400.0, "units"),
-                            param("fuse_type_proximity", "Proximity fuse distance — 0 = contact only", "Detonation", 0.0, 100.0, 30.0, "units"),
+                            param("fuse_type_proximity", "Proximity fuse distance - 0 = contact only", "Detonation", 0.0, 100.0, 30.0, "units"),
                         ],
                     },
                     SubComponentOption {
@@ -542,7 +542,7 @@ fn torpedo_customization() -> ModuleCustomizationDef {
                         stat_modifiers: { let mut m = HashMap::new(); m.insert("penetration".into(), 2.0); m.insert("area_damage".into(), 0.3); m },
                         parameters: vec![
                             param("charge_mass", "Explosive liner mass", "Penetration", 30.0, 500.0, 150.0, "kg"),
-                            param("cone_angle", "Narrower = deeper penetration, smaller hit area", "Penetration vs Area", 20.0, 90.0, 45.0, "°"),
+                            param("cone_angle", "Narrower = deeper penetration, smaller hit area", "Penetration vs Area", 20.0, 90.0, 45.0, "deg"),
                         ],
                     },
                 ],
@@ -558,7 +558,7 @@ fn torpedo_customization() -> ModuleCustomizationDef {
                         stat_modifiers: HashMap::new(),
                         parameters: vec![
                             param("fuel_mass", "More fuel = more range, heavier", "Range, Weight", 20.0, 300.0, 100.0, "kg"),
-                            param("thrust", "Motor thrust — more = faster, louder", "Speed, Noise", 500.0, 5000.0, 2000.0, "N"),
+                            param("thrust", "Motor thrust - more = faster, louder", "Speed, Noise", 500.0, 5000.0, 2000.0, "N"),
                             param("burn_time", "How long the motor runs", "Range", 2.0, 30.0, 10.0, "s"),
                         ],
                     },
@@ -589,7 +589,7 @@ fn torpedo_customization() -> ModuleCustomizationDef {
                         stat_modifiers: { let mut m = HashMap::new(); m.insert("accuracy".into(), 1.8); m },
                         parameters: vec![
                             param("seeker_sensitivity", "Minimum heat signature to track", "Lock Range", 10.0, 100.0, 40.0, "units"),
-                            param("seeker_fov", "Field of view of seeker head", "Tracking Cone", 10.0, 90.0, 30.0, "°"),
+                            param("seeker_fov", "Field of view of seeker head", "Tracking Cone", 10.0, 90.0, 30.0, "deg"),
                             param("countermeasure_resistance", "Resistance to flares/decoys", "vs ECM", 0.0, 100.0, 30.0, "%"),
                         ],
                     },

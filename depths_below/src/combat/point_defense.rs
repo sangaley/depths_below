@@ -45,7 +45,7 @@ pub fn toggle_intercept_mode(
             } else {
                 commands.entity(entity).insert(InterceptMode);
                 notifications.write(ShowNotification {
-                    message: format!("{}: Intercept mode ON — will target incoming missiles", module.module_type.name()),
+                    message: format!("{}: Intercept mode ON - will target incoming missiles", module.module_type.name()),
                     notification_type: NotificationType::Warning,
                     duration: 2.0,
                 });

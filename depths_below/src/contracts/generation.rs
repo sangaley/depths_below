@@ -286,12 +286,12 @@ fn generate_single_contract(
             let (title, desc) = if is_boss {
                 (
                     format!("JACKPOT BOUNTY: {}", name),
-                    format!("A {} has been marked on your map, far past the edge of charted space. This is the single biggest bounty available — and the single hardest kill.", name),
+                    format!("A {} has been marked on your map, far past the edge of charted space. This is the single biggest bounty available - and the single hardest kill.", name),
                 )
             } else {
                 (
                     format!("Bounty: {} vessel", name),
-                    format!("A {} vessel has been marked on your map — hunt it down and destroy it. Higher-value bounty for a distant, dangerous target.", name),
+                    format!("A {} vessel has been marked on your map - hunt it down and destroy it. Higher-value bounty for a distant, dangerous target.", name),
                 )
             };
             (title, desc, ContractObjective::DestroyShip { ship_type, target_id, destroyed: false })

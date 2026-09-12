@@ -36,6 +36,11 @@ pub fn spawn_starter_ship(
     // Spawn the main ship entity (invisible anchor for movement)
     let ship = commands.spawn((
         Transform::from_xyz(0.0, -50.0, 0.0),
+        // The ship carries no sprite of its own, but its ~120 hull/module
+        // children do. Bevy propagates visibility down the hierarchy, so
+        // without Visibility here every child logs B0004 on spawn (120 warnings
+        // a run) and parent-level visibility can never hide the ship.
+        Visibility::default(),
         Ship,
         Velocity(Vec2::ZERO),
         Depth(0.0),
@@ -95,7 +100,7 @@ pub fn spawn_starter_ship(
     );
 
     notifications.write(ShowNotification {
-        message: "Mouse: Aim | W/S: Thrust | A/D: Strafe | Shift: Brake | Space/Click: Fire | R: Shield | F: Dock".into(),
+        message: "Systems online.".into(),
         notification_type: NotificationType::Info,
         duration: 8.0,
     });
@@ -327,6 +332,38 @@ pub(crate) fn lay_hallways(
 }
 
 /// Spawns a module entity using the registry for stats and companion components
+/// Does this module come out of the yard switched on?
+///
+/// Essential systems start active; everything else starts inactive to save
+/// power. The exceptions are all the same lesson learned repeatedly: a module
+/// a player placed, that silently does nothing because of a hidden power
+/// toggle, reads as a bug rather than as a mechanic. A gun that won't fire, a
+/// radar that won't scan ("no active detection module"), and most recently an
+/// airlock that won't take the dead — crew::burial skips an inactive lock, so
+/// the bodies simply piled up on the deck with nothing anywhere saying why.
+pub fn starts_active(module_type: ModuleType) -> bool {
+    matches!(
+        module_type.category(),
+        ModuleCategory::Power
+            | ModuleCategory::Propulsion
+            | ModuleCategory::LifeSupport
+            | ModuleCategory::Weapons
+            | ModuleCategory::Detection
+    ) || matches!(
+        module_type,
+        ModuleType::HelmStation
+            | ModuleType::ManeuverThruster
+            | ModuleType::CoolingPump
+            | ModuleType::HeatVent
+            | ModuleType::BasicQuarters
+            | ModuleType::Barracks
+            | ModuleType::Floodlight
+            | ModuleType::RepairBay
+            | ModuleType::AirlockChamber
+            | ModuleType::DockingPort
+    )
+}
+
 pub fn spawn_module(
     commands: &mut Commands,
     asset_server: &AssetServer,
@@ -370,7 +407,11 @@ pub fn spawn_module(
     // raised z below, the barrel renders over neighbouring blocks. The extension
     // is applied in LOCAL space and then run through the same quarter-turn swap,
     // so the barrel follows the weapon's facing at any rotation.
-    let local_w = 60.0 + bounds_w * 66.0;
+    // 66 is the grid cell. This was 60, so every module was drawn 6 units
+    // narrower than the cell it occupies -- a 9% gap on every side, and since
+    // only about half the modules on a hull sit over a hull plate, most of
+    // those gaps showed open space straight through the ship.
+    let local_w = 66.0 + bounds_w * 66.0;
     // Directional parts (thruster nozzles, gun barrels) protrude PAST their
     // block: the sprite is lengthened along its local vertical axis by
     // `overhang`, and the whole sprite is nudged so the housing stays centred on
@@ -379,7 +420,7 @@ pub fn spawn_module(
     // (nozzles). The matching art carries the extra length in its canvas so
     // nothing stretches.
     let (overhang, protrude) = sprite_map::sprite_overhang(module_type);
-    let local_h = 60.0 + bounds_h * 66.0;
+    let local_h = 66.0 + bounds_h * 66.0;
     // Footprint dims after the quarter-turn swap (handles rotated multi-cell
     // aspect). The swap must run on the FOOTPRINT only.
     let (foot_w, foot_h) = if quarter % 2 == 1 {
@@ -432,19 +473,7 @@ pub fn spawn_module(
             max_health: def.health,
             power_consumption: def.power_consumption,
             power_generation: def.power_generation,
-            // Essential modules start active, others start inactive to save power.
-            // Weapons AND Detection included: a gun that silently won't fire — or
-            // a radar you placed that silently won't scan ("no active detection
-            // module") — because of a hidden power toggle reads as a bug, not a
-            // mechanic.
-            is_active: matches!(module_type.category(),
-                ModuleCategory::Power | ModuleCategory::Propulsion | ModuleCategory::LifeSupport
-                | ModuleCategory::Weapons | ModuleCategory::Detection
-            ) || matches!(module_type,
-                ModuleType::HelmStation | ModuleType::ManeuverThruster | ModuleType::CoolingPump
-                | ModuleType::HeatVent | ModuleType::BasicQuarters | ModuleType::Barracks
-                | ModuleType::Floodlight | ModuleType::RepairBay
-            ),
+            is_active: starts_active(module_type),
             grid_position: grid_pos,
             size: def.size,
             rotation,
@@ -1059,6 +1088,28 @@ mod starter_tests {
         for m in &design.modules {
             assert!(seen.insert(m.grid_pos),
                 "two modules both at {:?}", m.grid_pos);
+        }
+    }
+}
+
+#[cfg(test)]
+mod spawn_activation_tests {
+    use super::*;
+
+    /// Modules start inactive unless whitelisted, and anything a player places
+    /// expecting it to just work has to be on that list. An airlock is one:
+    /// `crew::burial` skips inactive locks, so an off-by-default airlock means
+    /// the dead pile up on the deck with no explanation anywhere.
+    ///
+    /// This is the third time a hidden power toggle has read as a broken
+    /// feature (guns, then radar, now this), which is why it is a test.
+    #[test]
+    fn airlocks_spawn_active() {
+        for module_type in [ModuleType::AirlockChamber, ModuleType::DockingPort] {
+            assert!(
+                starts_active(module_type),
+                "{module_type:?} spawns inactive - burial at space will silently never happen"
+            );
         }
     }
 }

@@ -308,7 +308,7 @@ mod heat_tests {
         assert!(heat.temperatures.contains_key(&(enemy, cell)),
             "the enemy's reactor should heat its OWN tile");
         assert!(!heat.temperatures.contains_key(&(player, cell)),
-            "enemy heat landed on the player's hull — the leak is back");
+            "enemy heat landed on the player's hull - the leak is back");
     }
 
     /// And an enemy reactor really does generate, which is the point of

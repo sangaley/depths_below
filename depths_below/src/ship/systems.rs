@@ -192,9 +192,14 @@ pub fn cleanup_game_entities(
     for entity in chunks.iter() {
         commands.entity(entity).despawn();
     }
-    // Despawn any orphaned POIs
+    // Despawn any orphaned POIs.
+    //
+    // try_despawn, not despawn: chunk despawn above is recursive, so every POI
+    // parented to a chunk is already gone by the time this runs and only the
+    // genuinely orphaned ones are left. Using the erroring variant here logged
+    // a despawn warning per POI on every restart.
     for entity in pois.iter() {
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
     // Reset chunk manager
     chunk_manager.loaded_chunks.clear();

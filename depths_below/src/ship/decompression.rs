@@ -194,7 +194,7 @@ pub fn handle_bulkhead_toggle(
             commands.entity(event.segment).insert(BulkheadSealed);
             sprite.color = Color::srgb(0.8, 0.2, 0.2); // Red = sealed
             notifications.write(ShowNotification {
-                message: "Bulkhead sealed — section airtight!".into(),
+                message: "Bulkhead sealed - section airtight!".into(),
                 notification_type: NotificationType::Warning,
                 duration: 2.0,
             });

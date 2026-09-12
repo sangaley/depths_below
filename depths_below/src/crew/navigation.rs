@@ -510,7 +510,7 @@ mod nav_tests {
         let nav = nav_from_design(&design);
 
         let halls = nav.cells.values().filter(|c| **c == NavCell::Hallway).count();
-        assert!(halls > 0, "the shipped starter has no hallways — crew cannot move at all");
+        assert!(halls > 0, "the shipped starter has no hallways - crew cannot move at all");
 
         let start = *nav
             .cells
@@ -533,6 +533,53 @@ mod nav_tests {
         );
     }
 
+    /// The starter has to carry an airlock, and a pallbearer has to be able to
+    /// stand next to it.
+    ///
+    /// Burial at space (crew::burial) is gated on the ship having somewhere to
+    /// put a body, so a starter without one means no player ever sees the
+    /// mechanic. The airlock is a solid module, so it takes its own cell OFF
+    /// the nav map — which is why it sits on a dead-end stub at the bow. Drop
+    /// it into the middle of a corridor instead and this test still passes
+    /// while the ship is quietly cut in half, so the reachability check above
+    /// is the other half of the guard.
+    #[test]
+    fn the_starter_has_an_airlock_a_pallbearer_can_reach() {
+        let design = crate::building::blueprint::load_design_file("designs/starter.json")
+            .expect("designs/starter.json missing or unparseable");
+
+        let airlocks: Vec<IVec2> = design
+            .modules
+            .iter()
+            .filter(|m| {
+                matches!(
+                    m.module_type,
+                    ModuleType::AirlockChamber | ModuleType::DockingPort
+                )
+            })
+            .map(|m| m.grid_pos)
+            .collect();
+        assert!(
+            !airlocks.is_empty(),
+            "the shipped starter has no airlock - the dead can never be put out"
+        );
+
+        let nav = nav_from_design(&design);
+        for lock in airlocks {
+            let stand = nav.nearest_passable(lock).unwrap_or_else(|| {
+                panic!("nowhere to stand near the airlock at {lock:?}")
+            });
+            assert_ne!(
+                stand, lock,
+                "the airlock's own cell is walkable, which it should not be"
+            );
+            assert!(
+                (stand - lock).abs().element_sum() <= 2,
+                "the nearest footing to the airlock at {lock:?} is {stand:?}, too far to work it"
+            );
+        }
+    }
+
     /// Armour plates sit outboard, on cells with no hull under them. If they
     /// ever entered the nav map, crew would stroll out onto the plating.
     #[test]
@@ -546,7 +593,7 @@ mod nav_tests {
             .iter()
             .filter(|m| !hull.contains(&m.grid_pos))
             .count();
-        assert!(plates > 0, "starter has no outboard modules — test proves nothing");
+        assert!(plates > 0, "starter has no outboard modules - test proves nothing");
 
         for module in &design.modules {
             if !hull.contains(&module.grid_pos) {

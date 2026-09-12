@@ -166,7 +166,7 @@ pub fn wreck_drill_system(
             if *full_warn_cooldown <= 0.0 {
                 *full_warn_cooldown = 5.0;
                 notifications.write(ShowNotification {
-                    message: "Cargo hold full — drill idle.".into(),
+                    message: "Cargo hold full - drill idle.".into(),
                     notification_type: NotificationType::Warning,
                     duration: 3.0,
                 });
@@ -180,7 +180,7 @@ pub fn wreck_drill_system(
                 wreck.is_explored = true;
                 statistics.wrecks_salvaged += 1;
                 notifications.write(ShowNotification {
-                    message: "Cargo stripped — drill grinding hull to scrap.".into(),
+                    message: "Cargo stripped - drill grinding hull to scrap.".into(),
                     notification_type: NotificationType::Info,
                     duration: 3.0,
                 });

@@ -38,6 +38,7 @@ PALETTE = {
     "utility":   "#4f9a68",  # tractor / support / non-lethal
     "utility_lit":"#6fbc88",
     "amber":     "#c8963c",  # industrial: drills, cutting gear
+
 }
 
 
@@ -297,11 +298,27 @@ def materials():
     }
 
 
-def armour_base(m, hazard=True, w=0.94, h=0.94):
+# How far the plate is pushed past the camera frame. The bevel rounds every
+# edge including the vertical corners, and rounded corners cannot tile -- they
+# leave a diamond of empty space where four blocks meet. Overscanning crops the
+# rounding away, so what survives is a square block that butts against its
+# neighbour with no seam.
+PLATE_BLEED = 1.07
+
+
+def armour_base(m, hazard=True, w=1.0, h=1.0):
     """The chassis every module sits on: bevelled plate, corner bolts, and an
-    optional hazard strip along the mounting edge."""
-    box("plate", (w, h, 0.08), (0.0, 0.0, 0.04), m["body"], bevel=0.013)
-    bx, by = w / 2.0 - 0.085, h / 2.0 - 0.085
+    optional hazard strip along the mounting edge.
+
+    `w`/`h` are in CELLS. The plate is drawn past the frame (see PLATE_BLEED)
+    so the sprite is full-bleed: blocks in game sit on a 66-unit grid and are
+    drawn at exactly 66 units, so any transparent margin here becomes a
+    visible gap between the blocks of a ship -- and since only about half of a
+    hull's modules sit over a hull plate, most of those gaps show open space.
+    """
+    box("plate", (w * PLATE_BLEED, h * PLATE_BLEED, 0.08), (0.0, 0.0, 0.04),
+        m["body"], bevel=0.013)
+    bx, by = w / 2.0 - 0.075, h / 2.0 - 0.075
     for sx in (-1, 1):
         for sy in (-1, 1):
             cyl("bolt", 0.021, 0.024, (sx * bx, sy * by, 0.086), m["light"],
@@ -319,18 +336,17 @@ def armour_base(m, hazard=True, w=0.94, h=0.94):
 def frame(scene, res, cells_w=1, cells_h=1, overhang=0.0, protrude=1.0):
     """Camera + resolution for a module's real drawn size.
 
-    spawner.rs draws a module at (60 + bounds*66) world units per axis, where
-    bounds is the cell-span DIFFERENCE -- so a 1x1 is 60x60 and a 2x1 is
-    126x60 (2.1:1, NOT 2:1). `overhang` lengthens the vertical axis and
-    `protrude` says which end it hangs off: +1 art-top (gun barrels), -1
-    art-bottom (engine nozzles). One frame unit = 60 world units.
+    spawner.rs draws a module at exactly `cells * 66` world units per axis --
+    the full grid cell, so blocks touch. `overhang` lengthens the vertical
+    axis and `protrude` says which end it hangs off: +1 art-top (gun barrels),
+    -1 art-bottom (engine nozzles). One frame unit = 66 world units = 1 cell.
     """
-    cw = 60.0 + (cells_w - 1) * 66.0
-    ch = 60.0 + (cells_h - 1) * 66.0 + overhang
-    span_w, span_h = cw / 60.0, ch / 60.0
+    cw = 66.0 * cells_w
+    ch = 66.0 * cells_h + overhang
+    span_w, span_h = cw / 66.0, ch / 66.0
     cam = ortho_camera(scene, max(span_w, span_h))
     # Keep the housing centred on its cell; the overhang hangs off one end.
-    cam.location = (0.0, protrude * (overhang / 120.0), 6.0)
+    cam.location = (0.0, protrude * (overhang / 132.0), 6.0)
     if span_w >= span_h:
         scene.render.resolution_x = res
         scene.render.resolution_y = int(round(res * span_h / span_w))

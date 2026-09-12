@@ -311,10 +311,12 @@ fn spawn_ai_hull(
         let hull_entity = commands.spawn((
             (Sprite {
                     image: asset_server.load(
-                        crate::sprite_map::hull_sprite_path(cell.material),
+                        crate::sprite_map::hull_layer_sprite_path(cell.material, cell.layer),
                     ),
                     color: hull_color,
-                    custom_size: Some(Vec2::splat(60.0)),
+                    // Full cell. Enemy hulls were drawn at 60 in a 66-unit grid,
+                    // so every AI ship had a 9% gap between its blocks too.
+                    custom_size: Some(Vec2::splat(66.0)),
                     ..default()
                 }, Transform::from_xyz(x, y, 0.1)),
             BaseSpriteColor(hull_color),

@@ -589,7 +589,6 @@ pub fn eva_blast_damage(
     mut explosions: MessageReader<AiModuleExploded>,
     mut eva_query: Query<(Entity, &Transform, &mut CrewMember), With<EvaSalvaging>>,
     mut damage_events: MessageWriter<CrewDamaged>,
-    mut death_events: MessageWriter<CrewDied>,
 ) {
     for explosion in explosions.read() {
         for (entity, transform, mut crew) in eva_query.iter_mut() {
@@ -605,18 +604,13 @@ pub fn eva_blast_damage(
                 continue;
             }
             crew.health -= damage;
+            // Reporting the wound is the whole job here. Whether it killed
+            // them is `crew::report_crew_deaths`'s call, not this system's.
             damage_events.write(CrewDamaged {
                 crew: entity,
                 amount: damage,
                 source: CrewDamageSource::Explosion,
             });
-            if crew.health <= 0.0 {
-                death_events.write(CrewDied {
-                    crew: entity,
-                    name: crew.name.clone(),
-                    cause: CrewDamageSource::Explosion,
-                });
-            }
         }
     }
 }

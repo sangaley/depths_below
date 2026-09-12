@@ -5,6 +5,8 @@ use crate::resources::*;
 use crate::events::*;
 use crate::building::rooms::RoomMap;
 
+pub mod animation;
+pub mod burial;
 pub mod eva_salvage;
 pub mod hiring;
 pub mod navigation;
@@ -38,14 +40,35 @@ impl Plugin for CrewPlugin {
             // assignments it just made.
             .init_resource::<walking::CrewPlanTimer>()
             .init_resource::<walking::CrewErrandTimer>()
+            .init_resource::<walking::CrewMedicalTimer>()
+            .init_resource::<walking::CrewOffDutyTimer>()
+            .init_resource::<burial::DriftingDead>()
+            .add_systems(Startup, animation::setup_crew_atlases)
+            .add_systems(
+                Update,
+                animation::animate_crew_sprites
+                    .run_if(in_state(GameState::Exploring)
+                        .or_else(in_state(GameState::StationDocked))
+                        .or_else(in_state(GameState::Docked))),
+            )
             .add_systems(
                 Update,
                 (
                     walking::plan_crew_destinations,
                     walking::walk_engine_room_rounds,
+                    // Lowest priority of the destination setters: everything
+                    // below is a job and overwrites it. Nothing here is.
+                    walking::plan_off_duty_errands,
                     // After destinations: posted crew keep their post, and
                     // only the hands nobody assigned get sent to the damage.
                     walking::plan_repair_errands,
+                    // Last of the destination setters: a wounded hand's errand
+                    // outranks their post and the breach down the corridor.
+                    walking::plan_medical_errands,
+                    // The dead go last of the destination setters and, like
+                    // damage control, only spare hands carry them.
+                    burial::plan_burial_detail,
+                    burial::advance_burial.after(burial::plan_burial_detail),
                     walking::plan_crew_paths,
                     walking::walk_crew,
                     // Last in the chain: the draught is applied on top of
@@ -84,7 +107,11 @@ impl Plugin for CrewPlugin {
                     update_crew_ai.after(crew_emergency_dispatch),
                     crew_fire_suppression.after(update_crew_ai),
                     crew_repair_system.after(update_crew_ai),
-                    handle_crew_death,
+                    report_crew_deaths,
+                    handle_crew_death.after(report_crew_deaths),
+                    burial::drift_dead,
+                    burial::sync_drifting_dead,
+
                     medbay_healing,
                     messhall_morale,
                     recroom_morale_floor,
@@ -146,6 +173,8 @@ impl Default for AutoAssignTimer {
 /// frame the placement event fires.
 fn crew_arrive_with_quarters(
     mut commands: Commands,
+    assets: Res<AssetServer>,
+    crew_atlases: Res<animation::CrewAtlases>,
     mut placed_events: MessageReader<ModulePlaced>,
     registry: Res<crate::building::ModuleRegistry>,
     ship_query: Query<Entity, With<Ship>>,
@@ -198,14 +227,8 @@ fn crew_arrive_with_quarters(
             let name = NAMES[rng.gen_range(0..NAMES.len())];
             let crew = commands
                 .spawn((
-                    (
-                        Sprite {
-                            color: Color::srgb(0.8, 0.6, 0.5),
-                            custom_size: Some(Vec2::new(16.0, 16.0)),
-                            ..default()
-                        },
-                        Transform::from_translation(walking::berth_position(&berths, alive as usize + i as usize)),
-                    ),
+                    animation::crew_sprite(&assets, &crew_atlases),
+                    Transform::from_translation(walking::berth_position(&berths, alive as usize + i as usize)),
                     CrewMember {
                         name: name.to_string(),
                         health: 100.0,
@@ -222,7 +245,7 @@ fn crew_arrive_with_quarters(
 
         notifications.write(ShowNotification {
             message: format!(
-                "{} crew signed on — bunks full ({}/{}).",
+                "{} crew signed on - bunks full ({}/{}).",
                 to_spawn,
                 alive + to_spawn,
                 capacity
@@ -241,6 +264,8 @@ fn crew_arrive_with_quarters(
 /// among them — dark, with no signal beyond "the guns don't fire".
 pub fn spawn_starter_crew(
     mut commands: Commands,
+    assets: Res<AssetServer>,
+    crew_atlases: Res<animation::CrewAtlases>,
     ship_query: Query<Entity, With<Ship>>,
     existing_crew: Query<Entity, With<CrewMember>>,
     quarters_query: Query<(&Quarters, &Module, &ChildOf)>,
@@ -287,11 +312,8 @@ pub fn spawn_starter_crew(
             None => format!("Hand {}", i + 1),
         };
         let crew = commands.spawn((
-            (Sprite {
-                    color: Color::srgb(0.8, 0.6, 0.5),
-                    custom_size: Some(Vec2::new(16.0, 16.0)),
-                    ..default()
-                }, Transform::from_translation(walking::berth_position(&berths, i))),
+            animation::crew_sprite(&assets, &crew_atlases),
+            Transform::from_translation(walking::berth_position(&berths, i)),
             CrewMember {
                 name,
                 health: 100.0,
@@ -455,6 +477,39 @@ fn update_staffing_state(
 /// and without this grouping a single global pool would happily staff one
 /// ship's idle crew onto a completely different ship's open stations the
 /// next tick this system runs.
+/// Guns keep their crews this long after the last hostile leaves range.
+/// Long enough that a contact drifting across the range edge does not have the
+/// battery manning and standing down repeatedly, short enough that the crew
+/// are free to get on with something else soon after a fight.
+const GUNS_STAND_DOWN_AFTER: f32 = 10.0;
+
+/// Engineers hold the bank this long after the throttle goes quiet, so
+/// feathering the throttle does not empty and refill the engine room.
+const ENGINES_STAND_DOWN_AFTER: f32 = 10.0;
+
+/// How long the ship has been out of a fight and off the throttle.
+#[derive(Default)]
+pub struct StandDown {
+    since_hostile: f32,
+    since_thrust: f32,
+}
+
+/// Does this post need a body on it right now?
+///
+/// A gun with nothing to shoot at and an engine with no throttle are not jobs,
+/// they are furniture. Keeping hands nailed to them in peacetime meant a ship
+/// with twenty berths and twenty stations had nobody spare to do anything —
+/// no damage control between fights, and nobody to carry the dead to the lock.
+/// Everything else (power, air, sensors, the medbay) runs continuously and is
+/// always wanted.
+fn post_is_wanted(category: ModuleCategory, at_battle_stations: bool, under_thrust: bool) -> bool {
+    match category {
+        ModuleCategory::Weapons => at_battle_stations,
+        ModuleCategory::Propulsion => under_thrust,
+        _ => true,
+    }
+}
+
 fn auto_assign_crew(
     time: Res<Time>,
     mut timer: ResMut<AutoAssignTimer>,
@@ -465,12 +520,44 @@ fn auto_assign_crew(
         Option<&CrewDuty>,
         Option<&crate::ai_ship::components::OwnedByAiShip>,
     )>,
+    // Identity and state are separate queries ON PURPOSE. Folding the
+    // transform and physics into this one made a ship that has neither stop
+    // being recognised as the player's at all, and every post on it went
+    // unstaffed — the ship is the fallback owner for anything without
+    // OwnedByAiShip, so losing it loses the whole assignment pass.
     ship_query: Query<Entity, With<Ship>>,
+    ship_motion: Query<(&GlobalTransform, &ShipPhysics), With<Ship>>,
+    hostiles: Query<&GlobalTransform, With<crate::ai_ship::components::AiShip>>,
+    mut quiet: Local<StandDown>,
 ) {
+    // Accumulated every frame, deliberately BEFORE the timer gate — the body
+    // below runs on a slow cadence and would otherwise measure nothing.
+    // With no motion data the counters stay at zero, which reads as "in a
+    // fight and under way": posts stay manned, the safe default.
+    let dt = time.delta_secs();
+    if let Ok((ship_gt, physics)) = ship_motion.single() {
+        if crate::crew::walking::under_threat(
+            ship_gt.translation().truncate(),
+            hostiles.iter().map(|h| h.translation().truncate()),
+        ) {
+            quiet.since_hostile = 0.0;
+        } else {
+            quiet.since_hostile += dt;
+        }
+        if physics.throttle.abs() > 0.01 || physics.rudder.abs() > 0.01 {
+            quiet.since_thrust = 0.0;
+        } else {
+            quiet.since_thrust += dt;
+        }
+    }
+
     timer.timer.tick(time.delta());
     if !timer.timer.just_finished() {
         return;
     }
+
+    let at_battle_stations = quiet.since_hostile < GUNS_STAND_DOWN_AFTER;
+    let under_thrust = quiet.since_thrust < ENGINES_STAND_DOWN_AFTER;
 
     let player_ship = ship_query.single().ok();
     // Absent OwnedByAiShip => player-owned (the only other kind of ship).
@@ -483,6 +570,24 @@ fn auto_assign_crew(
     for (_, _, station, _, _) in station_query.iter() {
         if let Some(crew_entity) = station.assigned_crew {
             assigned_crew.insert(crew_entity);
+        }
+    }
+
+    // Stand down posts with nothing to do. Player ship only: AI crews are not
+    // simulated walking anywhere, and an enemy that stood its battery down
+    // would simply be worse at fighting.
+    //
+    // A pinned post (KeepManned) is the player's standing order and outranks
+    // this — if you have told someone to hold that seat, they hold it.
+    for (_, module, mut station, pinned, owned) in station_query.iter_mut() {
+        if pinned || station.manually_assigned || owner_of(owned) != player_ship {
+            continue;
+        }
+        if post_is_wanted(module.module_type.category(), at_battle_stations, under_thrust) {
+            continue;
+        }
+        if let Some(freed) = station.assigned_crew.take() {
+            assigned_crew.remove(&freed);
         }
     }
 
@@ -546,6 +651,17 @@ fn auto_assign_crew(
     for (entity, module, station, pinned, owned) in station_query.iter() {
         if station.priority > 0 && !station.manually_assigned && station.assigned_crew.is_none() {
             if let Some(ship) = owner_of(owned) {
+                // Nothing to shoot at, or no throttle: leave the seat empty.
+                if Some(ship) == player_ship
+                    && !pinned
+                    && !post_is_wanted(
+                        module.module_type.category(),
+                        at_battle_stations,
+                        under_thrust,
+                    )
+                {
+                    continue;
+                }
                 // Don't offer more engine berths than the room needs.
                 if module.module_type.category() == ModuleCategory::Propulsion {
                     let used = engine_berths_used.entry(ship).or_insert(0);
@@ -639,16 +755,20 @@ fn update_crew_needs(
 /// Maps each crew member's world position to a grid position and room via RoomMap.
 fn update_crew_room_location(
     mut commands: Commands,
+    // LOCAL transform, not global. Crew are children of their ship and every
+    // room id in `RoomMap` is a ship-local cell (see rooms::transform_to_grid,
+    // which reads hull segments' own local transforms). Measuring a crew
+    // member against the world instead put them off by the ship's entire
+    // displacement the moment it left the origin — a hand standing in the
+    // MedBay reported a cell hundreds of tiles away, so their room never
+    // matched anything and every room-scoped behaviour downstream (medical
+    // treatment, fire and breach dispatch, room-local repair) silently did
+    // nothing in flight. `local_to_grid`'s own doc says it: world-space
+    // callers must undo the ship transform first.
     mut crew_query: Query<(Entity, &Transform, Option<&mut CrewRoomLocation>), (With<CrewMember>, Without<EvaSalvaging>)>,
     room_map: Res<RoomMap>,
 ) {
     for (entity, transform, location) in crew_query.iter_mut() {
-        // Ship-LOCAL, via the shared helper. This read GlobalTransform and did
-        // the cell arithmetic by hand, but RoomMap is keyed by ship-local
-        // cells -- so it only agreed with the room map while the ship sat at
-        // the world origin unrotated. In flight every crew member reported the
-        // wrong room, which is what stopped them sealing breaches under way.
-        // crew_repair_system already does it this way.
         let grid = crate::building::local_to_grid(transform.translation.truncate());
         let room_id = room_map.tile_to_room.get(&grid).copied();
 
@@ -1025,7 +1145,7 @@ fn crew_repair_system(
     if repair_stalled && !*stall_notified {
         *stall_notified = true;
         notifications.write(ShowNotification {
-            message: "Field repairs stalled — no ScrapMetal aboard".into(),
+            message: "Field repairs stalled - no ScrapMetal aboard".into(),
             notification_type: NotificationType::Warning,
             duration: 4.0,
         });
@@ -1035,10 +1155,57 @@ fn crew_repair_system(
     }
 }
 
+/// Declares death for anyone whose health has reached zero, however they got
+/// there.
+///
+/// A sweep rather than a line at each damage site, because there were three of
+/// those and only one — the EVA blast — ever remembered to raise the event.
+/// Radiation and boarders quietly left a zero-HP crew member in the roster
+/// indefinitely: never announced, never buried, still counted as a hand, still
+/// holding a bunk, still drawn on the deck as a body nobody had been told
+/// about. Anything added later that can hurt a person is covered for free.
+///
+/// AI-ship crew are excluded. They are casualties on somebody else's ship —
+/// counting them in `Statistics::crew_lost` would report the player losing a
+/// hand every time they gutted an enemy's engine room.
+fn report_crew_deaths(
+    crew: Query<(Entity, &CrewMember), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    mut damage_events: MessageReader<CrewDamaged>,
+    mut deaths: MessageWriter<CrewDied>,
+    mut wounds: Local<std::collections::HashMap<Entity, CrewDamageSource>>,
+) {
+    // Remember the last thing that hurt each person. Kept across frames on
+    // purpose: the killing blow and the frame this notices the body are not
+    // reliably the same one, and a death that cannot name its cause is a
+    // worse notification than one that can.
+    for event in damage_events.read() {
+        wounds.insert(event.crew, event.source.clone());
+    }
+
+    for (entity, member) in crew.iter() {
+        if member.health > 0.0 {
+            continue;
+        }
+        deaths.write(CrewDied {
+            crew: entity,
+            name: member.name.clone(),
+            cause: wounds.remove(&entity).unwrap_or(CrewDamageSource::Unknown),
+        });
+    }
+
+    // Anyone back to full health has no open wound to report.
+    wounds.retain(|entity, _| {
+        crew.get(*entity).is_ok_and(|(_, m)| m.health < m.max_health)
+    });
+}
+
 /// Handles crew death events - despawn and update roster.
 /// Also clears any CrewStation assignments for the dead crew.
 fn handle_crew_death(
     mut commands: Commands,
+    assets: Res<AssetServer>,
+    crew_atlases: Res<animation::CrewAtlases>,
+    corpse_pos: Query<(&Transform, Option<&ChildOf>), With<CrewMember>>,
     mut death_events: MessageReader<CrewDied>,
     mut roster: ResMut<CrewRoster>,
     mut statistics: ResMut<Statistics>,
@@ -1057,12 +1224,25 @@ fn handle_crew_death(
         }
 
         notifications.write(ShowNotification {
-            message: format!("{} has died! Cause: {:?}", event.name, event.cause),
+            message: format!("{} is dead — {}.", event.name, event.cause.describe()),
             notification_type: NotificationType::Danger,
-            duration: 4.0,
+            duration: 6.0,
         });
 
-        commands.entity(event.crew).despawn();
+        // Leave the body where they fell. The entity itself has to go -- every
+        // staffing, oxygen and routing system would otherwise have to learn to
+        // skip a corpse -- so a stripped-down stand-in takes its place.
+        if let Ok((transform, parent)) = corpse_pos.get(event.crew) {
+            animation::spawn_corpse(
+                &mut commands,
+                &assets,
+                &crew_atlases,
+                *transform,
+                parent.map(|p| p.parent()),
+                event.name.clone(),
+            );
+        }
+        commands.entity(event.crew).try_despawn();
     }
 }
 
@@ -1070,28 +1250,57 @@ fn handle_crew_death(
 // CREW FACILITY SYSTEMS (Phase 7)
 // ============================================================================
 
-/// MedBay heals crew in the same room. Heal rate = 10 HP/s * efficiency.
+/// HP per second in a working ward. Slow on purpose: recovery is something
+/// you spend quiet time on between fights, not a between-volleys top-up.
+const MEDBAY_HEAL_RATE: f32 = 1.0;
+
+/// The MedBay treats whoever is in its room, while nobody is shooting.
+///
+/// Scaled by the ward's DAMAGE only, deliberately not by
+/// `effective_efficiency`. A MedBay is `crew_station: true`, so that helper
+/// reports 0 for any bay without a crew member posted to it — which meant the
+/// bay healed nobody at all unless you had spent a hand standing in it. The
+/// patient walking through the door is the staffing that matters here; a
+/// shot-up ward still treats people, just worse.
+///
+/// `crew_query` needs `CrewRoomLocation`, which only exists on crew that have
+/// a `Transform` — so AI-ship crew fall out of this for free.
 fn medbay_healing(
     time: Res<Time>,
-    facility_query: Query<(&CrewFacility, &Module, Option<&ModuleEfficiency>)>,
+    facility_query: Query<(&CrewFacility, &Module), Without<DestroyedModule>>,
     room_map: Res<RoomMap>,
+    ships: Query<&GlobalTransform, (With<Ship>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
+    hostiles: Query<&GlobalTransform, With<crate::ai_ship::components::AiShip>>,
     mut crew_query: Query<(&mut CrewMember, &CrewRoomLocation)>,
 ) {
+    let Ok(ship_gt) = ships.single() else { return };
+    // Same definition of "in a fight" that sent them here, so they cannot be
+    // walked to the ward by one system and refused treatment by another.
+    if walking::under_threat(
+        ship_gt.translation().truncate(),
+        hostiles.iter().map(|h| h.translation().truncate()),
+    ) {
+        return;
+    }
+
     let dt = time.delta_secs();
 
-    for (facility, module, eff) in facility_query.iter() {
+    for (facility, module) in facility_query.iter() {
         if facility.facility_type != FacilityType::MedBay || !module.is_active {
             continue;
         }
 
-        let efficiency = effective_efficiency(module, eff);
-        if efficiency <= 0.0 { continue; }
+        let ratio = if module.max_health > 0.0 { module.health / module.max_health } else { 1.0 };
+        let condition = ModuleDamageState::from_health_ratio(ratio).efficiency();
+        if condition <= 0.0 {
+            continue;
+        }
 
         let Some(&room_id) = room_map.tile_to_room.get(&module.grid_position) else {
             continue;
         };
 
-        let heal_rate = 10.0 * efficiency * dt;
+        let heal_rate = MEDBAY_HEAL_RATE * condition * dt;
 
         for (mut crew, location) in crew_query.iter_mut() {
             if crew.health <= 0.0 || crew.health >= crew.max_health {
@@ -1274,6 +1483,174 @@ mod engine_room_tests {
             morale: 100.0,
             state: CrewState::Idle,
         }
+    }
+
+    /// A ship at rest with nothing to shoot at, carrying enough hands for
+    /// every post.
+    fn peacetime_ship(app: &mut App) -> (Entity, Entity, Entity) {
+        let ship = app
+            .world_mut()
+            .spawn((
+                Ship,
+                Transform::default(),
+                GlobalTransform::default(),
+                ShipPhysics::default(),
+            ))
+            .id();
+        let gun = app
+            .world_mut()
+            .spawn(post(ModuleType::Gatling, IVec2::new(2, 0), 6))
+            .insert(ChildOf(ship))
+            .id();
+        let engine = app
+            .world_mut()
+            .spawn(post(ModuleType::StandardEngine, IVec2::new(-2, 0), 9))
+            .insert(ChildOf(ship))
+            .id();
+        let reactor = app
+            .world_mut()
+            .spawn(post(ModuleType::StandardReactor, IVec2::ZERO, 10))
+            .insert(ChildOf(ship))
+            .id();
+        for name in ["Adeyemi", "Vasquez", "Ferreira", "Okonkwo"] {
+            app.world_mut().spawn(hand(name)).insert(ChildOf(ship));
+        }
+        (gun, engine, reactor)
+    }
+
+    fn stand_down_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<AutoAssignTimer>();
+        app.add_systems(Update, auto_assign_crew);
+        app
+    }
+
+    fn settle(app: &mut App) {
+        // Time<Virtual> clamps steps over 250ms, so one big jump would be
+        // silently shortened and the 2s auto-assign tick would never fire.
+        // 150 x 200ms = 30s of sim, comfortably past both stand-down delays.
+        // Keep this well clear of them: at 8s the battery is still correctly
+        // manned and an impatient test reads that as a broken feature.
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(200)));
+        for _ in 0..150 {
+            app.update();
+        }
+    }
+
+    fn manned(app: &App, station: Entity) -> bool {
+        app.world().get::<CrewStation>(station).unwrap().assigned_crew.is_some()
+    }
+
+    /// The point of the whole thing: a gun with nothing to shoot at and an
+    /// engine with no throttle are furniture, not jobs. Nailing hands to them
+    /// in peacetime left a ship with as many posts as berths no spare crew at
+    /// all — no damage control between fights and nobody to carry the dead to
+    /// the airlock.
+    #[test]
+    fn guns_and_engines_stand_down_in_peacetime() {
+        let mut app = stand_down_app();
+        let (gun, engine, reactor) = peacetime_ship(&mut app);
+
+        settle(&mut app);
+
+        assert!(!manned(&app, gun), "a gunner sat at the gun with nothing to shoot");
+        assert!(!manned(&app, engine), "an engineer held the bank with no throttle");
+        assert!(manned(&app, reactor), "the reactor was left unattended - it runs regardless");
+    }
+
+    /// Throttle up and the engine room fills again.
+    #[test]
+    fn the_engine_room_fills_when_the_throttle_opens() {
+        let mut app = stand_down_app();
+        let (_, engine, _) = peacetime_ship(&mut app);
+        let ship = app.world_mut().query_filtered::<Entity, With<Ship>>()
+            .iter(app.world()).next().unwrap();
+        app.world_mut().get_mut::<ShipPhysics>(ship).unwrap().throttle = 1.0;
+
+        settle(&mut app);
+
+        assert!(manned(&app, engine), "engines got no operator under full throttle");
+    }
+
+    /// A hostile inside COMBAT_RANGE calls the crew to battle stations.
+    #[test]
+    fn a_hostile_in_range_mans_the_guns() {
+        let mut app = stand_down_app();
+        let (gun, _, _) = peacetime_ship(&mut app);
+        app.world_mut().spawn((
+            crate::ai_ship::components::AiShip,
+            Transform::from_xyz(crate::crew::walking::COMBAT_RANGE * 0.5, 0.0, 0.0),
+            GlobalTransform::from_xyz(crate::crew::walking::COMBAT_RANGE * 0.5, 0.0, 0.0),
+        ));
+
+        settle(&mut app);
+
+        assert!(manned(&app, gun), "the battery stayed cold with a hostile in range");
+    }
+
+    /// A pinned post is the player's standing order and outranks stand-down.
+    #[test]
+    fn a_pinned_post_keeps_its_operator_in_peacetime() {
+        let mut app = stand_down_app();
+        let (gun, _, _) = peacetime_ship(&mut app);
+        app.world_mut().entity_mut(gun).insert(KeepManned);
+
+        settle(&mut app);
+
+        assert!(manned(&app, gun), "a pinned gun lost its operator anyway");
+    }
+
+    /// An AI ship's guns must actually get manned.
+    ///
+    /// AI crew and AI stations both carry `OwnedByAiShip`, and `auto_assign_crew`
+    /// resolves ownership through it — but the player ship is the fallback owner
+    /// for anything WITHOUT that marker. If AI attribution ever regresses, the
+    /// symptom is silent: enemy ships still spawn, still manoeuvre, and simply
+    /// never shoot, because `ai_weapon_fire_system` gates on efficiency > 0.
+    #[test]
+    fn ai_ship_crew_man_their_own_guns() {
+        use crate::ai_ship::components::OwnedByAiShip;
+
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        app.init_resource::<AutoAssignTimer>();
+        app.add_systems(Update, (auto_assign_crew, compute_module_efficiency).chain());
+
+        // A player ship must exist: it is the fallback owner, and its presence
+        // is what makes mis-attribution possible in the first place.
+        app.world_mut().spawn(Ship);
+
+        let ai = app.world_mut().spawn_empty().id();
+        let reactor = app.world_mut()
+            .spawn(post(ModuleType::StandardReactor, IVec2::new(0, 0), 10))
+            .insert((ChildOf(ai), OwnedByAiShip { root: ai })).id();
+        let gun = app.world_mut()
+            .spawn(post(ModuleType::Gatling, IVec2::new(2, 0), 6))
+            .insert((ChildOf(ai), OwnedByAiShip { root: ai })).id();
+        for name in ["Vex", "Sorrel"] {
+            app.world_mut().spawn(hand(name))
+                .insert((ChildOf(ai), OwnedByAiShip { root: ai }));
+        }
+
+        // Same cadence as the engine-bank test: Time<Virtual> clamps steps
+        // over 250ms, so one big jump would be silently shortened and the
+        // 2s auto-assign tick would never fire.
+        app.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(200)));
+        for _ in 0..14 {
+            app.update();
+        }
+
+        let manned = |e: Entity, app: &App| {
+            app.world().get::<CrewStation>(e).unwrap().assigned_crew.is_some()
+        };
+        assert!(manned(reactor, &app), "AI reactor left unmanned");
+        assert!(manned(gun, &app), "AI gun left unmanned - enemies would never fire");
+
+        let eff = app.world().get::<ModuleEfficiency>(gun)
+            .expect("AI gun never got a ModuleEfficiency");
+        assert!(eff.value > 0.0,
+            "AI gun efficiency {} - ai_weapon_fire_system skips at <= 0", eff.value);
     }
 
     /// Propulsion outranks everything but power, so on the starter's five-engine
@@ -1475,5 +1852,145 @@ mod engine_room_tests {
             let eff = app.world().get::<ModuleEfficiency>(*engine).unwrap();
             assert_eq!(eff.staffing_factor, 0.0, "an unmanned engine room still produced thrust");
         }
+    }
+}
+
+#[cfg(test)]
+mod death_tests {
+    use super::*;
+    use crate::ai_ship::components::OwnedByAiShip;
+
+    fn hand(name: &str, health: f32) -> CrewMember {
+        CrewMember {
+            name: name.into(),
+            health,
+            max_health: 100.0,
+            oxygen: 100.0,
+            morale: 100.0,
+            state: CrewState::Idle,
+        }
+    }
+
+    fn test_app() -> App {
+        let mut app = App::new();
+        app.add_message::<CrewDamaged>();
+        app.add_message::<CrewDied>();
+        app.add_systems(Update, report_crew_deaths);
+        app
+    }
+
+    fn deaths(app: &mut App) -> Vec<(Entity, String, String)> {
+        let messages = app.world().resource::<Messages<CrewDied>>();
+        let mut cursor = messages.get_cursor();
+        cursor
+            .read(messages)
+            .map(|d| (d.crew, d.name.clone(), d.cause.describe().to_string()))
+            .collect()
+    }
+
+    /// The bug this exists to stop: two of the three things that can kill a
+    /// crew member never raised `CrewDied`, so the player lost a hand and was
+    /// never told. Death is now decided by the body, not by the weapon.
+    #[test]
+    fn a_crew_member_at_zero_health_is_reported_dead() {
+        let mut app = test_app();
+        let crew = app.world_mut().spawn(hand("Okonkwo", 0.0)).id();
+
+        app.update();
+
+        let reported = deaths(&mut app);
+        assert_eq!(reported.len(), 1, "nobody was reported dead: {reported:?}");
+        assert_eq!(reported[0].0, crew);
+        assert_eq!(reported[0].1, "Okonkwo");
+    }
+
+    /// The killing blow and the frame the body is noticed are not reliably the
+    /// same one, so the cause has to outlive the frame its event was written in.
+    #[test]
+    fn a_death_names_what_caused_it_even_a_frame_later() {
+        let mut app = test_app();
+        let crew = app.world_mut().spawn(hand("Sowande", 40.0)).id();
+
+        app.world_mut().write_message(CrewDamaged {
+            crew,
+            amount: 60.0,
+            source: CrewDamageSource::Boarders,
+        });
+        app.update();
+        assert!(deaths(&mut app).is_empty(), "reported dead while still standing");
+
+        // The wound lands; the sweep notices on a later frame.
+        app.world_mut().get_mut::<CrewMember>(crew).unwrap().health = 0.0;
+        app.update();
+
+        let reported = deaths(&mut app);
+        assert_eq!(reported.len(), 1);
+        assert_eq!(reported[0].2, "parasites", "the cause was forgotten between frames");
+    }
+
+    /// Casualties on somebody else's ship are not the player's losses.
+    /// `handle_crew_death` increments `Statistics::crew_lost` for every event
+    /// it reads, so letting enemy crew through here would report a loss every
+    /// time the player gutted an enemy engine room.
+    #[test]
+    fn enemy_crew_are_not_the_players_dead() {
+        let mut app = test_app();
+        app.world_mut().spawn((hand("Vance", 0.0), OwnedByAiShip { root: Entity::PLACEHOLDER }));
+
+        app.update();
+
+        assert!(deaths(&mut app).is_empty(), "an enemy casualty was counted as ours");
+    }
+}
+
+#[cfg(test)]
+mod room_location_tests {
+    use super::*;
+    use crate::building::grid_to_local;
+    use crate::crew::walking::CREW_Z;
+
+    /// Room ids are ship-LOCAL, and so is everything that produces them. A
+    /// crew member's cell has to be read off their local transform, not their
+    /// world position — otherwise the answer is right only while the ship sits
+    /// exactly on the origin, and wrong by the ship's whole displacement the
+    /// moment it moves. Nothing downstream can tell the difference: the room
+    /// simply stops matching and the MedBay quietly treats nobody.
+    #[test]
+    fn a_crew_members_room_is_read_in_ship_space_not_world_space() {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::transform::TransformPlugin));
+        app.init_resource::<RoomMap>();
+        app.add_systems(Update, update_crew_room_location);
+
+        // A ship a long way from home, which is the normal case.
+        let ship = app
+            .world_mut()
+            .spawn((Ship, Transform::from_xyz(48_000.0, 31_500.0, 0.0)))
+            .id();
+
+        let cell = IVec2::new(2, 3);
+        let crew = app
+            .world_mut()
+            .spawn((
+                CrewMember {
+                    name: "Adeyemi".into(),
+                    health: 100.0,
+                    max_health: 100.0,
+                    oxygen: 100.0,
+                    morale: 100.0,
+                    state: CrewState::Idle,
+                },
+                Transform::from_translation(grid_to_local(cell).extend(CREW_Z)),
+            ))
+            .insert(ChildOf(ship))
+            .id();
+
+        app.update();
+
+        let location = app.world().get::<CrewRoomLocation>(crew).unwrap();
+        assert_eq!(
+            location.grid_position, cell,
+            "crew cell was measured against the world, not the ship"
+        );
     }
 }

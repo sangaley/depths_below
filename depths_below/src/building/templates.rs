@@ -46,7 +46,7 @@ pub fn template_input(
         if let Some(idx) = next {
             let t = &templates[idx];
             notifications.write(ShowNotification {
-                message: format!("Template: {} ({}c) — {}", t.name, t.total_cost, t.description),
+                message: format!("Template: {} ({}c) - {}", t.name, t.total_cost, t.description),
                 notification_type: NotificationType::Info,
                 duration: 3.0,
             });
@@ -87,7 +87,7 @@ pub fn template_input(
 
         if !all_free {
             notifications.write(ShowNotification {
-                message: "Cannot place template — positions occupied".into(),
+                message: "Cannot place template - positions occupied".into(),
                 notification_type: NotificationType::Warning,
                 duration: 2.0,
             });

@@ -184,7 +184,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::BatteryBank, ModuleDef {
         name: "Battery Bank",
-        description: "Chemical battery array. Zero heat, zero noise, zero glory — but it keeps systems alive when reactors go down.",
+        description: "Chemical battery array. Zero heat, zero noise, zero glory - but it keeps systems alive when reactors go down.",
         category: ModuleCategory::Power,
         size: IVec2::new(1, 1),
         health: 60.0,
@@ -275,7 +275,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::SilentDrive, ModuleDef {
         name: "Silent Drive",
-        description: "Magneto-hydrodynamic drive with no moving parts. Almost silent — creatures won't hear you coming.",
+        description: "Magneto-hydrodynamic drive with no moving parts. Almost silent - creatures won't hear you coming.",
         category: ModuleCategory::Propulsion,
         size: IVec2::new(1, 1),
         health: 80.0,
@@ -373,7 +373,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::NavigationConsole, ModuleDef {
         name: "Navigation Console",
-        description: "Holographic chart table with dead-reckoning computer. Shows you where you are — and where you shouldn't go.",
+        description: "Holographic chart table with dead-reckoning computer. Shows you where you are - and where you shouldn't go.",
         category: ModuleCategory::Control,
         size: IVec2::new(1, 1),
         health: 60.0,
@@ -797,7 +797,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::FuelTank, ModuleDef {
         name: "Fuel Tank",
-        description: "Pressurized fuel bladder. More range means deeper ventures — but also more to explode if something breaches it.",
+        description: "Pressurized fuel bladder. More range means deeper ventures - but also more to explode if something breaches it.",
         category: ModuleCategory::Storage,
         size: IVec2::new(1, 1),
         health: 60.0,
@@ -865,7 +865,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::MedBay, ModuleDef {
         name: "Med Bay",
-        description: "Surgical suite and recovery ward. Patches up crew injuries at 10 HP/s — staff it or it's just expensive furniture.",
+        description: "Surgical suite and recovery ward. Wounded crew walk here between fights and recover at 1 HP/s. Nobody is treated while the shooting lasts.",
         category: ModuleCategory::Crew,
         size: IVec2::new(1, 1),
         health: 70.0,
@@ -897,7 +897,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::RecRoom, ModuleDef {
         name: "Rec Room",
-        description: "Cards, books, and a dartboard. Keeps crew morale from dropping below 30 — sanity insurance.",
+        description: "Cards, books, and a dartboard. Keeps crew morale from dropping below 30 - sanity insurance.",
         category: ModuleCategory::Crew,
         size: IVec2::new(1, 1),
         health: 50.0,
@@ -933,7 +933,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::ManeuverThruster, ModuleDef {
         name: "Maneuvering Thruster",
-        description: "Vertical thruster for attitude control. Essential for maneuvering — without one you're drifting forever.",
+        description: "Vertical thruster for attitude control. Essential for maneuvering - without one you're drifting forever.",
         category: ModuleCategory::Utility,
         size: IVec2::new(1, 1),
         health: 80.0,
@@ -1013,7 +1013,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::SalvageArm, ModuleDef {
         name: "Breaker Drill",
-        description: "Industrial grinder that chews wreck blocks straight into the hold. Faster than an EVA detail and nobody's at risk — but it needs power, an operator, and the racket carries to everything with ears.",
+        description: "Industrial grinder that chews wreck blocks straight into the hold. Faster than an EVA detail and nobody's at risk - but it needs power, an operator, and the racket carries to everything with ears.",
         category: ModuleCategory::Utility,
         size: IVec2::new(1, 1),
         health: 60.0,
@@ -1419,7 +1419,7 @@ pub fn build_registry() -> ModuleRegistry {
     });
 
     defs.insert(ModuleType::EmergencyShutdown, ModuleDef {
-        name: "Emergency Shutdown", description: "Auto-SCRAMs reactor before meltdown. One-time use — saves the ship, kills the power.",
+        name: "Emergency Shutdown", description: "Auto-SCRAMs reactor before meltdown. One-time use - saves the ship, kills the power.",
         category: ModuleCategory::Power, size: IVec2::new(1, 1), health: 40.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.80, 0.20, 0.15),
         companion: CompanionData::None, customizable: false, cost: 60,
@@ -1596,7 +1596,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::CornerArmorPlate, ModuleDef {
         name: "Corner Armor Plate",
-        description: "L-shaped armor block. Wraps a hull corner without blocking the cell behind it — a neighbor can still be built into the notch.",
+        description: "L-shaped armor block. Wraps a hull corner without blocking the cell behind it - a neighbor can still be built into the notch.",
         category: ModuleCategory::Structural, size: IVec2::new(2, 2), health: 160.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.56, 0.54, 0.50),
         companion: CompanionData::None, customizable: false, cost: 41,
@@ -1609,7 +1609,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::BridgeWing, ModuleDef {
         name: "Bridge Wing",
-        description: "Command bridge with wings that extend past the hull on both sides. Real warships do this so the officer of the watch can actually see down the hull during docking — nobody misjudges a berth with this kind of sightline.",
+        description: "Command bridge with wings that extend past the hull on both sides. Real warships do this so the officer of the watch can actually see down the hull during docking - nobody misjudges a berth with this kind of sightline.",
         category: ModuleCategory::Control, size: IVec2::new(3, 2), health: 150.0,
         power_generation: 0.0, power_consumption: 15.0, color: Color::srgb(0.42, 0.32, 0.52),
         companion: CompanionData::None, customizable: false, cost: 135,
@@ -1618,7 +1618,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::SurgicalBay, ModuleDef {
         name: "Surgical Bay",
-        description: "Full surgical theater instead of a single cot — a narrow triage entry opens into a wide treatment bay. Same care as a Med Bay, room for more than one patient at a time.",
+        description: "Full surgical theater instead of a single cot - a narrow triage entry opens into a wide treatment bay. Same care as a Med Bay, room for more than one patient at a time.",
         category: ModuleCategory::Crew, size: IVec2::new(3, 2), health: 170.0,
         power_generation: 0.0, power_consumption: 30.0, color: Color::srgb(0.78, 0.80, 0.92),
         companion: CompanionData::CrewFacility { facility_type: crate::components::FacilityType::MedBay },
@@ -1628,7 +1628,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::GalleyMess, ModuleDef {
         name: "Galley Mess",
-        description: "A proper galley run — narrow working kitchen with a dining nook built into the bend, the way ship galleys have always been laid out. Feeds more crew without feeling like a cafeteria line.",
+        description: "A proper galley run - narrow working kitchen with a dining nook built into the bend, the way ship galleys have always been laid out. Feeds more crew without feeling like a cafeteria line.",
         category: ModuleCategory::Crew, size: IVec2::new(2, 2), health: 110.0,
         power_generation: 0.0, power_consumption: 10.0, color: Color::srgb(0.38, 0.68, 0.42),
         companion: CompanionData::CrewFacility { facility_type: crate::components::FacilityType::MessHall },
@@ -1638,7 +1638,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::BulkCargoHold, ModuleDef {
         name: "Bulk Cargo Hold",
-        description: "Cargo bay shaped to eat the dead space a boxy hold would waste — real cargo-ship design obsesses over exactly this. More capacity per cell than Large Cargo.",
+        description: "Cargo bay shaped to eat the dead space a boxy hold would waste - real cargo-ship design obsesses over exactly this. More capacity per cell than Large Cargo.",
         category: ModuleCategory::Storage, size: IVec2::new(2, 2), health: 150.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.62, 0.52, 0.24),
         companion: CompanionData::Cargo { capacity: 440.0 },
@@ -1648,7 +1648,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::DockingHub, ModuleDef {
         name: "Docking Hub",
-        description: "Multi-port docking node, same idea as an ISS connecting node — more than one ship, wreck, or station can couple to it at once, from different sides. No queue.",
+        description: "Multi-port docking node, same idea as an ISS connecting node - more than one ship, wreck, or station can couple to it at once, from different sides. No queue.",
         category: ModuleCategory::Utility, size: IVec2::new(3, 3), health: 180.0,
         power_generation: 0.0, power_consumption: 15.0, color: Color::srgb(0.42, 0.42, 0.55),
         companion: CompanionData::Docking,
@@ -1668,7 +1668,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::StaggeredArmorPlate, ModuleDef {
         name: "Staggered Armor Plate",
-        description: "Offset plating, laid the way real armor is — staggered so no single straight seam runs through it. There's no clean line for a hit to travel along.",
+        description: "Offset plating, laid the way real armor is - staggered so no single straight seam runs through it. There's no clean line for a hit to travel along.",
         category: ModuleCategory::Structural, size: IVec2::new(3, 2), health: 480.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.54, 0.54, 0.58),
         companion: CompanionData::None, customizable: false, cost: 225,
@@ -1677,7 +1677,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::AngledHullPlate, ModuleDef {
         name: "Angled Hull Plate",
-        description: "Structural framing cut to a taper instead of a square face. Light — it deflects far better than it stops, so it belongs on a corner you want shots to skip off, not in front of anything important. Rotate to pick which corner the face looks out from.",
+        description: "Structural framing cut to a taper instead of a square face. Light - it deflects far better than it stops, so it belongs on a corner you want shots to skip off, not in front of anything important. Rotate to pick which corner the face looks out from.",
         category: ModuleCategory::Structural, size: IVec2::new(1, 1), health: 90.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.56, 0.54, 0.48),
         companion: CompanionData::None, customizable: false, cost: 19,
@@ -1971,7 +1971,7 @@ pub fn build_registry() -> ModuleRegistry {
 
     defs.insert(ModuleType::Bulkhead, ModuleDef {
         name: "Bulkhead",
-        description: "Airtight bulkhead wall. Seals rooms from each other — when one depressurizes, the rest survive.",
+        description: "Airtight bulkhead wall. Seals rooms from each other - when one depressurizes, the rest survive.",
         category: ModuleCategory::Structural,
         size: IVec2::new(1, 1),
         health: 150.0,

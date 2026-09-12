@@ -141,7 +141,7 @@ pub fn spawn_bounty_markers(
 ) {
     for (entity, transform) in new_targets.iter() {
         commands.spawn((
-            Text2d::new("\u{25C6} BOUNTY TARGET \u{25C6}"),
+            Text2d::new("* BOUNTY TARGET *"),
             TextFont { font_size: FontSize::Px(20.0), ..default() },
             TextColor(Color::srgb(1.0, 0.25, 0.25)),
             Transform::from_translation(transform.translation + Vec3::new(0.0, 140.0, 6.0)),

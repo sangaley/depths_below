@@ -310,6 +310,18 @@ pub struct FactionTerritory {
     pub faction: AiShipType,
     pub center: Vec2,
     pub radius: f32,
+    /// How many vessels this faction keeps in one of its systems.
+    ///
+    /// Density, not headcount, is what the player feels. Ships are scattered
+    /// over `radius * 0.8` and only become real entities inside the 10,000-unit
+    /// materialisation bubble (ai_ship::simulation::RENDER_DISTANCE), so the
+    /// count that matters is `ship_count * (10_000 / (0.8 * radius))^2`.
+    ///
+    /// These were tuned when the whole game was ONE system and every faction
+    /// ship shared it with the player. The multi-system galaxy then spread the
+    /// same handful across ~30 systems, which dropped most territories below
+    /// ONE expected contact -- the void went quiet. Current values target 2-6
+    /// contacts inside the bubble.
     pub ship_count: usize,
 }
 
@@ -334,49 +346,49 @@ pub fn faction_territories() -> Vec<FactionTerritory> {
             faction: AiShipType::RustSwarm,
             center: Vec2::new(30_000.0, -10_000.0),
             radius: 15_000.0,
-            ship_count: 5, // many small ships
+            ship_count: 8, // many small ships
         },
         // Leviathan Riders - shallow hunting grounds
         FactionTerritory {
             faction: AiShipType::Leviathan,
             center: Vec2::new(-45_000.0, -20_000.0),
-            radius: 18_000.0,
-            ship_count: 2,
+            radius: 14_000.0,
+            ship_count: 4,
         },
         // Abyssal Cult - mid-depth sacred waters
         FactionTerritory {
             faction: AiShipType::AbyssalCult,
             center: Vec2::new(60_000.0, -50_000.0),
-            radius: 22_000.0,
-            ship_count: 3,
+            radius: 16_000.0,
+            ship_count: 6,
         },
         // Glass Eye - everywhere, lurking
         FactionTerritory {
             faction: AiShipType::GlassEye,
             center: Vec2::new(-85_000.0, -55_000.0),
-            radius: 28_000.0,
-            ship_count: 2,
+            radius: 18_000.0,
+            ship_count: 5,
         },
         // Blackwater PMC - mid-depth patrol routes, out toward the outer system
         FactionTerritory {
             faction: AiShipType::Blackwater,
             center: Vec2::new(60_000.0, -180_000.0),
-            radius: 28_000.0,
-            ship_count: 3,
+            radius: 18_000.0,
+            ship_count: 6,
         },
         // The Drowned - scattered everywhere, no home (biggest spread)
         FactionTerritory {
             faction: AiShipType::Drowned,
             center: Vec2::new(-60_000.0, -200_000.0),
-            radius: 45_000.0,
-            ship_count: 4,
+            radius: 24_000.0,
+            ship_count: 8,
         },
         // Iron Tide - deep military zone, far outer system
         FactionTerritory {
             faction: AiShipType::IronTide,
             center: Vec2::new(150_000.0, -250_000.0),
-            radius: 28_000.0,
-            ship_count: 2, // rare but powerful
+            radius: 18_000.0,
+            ship_count: 4, // rare but powerful
         },
         // Pressure Kings - deep zone only, farthest out of the "normal"
         // factions (still a real gap before the star itself at ~492k, which

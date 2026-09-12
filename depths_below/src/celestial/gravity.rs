@@ -90,7 +90,7 @@ pub fn apply_gravity_to_ship(
     if force_magnitude > 100.0 && !*warned_light {
         *warned_light = true;
         notifications.write(ShowNotification {
-            message: "Gravitational pull detected — watch your trajectory!".into(),
+            message: "Gravitational pull detected - watch your trajectory!".into(),
             notification_type: crate::events::NotificationType::Warning,
             duration: 3.0,
         });

@@ -594,7 +594,7 @@ pub fn update_settings_values(
             SettingsValue::InvertAimY => set_toggle(&mut text, &mut color, game_settings.invert_aim_y, ThemeColors::ACCENT_GREEN),
             SettingsValue::Resolution => {
                 let (w, h) = game_settings.resolution();
-                text.0 = format!("{}×{}", w, h);
+                text.0 = format!("{}x{}", w, h);
                 color.0 = ThemeColors::ACCENT_BLUE;
             }
             SettingsValue::UiScale => {
@@ -718,7 +718,7 @@ fn spawn_settings_overlay(commands: &mut Commands, tab: SettingsTab) {
                     })
                     .with_children(|footer| {
                         footer_button(footer, "RESET DEFAULTS", ThemeColors::TEXT_MUTED, MenuAction::ResetSettings);
-                        footer_button(footer, "BACK  ·  Esc", ThemeColors::TEXT_PRIMARY, MenuAction::CloseSettings);
+                        footer_button(footer, "BACK  -  Esc", ThemeColors::TEXT_PRIMARY, MenuAction::CloseSettings);
                     });
             });
         });
@@ -773,14 +773,14 @@ fn controls_tab(content: &mut ChildSpawnerCommands) {
                 ("Z", "Radar ping"),
                 ("F", "Interact / dock"),
                 ("B", "Build mode"),
-                ("C", "Crew  ·  M  Map"),
+                ("C", "Crew  -  M  Map"),
                 ("Esc", "Pause"),
             ]);
             reference_column(cols, "GAMEPAD", &[
                 ("L-Stick", "Throttle / strafe"),
                 ("R-Stick", "Aim"),
-                ("RT", "Fire  ·  LT  Brake"),
-                ("A", "Confirm  ·  B  Cancel"),
+                ("RT", "Fire  -  LT  Brake"),
+                ("A", "Confirm  -  B  Cancel"),
                 ("X", "Interact / dock"),
                 ("Y", "Radar ping"),
                 ("LB", "Cycle target"),
@@ -824,7 +824,7 @@ fn generic_stepper_row(
     up: MenuAction,
 ) {
     settings_row(parent, label, |controls| {
-        spawn_chip_button(controls, "−", ThemeColors::TEXT_PRIMARY, down);
+        spawn_chip_button(controls, "-", ThemeColors::TEXT_PRIMARY, down);
         controls
             .spawn(Node {
                 min_width: Val::Px(88.0),

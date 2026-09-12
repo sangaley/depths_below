@@ -88,7 +88,7 @@ pub fn toggle_mission_board(
 
     let Some(station) = station else {
         notifications.write(ShowNotification {
-            message: "No station in range — fly closer to view its bounty board.".into(),
+            message: "No station in range - fly closer to view its bounty board.".into(),
             notification_type: NotificationType::Warning,
             duration: 3.0,
         });
@@ -116,7 +116,7 @@ pub fn toggle_mission_board(
         MissionBoardPanel,
     )).with_children(|parent| {
         // Title
-        parent.spawn((Text::new(format!("EXPEDITION CONTRACTS — {}", station_name(station))), TextFont { font_size: FontSize::Px(28.0), ..default() }, TextColor(Color::WHITE), Node { margin: UiRect::bottom(Val::Px(12.0)),
+        parent.spawn((Text::new(format!("EXPEDITION CONTRACTS - {}", station_name(station))), TextFont { font_size: FontSize::Px(28.0), ..default() }, TextColor(Color::WHITE), Node { margin: UiRect::bottom(Val::Px(12.0)),
             ..default() }));
 
         // Scrollable content area
@@ -401,7 +401,7 @@ pub fn toggle_contract_hud(
         message: if visible.0 {
             "Contract tracker shown (Shift+J)".into()
         } else {
-            "Contract tracker hidden — Shift+J to bring it back".into()
+            "Contract tracker hidden - Shift+J to bring it back".into()
         },
         notification_type: NotificationType::Info,
         duration: 2.5,
