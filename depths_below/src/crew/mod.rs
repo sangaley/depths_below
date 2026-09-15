@@ -74,6 +74,9 @@ impl Plugin for CrewPlugin {
                     // Before path planning: the locker is a destination like
                     // any other, and has to be set before routes are laid.
                     suits::plan_suit_errands,
+                    // After the locker errand: once they have a suit on, the
+                    // hole outranks whatever post they came from.
+                    suits::suited_damage_control,
                     walking::plan_crew_paths,
                     walking::walk_crew,
                     suits::issue_suits,
