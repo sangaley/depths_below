@@ -805,7 +805,10 @@ fn update_crew_room_location(
 fn crew_emergency_dispatch(
     ship_query: Query<Entity, With<Ship>>,
     child_query: Query<&ChildOf>,
-    mut crew_query: Query<(Entity, &mut CrewMember, Option<&CrewRoomLocation>)>,
+    mut crew_query: Query<
+        (Entity, &mut CrewMember, Option<&CrewRoomLocation>),
+        Without<DamageControl>,
+    >,
     fire_query: Query<(Entity, &Module), With<OnFire>>,
     room_map: Res<RoomMap>,
     mut station_query: Query<(Entity, &mut CrewStation)>,
@@ -885,7 +888,9 @@ fn update_crew_ai(
     hull_query: Query<(Entity, &HullSegment, &Transform)>,
     fire_query: Query<Entity, With<OnFire>>,
     // EVA crew's state machine is owned by eva_salvage while they're out
-    mut crew_query: Query<&mut CrewMember, Without<EvaSalvaging>>,
+    // DamageControl crew have their state set by suits::suited_damage_control;
+    // resetting Repairing here would stop them sealing the hole they were sent to.
+    mut crew_query: Query<&mut CrewMember, (Without<EvaSalvaging>, Without<DamageControl>)>,
 ) {
     let Ok(ship) = ship_query.single() else { return };
     // Danger must be OUR danger — unscoped, any holed/burning wreck

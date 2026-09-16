@@ -426,6 +426,15 @@ mod suit_tests {
             IVec2::new(3, 0),
             "should stand beside the hole, not try to occupy it"
         );
+        // Walking there is half the job. crew_repair_system skips any state
+        // that is not Repairing or Idle, and seal_breach_system counts only
+        // Repairing -- so arriving still flagged Working means standing at the
+        // hole doing nothing, which is exactly how this first shipped.
+        assert_eq!(
+            app.world().get::<CrewMember>(hand).unwrap().state,
+            CrewState::Repairing,
+            "sent to the breach but not set to work on it"
+        );
     }
 
     /// A cell the air model has no entry for is not vacuum. Ships have gaps the
@@ -458,8 +467,8 @@ pub fn suited_damage_control(
     mut commands: Commands,
     ships: Query<(Entity, &NavGrid), (With<Ship>, Without<OwnedByAiShip>)>,
     hulls: Query<(&HullSegment, &ChildOf), Without<HullDestroyed>>,
-    crew: Query<
-        (Entity, &Transform, &ChildOf, Has<DamageControl>),
+    mut crew: Query<
+        (Entity, &Transform, &mut CrewMember, &ChildOf, Has<DamageControl>),
         (With<Suited>, Without<EvaSalvaging>, Without<OwnedByAiShip>),
     >,
 ) {
@@ -476,9 +485,10 @@ pub fn suited_damage_control(
         .collect();
 
     if breaches.is_empty() {
-        for (entity, _, _, working) in crew.iter() {
+        for (entity, _, mut member, _, working) in crew.iter_mut() {
             if working {
                 commands.entity(entity).try_remove::<DamageControl>();
+                member.state = CrewState::Idle;
             }
         }
         return;
@@ -487,7 +497,7 @@ pub fn suited_damage_control(
     // One hole per hand, nearest first, so they spread out instead of all
     // walking to the same one.
     let mut claimed: std::collections::HashSet<IVec2> = std::collections::HashSet::new();
-    for (entity, transform, parent, _) in crew.iter() {
+    for (entity, transform, mut member, parent, _) in crew.iter_mut() {
         if parent.parent() != ship {
             continue;
         }
@@ -509,5 +519,12 @@ pub fn suited_damage_control(
         commands
             .entity(entity)
             .try_insert((DamageControl, CrewDestination(stand)));
+
+        // The state IS the work. crew_repair_system credits Repairing at 1.0
+        // and Idle at 0.5 and skips everything else outright, and
+        // seal_breach_system only counts Repairing -- so a hand pulled off a
+        // post arrived at the hole still flagged Working and stood there
+        // contributing precisely nothing.
+        member.state = CrewState::Repairing;
     }
 }
