@@ -115,11 +115,58 @@ pub fn update_pressure_overlay(
     }
 }
 
-/// Draws each tile's flow as a short line, so direction is visible and not
-/// just inferred from which cells went dark first.
+/// Seeds per tile, spread on a 3x3 sub-grid. One line per cell reads as a
+/// field of unrelated darts; nine tells you where the air is going.
+const SEEDS_PER_AXIS: i32 = 3;
+
+/// Segments per streamline. The curve comes from re-sampling the field at each
+/// step, so more steps means a longer, more sharply bent line.
+const TRACE_STEPS: usize = 14;
+
+/// Ship-local units per segment.
+const STEP_LEN: f32 = 9.0;
+
+/// Below this the air is not really moving and the line would be noise.
+const FLOW_FLOOR: f32 = 0.03;
+
+/// Air speed that draws at full brightness.
+const FULL_BRIGHT: f32 = 1.2;
+
+/// Flow at an arbitrary ship-local point, blended from the four tile centres
+/// around it.
+///
+/// Sampling the containing tile alone gives every line inside one cell an
+/// identical heading, and they come out as straight parallel darts that snap
+/// direction at the tile border. Blending is what lets a line bend.
+fn sample_flow(air: &AirField, local: Vec2) -> Vec2 {
+    // Tile centres sit at grid_to_local; work in that space and take the
+    // fractional position between the four nearest.
+    let gx = local.x / GRID_SIZE;
+    let gy = (local.y + 33.0) / GRID_SIZE;
+    let (x0, y0) = (gx.floor(), gy.floor());
+    let (fx, fy) = (gx - x0, gy - y0);
+
+    let at = |dx: i32, dy: i32| -> Vec2 {
+        let cell = IVec2::new(x0 as i32 + dx, y0 as i32 + dy);
+        air.flow.get(&cell).copied().unwrap_or(Vec2::ZERO)
+    };
+
+    let bottom = at(0, 0) * (1.0 - fx) + at(1, 0) * fx;
+    let top = at(0, 1) * (1.0 - fx) + at(1, 1) * fx;
+    bottom * (1.0 - fy) + top * fy
+}
+
+/// Traces the airflow as curving streamlines, weather-map fashion.
+///
+/// Each line starts at a seed and walks the field one short step at a time,
+/// re-reading the direction as it goes, so it bends around corners and bunches
+/// where the air is being funnelled — which is the part that tells you a hole
+/// is pulling from three compartments away. Brightness is air speed, so a
+/// still room draws almost nothing and a vent draws a bright fan into it.
 pub fn draw_pressure_flow(
     mut gizmos: Gizmos,
     ship_query: Query<(&GlobalTransform, Has<PressureOverlayVisible>), With<Ship>>,
+    room_map: Res<RoomMap>,
     air: Res<AirField>,
 ) {
     let Ok((ship_gt, visible)) = ship_query.single() else { return };
@@ -127,19 +174,43 @@ pub fn draw_pressure_flow(
         return;
     }
 
-    for (&cell, &flow) in air.flow.iter() {
-        let strength = flow.length();
-        if strength < 0.02 {
-            continue;
+    let to_world = |p: Vec2| ship_gt.transform_point(p.extend(0.5)).truncate();
+    let spacing = GRID_SIZE / SEEDS_PER_AXIS as f32;
+
+    for &cell in room_map.tile_to_room.keys() {
+        let centre = grid_to_local(cell);
+        for sy in 0..SEEDS_PER_AXIS {
+            for sx in 0..SEEDS_PER_AXIS {
+                // Offset from the tile's own corner so seeds tile evenly
+                // across the ship rather than clustering at cell centres.
+                let offset = Vec2::new(
+                    (sx as f32 + 0.5) * spacing - GRID_SIZE * 0.5,
+                    (sy as f32 + 0.5) * spacing - GRID_SIZE * 0.5,
+                );
+                let mut point = centre + offset;
+
+                for step in 0..TRACE_STEPS {
+                    let flow = sample_flow(&air, point);
+                    let speed = flow.length();
+                    if speed < FLOW_FLOOR {
+                        break;
+                    }
+                    let next = point + (flow / speed) * STEP_LEN;
+
+                    // Fade along the trail so the bright end is the one the
+                    // air is heading towards — direction without arrowheads.
+                    let along = step as f32 / TRACE_STEPS as f32;
+                    let alpha =
+                        (speed / FULL_BRIGHT).clamp(0.05, 1.0) * (0.25 + 0.75 * along) * 0.9;
+                    gizmos.line_2d(
+                        to_world(point),
+                        to_world(next),
+                        Color::srgba(1.0, 1.0, 1.0, alpha),
+                    );
+                    point = next;
+                }
+            }
         }
-        // Clamped so a violent vent stays inside its own cell rather than
-        // drawing a spear across the ship.
-        let length = (strength * 26.0).min(GRID_SIZE * 0.45);
-        let local = grid_to_local(cell);
-        let tip = local + flow.normalize_or_zero() * length;
-        let from = ship_gt.transform_point(local.extend(0.5)).truncate();
-        let to = ship_gt.transform_point(tip.extend(0.5)).truncate();
-        gizmos.line_2d(from, to, Color::srgba(0.75, 0.9, 1.0, 0.85));
     }
 }
 

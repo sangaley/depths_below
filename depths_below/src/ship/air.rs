@@ -37,11 +37,15 @@ const DIFFUSE_RATE: f32 = 2.5;
 
 /// World units per second of body drag per unit of air flow.
 ///
-/// A unit conversion, not a difficulty dial. Crew walk at `CREW_WALK_SPEED`
-/// (50 u/s), and a fresh hole against full pressure produces flow near 0.9, so
-/// 70.0 puts the draught at ~63 u/s — it takes them. By half pressure it is
-/// ~31 u/s and they can walk out again.
-const SUCTION_COUPLING: f32 = 70.0;
+/// Crew walk at `CREW_WALK_SPEED` (50 u/s) and a fresh hole against full
+/// pressure produces flow near 0.9, so this puts the draught at ~200 u/s --
+/// four times a walk. Caught in it you are swept, not slowed. The first
+/// version only just beat walking, at 63 u/s, and read on screen as a stiff
+/// breeze rather than a hull breach.
+///
+/// It still tapers with the air behind it, which is what keeps it survivable:
+/// ~100 u/s at half pressure, ~33 u/s once the compartment is nearly gone.
+const SUCTION_COUPLING: f32 = 220.0;
 
 /// Flow above which being dragged starts to tell on someone.
 const PANIC_FLOW: f32 = 0.5;
