@@ -37,7 +37,9 @@ impl Plugin for GameAudioPlugin {
         app
             .init_resource::<AlarmState>()
             .add_systems(Startup, load_audio)
-            .add_systems(OnEnter(GameState::Exploring), start_flight_loops)
+            .add_systems(OnEnter(GameState::Exploring), (start_flight_loops, launch_audio))
+            .add_systems(OnEnter(GameState::StationDocked), (start_station_loops, docking_audio))
+            .add_systems(OnExit(GameState::StationDocked), stop_station_loops)
             // Deliberately NOT OnExit(Exploring). That fired on every pause,
             // on docking, and on entering the ending — despawning the drone,
             // engine, alarm and both dread layers and restarting them from
@@ -53,6 +55,7 @@ impl Plugin for GameAudioPlugin {
                 warp_audio,
                 engine_loop_volume,
                 dread_volume,
+                ship_damaged_audio,
                 update_ambient_volume,
                 hull_creak_ticker,
             ).run_if(in_state(GameState::Exploring)))
@@ -60,7 +63,6 @@ impl Plugin for GameAudioPlugin {
                 ui_click_audio,
                 notification_audio,
                 build_audio,
-                docking_audio,
             ));
     }
 }
@@ -85,6 +87,10 @@ pub struct GameAudio {
     /// licensed and sitting in assets/audio/ambient with nothing loading them.
     dread_low: Handle<AudioSource>,
     dread_high: Handle<AudioSource>,
+    /// Interior ambience for the station. The opening was ~50 seconds of
+    /// silence: no menu audio, no station hum, nothing marking launch.
+    station_hum: Handle<AudioSource>,
+    machine_loops: Vec<Handle<AudioSource>>,
     hull_creaks: Vec<Handle<AudioSource>>,
     alarm_loop: Handle<AudioSource>,
     ui_select: Vec<Handle<AudioSource>>,
@@ -131,6 +137,11 @@ fn load_audio(mut commands: Commands, assets: Res<AssetServer>) {
         space_drone: assets.load("audio/ambient/space_drone.mp3"),
         dread_low: assets.load("audio/ambient/black_hole_drone.mp3"),
         dread_high: assets.load("audio/ambient/hostile_atmosphere_loop.mp3"),
+        station_hum: assets.load("audio/ambient/interior_hum.ogg"),
+        machine_loops: vec![
+            assets.load("audio/ambient/machine_loop_1.ogg"),
+            assets.load("audio/ambient/machine_loop_2.ogg"),
+        ],
         hull_creaks: load_all(&[
             "audio/ambient/hull_creak_1.mp3",
             "audio/ambient/hull_creak_2.mp3",
@@ -364,6 +375,10 @@ struct EngineLoopAudio;
 #[derive(Component)]
 struct AmbientLoopAudio;
 
+/// Station interior ambience. Runs while docked, which used to be silent.
+#[derive(Component)]
+struct StationLoopAudio;
+
 /// The bed under everything, brought up by how far along the run is.
 ///
 /// Starts silent and stays silent for the whole opening. Two layers rather
@@ -404,6 +419,98 @@ fn start_flight_loops(
         PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0)),
         DreadLoopAudio { from: 0.70, ceiling: 0.18 },
     ));
+}
+
+fn start_station_loops(
+    audio: Option<Res<GameAudio>>,
+    settings: Res<GameSettings>,
+    existing: Query<Entity, With<StationLoopAudio>>,
+    mut commands: Commands,
+) {
+    let Some(audio) = audio else { return };
+    if !existing.is_empty() {
+        return;
+    }
+    let vol = AMBIENT_VOL * settings.music_volume;
+    commands.spawn((
+        AudioPlayer(audio.station_hum.clone()),
+        PlaybackSettings::LOOP.with_volume(Volume::Linear(vol)),
+        StationLoopAudio,
+    ));
+    // One machine loop under the hum so the berth sounds worked-in rather
+    // than merely not-silent.
+    if let Some(machine) = audio.machine_loops.first() {
+        commands.spawn((
+            AudioPlayer(machine.clone()),
+            PlaybackSettings::LOOP.with_volume(Volume::Linear(vol * 0.55)),
+            StationLoopAudio,
+        ));
+    }
+}
+
+fn stop_station_loops(loops: Query<Entity, With<StationLoopAudio>>, mut commands: Commands) {
+    for e in loops.iter() {
+        commands.entity(e).despawn();
+    }
+}
+
+/// Being shot used to be silent.
+///
+/// ShipDamaged had no handler at all: the only audible thing was a hull tile
+/// being fully destroyed, so ordinary incoming fire produced camera shake and
+/// nothing else. There is no dedicated impact asset (see the TODO in
+/// combat/new_projectiles.rs), so this uses the existing hull-crunch bank at
+/// low volume and a short pitch-varied rate limit — close enough to read as
+/// metal being hit, and far better than nothing.
+fn ship_damaged_audio(
+    mut events: MessageReader<ShipDamaged>,
+    audio: Option<Res<GameAudio>>,
+    settings: Res<GameSettings>,
+    time: Res<Time>,
+    mut commands: Commands,
+    mut last: Local<f32>,
+) {
+    let Some(audio) = audio else { return };
+    let mut heaviest = 0.0f32;
+    for e in events.read() {
+        heaviest = heaviest.max(e.amount);
+    }
+    if heaviest <= 0.0 {
+        return;
+    }
+    // Rate limit: a burst of gatling hits is one sound, not thirty.
+    let now = time.elapsed_secs();
+    if now - *last < 0.18 {
+        return;
+    }
+    *last = now;
+
+    if let Some(sound) = audio.hull_creaks.first() {
+        // Scale with the size of the hit so a graze and a shell are different.
+        let vol = (0.10 + (heaviest / 120.0).clamp(0.0, 1.0) * 0.28)
+            * SFX_VOL
+            * settings.sfx_volume;
+        commands.spawn((
+            AudioPlayer(sound.clone()),
+            PlaybackSettings::DESPAWN.with_volume(Volume::Linear(vol)),
+        ));
+    }
+}
+
+/// Nothing marked launch — the most cinematic beat in the first minute.
+fn launch_audio(
+    audio: Option<Res<GameAudio>>,
+    settings: Res<GameSettings>,
+    mut commands: Commands,
+) {
+    let Some(audio) = audio else { return };
+    if let Some(sound) = audio.warps.first() {
+        commands.spawn((
+            AudioPlayer(sound.clone()),
+            PlaybackSettings::DESPAWN
+                .with_volume(Volume::Linear(0.45 * SFX_VOL * settings.sfx_volume)),
+        ));
+    }
 }
 
 /// Ease each dread layer toward where the cascade says it should be.
@@ -563,15 +670,22 @@ fn build_audio(
     }
 }
 
+/// Docking had a purpose-built sound that never played: DockingCompleted has
+/// a handler and no writer anywhere in the codebase, so the only audible
+/// confirmation was the generic notification blip. Driven off the state
+/// change instead, which is the thing that actually happens.
 fn docking_audio(
-    mut docked: MessageReader<DockingCompleted>,
     audio: Option<Res<GameAudio>>,
     settings: Res<GameSettings>,
     mut commands: Commands,
 ) {
     let Some(audio) = audio else { return };
-    for _ in docked.read() {
-        play_oneshot(&mut commands, audio.ui_terminal[1].clone(), UI_VOL * settings.ui_volume);
+    if let Some(sound) = audio.ui_terminal.first() {
+        commands.spawn((
+            AudioPlayer(sound.clone()),
+            PlaybackSettings::DESPAWN
+                .with_volume(Volume::Linear(0.6 * UI_VOL * settings.ui_volume)),
+        ));
     }
 }
 
