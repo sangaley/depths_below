@@ -25,7 +25,9 @@ Space gets darker and stranger the farther you go. Scattered throughout are log 
 
 ## Building & Running
 
-Requires a recent [Rust toolchain](https://rustup.rs/).
+Requires a recent [Rust toolchain](https://rustup.rs/). If you've never built a Rust
+project before, follow [TUTORIAL.md](TUTORIAL.md) instead — it covers the whole setup
+from a clean machine.
 
 ```bash
 cd depths_below
