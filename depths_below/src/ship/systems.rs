@@ -43,6 +43,7 @@ pub fn update_ship_state(
 pub fn check_game_over(
     hull_state: Res<HullState>,
     crew_query: Query<&CrewMember>,
+    core_query: Query<(&Module, &MemoryCoreComp), (Without<DestroyedModule>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
     mut death_cause: ResMut<DeathCause>,
     mut next_state: ResMut<NextState<GameState>>,
     mut notifications: MessageWriter<ShowNotification>,
@@ -54,6 +55,12 @@ pub fn check_game_over(
     if session_timer.elapsed < 3.0 {
         return;
     }
+
+    // Cores are the player's own continuity, not just equipment. Losing every
+    // one is a different death from losing the hull: the ship can still be
+    // structurally fine and full of living people.
+    let cores_alive = core_query.iter().filter(|(m, _)| m.is_active).count();
+    let had_cores = !core_query.is_empty();
 
     let crew_count = crew_query.iter().count();
     let all_crew_dead = crew_count == 0 || crew_query.iter().all(|c| c.health <= 0.0);
@@ -68,7 +75,15 @@ pub fn check_game_over(
         .map(|d| format!(" Cause: {}.", d))
         .unwrap_or_default();
 
-    if all_crew_dead {
+    if had_cores && cores_alive == 0 {
+        death_cause.cause = Some(format!("Every memory core destroyed.{}", attribution));
+        notifications.write(ShowNotification {
+            message: "Last core gone. Whatever was running this ship is not running it now.".into(),
+            notification_type: NotificationType::Danger,
+            duration: 5.0,
+        });
+        next_state.set(GameState::GameOver);
+    } else if all_crew_dead {
         death_cause.cause = Some(format!("All crew died.{}", attribution));
         notifications.write(ShowNotification {
             message: "All crew lost. The ship drifts silently into the void...".into(),

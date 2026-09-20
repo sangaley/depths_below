@@ -98,6 +98,7 @@ pub enum CompanionData {
     TargetingComputer { accuracy_bonus: f32 },
     /// AI combat core: auto-targets highest threat
     AICombatCore { priority_bonus: f32 },
+    MemoryCore { autonomy: f32 },
     /// Research lab: generates research points from specimens
     ResearchLab { research_speed: f32 },
 }
@@ -2411,6 +2412,22 @@ pub fn build_registry() -> ModuleRegistry {
         companion: CompanionData::AICombatCore { priority_bonus: 0.2 },
         customizable: false,
         cost: 113,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
+    defs.insert(ModuleType::MemoryCore, ModuleDef {
+        name: "Memory Core",
+        description: "Redundant cognition lattice. Holds enough of the ship's own judgement to keep a station running with nobody standing at it. Crews call them the quiet crew.",
+        category: ModuleCategory::Control,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 12.0,
+        color: Color::srgb(0.35, 0.42, 0.55),
+        companion: CompanionData::MemoryCore { autonomy: 0.16 },
+        customizable: false,
+        cost: 140,
         base_stats: CalculatedStats::default(),
         crew_station: false,
     });

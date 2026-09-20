@@ -118,6 +118,7 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::EmergencyBulkhead => "sprites/modules/hull_beam.png",
         ModuleType::FirebreakWall => "sprites/modules/hull_beam.png",
         ModuleType::PressureSensor => "sprites/modules/depth_sensor.png",
+        ModuleType::MemoryCore => "sprites/modules/navigation.png",
         ModuleType::TargetingComputer => "sprites/modules/navigation.png",
         ModuleType::AutopilotCore => "sprites/modules/navigation.png",
         ModuleType::AICombatCore => "sprites/modules/navigation_2x1.png",

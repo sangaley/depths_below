@@ -21,6 +21,7 @@ use crate::ai_ship::components::{AiShip, OwnedByAiShip};
 use crate::building::{footprints, grid_to_local, local_to_grid, ShipGrid};
 use crate::celestial::resources::SystemStreamingManager;
 use crate::components::*;
+use crate::events::{NotificationType, ShowNotification};
 use crate::crew::animation::{CrewAtlases, CrewCorpse, CREW_SIZE};
 use crate::crew::eva_salvage::EvaSalvaging;
 use crate::crew::navigation::NavGrid;
@@ -233,6 +234,8 @@ pub fn advance_burial(
         (With<CrewMember>, Without<CrewCorpse>),
     >,
     mut bodies: Query<(&mut Transform, Option<&CrewCorpse>), Without<CrewMember>>,
+    cascade: Res<crate::narrative::CascadeState>,
+    mut notifications: MessageWriter<crate::events::ShowNotification>,
 ) {
     let Ok((ship, ship_gt, ship_vel, nav)) = ships.single() else { return };
     let Some(lock) = airlock_cell(
@@ -286,6 +289,7 @@ pub fn advance_burial(
                     .ok()
                     .and_then(|(_, corpse)| corpse.map(|c| c.name.clone()))
                     .unwrap_or_default();
+                let name_for_line = name.clone();
                 let id = dead.add(
                     streaming.loaded_system.unwrap_or(u32::MAX),
                     world,
@@ -293,6 +297,23 @@ pub fn advance_burial(
                     0.0,
                     name,
                 );
+
+                // Say something as they go. Near Haven it is the plain fact.
+                // Further out the ship starts adding things nobody asked it to
+                // add, which is the only place the story ever states its own
+                // premise outright — and it takes going a long way to hear it.
+                let who = if name_for_line.is_empty() { "A hand".to_string() } else { name_for_line.clone() };
+                let line = match cascade.ring {
+                    0 => format!("{who} committed to space."),
+                    1 => format!("{who} committed to space. The roster is updated."),
+                    2 => format!("{who} committed to space. Their station logs are retained."),
+                    _ => format!("{who} committed to space. The body, anyway."),
+                };
+                notifications.write(ShowNotification {
+                    message: line,
+                    notification_type: NotificationType::Info,
+                    duration: 5.0,
+                });
 
                 commands
                     .entity(detail.body)
@@ -468,6 +489,10 @@ mod burial_tests {
         app.add_plugins((MinimalPlugins, bevy::transform::TransformPlugin));
         app.init_resource::<CrewPlanTimer>();
         app.init_resource::<DriftingDead>();
+        // advance_burial reads the cascade level to decide what it says as a
+        // body goes out. A fresh, quiet run is the right default here.
+        app.init_resource::<crate::narrative::CascadeState>();
+        app.add_message::<ShowNotification>();
         app.insert_resource(SystemStreamingManager {
             loaded_system: Some(SYSTEM),
             ..default()

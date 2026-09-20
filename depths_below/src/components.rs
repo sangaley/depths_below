@@ -659,6 +659,7 @@ pub enum ModuleType {
 
     // Phase B: Navigation & Control
     TargetingComputer,
+    MemoryCore,
     AutopilotCore,
     AICombatCore,
 
@@ -806,6 +807,7 @@ impl ModuleType {
 
             ModuleType::NavigationConsole |
             ModuleType::HelmStation |
+            ModuleType::MemoryCore |
             ModuleType::TargetingComputer |
             ModuleType::AutopilotCore |
             ModuleType::BridgeWing |
@@ -1015,6 +1017,7 @@ impl ModuleType {
             ModuleType::EmergencyBulkhead => "Emergency Bulkhead",
             ModuleType::FirebreakWall => "Firebreak Wall",
             ModuleType::PressureSensor => "Radiation Sensor",
+            ModuleType::MemoryCore => "Memory Core",
             ModuleType::TargetingComputer => "Targeting Computer",
             ModuleType::AutopilotCore => "Autopilot Core",
             ModuleType::AICombatCore => "AI Combat Core",
@@ -1483,6 +1486,17 @@ pub struct ForceFieldEmitter {
     /// announced. Until the field has any art, this is the only way to tell
     /// from the cockpit that it is doing something.
     pub holding: u32,
+}
+
+/// A block that holds part of the ship's mind.
+///
+/// Mechanically it is what lets the ship keep working a station nobody is
+/// standing at. More cores, more of the ship runs itself — and the last one
+/// is not a component you can afford to lose.
+#[derive(Component)]
+pub struct MemoryCoreComp {
+    /// This core's own contribution to autonomy, before diminishing returns.
+    pub autonomy: f32,
 }
 
 /// Targeting computer — boosts weapon accuracy

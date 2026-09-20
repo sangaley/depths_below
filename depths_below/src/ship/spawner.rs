@@ -1016,6 +1016,9 @@ fn insert_companion_components(commands: &mut Commands, entity: Entity, companio
                 accuracy_bonus: *accuracy_bonus,
             });
         }
+        CompanionData::MemoryCore { autonomy } => {
+            commands.entity(entity).insert(MemoryCoreComp { autonomy: *autonomy });
+        }
         CompanionData::AICombatCore { priority_bonus } => {
             commands.entity(entity).insert(AICombatCoreComp {
                 priority_bonus: *priority_bonus,

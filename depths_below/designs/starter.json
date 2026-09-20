@@ -1773,6 +1773,39 @@
       "custom_name": null,
       "subcomponents": null,
       "extras": null
+    },
+    {
+      "module_type": "MemoryCore",
+      "grid_pos": [
+        -4,
+        0
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "MemoryCore",
+      "grid_pos": [
+        0,
+        -1
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "MemoryCore",
+      "grid_pos": [
+        5,
+        0
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
     }
   ],
   "created_at": "builtin",

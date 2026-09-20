@@ -354,11 +354,44 @@ fn crew_on_duty(crew: &CrewMember) -> bool {
 /// That's the teeth behind crew scarcity: send everyone out on salvage
 /// and the unmanned reactors/engines/guns go dark until they're back.
 /// value = damage_efficiency * staffing_factor
+/// How much of a station a ship can work with nobody standing at it, given
+/// how many Memory Cores it has alive.
+///
+/// Diminishing, same shape as apply_targeting_computer_bonus: each core is
+/// worth less than the last, and no number of them replaces a crew. The cap
+/// is the important half — a ship can never run itself outright, or crew stop
+/// being a thing you need and the whole staffing layer goes quiet.
+pub fn autonomy_from_cores(core_autonomy: &[f32]) -> f32 {
+    let mut combined = 0.0f32;
+    for a in core_autonomy {
+        combined = 1.0 - (1.0 - combined) * (1.0 - a.clamp(0.0, 1.0));
+    }
+    combined.min(MAX_AUTONOMY)
+}
+
+/// Ceiling on self-operation. Deliberately well under half: the ship covering
+/// for a missing hand is a different thing from the ship not needing hands.
+pub const MAX_AUTONOMY: f32 = 0.45;
+
 fn compute_module_efficiency(
     mut commands: Commands,
     mut station_query: Query<(Entity, &Module, &mut CrewStation, &ChildOf)>,
     crew_query: Query<&CrewMember>,
+    core_query: Query<(&MemoryCoreComp, &Module, &ChildOf), Without<DestroyedModule>>,
 ) {
+    // Cores are counted PER SHIP. This system is globally unscoped — it has
+    // always run over AI ship modules too — so a single global autonomy figure
+    // derived from the player's cores would quietly hand every enemy in the
+    // system the same benefit. Same bug shape as the crew and power leaks that
+    // turned up when AI ships first got real crews.
+    let mut cores_by_ship: std::collections::HashMap<Entity, Vec<f32>> =
+        std::collections::HashMap::new();
+    for (core, module, parent) in core_query.iter() {
+        if !module.is_active {
+            continue;
+        }
+        cores_by_ship.entry(parent.parent()).or_default().push(core.autonomy);
+    }
     // One engineer walks a bank of ENGINES_PER_OPERATOR nozzles. Not one hand
     // each (five engines ate five of eight crew and the guns stayed dark), and
     // not one hand for the whole ship however big it gets — a hundred-engine
@@ -419,7 +452,12 @@ fn compute_module_efficiency(
             // Within an engineer's rounds.
             1.0
         } else {
-            0.0
+            // Nobody is at this post. What the ship can still do for itself
+            // depends on how much of its mind is intact.
+            cores_by_ship
+                .get(&parent.parent())
+                .map(|c| autonomy_from_cores(c))
+                .unwrap_or(0.0)
         };
 
         // try_insert: wreck modules carry CrewStation too, and a drill or
@@ -737,6 +775,7 @@ fn auto_assign_crew(
 fn update_crew_needs(
     time: Res<Time>,
     depth_state: Res<DepthState>,
+    cascade: Res<crate::narrative::CascadeState>,
     // EVA crew are on suit systems — needs frozen while outside
     mut crew_query: Query<&mut CrewMember, Without<EvaSalvaging>>,
 ) {
@@ -746,18 +785,37 @@ fn update_crew_needs(
         }
 
         if depth_state.current_depth > 500.0 {
-            // Deep-space dread erodes morale but bottoms out ABOVE both
-            // the panic threshold (20) and the recovery threshold (30):
-            // depth alone makes crew jumpy, never permanently catatonic.
-            // Draining to 0 locked every deep-zone crew into panic forever
-            // — nobody could man a station or crew a salvage detail out
-            // where the wrecks actually are.
-            crew.morale = (crew.morale - 5.0 * time.delta_secs()).max(35.0);
+            // Distance erodes morale, and how far it can erode depends on how
+            // far along the run is.
+            //
+            // The floor used to be a flat 35, above both the panic threshold
+            // (20) and the recovery threshold (30), for a good reason: letting
+            // it reach zero locked every deep-zone crew into permanent panic
+            // and nobody could man a station or crew a salvage detail out
+            // where the wrecks actually are. That failure is still real and
+            // this does not undo it.
+            //
+            // What changes is that the floor slides with the cascade. Early it
+            // is the old 35 exactly. At the far edge it dips just under the
+            // panic threshold, so an unmitigated crew finally does start to
+            // break — and the answer is a thing the player can build. A Rec
+            // Room hard-floors morale at 30 and a Mess Hall pushes it back up,
+            // so going out that far becomes a question of whether the ship was
+            // designed for it, rather than an unavoidable loss.
+            let floor = DREAD_FLOOR_NEAR
+                + (DREAD_FLOOR_FAR - DREAD_FLOOR_NEAR) * cascade.level.clamp(0.0, 1.0);
+            crew.morale = (crew.morale - 5.0 * time.delta_secs()).max(floor);
         } else {
             crew.morale = (crew.morale + 1.0 * time.delta_secs()).min(100.0);
         }
     }
 }
+
+/// Morale floor from distance alone, at the start of a run and at the end of
+/// one. FAR sits just under the panic threshold of 20 on purpose: reachable,
+/// but only at the edge, and answerable by building for it.
+const DREAD_FLOOR_NEAR: f32 = 35.0;
+const DREAD_FLOOR_FAR: f32 = 18.0;
 
 /// Maps each crew member's world position to a grid position and room via RoomMap.
 fn update_crew_room_location(
@@ -1999,5 +2057,83 @@ mod room_location_tests {
             location.grid_position, cell,
             "crew cell was measured against the world, not the ship"
         );
+    }
+}
+
+#[cfg(test)]
+mod autonomy_tests {
+    use super::*;
+
+    /// No cores, no self-operation. An unstaffed post must still produce
+    /// nothing on a ship with nothing to think with — that is the baseline the
+    /// whole staffing layer rests on.
+    #[test]
+    fn no_cores_means_no_autonomy() {
+        assert_eq!(autonomy_from_cores(&[]), 0.0);
+    }
+
+    /// Each core is worth less than the one before, and they never add up to a
+    /// crew. If this cap ever reached 1.0, crew would stop mattering and an
+    /// entire system of the game would go quiet without anything failing.
+    #[test]
+    fn cores_diminish_and_never_replace_a_crew() {
+        let one = autonomy_from_cores(&[0.16]);
+        let two = autonomy_from_cores(&[0.16, 0.16]);
+        let three = autonomy_from_cores(&[0.16, 0.16, 0.16]);
+
+        assert!(one > 0.0);
+        assert!(two > one && three > two, "more cores should do more");
+        assert!(two - one < one, "the second core must be worth less than the first");
+        assert!(three - two < two - one, "returns must keep diminishing");
+
+        let many = autonomy_from_cores(&[0.16; 50]);
+        assert!(many <= MAX_AUTONOMY, "autonomy ran past its cap: {many}");
+        assert!(MAX_AUTONOMY < 1.0, "a ship must never fully run itself");
+    }
+
+    /// Order must not change the result, or the same ship reports different
+    /// autonomy depending on the order its blocks happened to be queried in.
+    #[test]
+    fn order_does_not_matter() {
+        let a = autonomy_from_cores(&[0.16, 0.30, 0.05]);
+        let b = autonomy_from_cores(&[0.05, 0.16, 0.30]);
+        assert!((a - b).abs() < 1e-6, "{a} vs {b}");
+    }
+}
+
+#[cfg(test)]
+mod dread_tests {
+    use super::*;
+
+    fn floor_at(level: f32) -> f32 {
+        DREAD_FLOOR_NEAR + (DREAD_FLOOR_FAR - DREAD_FLOOR_NEAR) * level.clamp(0.0, 1.0)
+    }
+
+    /// Early on the floor must be exactly what it always was. The old value
+    /// was load-bearing: below it, deep-zone crews locked into permanent panic
+    /// and nobody could man a station where the wrecks are.
+    #[test]
+    fn a_fresh_run_keeps_the_old_floor() {
+        assert_eq!(floor_at(0.0), 35.0);
+        assert!(floor_at(0.0) > 30.0, "must stay above the panic-recovery threshold");
+    }
+
+    /// At the far edge, distance alone finally can break someone — otherwise
+    /// the dread is decorative.
+    #[test]
+    fn the_far_edge_can_actually_break_a_crew() {
+        assert!(floor_at(1.0) < 20.0, "should dip under the panic threshold");
+    }
+
+    /// But never to nothing. A Rec Room hard-floors morale at 30, so the
+    /// player always has an answer; what must not exist is a floor so low that
+    /// no amount of building helps.
+    #[test]
+    fn it_never_bottoms_out() {
+        assert!(floor_at(1.0) > 0.0);
+        assert!(floor_at(1.0) < floor_at(0.0), "it has to actually get worse");
+        for l in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            assert!(floor_at(l) >= DREAD_FLOOR_FAR, "level {l} went under the cap");
+        }
     }
 }
