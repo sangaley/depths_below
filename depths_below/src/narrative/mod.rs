@@ -22,6 +22,16 @@ use crate::states::GameState;
 /// This matters for a second reason. `handle_save_request` is at Bevy's
 /// 16-parameter limit and says so in a comment, so a new saved resource is not
 /// a free change. Deriving sidesteps that entirely.
+/// Raised the moment the finale entry is *read*, and only then.
+///
+/// The ending used to trigger on `Statistics.logs_found` containing the
+/// finale, which is a state rather than an event: loading any save made after
+/// the ending would replay the whole sequence, and a new expedition that
+/// inherited the old run's statistics would fire it in the first second.
+/// Finding it is the moment that means something.
+#[derive(Resource, Debug, Default)]
+pub struct FinaleFound(pub bool);
+
 #[derive(Resource, Debug, Default)]
 pub struct CascadeState {
     /// 0.0 at the first launch, 1.0 at the far edge with everything read.
@@ -96,6 +106,7 @@ pub struct NarrativePlugin;
 
 impl Plugin for NarrativePlugin {
     fn build(&self, app: &mut App) {
+        app.init_resource::<FinaleFound>();
         app.add_plugins(reader::LogReaderPlugin);
         app.add_plugins(truth::TruthPlugin);
         app.init_resource::<CascadeState>().add_systems(

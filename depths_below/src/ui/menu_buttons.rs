@@ -384,13 +384,23 @@ pub fn menu_button_dispatch(
     mut save_ev: MessageWriter<SaveGameRequest>,
     mut load_ev: MessageWriter<LoadGameRequest>,
     mut exit_ev: MessageWriter<AppExit>,
+    mut new_expedition: MessageWriter<crate::events::NewExpeditionRequest>,
+    mut tutorial: ResMut<crate::tutorial::Tutorial>,
 ) {
     for (interaction, btn) in interactions.iter() {
         if *interaction != Interaction::Pressed {
             continue;
         }
         match btn.action {
-            MenuAction::NewGame => next_state.set(GameState::StationDocked),
+            MenuAction::NewGame => {
+                // This used to be the whole arm. Clicking the button started a
+                // game with no tutorial and no reset, while pressing Enter did
+                // both — the same menu item behaving differently depending on
+                // how it was activated.
+                tutorial.begin();
+                new_expedition.write(crate::events::NewExpeditionRequest);
+                next_state.set(GameState::StationDocked);
+            }
             MenuAction::LoadSlot(slot) => {
                 settings_menu.open = false;
                 load_ev.write(LoadGameRequest { slot });

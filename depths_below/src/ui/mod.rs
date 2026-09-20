@@ -1724,6 +1724,7 @@ fn handle_menu_input(
     mut pre_pause: ResMut<PrePauseState>,
     mut load_events: MessageWriter<LoadGameRequest>,
     mut tutorial: ResMut<crate::tutorial::Tutorial>,
+    mut new_expedition: MessageWriter<NewExpeditionRequest>,
     mut settings_menu: ResMut<menu_buttons::SettingsMenu>,
     mut commands: Commands,
     module_panel: Query<Entity, With<ModulePanelOverlay>>,
@@ -1806,8 +1807,11 @@ fn handle_menu_input(
     {
         match current_state.get() {
             GameState::MainMenu => {
-                // New expedition (not a load) — arm the guided tutorial.
+                // New expedition (not a load) — arm the guided tutorial and
+                // wipe the previous run. Both of those must also happen on the
+                // button path; see menu_buttons::menu_button_dispatch.
                 tutorial.begin();
+                new_expedition.write(NewExpeditionRequest);
                 next_state.set(GameState::StationDocked);
             }
             GameState::StationDocked => next_state.set(GameState::Exploring),

@@ -28,6 +28,9 @@ impl Plugin for MetaPlugin {
             // Ungated (like handle_load_request): it only acts when a
             // SaveGameRequest event is present, and quick-save (F5) fires that
             // during Exploring — a Paused-only gate here silently dropped those.
+            // Must run before the state change lands, so the wipe is in place
+            // by the time StationDocked spawns the starter ship and crew.
+            .add_systems(Update, reset_for_new_game)
             .add_systems(Update, handle_save_request)
             .add_systems(Update, handle_load_request)
             .add_systems(Update, apply_pending_load)
@@ -653,4 +656,57 @@ fn auto_save_system(
         info!("Auto-save triggered");
         save_events.write(SaveGameRequest { slot: AUTO_SAVE_SLOT });
     }
+}
+
+/// Wipe the previous run when a new expedition starts.
+///
+/// ROADMAP called this out as open: "New Expedition doesn't start a new
+/// expedition. It sets the state and nothing else." Everything below was
+/// inherited from the last run, which made a fresh start quietly not fresh.
+///
+/// It became load-bearing once the story landed. `Statistics.logs_found`
+/// survived into the new run, and the ending keys on the finale entry, so a
+/// player who finished once would start their next expedition and have the
+/// ending fire immediately.
+///
+/// `Unlocks` is deliberately NOT reset: that is meta-progression across runs,
+/// which is the one thing that is supposed to carry.
+pub fn reset_for_new_game(
+    mut requests: MessageReader<NewExpeditionRequest>,
+    mut currency: ResMut<Currency>,
+    mut inventory: ResMut<Inventory>,
+    mut statistics: ResMut<Statistics>,
+    mut contracts: ResMut<crate::contracts::ContractState>,
+    mut reputation: ResMut<crate::contracts::FactionReputation>,
+    mut victory: ResMut<VictoryState>,
+    mut death_cause: ResMut<DeathCause>,
+    mut dead: ResMut<crate::crew::burial::DriftingDead>,
+    mut finale: ResMut<crate::narrative::FinaleFound>,
+    mut galaxy: ResMut<crate::celestial::resources::GalaxyMap>,
+    mut streaming: ResMut<crate::celestial::resources::SystemStreamingManager>,
+) {
+    if requests.read().next().is_none() {
+        return;
+    }
+    requests.clear();
+
+    *currency = Currency::default();
+    *inventory = Inventory::default();
+    *statistics = Statistics::default();
+    *contracts = crate::contracts::ContractState::default();
+    *reputation = crate::contracts::FactionReputation::default();
+    *victory = VictoryState::default();
+    *death_cause = DeathCause::default();
+    // The dead are permanent within a run, on purpose. They are not permanent
+    // across runs: those were a different expedition's crew.
+    *dead = crate::crew::burial::DriftingDead::default();
+    finale.0 = false;
+
+    // Emptying the systems list is the trigger: generate_galaxy_on_enter
+    // early-returns when the galaxy is already populated, so clearing it is
+    // what makes the next launch roll a fresh one.
+    galaxy.systems.clear();
+    *streaming = crate::celestial::resources::SystemStreamingManager::default();
+
+    info!("new expedition: previous run cleared");
 }

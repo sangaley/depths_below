@@ -55,9 +55,21 @@ impl Plugin for WorldPlugin {
                     home_base::station_docking
                         .after(crate::crew::eva_salvage::order_salvage_detail),
                     home_base::update_base_arrow,
-                    discover_log_entries,
                     apply_hazard_damage,
                 )
+                    .run_if(in_state(GameState::Exploring)),
+            )
+            // Must run AFTER transform propagation. In Update, a point of
+            // interest spawned this frame still has the default GlobalTransform
+            // — the world origin — so every log-bearing wreck in the galaxy
+            // read as sitting 50 units from the ship and was "discovered" on
+            // the frame it spawned. That is why the player was handed a log
+            // before touching a control, and it had nothing to do with where
+            // the wreck actually was.
+            .add_systems(
+                PostUpdate,
+                discover_log_entries
+                    .after(bevy::transform::TransformSystems::Propagate)
                     .run_if(in_state(GameState::Exploring)),
             );
     }
@@ -313,6 +325,7 @@ fn discover_log_entries(
     log_query: Query<(&GlobalTransform, &LogEntry), Without<Ship>>,
     mut statistics: ResMut<Statistics>,
     mut log_queue: ResMut<crate::narrative::reader::LogQueue>,
+    mut finale: ResMut<crate::narrative::FinaleFound>,
     mut discovered_logs: Local<Vec<String>>,
 ) {
     let Ok(ship_gt) = ship_query.single() else { return };
@@ -330,6 +343,11 @@ fn discover_log_entries(
                 statistics.logs_found.push(log.title.clone());
             }
 
+            // The ending keys on *finding* the finale, not on holding it, so
+            // that loading a save from after the ending does not replay it.
+            if log.title == crate::narrative::logs::FINALE_TITLE {
+                finale.0 = true;
+            }
             // Goes to the reader, not a toast. Several entries run past two
             // hundred characters and the toast is 340px wide with an eight
             // second life — they were unreadable by construction.

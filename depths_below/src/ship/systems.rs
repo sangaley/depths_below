@@ -116,7 +116,7 @@ pub fn update_inventory_capacity(
 /// "you have read the last thing out there" already means "you went all the
 /// way out". One condition, and it is the one that means something.
 pub fn check_victory(
-    statistics: Res<Statistics>,
+    mut finale: ResMut<crate::narrative::FinaleFound>,
     mut victory_state: ResMut<VictoryState>,
     mut next_state: ResMut<NextState<GameState>>,
 ) {
@@ -127,7 +127,8 @@ pub fn check_victory(
     // Keyed by name through narrative::logs::FINALE_TITLE rather than a
     // literal, because the last time this check owned its own copy of the
     // string, the entry it named could not spawn and nobody noticed.
-    if statistics.logs_found.iter().any(|l| l == crate::narrative::logs::FINALE_TITLE) {
+    if finale.0 {
+        finale.0 = false;
         victory_state.achieved = true;
         // Straight into the sequence. No toast: the ending opens with its own
         // victory screen, and a congratulatory popup in front of it would step

@@ -3,6 +3,10 @@ use rand::prelude::*;
 use crate::components::*;
 use crate::sprite_map;
 
+/// How far from the world origin the chunk layer stops placing points of
+/// interest. Covers the spawn berth and Haven's station beside it.
+const SPAWN_KEEP_CLEAR: f32 = 1_400.0;
+
 /// Generates a chunk at the given position
 pub fn generate_chunk(
     commands: &mut Commands,
@@ -37,6 +41,17 @@ pub fn generate_chunk(
     // chunks favour ruins and vents, shallow ones wrecks and caves.
     let deep_level = 9;
     let is_deep_chunk = depth_level >= deep_level;
+
+    // Keep the berth clear. The ship spawns at roughly the world origin and
+    // Haven's station sits just beside it, while chunk points of interest
+    // land within a couple of hundred units of their chunk corner — so the
+    // chunk under the spawn reliably put a wreck within the 500-unit log
+    // pickup radius. The player was handed their first log before they had
+    // touched a control, which is the opposite of the opening the story wants.
+    let chunk_center = Vec2::new(chunk_world_x + 256.0, chunk_world_y + 256.0);
+    if chunk_center.length() < SPAWN_KEEP_CLEAR {
+        return chunk;
+    }
 
     // --- Settlements at fixed depth intervals ---
     if depth_level > 0 && depth_level % 4 == 0 && (chunk_pos.x.abs() % 3 == 0) {
