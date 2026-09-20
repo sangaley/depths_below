@@ -82,6 +82,35 @@ impl Plugin for WorldPlugin {
     }
 }
 
+
+/// How far the ship is from the nearest berth in the system it is standing in.
+///
+/// The honest answer to "how far out am I", and deliberately separate from
+/// `DepthState.current_depth`, which measures distance from the world origin
+/// and is what the depth vignette, the HUD readout and the camera are all
+/// calibrated against. Redefining that field broke rendering outright.
+///
+/// The origin measure stopped meaning anything when the galaxy arrived: every
+/// system except Haven centres hundreds of thousands of units away in a shared
+/// local space, so anything keyed on it saturates the moment the player warps
+/// anywhere. That is what auto-completed ReachDepth contracts, pinned zone
+/// selection, and put creature density and spawn rate at maximum everywhere
+/// outside Haven.
+pub fn distance_from_safety(ship_pos: Vec2, stations: &home_base::SystemStations) -> f32 {
+    let nearest = stations
+        .sites
+        .iter()
+        .map(|s| s.pos.distance(ship_pos))
+        .fold(f32::INFINITY, f32::min);
+    if nearest.is_finite() {
+        nearest
+    } else {
+        // Blind-warped into empty space: nowhere to dock, so treat it as a
+        // long way from anywhere rather than as zero.
+        f32::MAX
+    }
+}
+
 /// Checks if player entered a new depth zone
 fn check_depth_zone_change(
     ship_state: Res<DepthState>,
@@ -133,8 +162,8 @@ fn depth_to_zone(depth: f32) -> crate::components::ZoneType {
 
 /// Updates current biome based on ship position
 fn update_biome(
-    ship_state: Res<DepthState>,
     ship_query: Query<&Transform, With<Ship>>,
+    stations: Res<home_base::SystemStations>,
     mut world_state: ResMut<WorldState>,
     mut notifications: MessageWriter<ShowNotification>,
     mut last_biome: Local<Option<BiomeType>>,
@@ -142,7 +171,10 @@ fn update_biome(
     let Ok(ship_transform) = ship_query.single() else { return };
 
     let x = ship_transform.translation.x;
-    let depth = ship_state.current_depth;
+    // Distance from the nearest berth, not from the world origin — otherwise
+    // this reads >180,000 in every system but Haven and pins the biome to the
+    // most hostile band everywhere.
+    let depth = distance_from_safety(ship_transform.translation.truncate(), &stations);
 
     // Determine biome from position and depth
     let biome = match depth {

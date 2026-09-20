@@ -34,8 +34,17 @@ if ! cargo build 2>"$OUT/build.log"; then
   exit 2
 fi
 
+# -u asserts user activity, which WAKES a display that has already slept.
+# -d alone only prevents it sleeping, which is no help once it already has.
+caffeinate -u -t 2 2>/dev/null || true
+
 echo "[playtest] running '$LABEL' for ${SECS}s"
-env DEPTHS_SKIP_MENU=1 DEPTHS_SHOTS=6 DEPTHS_SHOTS_DIR="$OUT" "$@" \
+# caffeinate -di: without it the display sleeps during a long session and the
+# render target stops producing content -- every captured frame comes back
+# solid black and looks exactly like a rendering regression. It is not.
+# `env` is required: caffeinate treats the first token as its command, so
+# inline VAR=value assignments would be swallowed.
+caffeinate -di env DEPTHS_SKIP_MENU=1 DEPTHS_SHOTS=6 DEPTHS_SHOTS_DIR="$OUT" "$@" \
   cargo run >"$LOG" 2>&1 &
 RUNNER=$!
 disown "$RUNNER" 2>/dev/null || true   # keep job control quiet on kill
@@ -63,6 +72,18 @@ ERRORS=$(count "^ERROR")
 B0001=$(count "B0001")
 
 echo "[playtest] alive=${ALIVE}s frames=$FRAMES panics=$PANICS errors=$ERRORS query-conflicts=$B0001"
+
+# A black frame is ~57KB; a real one is several hundred. Identical tiny sizes
+# across every frame means the display slept, not that rendering broke.
+if [ "$FRAMES" != "0" ]; then
+  BLACK=$(find "$OUT" -name 'shot_*.png' -size -80k | wc -l | tr -d ' ')
+  if [ "$BLACK" = "$FRAMES" ]; then
+    echo "[playtest] NOTE: all $FRAMES frames are blank."
+    echo "[playtest]       This is the environment, not the build: the render target"
+    echo "[playtest]       produces nothing while the screen is locked or asleep."
+    echo "[playtest]       Panics, errors and query conflicts above are still valid."
+  fi
+fi
 echo "[playtest] frames in $OUT"
 
 if [ "$PANICS" != "0" ]; then

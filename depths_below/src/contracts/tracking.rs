@@ -74,12 +74,20 @@ pub fn track_poi_contracts(
 
 pub fn track_depth_contracts(
     mut state: ResMut<ContractState>,
-    depth: Res<DepthState>,
+    ship: Query<&Transform, With<crate::components::Ship>>,
+    stations: Res<crate::world::home_base::SystemStations>,
 ) {
+    let Ok(tf) = ship.single() else { return };
+    let out = crate::world::distance_from_safety(tf.translation.truncate(), &stations);
+
     for contract in state.active_contracts.iter_mut() {
         if contract.status != ContractStatus::Active { continue; }
         if let ContractObjective::ReachDepth { target_depth, reached } = &mut contract.objective {
-            if depth.current_depth >= *target_depth {
+            // Distance from the nearest berth. Against current_depth this
+            // completed the instant the player warped anywhere, because that
+            // measures distance from the world origin and every system but
+            // Haven centres hundreds of thousands of units away.
+            if out >= *target_depth {
                 *reached = true;
             }
         }
@@ -117,10 +125,13 @@ fn current_zone(depth: f32) -> ZoneType {
 
 pub fn track_survey_contracts(
     mut state: ResMut<ContractState>,
-    depth: Res<DepthState>,
+    ship: Query<&Transform, With<crate::components::Ship>>,
+    stations: Res<crate::world::home_base::SystemStations>,
     time: Res<Time>,
 ) {
-    let zone = current_zone(depth.current_depth);
+    let Ok(tf) = ship.single() else { return };
+    let out = crate::world::distance_from_safety(tf.translation.truncate(), &stations);
+    let zone = current_zone(out);
 
     for contract in state.active_contracts.iter_mut() {
         if contract.status != ContractStatus::Active { continue; }
@@ -198,7 +209,10 @@ fn turn_in_active(
     for contract in state.active_contracts.iter_mut() {
         if contract.status != ContractStatus::Completed { continue; }
 
-        currency.credits += contract.reward;
+        // Reward plus the deposit back. The deposit is taken when the job is
+        // accepted (contracts/ui.rs), so finishing has to return it or every
+        // completed contract quietly costs the player its stake.
+        currency.credits += contract.reward + contract.deposit;
         let rep_gain = contract.star_rating as f32 * 2.0;
         rep.add(&contract.faction, rep_gain);
         contract.status = ContractStatus::TurnedIn;
@@ -287,7 +301,9 @@ pub fn handle_contract_failure(
         failed_count += 1;
 
         if contract.deposit > 0 {
-            currency.credits = currency.credits.saturating_sub(contract.deposit);
+            // Nothing is deducted here. The deposit was already taken on
+            // accept; failing simply means it is not returned. Deducting again
+            // would charge the player twice for the same stake.
             notifications.write(ShowNotification {
                 message: format!("Contract failed: {}. Lost {}c deposit.", contract.title, contract.deposit),
                 notification_type: NotificationType::Danger,

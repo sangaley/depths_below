@@ -240,10 +240,17 @@ pub fn update_depth(
         return;
     };
 
-    // Distance from home (origin) drives zone/danger progression — radial,
-    // so danger grows in every direction. The old code clamped the ship
-    // between y=0 and y=-5000: the ocean surface and the seafloor. In space
-    // there is no surface — both invisible walls are gone.
+    // Distance from the world origin. This is what the depth vignette, the
+    // HUD range readout and the camera are all calibrated against, so it stays
+    // as it is.
+    //
+    // It is NOT a meaningful measure of "how far out am I" now that the galaxy
+    // exists — every system but Haven centres hundreds of thousands of units
+    // away — but the fix for that belongs in the handful of systems that need
+    // a real answer, not here. Redefining this one field to mean distance from
+    // the nearest station blacked out the entire screen: the vignette treats
+    // anything past ~20 as deep space, and the ship starts ~800 units from
+    // Haven's berth. See world::distance_from_safety for the honest measure.
     depth.0 = transform.translation.truncate().length();
 }
 
@@ -256,25 +263,53 @@ pub fn update_fuel_consumption(
     mut fuel_state: ResMut<FuelState>,
     mut engine_query: Query<(&Engine, &mut Module, &ChildOf)>,
     ship_query: Query<Entity, With<Ship>>,
+    physics_query: Query<&ShipPhysics, With<Ship>>,
+    stations: Res<crate::world::home_base::SystemStations>,
     mut notifications: MessageWriter<ShowNotification>,
     mut warned_25: Local<bool>,
     mut warned_10: Local<bool>,
     debug_tuning: Res<crate::debug::DebugTuning>,
 ) {
     let Ok(player_ship) = ship_query.single() else { return };
+    let Ok(physics) = physics_query.single() else { return };
     let dt = time.delta_secs();
     let mut total_consumption = 0.0;
 
-    // Calculate fuel consumption from the player's active engines
+    // Burn scales with how hard the ship is actually being driven.
+    //
+    // This used to key off `module.is_active`, which means POWERED, not
+    // throttled — so five standard engines drank 4 fuel a second while the
+    // ship sat still, emptying a 1500 tank in about six minutes of doing
+    // nothing. The tutorial tells the player to "watch FUEL tick down as you
+    // burn", which was not what happened.
+    //
+    // A small idle draw remains: engines that are lit still cost something,
+    // and shutting them down is a real decision.
+    const IDLE_FRACTION: f32 = 0.12;
+    let drive = physics.throttle.abs().clamp(0.0, 1.0);
+    let draw = IDLE_FRACTION + (1.0 - IDLE_FRACTION) * drive;
     for (engine, module, parent) in engine_query.iter() {
         if parent.parent() != player_ship { continue; }
         if module.is_active {
-            total_consumption += engine.fuel_consumption * fuel_state.fuel_consumption_rate * dt;
+            total_consumption +=
+                engine.fuel_consumption * fuel_state.fuel_consumption_rate * draw * dt;
         }
     }
 
     if total_consumption > 0.0 && !debug_tuning.infinite_fuel {
         fuel_state.current_fuel = (fuel_state.current_fuel - total_consumption).max(0.0);
+    }
+
+    // Stranding guard. A blind warp can land in genuinely empty space: no
+    // system, so no station, so no refuel. With jump cost now rising as the
+    // square of distance, a player who arrives there low on fuel could be
+    // unable to leave at all — a hard lock with nothing on screen explaining
+    // it. Trickle back up to just enough for the cheapest possible jump, and
+    // only ever when there is nowhere to dock.
+    const STRANDED_RESERVE: f32 = 90.0; // a little over INTERSTELLAR_BASE_FUEL
+    if stations.sites.is_empty() && fuel_state.current_fuel < STRANDED_RESERVE {
+        fuel_state.current_fuel =
+            (fuel_state.current_fuel + 6.0 * dt).min(STRANDED_RESERVE);
     }
 
     let fuel_pct = if fuel_state.max_fuel > 0.0 {

@@ -12,19 +12,36 @@ use super::galaxy;
 // dash (ui/mod.rs's WARP_DASH_* constants): that's a same-system reposition
 // bounded by a ~600k-unit local map, this is a jump across the whole
 // galaxy, orders of magnitude larger. Strawman numbers, tune by feel.
+// Cost rises with the SQUARE of distance, and a full-radius jump deliberately
+// costs more than a full tank.
+//
+// It used to be linear and capped at 500 of a 1500 tank, which meant a
+// minute-one player could click the far edge of the galaxy map, wait four
+// seconds, and arrive parked beside a station in the hardest territory in the
+// game. Crossing the galaxy was not a cost, it was a menu.
+//
+// Squared keeps neighbours cheap and makes the edge unreachable in one go:
+//   t=0.2  ->  144 fuel      a hop to a neighbour, trivial
+//   t=0.5  ->  480 fuel      a real commitment, a third of a tank
+//   t=0.8  -> 1104 fuel      most of everything you have
+//   t=1.0  -> 1680 fuel      more than a tank: impossible in one jump
+// So reaching the far systems means staging through the middle ones, which
+// are exactly the ones that get progressively more dangerous.
 const INTERSTELLAR_BASE_CHARGE: f32 = 1.0; // seconds
-const INTERSTELLAR_MAX_EXTRA_CHARGE: f32 = 3.0; // up to 4s at the far edge — was 6-60s, way too slow
+const INTERSTELLAR_MAX_EXTRA_CHARGE: f32 = 7.0;
 const INTERSTELLAR_BASE_FUEL: f32 = 80.0;
-const INTERSTELLAR_MAX_EXTRA_FUEL: f32 = 420.0; // up to 500 at the far edge
+const INTERSTELLAR_MAX_EXTRA_FUEL: f32 = 1600.0;
 
 // pub(crate): reused by ui/mod.rs for the galaxy map's cost/charge preview
 // so the sidebar shows the exact numbers the jump will actually use.
 pub(crate) fn interstellar_charge_time(t: f32) -> f32 {
-    INTERSTELLAR_BASE_CHARGE + t.clamp(0.0, 1.0) * INTERSTELLAR_MAX_EXTRA_CHARGE
+    let t = t.clamp(0.0, 1.0);
+    INTERSTELLAR_BASE_CHARGE + t * t * INTERSTELLAR_MAX_EXTRA_CHARGE
 }
 
 pub(crate) fn interstellar_fuel_cost(t: f32) -> f32 {
-    INTERSTELLAR_BASE_FUEL + t.clamp(0.0, 1.0) * INTERSTELLAR_MAX_EXTRA_FUEL
+    let t = t.clamp(0.0, 1.0);
+    INTERSTELLAR_BASE_FUEL + t * t * INTERSTELLAR_MAX_EXTRA_FUEL
 }
 
 pub(crate) fn target_galaxy_pos(galaxy_map: &GalaxyMap, target: GalaxyWarpTarget) -> Option<Vec2> {
@@ -350,5 +367,42 @@ mod arrival_tests {
             let sites = crate::world::home_base::station_sites(id, Vec2::ZERO);
             assert!(!sites.is_empty(), "system {id} has no station to warp to");
         }
+    }
+}
+
+#[cfg(test)]
+mod cost_tests {
+    use super::*;
+
+    /// A neighbour must stay cheap, or ordinary play becomes a fuel chore.
+    #[test]
+    fn short_hops_are_affordable() {
+        assert!(interstellar_fuel_cost(0.2) < 200.0);
+        assert!(interstellar_charge_time(0.2) < 2.0);
+    }
+
+    /// And the far edge must not be reachable in one jump from a full tank.
+    /// That is the whole point: staging through the middle systems is what
+    /// turns distance into a difficulty ramp instead of a menu choice.
+    #[test]
+    fn the_far_edge_cannot_be_reached_in_one_jump() {
+        const TANK: f32 = 1500.0; // FuelState::default max_fuel
+        assert!(
+            interstellar_fuel_cost(1.0) > TANK,
+            "a full-radius jump costs {} of a {TANK} tank — the player can \
+             still skip straight to the hardest content",
+            interstellar_fuel_cost(1.0)
+        );
+        // Half way must still be possible, or the galaxy is unreachable.
+        assert!(interstellar_fuel_cost(0.5) < TANK);
+    }
+
+    /// Cost must rise faster than distance, or halving the range halves the
+    /// price and staging buys the player nothing.
+    #[test]
+    fn cost_is_superlinear() {
+        let half = interstellar_fuel_cost(0.5) - INTERSTELLAR_BASE_FUEL;
+        let full = interstellar_fuel_cost(1.0) - INTERSTELLAR_BASE_FUEL;
+        assert!(full > half * 2.0, "half={half} full={full}");
     }
 }
