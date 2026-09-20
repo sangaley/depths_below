@@ -154,6 +154,12 @@ fn drive_log_card(
     }
 }
 
+fn hide_log_card(mut root: Query<&mut Visibility, With<LogCardRoot>>) {
+    if let Ok(mut v) = root.single_mut() {
+        *v = Visibility::Hidden;
+    }
+}
+
 /// Nothing should still be on screen once the run is over.
 fn clear_log_queue(mut queue: ResMut<LogQueue>) {
     queue.pending.clear();
@@ -167,6 +173,11 @@ impl Plugin for LogReaderPlugin {
             .add_systems(Startup, spawn_log_card)
             .add_systems(Update, drive_log_card.run_if(in_state(GameState::Exploring)))
             .add_systems(OnEnter(GameState::GameOver), clear_log_queue)
-            .add_systems(OnEnter(GameState::MainMenu), clear_log_queue);
+            .add_systems(OnEnter(GameState::MainMenu), clear_log_queue)
+            .add_systems(OnEnter(GameState::Truth), clear_log_queue)
+            // The card only *drives* while Exploring, so without this it stays
+            // on screen unattended once the state changes — it was still sitting
+            // over the ending, offering "[Space] close".
+            .add_systems(OnExit(GameState::Exploring), hide_log_card);
     }
 }

@@ -313,7 +313,10 @@ impl Plugin for UiPlugin {
 }
 
 #[derive(Component)]
-struct HudRoot;
+/// The flight HUD's root. Public so the ending can take the whole instrument
+/// panel off screen: it is telling the player the run is over, and a live fuel
+/// gauge behind that argues with it.
+pub struct HudRoot;
 
 /// A clickable HUD toolbar button that stands in for a keyboard shortcut.
 /// While pressed, hud_action_button_press synthesizes `key` onto the shared

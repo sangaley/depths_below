@@ -3,6 +3,7 @@
 
 pub mod logs;
 pub mod reader;
+pub mod truth;
 
 use bevy::prelude::*;
 
@@ -96,6 +97,7 @@ pub struct NarrativePlugin;
 impl Plugin for NarrativePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(reader::LogReaderPlugin);
+        app.add_plugins(truth::TruthPlugin);
         app.init_resource::<CascadeState>().add_systems(
             Update,
             update_cascade.run_if(in_state(GameState::Exploring).or_else(in_state(GameState::StationDocked))),

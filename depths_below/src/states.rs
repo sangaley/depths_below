@@ -11,6 +11,10 @@ pub enum GameState {
     Docked,         // At outpost or wreck
     Paused,
     GameOver,
+    /// The ending. Scripted, non-interactive, and its own state rather than a
+    /// mode of GameOver, because GameOver owns the run-summary screen and this
+    /// sequence has to be able to contradict it.
+    Truth,
 }
 
 /// Sub-states for more granular control

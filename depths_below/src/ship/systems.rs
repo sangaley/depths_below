@@ -104,32 +104,35 @@ pub fn update_inventory_capacity(
     inventory.max_capacity = base_capacity + cargo_bonus;
 }
 
-/// Checks if the player has achieved victory (reached 2500m depth + found final log)
+/// Fires the ending once the player holds the finale log.
+///
+/// The distance clause this used to carry is gone. It asked for 2,200 units
+/// from the origin, a submarine-era measure that survived the conversion to
+/// space and amounted to a few seconds of flight; it only ever looked like a
+/// real condition because the log it was paired with could not spawn at all.
+///
+/// The finale entry only exists at the deepest log tier, which only exists in
+/// the most dangerous systems, which sit at the far edge of the galaxy. So
+/// "you have read the last thing out there" already means "you went all the
+/// way out". One condition, and it is the one that means something.
 pub fn check_victory(
-    depth_state: Res<DepthState>,
     statistics: Res<Statistics>,
     mut victory_state: ResMut<VictoryState>,
     mut next_state: ResMut<NextState<GameState>>,
-    mut notifications: MessageWriter<ShowNotification>,
 ) {
     if victory_state.achieved {
         return;
     }
 
-    // Victory requires reaching 2200m+ depth AND finding the final log.
-    // The finale entry is keyed by name through narrative::logs::FINALE_TITLE
-    // rather than a literal, because the last time this check owned its own
-    // copy of the string the entry it named could not spawn at all.
-    if depth_state.current_depth >= 2200.0
-        && statistics.logs_found.iter().any(|l| l == crate::narrative::logs::FINALE_TITLE)
-    {
+    // Keyed by name through narrative::logs::FINALE_TITLE rather than a
+    // literal, because the last time this check owned its own copy of the
+    // string, the entry it named could not spawn and nobody noticed.
+    if statistics.logs_found.iter().any(|l| l == crate::narrative::logs::FINALE_TITLE) {
         victory_state.achieved = true;
-        notifications.write(ShowNotification {
-            message: "You have reached the deepest point and uncovered the final truth. VICTORY!".into(),
-            notification_type: NotificationType::Success,
-            duration: 8.0,
-        });
-        next_state.set(GameState::GameOver);
+        // Straight into the sequence. No toast: the ending opens with its own
+        // victory screen, and a congratulatory popup in front of it would step
+        // on the one beat that has to land cleanly.
+        next_state.set(GameState::Truth);
     }
 }
 
