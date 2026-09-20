@@ -91,7 +91,9 @@ impl Plugin for UiPlugin {
                 ),
             )
             // Main menu
-            .add_systems(OnEnter(GameState::MainMenu), spawn_main_menu)
+            .add_systems(OnEnter(GameState::MainMenu), (spawn_main_menu, hide_hud))
+            .add_systems(OnEnter(GameState::Exploring), show_hud)
+            .add_systems(OnEnter(GameState::StationDocked), show_hud)
             .add_systems(OnExit(GameState::MainMenu), despawn_main_menu)
             // Game Over screen
             .add_systems(OnEnter(GameState::GameOver), spawn_game_over_screen)
@@ -3554,7 +3556,36 @@ fn spawn_main_menu(mut commands: Commands) {
 
         // Version / flavor
         parent.spawn((Text::new("The void remembers those who dare to venture deeper."), TextFont { font_size: FontSize::Px(ThemeFonts::BODY_SMALL), ..default() }, TextColor(Color::srgba(0.25, 0.28, 0.35, 0.6))));
+
+        // Required attribution. assets/audio/CREDITS.md puts most of the sound
+        // under CC-BY 3.0, which obliges a visible credit, and the game had
+        // none anywhere — an outstanding licence breach rather than an
+        // oversight. On the title screen rather than buried behind a button,
+        // because that is the page everyone actually sees.
+        parent.spawn((
+            Text::new("Sound effects by Little Robot Sound Factory (littlerobotsoundfactory.com), CC-BY 3.0"),
+            TextFont { font_size: FontSize::Px(ThemeFonts::TINY), ..default() },
+            TextColor(Color::srgba(0.22, 0.25, 0.31, 0.55)),
+            Node { margin: UiRect::top(Val::Px(ThemeSpacing::MD)), ..default() },
+        ));
     });
+}
+
+/// The flight HUD has no business on the title screen.
+///
+/// It was faintly visible behind the menu -- a hull bar and an ammo count for
+/// a ship that does not exist yet -- because the menu's background sits at 98%
+/// opacity and nothing ever hid the instruments.
+fn hide_hud(mut hud: Query<&mut Visibility, With<HudRoot>>) {
+    for mut v in hud.iter_mut() {
+        *v = Visibility::Hidden;
+    }
+}
+
+fn show_hud(mut hud: Query<&mut Visibility, With<HudRoot>>) {
+    for mut v in hud.iter_mut() {
+        *v = Visibility::Inherited;
+    }
 }
 
 fn despawn_main_menu(

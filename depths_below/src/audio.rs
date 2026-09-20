@@ -45,6 +45,7 @@ impl Plugin for GameAudioPlugin {
                 alarm_audio,
                 warp_audio,
                 engine_loop_volume,
+                dread_volume,
                 update_ambient_volume,
                 hull_creak_ticker,
             ).run_if(in_state(GameState::Exploring)))
@@ -73,6 +74,10 @@ pub struct GameAudio {
     engine_loop: Handle<AudioSource>,
     warps: Vec<Handle<AudioSource>>,
     space_drone: Handle<AudioSource>,
+    /// Two dread layers that fade in with the cascade. Both were already
+    /// licensed and sitting in assets/audio/ambient with nothing loading them.
+    dread_low: Handle<AudioSource>,
+    dread_high: Handle<AudioSource>,
     hull_creaks: Vec<Handle<AudioSource>>,
     alarm_loop: Handle<AudioSource>,
     ui_select: Vec<Handle<AudioSource>>,
@@ -117,6 +122,8 @@ fn load_audio(mut commands: Commands, assets: Res<AssetServer>) {
             "audio/engines/warp_3.mp3",
         ]),
         space_drone: assets.load("audio/ambient/space_drone.mp3"),
+        dread_low: assets.load("audio/ambient/black_hole_drone.mp3"),
+        dread_high: assets.load("audio/ambient/hostile_atmosphere_loop.mp3"),
         hull_creaks: load_all(&[
             "audio/ambient/hull_creak_1.mp3",
             "audio/ambient/hull_creak_2.mp3",
@@ -350,6 +357,19 @@ struct EngineLoopAudio;
 #[derive(Component)]
 struct AmbientLoopAudio;
 
+/// The bed under everything, brought up by how far along the run is.
+///
+/// Starts silent and stays silent for the whole opening. Two layers rather
+/// than one so it can thicken rather than just get louder: the low drone
+/// arrives first, and the second only in the last stretch.
+#[derive(Component)]
+struct DreadLoopAudio {
+    /// Cascade level at which this layer starts being audible at all.
+    from: f32,
+    /// Volume it reaches at cascade 1.0.
+    ceiling: f32,
+}
+
 fn start_flight_loops(
     audio: Option<Res<GameAudio>>,
     settings: Res<GameSettings>,
@@ -367,6 +387,38 @@ fn start_flight_loops(
         PlaybackSettings::LOOP.with_volume(Volume::Linear(AMBIENT_VOL * settings.music_volume)),
         AmbientLoopAudio,
     ));
+    commands.spawn((
+        AudioPlayer(audio.dread_low.clone()),
+        PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0)),
+        DreadLoopAudio { from: 0.30, ceiling: 0.26 },
+    ));
+    commands.spawn((
+        AudioPlayer(audio.dread_high.clone()),
+        PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0)),
+        DreadLoopAudio { from: 0.70, ceiling: 0.18 },
+    ));
+}
+
+/// Ease each dread layer toward where the cascade says it should be.
+///
+/// Eased rather than set, for the same reason the engine loop is: a volume
+/// that snaps is audible as a snap. Nobody should be able to point at the
+/// moment the music changed.
+fn dread_volume(
+    time: Res<Time>,
+    settings: Res<GameSettings>,
+    cascade: Res<crate::narrative::CascadeState>,
+    mut layers: Query<(&mut AudioSink, &DreadLoopAudio)>,
+) {
+    let level = cascade.level.clamp(0.0, 1.0);
+    for (mut sink, layer) in layers.iter_mut() {
+        let span = (1.0 - layer.from).max(0.001);
+        let ramp = ((level - layer.from) / span).clamp(0.0, 1.0);
+        let target = ramp * layer.ceiling * settings.music_volume;
+        let current = sink.volume().to_linear();
+        let eased = current + (target - current) * (time.delta_secs() * 0.6).min(1.0);
+        sink.set_volume(Volume::Linear(eased));
+    }
 }
 
 /// Keep the ambient drone in sync with the MUSIC bus while it changes live.
@@ -383,7 +435,15 @@ fn update_ambient_volume(
 }
 
 fn stop_flight_loops(
-    loops: Query<Entity, Or<(With<EngineLoopAudio>, With<AmbientLoopAudio>, With<AlarmLoopAudio>)>>,
+    loops: Query<
+        Entity,
+        Or<(
+            With<EngineLoopAudio>,
+            With<AmbientLoopAudio>,
+            With<AlarmLoopAudio>,
+            With<DreadLoopAudio>,
+        )>,
+    >,
     mut state: ResMut<AlarmState>,
     mut commands: Commands,
 ) {
@@ -505,5 +565,40 @@ fn docking_audio(
     let Some(audio) = audio else { return };
     for _ in docked.read() {
         play_oneshot(&mut commands, audio.ui_terminal[1].clone(), UI_VOL * settings.ui_volume);
+    }
+}
+
+#[cfg(test)]
+mod dread_tests {
+    /// Mirrors the ramp in dread_volume.
+    fn ramp(level: f32, from: f32, ceiling: f32) -> f32 {
+        let span = (1.0 - from).max(0.001);
+        ((level - from) / span).clamp(0.0, 1.0) * ceiling
+    }
+
+    /// The opening must be silent under the existing drone. If the bed is
+    /// audible in the first hour there is nothing left to bring in later.
+    #[test]
+    fn the_opening_has_no_dread_bed() {
+        assert_eq!(ramp(0.0, 0.30, 0.26), 0.0);
+        assert_eq!(ramp(0.29, 0.30, 0.26), 0.0);
+        assert_eq!(ramp(0.0, 0.70, 0.18), 0.0);
+    }
+
+    /// It thickens rather than simply getting louder: the second layer must
+    /// stay silent well past the point the first has arrived.
+    #[test]
+    fn the_layers_arrive_in_order() {
+        let level = 0.5;
+        assert!(ramp(level, 0.30, 0.26) > 0.0, "the low layer should be in by half way");
+        assert_eq!(ramp(level, 0.70, 0.18), 0.0, "the high layer is early");
+    }
+
+    /// And neither layer should ever drown the game. These sit under an
+    /// ambient drone that is itself only at 0.30.
+    #[test]
+    fn it_stays_under_everything_else() {
+        assert!(ramp(1.0, 0.30, 0.26) <= 0.30);
+        assert!(ramp(1.0, 0.70, 0.18) <= 0.30);
     }
 }
