@@ -312,7 +312,7 @@ fn discover_log_entries(
     // this system no matter what they carried.
     log_query: Query<(&GlobalTransform, &LogEntry), Without<Ship>>,
     mut statistics: ResMut<Statistics>,
-    mut notifications: MessageWriter<ShowNotification>,
+    mut log_queue: ResMut<crate::narrative::reader::LogQueue>,
     mut discovered_logs: Local<Vec<String>>,
 ) {
     let Ok(ship_gt) = ship_query.single() else { return };
@@ -330,12 +330,10 @@ fn discover_log_entries(
                 statistics.logs_found.push(log.title.clone());
             }
 
-            // Show the log entry as a long notification
-            notifications.write(ShowNotification {
-                message: format!("[LOG: {}] {}", log.title, log.text),
-                notification_type: NotificationType::Info,
-                duration: 8.0,
-            });
+            // Goes to the reader, not a toast. Several entries run past two
+            // hundred characters and the toast is 340px wide with an eight
+            // second life — they were unreadable by construction.
+            log_queue.push(log.title.clone(), log.text.clone());
         }
     }
 }
