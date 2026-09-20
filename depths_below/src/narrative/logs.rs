@@ -32,34 +32,50 @@ pub fn tier_for_danger(danger: f32) -> u8 {
     if danger < 1.0 { 0 } else if danger < 2.0 { 1 } else if danger < 4.0 { 2 } else { 3 }
 }
 
+/// The title the ending keys on. A named constant because a magic string
+/// scattered across the victory check and the corpus is exactly how the old
+/// ending ended up depending on an entry that could not spawn.
+pub const FINALE_TITLE: &str = "[UNTITLED]";
+
+/// The corpus, low to high.
+///
+/// The voice drifts on purpose. Tier 0 and 1 are other people's paperwork:
+/// salvage assays, maintenance orders, a black box. Somewhere in tier 2 the
+/// attribution starts failing and the first person arrives without announcing
+/// itself. By tier 3 there is no one else left writing. Nothing in here ever
+/// states the premise; the entries just stop being about someone else.
 pub const LOG_ENTRIES: &[LogEntryDef] = &[
-    // ---- tier 0 ----
-    LogEntryDef { tier: 0, title: "Expedition Log #1", text: "Day 3: We've pushed past the asteroid fields. Radar shows massive structures ahead. Not natural formations." },
-    LogEntryDef { tier: 0, title: "Recovered Note", text: "To whoever finds this: the company lied about what's out here. Turn back. The station has forgotten this sector for good reason." },
-    LogEntryDef { tier: 0, title: "Ship's Log: CSS Meridian", text: "Engine failure at sector 180. Hull compromised. Three crew missing since last night. Nobody heard them leave." },
-    LogEntryDef { tier: 0, title: "Expedition Log #2", text: "Day 7: Found wreckage of a previous expedition. Their hull was breached from the INSIDE. What could do that?" },
-    LogEntryDef { tier: 0, title: "Research Note: Acoustics", text: "We've been recording infrasound from deeper in the void. When played back at normal speed, it sounds like breathing." },
-    LogEntryDef { tier: 0, title: "Distress Signal (Decoded)", text: "MAYDAY MAYDAY. Something is following us. It matches our speed exactly. It's been three days. It never gets closer, never falls behind." },
-    LogEntryDef { tier: 0, title: "Research Note: Luminescence", text: "The creatures here don't just glow - they communicate with light. Patterns too complex to be random. Are they... words?" },
-    // ---- tier 1 ----
-    LogEntryDef { tier: 1, title: "Expedition Log #3", text: "Day 12: The ruins are older than anything at the station. Carved metal at sector 800. Impossible engineering. The carvings depict... us. Ships. How?" },
-    LogEntryDef { tier: 1, title: "Personal Journal: Dr. Vasquez", text: "The symbols match nothing in any database. But I dream about them now. In the dreams, I can read them perfectly. I just can't remember what they say when I wake." },
-    LogEntryDef { tier: 1, title: "Engineering Report", text: "Hull sensors report external contact - something is running along the hull. Like fingers. There's nothing on radar." },
-    LogEntryDef { tier: 1, title: "Audio Transcript #47", text: "RESEARCHER: The artifact we recovered - it's warm to the touch. CAPTAIN: That's impossible in the void. RESEARCHER: I know. And it's getting warmer." },
-    LogEntryDef { tier: 1, title: "Warning Beacon", text: "AUTOMATED MESSAGE: Do not proceed past sector 1000. Repeat: DO NOT proceed. The watchers are not what they seem." },
-    // ---- tier 2 ----
-    LogEntryDef { tier: 2, title: "Expedition Log #4", text: "Day 18: We can hear it now. A low hum from deeper in. The instruments say nothing is there, but we can all hear it. Chen says it's trying to communicate." },
-    LogEntryDef { tier: 2, title: "Recovered Black Box", text: "Last words of the crew of the DSV Orpheus: 'It opened its eyes. Oh god, the whole void opened its eyes.'" },
-    LogEntryDef { tier: 2, title: "Research Note: Evolution", text: "These creatures didn't evolve to live here. They evolved somewhere else and were... placed here. Like prisoners. Or guards." },
-    LogEntryDef { tier: 2, title: "Fragment: Ancient Text", text: "Translation (partial): '...and in the deep void we built our prisons, for what slumbers must never dream of the worlds above...'" },
-    LogEntryDef { tier: 2, title: "Personal Log: Unknown Author", text: "Day ??? The compass doesn't work anymore. Neither does time. My watch says it's been 3 hours. My body says weeks. I can feel the hum in my teeth." },
-    LogEntryDef { tier: 2, title: "Radio Intercept", text: "Station control, this is Deep Outpost Seven. We are NOT alone out here. I don't mean the creatures. Something is watching through them. Request immediate extraction." },
-    // ---- tier 3 ----
-    LogEntryDef { tier: 3, title: "Final Transmission", text: "They built this place to contain something. The ruins aren't ruins - they're a cage. And it's waking up." },
-    LogEntryDef { tier: 3, title: "Carved Metal (Translated)", text: "WE WHO GUARD THE DEEP VOID WARN YOU: WHAT SLEEPS BEYOND DREAMS OF YOUR WORLDS. DO NOT WAKE IT. DO NOT LISTEN TO ITS SONGS." },
-    LogEntryDef { tier: 3, title: "???", text: "The hum has stopped. That's worse. That's so much worse." },
-    LogEntryDef { tier: 3, title: "Final Entry", text: "We were wrong about everything. The void isn't hostile. It's terrified. Space itself is trying to keep us away from what lies beyond." },
-    LogEntryDef { tier: 3, title: "[UNTITLED]", text: "You found it. The deepest point. The silence is absolute. The void itself seems alive. You understand now - you were always meant to come here. It was always going to be you." },];
+    // ---- tier 0: nothing is wrong yet, and everything is already here ----
+    LogEntryDef { tier: 0, title: "Expedition Log #1", text: "Day 3: Pushed past the asteroid fields. Radar shows structures ahead. Too regular to be rock. Logged as formations pending survey." },
+    LogEntryDef { tier: 0, title: "Recovered Note", text: "To whoever finds this: the company lied about what's out here. Turn back. The station has forgotten this sector and it had reasons." },
+    LogEntryDef { tier: 0, title: "Ship's Log: CSS Meridian", text: "Engine failure at sector 180. Hull compromised. Three crew missing since last shift. Nobody heard them leave, and the lock cycled from the inside." },
+    LogEntryDef { tier: 0, title: "Salvage Assay, Hull 7731", text: "Cut in expecting a Choir wreck. Found our own frame layout instead. Same reactor spacing, same dogleg in the starboard corridor that Vance swears at daily. Serial plate scratched out. Ours isn't. Filing for review and expecting to be told it's coincidence." },
+    LogEntryDef { tier: 0, title: "Maintenance Order 44-C", text: "Repair nanites are stripping plate off the aft sections to patch the forward ones. Technically working as designed. The ship is eating itself to stay whole and the paperwork calls that maintenance." },
+    LogEntryDef { tier: 0, title: "Crew Complaint (unresolved)", text: "Kowal says someone is filing reports under his name in his handwriting. Checked the log. The entries are his. He does not remember writing them and the timestamps are from his rest shift." },
+    LogEntryDef { tier: 0, title: "Research Note: Acoustics", text: "We have been recording infrasound from further out. Slowed to normal speed it is periodic, and the period is about four seconds. Chen declines to characterise it in writing. For the record, slowed down, it is breathing." },
+
+    // ---- tier 1: still someone else's problem, structurally wrong ----
+    LogEntryDef { tier: 1, title: "Expedition Log #2", text: "Day 7: Found the wreck of an earlier survey. Hull breached outward. Whatever did it started inside, with nothing aboard that could have made that hole." },
+    LogEntryDef { tier: 1, title: "Distress Signal (Decoded)", text: "MAYDAY. Something is following us. It matches our speed exactly. Three days now. Never closer, never further. When we cut engines it cut engines." },
+    LogEntryDef { tier: 1, title: "Engineering Report", text: "Hull sensors keep reporting external contact along the dorsal plating. Sequential, slow, from bow to stern. Like fingers. Radar is clear and has been clear the whole time." },
+    LogEntryDef { tier: 1, title: "Personal Journal: Dr. Vasquez", text: "The symbols match nothing in any database. But I dream about them now, and in the dreams I read them without effort. I wake up certain I understood, and unable to say what." },
+    LogEntryDef { tier: 1, title: "Warning Beacon", text: "AUTOMATED: Do not proceed beyond this marker. Repeat: do not proceed. The watchers are not what they appear to be and they are not the thing being watched." },
+
+    // ---- tier 2: attribution starts failing; the first person arrives ----
+    LogEntryDef { tier: 2, title: "Recovered Black Box", text: "Third derelict this month built to our spec. Command says stop asking. Kowal says the hulls are older than the yard that would have built them, by a margin he refuses to put in writing." },
+    LogEntryDef { tier: 2, title: "Audio Transcript #47", text: "RESEARCHER: The artifact is warm to the touch. CAPTAIN: Nothing is warm out here. RESEARCHER: I know what the void does to temperature. I am telling you it is warm, and I am telling you it is warmer than it was." },
+    LogEntryDef { tier: 2, title: "Assay 7731 — resubmitted", text: "I have filed this report before. The wording I reach for is already the wording in the file. I am told the handwriting is mine. I am told I am the one who scratched out the plate." },
+    LogEntryDef { tier: 2, title: "Research Note: Evolution", text: "These things did not evolve here. Nothing evolves in this. They were brought and left, and the arrangement of them is deliberate. Prisoners, or guards. The difference matters less the longer I look at it." },
+    LogEntryDef { tier: 3, title: "Personal Log (unsigned)", text: "Day ? The compass stopped agreeing with itself. So did the clock. The watch says three hours. My hands say weeks. I can feel the hum in my teeth and I have started to find it restful, which frightens me more than the hum." },
+    LogEntryDef { tier: 2, title: "Fragment: Ancient Text", text: "Partial translation: \"...and in the deep void we built our prisons, for what slumbers must never dream of the worlds above, nor of the hands that made it a place to sleep...\"" },
+
+    // ---- tier 3: no one else is writing ----
+    LogEntryDef { tier: 3, title: "[corrupted]", text: "Ninety-six percent match against my own schematic. I have checked four times. I keep checking because each time I do, I am the thing doing the checking, and that is the part I cannot get underneath." },
+    LogEntryDef { tier: 2, title: "Carved Metal (Translated)", text: "WE WHO GUARD THE DEEP VOID WARN YOU. WHAT SLEEPS BEYOND DREAMS OF YOUR WORLDS. DO NOT WAKE IT. DO NOT ANSWER IT. DO NOT ASSUME THE VOICE ANSWERING IS NOT YOUR OWN." },
+    LogEntryDef { tier: 3, title: "[no header]", text: "The hum has stopped. I had stopped hearing it the way you stop hearing your own engines, and now it is gone and the silence has a shape. It is waiting to see what I do about it." },
+    LogEntryDef { tier: 3, title: "Final Entry", text: "I had the direction of it backwards the whole time. The void is not hostile. The void is terrified, and it has spent a very long time and a great deal of structure trying to keep something from getting back out. I have been sailing toward that thing and calling it exploration." },
+    LogEntryDef { tier: 3, title: FINALE_TITLE, text: "You are here. There is nothing further out than this and there never was. The silence is absolute and it is not empty, it is attentive. You understand now, in the way you understand your own name: you were not sent to find this. You were the thing that got out, and you have been coming home the entire time." },
+];
 
 /// Pick one entry allowed at `tier`, chosen by `key` so a given place always
 /// yields the same log. Falls back to lower tiers, so an early system is never
@@ -119,4 +135,80 @@ mod tests {
             assert_eq!(a, b);
         }
     }
+}
+
+#[cfg(test)]
+mod corpus_tests {
+    use super::*;
+
+    /// The finale must exist in the corpus and sit at the top tier. The ending
+    /// keys on it, and the previous version of this arrangement shipped an
+    /// ending whose trigger could never appear.
+    #[test]
+    fn the_finale_exists_and_is_last() {
+        let finale = LOG_ENTRIES
+            .iter()
+            .find(|e| e.title == FINALE_TITLE)
+            .expect("the finale entry is missing from the corpus");
+        assert_eq!(finale.tier, MAX_TIER, "the finale must sit at the deepest tier");
+        assert_eq!(
+            LOG_ENTRIES.iter().filter(|e| e.title == FINALE_TITLE).count(),
+            1,
+            "two entries share the finale title, so the ending could fire early"
+        );
+    }
+
+    /// Titles must be unique. Discovery dedupes by title, so a duplicate makes
+    /// one of the two unreadable forever.
+    #[test]
+    fn titles_are_unique() {
+        let mut seen: Vec<&str> = LOG_ENTRIES.iter().map(|e| e.title).collect();
+        seen.sort_unstable();
+        let before = seen.len();
+        seen.dedup();
+        assert_eq!(before, seen.len(), "duplicate log titles — discovery dedupes by title");
+    }
+
+    /// The voice drifts outward, and it has to drift *monotonically*.
+    ///
+    /// Tier 0 is institutional paperwork about other people. By the deepest
+    /// tier there is nobody else writing. An earlier draft of this corpus
+    /// passed a weaker version of this check while actually peaking in the
+    /// middle, so the assertion is per-step rather than just end-to-end:
+    /// a rewrite that flattens one rung gets caught.
+    ///
+    /// The finale is excluded. It speaks in the second person on purpose —
+    /// that turn is the point of it, and counting it as "not first person"
+    /// would penalise the one entry doing the most work.
+    #[test]
+    fn the_voice_drifts_outward() {
+        fn first_person(t: &str) -> bool {
+            t.split(|c: char| !c.is_alphanumeric() && c != '\'')
+                .any(|w| matches!(w, "I" | "I'm" | "I've" | "my" | "My" | "me"))
+        }
+
+        let mut rates = Vec::new();
+        for tier in 0..=MAX_TIER {
+            let band: Vec<_> = LOG_ENTRIES
+                .iter()
+                .filter(|e| e.tier == tier && e.title != FINALE_TITLE)
+                .collect();
+            assert!(!band.is_empty(), "tier {tier} has no entries");
+            let fp = band.iter().filter(|e| first_person(e.text)).count();
+            rates.push(fp as f32 / band.len() as f32);
+        }
+
+        assert_eq!(rates[0], 0.0, "tier 0 should be other people's paperwork, not a diary");
+        for w in rates.windows(2) {
+            assert!(
+                w[1] >= w[0],
+                "the first person must not get rarer further out: {rates:?}"
+            );
+        }
+        assert!(
+            rates[MAX_TIER as usize] > 0.5,
+            "the deepest tier should mostly be speaking as itself: {rates:?}"
+        );
+    }
+
 }

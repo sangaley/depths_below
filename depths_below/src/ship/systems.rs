@@ -117,9 +117,11 @@ pub fn check_victory(
     }
 
     // Victory requires reaching 2200m+ depth AND finding the final log.
-    // The [UNTITLED] log spawns at depth_level 20-23 (2000-2300m range).
+    // The finale entry is keyed by name through narrative::logs::FINALE_TITLE
+    // rather than a literal, because the last time this check owned its own
+    // copy of the string the entry it named could not spawn at all.
     if depth_state.current_depth >= 2200.0
-        && statistics.logs_found.iter().any(|l| l == "[UNTITLED]")
+        && statistics.logs_found.iter().any(|l| l == crate::narrative::logs::FINALE_TITLE)
     {
         victory_state.achieved = true;
         notifications.write(ShowNotification {
