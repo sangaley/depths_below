@@ -112,6 +112,7 @@ fn main() {
         .add_plugins(GameAudioPlugin)
         .add_plugins(GamepadPlugin)
         .add_plugins(TutorialPlugin)
+        .add_plugins(narrative::NarrativePlugin)
 
         .run();
 }
