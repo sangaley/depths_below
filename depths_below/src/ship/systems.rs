@@ -42,7 +42,10 @@ pub fn update_ship_state(
 /// Checks game over conditions
 pub fn check_game_over(
     hull_state: Res<HullState>,
-    crew_query: Query<&CrewMember>,
+    // Scoped, like core_query below it. Unscoped, a single living AI crewman
+    // anywhere in the system kept "all crew dead" permanently false — the
+    // player's whole crew could die and the run continued as a ghost ship.
+    crew_query: Query<&CrewMember, Without<crate::ai_ship::components::OwnedByAiShip>>,
     // Includes destroyed cores on purpose — see below.
     core_query: Query<
         Option<&DestroyedModule>,

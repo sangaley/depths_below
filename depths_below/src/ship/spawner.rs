@@ -286,6 +286,49 @@ pub(crate) fn builtin_starter_design() -> crate::building::blueprint::Blueprint 
         });
     }
 
+    // Memory Cores. These must exist on the built-in design and not only in
+    // designs/starter.json, because the JSON is what normally wins and the
+    // built-in is the fallback when it is missing or regenerated. Without them
+    // here, a regenerated starter silently ships with no cores at all — which
+    // switches off both the autonomy mechanic and the last-core death
+    // condition, with nothing reporting that anything is wrong. Same silent
+    // fallback trap as the faction designs.
+    //
+    // Spread, not clustered: three cores in adjacent cells all die to one hit,
+    // which makes losing the last one an accident rather than a story.
+    // Found rather than hardcoded: the plating above has already claimed
+    // cells by this point, so fixed coordinates silently found nothing free
+    // and added no cores at all.
+    let taken: std::collections::HashSet<IVec2> =
+        modules.iter().map(|m| m.grid_pos).collect();
+    let mut free_inner: Vec<IVec2> = hull_cells
+        .iter()
+        .filter(|c| c.layer == HullLayer::Inner && !taken.contains(&c.grid_pos))
+        .map(|c| c.grid_pos)
+        .collect();
+    free_inner.sort_by_key(|p| (p.x, p.y));
+    if !free_inner.is_empty() {
+        // Take from each end and the middle so one hit cannot take all three.
+        let last = free_inner.len() - 1;
+        let picks = [0usize, last / 2, last];
+        let mut placed: Vec<IVec2> = Vec::new();
+        for i in picks {
+            let grid_pos = free_inner[i];
+            if placed.contains(&grid_pos) {
+                continue;
+            }
+            placed.push(grid_pos);
+            modules.push(BlueprintModule {
+                module_type: ModuleType::MemoryCore,
+                grid_pos,
+                rotation: Rotation::North,
+                custom_name: None,
+                subcomponents: None,
+                extras: None,
+            });
+        }
+    }
+
     lay_hallways(&mut hull_cells, &modules);
 
     Blueprint {
@@ -1117,5 +1160,70 @@ mod spawn_activation_tests {
                 "{module_type:?} spawns inactive - burial at space will silently never happen"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod starter_core_tests {
+    use super::*;
+
+    /// The built-in starter and the shipped JSON must agree about Memory
+    /// Cores.
+    ///
+    /// designs/starter.json normally wins; the built-in is the fallback when
+    /// the file is missing or has been regenerated. If only the JSON carries
+    /// cores, a regenerated starter silently ships with none — switching off
+    /// both the autonomy mechanic and the last-core death condition, with
+    /// nothing reporting that anything is wrong. That is the same trap the
+    /// faction designs had.
+    #[test]
+    fn the_builtin_starter_has_memory_cores() {
+        let design = builtin_starter_design();
+        let cores = design
+            .modules
+            .iter()
+            .filter(|m| m.module_type == ModuleType::MemoryCore)
+            .count();
+        assert!(
+            cores > 0,
+            "the built-in starter has no Memory Cores, so a regenerated \
+             starter.json would disable the core death condition silently"
+        );
+
+        // And they must not all sit in one place, or one hit ends the run.
+        if cores > 1 {
+            let positions: Vec<IVec2> = design
+                .modules
+                .iter()
+                .filter(|m| m.module_type == ModuleType::MemoryCore)
+                .map(|m| m.grid_pos)
+                .collect();
+            let spread = positions
+                .iter()
+                .flat_map(|a| positions.iter().map(move |b| (*a - *b).abs().max_element()))
+                .max()
+                .unwrap_or(0);
+            assert!(spread >= 3, "cores are clustered ({spread} cells apart at most)");
+        }
+    }
+
+    /// If the shipped design exists, it must agree with the built-in about
+    /// whether this ship has a mind.
+    #[test]
+    fn the_shipped_starter_agrees() {
+        let Some(shipped) = crate::building::blueprint::load_design_file("designs/starter.json")
+        else {
+            return; // not present in this checkout; the built-in test covers it
+        };
+        let shipped_cores = shipped
+            .modules
+            .iter()
+            .filter(|m| m.module_type == ModuleType::MemoryCore)
+            .count();
+        assert!(
+            shipped_cores > 0,
+            "designs/starter.json has no Memory Cores but the built-in does — \
+             the ship the player actually flies would have no mind"
+        );
     }
 }

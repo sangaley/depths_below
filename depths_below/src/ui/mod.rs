@@ -227,7 +227,10 @@ impl Plugin for UiPlugin {
                     crew_duty_option_click,
                     sync_crew_duty_dropdowns,
                     refresh_crew_duty_labels,
-                ).run_if(in_state(GameState::Exploring)),
+                ).run_if(
+                    in_state(GameState::Exploring)
+                        .or_else(in_state(GameState::StationDocked)),
+                ),
             )
             // Map-click warp destination + G-hold warp dash (while exploring)
             .add_systems(
@@ -366,10 +369,15 @@ fn toolbar_actions(game: &GameState, build: &BuildState) -> &'static [ToolbarAct
         act("Ping", "Z", K::KeyZ),
         act("Dock", "F", K::KeyF),
     ];
-    const DOCKED: [ToolbarAction; 5] = [
+    // Crew belongs here as much as Hire does: the tutorial's second-to-last
+    // step tells the player to manage crew while docked, and until this button
+    // existed there was nothing on screen to press and the C key did nothing
+    // in this state either — a dead end one step before the payoff line.
+    const DOCKED: [ToolbarAction; 6] = [
         act("Build", "B", K::KeyB),
         act("Shop", "U", K::KeyU),
         act("Jobs", "J", K::KeyJ),
+        act("Crew", "C", K::KeyC),
         act("Hire", "H", K::KeyH),
         act("Launch", "Enter", K::Enter),
     ];

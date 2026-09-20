@@ -43,7 +43,6 @@ impl Plugin for WorldPlugin {
                     update_chunks,
                     check_depth_zone_change,
                     update_biome,
-                    check_poi_discovery,
                     tick_market_events,
                     // Both claim the shared F press (resources::InteractPress),
                     // so they must sit behind the salvage handler: crew on the
@@ -68,7 +67,15 @@ impl Plugin for WorldPlugin {
             // the wreck actually was.
             .add_systems(
                 PostUpdate,
-                discover_log_entries
+                // Both of these compare GlobalTransform, so both must run
+                // after propagation. check_poi_discovery was left behind in
+                // Update when discover_log_entries was moved, and had exactly
+                // the same bug: a point of interest spawned this frame still
+                // carries the default GlobalTransform — the world origin —
+                // and the ship starts 50 units from it, so every streamed POI
+                // read as adjacent and was instantly "discovered". That meant
+                // toast spam and contract objectives completing on their own.
+                (discover_log_entries, check_poi_discovery)
                     .after(bevy::transform::TransformSystems::Propagate)
                     .run_if(in_state(GameState::Exploring)),
             );
@@ -326,7 +333,6 @@ fn discover_log_entries(
     mut statistics: ResMut<Statistics>,
     mut log_queue: ResMut<crate::narrative::reader::LogQueue>,
     mut finale: ResMut<crate::narrative::FinaleFound>,
-    mut discovered_logs: Local<Vec<String>>,
 ) {
     let Ok(ship_gt) = ship_query.single() else { return };
     let ship_pos = ship_gt.translation().truncate();
@@ -335,13 +341,17 @@ fn discover_log_entries(
         let poi_pos = poi_gt.translation().truncate();
         let dist = ship_pos.distance(poi_pos);
 
-        if dist < 500.0 && !discovered_logs.contains(&log.title) {
-            discovered_logs.push(log.title.clone());
-
-            // Record in statistics
-            if !statistics.logs_found.contains(&log.title) {
-                statistics.logs_found.push(log.title.clone());
-            }
+        // Statistics.logs_found is the only record of what has been read.
+        //
+        // This used to dedupe against a system `Local` as well, which was a
+        // quiet disaster: a Local outlives the run, and reset_for_new_game has
+        // no way to clear one. So after a single New Expedition every log read
+        // in the previous run was permanently unreadable — the finale
+        // included, which made the ending unreachable on any second run until
+        // the process was restarted. logs_found IS reset, so it is the right
+        // and only source of truth.
+        if dist < 500.0 && !statistics.logs_found.contains(&log.title) {
+            statistics.logs_found.push(log.title.clone());
 
             // The ending keys on *finding* the finale, not on holding it, so
             // that loading a save from after the ending does not replay it.

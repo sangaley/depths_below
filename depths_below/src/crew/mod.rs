@@ -274,7 +274,11 @@ pub fn spawn_starter_crew(
     assets: Res<AssetServer>,
     crew_atlases: Res<animation::CrewAtlases>,
     ship_query: Query<Entity, With<Ship>>,
-    existing_crew: Query<Entity, With<CrewMember>>,
+    // Must exclude AI crew. This runs on EVERY dock, not just startup, and
+    // unscoped it meant any living enemy crewman anywhere suppressed the
+    // player's replacement crew — so a wiped-out run could not recover by
+    // docking either.
+    existing_crew: Query<Entity, (With<CrewMember>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
     quarters_query: Query<(&Quarters, &Module, &ChildOf)>,
     mut roster: ResMut<CrewRoster>,
 ) {

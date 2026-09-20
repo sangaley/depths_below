@@ -111,14 +111,19 @@ fn collect_save_data(
     discovered_locations: &DiscoveredLocations,
     world_state: &WorldState,
     ship_query: &Query<&Transform, With<Ship>>,
+    // Every one of these MUST exclude AI ships. Enemy hull, modules and crew
+    // carry the same components as the player's, and hull cells are recorded
+    // from LOCAL transforms — so an enemy plate at its own (2,3) was being
+    // written into the save as the player's (2,3). Autosave runs every two
+    // minutes while exploring, which is exactly when enemies are around.
     module_query: &Query<(
         &Module,
         Option<&CustomModule>,
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&crate::building::customization::tuning::SelectedAmmo>,
-    )>,
-    hull_query: &Query<(&HullSegment, &Transform)>,
-    crew_query: &Query<(Entity, &CrewMember, Option<&CrewDuty>)>,
+    ), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    hull_query: &Query<(&HullSegment, &Transform), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    crew_query: &Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
     current_state: &State<GameState>,
     galaxy_map: &GalaxyMap,
     streaming: &SystemStreamingManager,
@@ -275,9 +280,9 @@ fn handle_save_request(
         Option<&CustomModule>,
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&crate::building::customization::tuning::SelectedAmmo>,
-    )>,
-    hull_query: Query<(&HullSegment, &Transform)>,
-    crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>)>,
+    ), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    hull_query: Query<(&HullSegment, &Transform), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
 ) {
     let (world_state, galaxy_map, streaming, drifting_dead) = &world_galaxy;
     for event in save_events.read() {
@@ -425,9 +430,11 @@ fn rebuild_entities_from_save(
     asset_server: Res<AssetServer>,
     registry: Res<crate::building::registry::ModuleRegistry>,
     ship_query: Query<Entity, With<Ship>>,
-    module_entities: Query<Entity, With<Module>>,
-    hull_entities: Query<Entity, With<HullSegment>>,
-    crew_entities: Query<Entity, With<CrewMember>>,
+    // Mirror of the save-side defect: unscoped, these despawned every live AI
+    // ship's blocks and crew, gutting them into empty root entities on load.
+    module_entities: Query<Entity, (With<Module>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
+    hull_entities: Query<Entity, (With<HullSegment>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
+    crew_entities: Query<Entity, (With<CrewMember>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
     mut galaxy_map: ResMut<GalaxyMap>,
     mut streaming: ResMut<SystemStreamingManager>,
     mut drifting_dead: ResMut<crate::crew::burial::DriftingDead>,

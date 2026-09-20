@@ -38,7 +38,14 @@ impl Plugin for GameAudioPlugin {
             .init_resource::<AlarmState>()
             .add_systems(Startup, load_audio)
             .add_systems(OnEnter(GameState::Exploring), start_flight_loops)
-            .add_systems(OnExit(GameState::Exploring), stop_flight_loops)
+            // Deliberately NOT OnExit(Exploring). That fired on every pause,
+            // on docking, and on entering the ending — despawning the drone,
+            // engine, alarm and both dread layers and restarting them from
+            // sample zero on the way back. Pausing mid-fight hard-cut the
+            // whole soundscape, and the 2.5-minute ending played in total
+            // silence because Truth is entered from Exploring.
+            .add_systems(OnEnter(GameState::MainMenu), stop_flight_loops)
+            .add_systems(OnEnter(GameState::GameOver), stop_flight_loops)
             .add_systems(Update, (
                 weapon_fired_audio,
                 explosion_audio,
