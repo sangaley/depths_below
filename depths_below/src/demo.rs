@@ -17,6 +17,13 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //                          straight into Exploring with the starter ship,
 //                          the normal 37-ship world simulation, and full
 //                          manual control (no autopilot).
+//   DEPTHS_SHOTS=<n>    — engine-side screenshot every n seconds during
+//                          NORMAL play: no autopilot, no menu skip, nothing
+//                          else changed. F7 takes one on demand. Captures the
+//                          render target, not the display, so it works while
+//                          the game is behind other windows and never
+//                          photographs whatever app happens to be in front.
+//                          Dir: DEPTHS_SHOTS_DIR (default /tmp/depths_shots).
 //   DEPTHS_MOVETEST=1   — bare movement sandbox: instant skip (no menu/
 //                          station flash), starter ship, manual control,
 //                          and NO AI ships spawned — just open space and
@@ -191,5 +198,84 @@ fn demo_screenshots(
     let path = format!("{}/frame_{:03}.png", dir, *index);
     *index += 1;
 
+    commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path));
+}
+
+// ============================================================================
+// ENGINE-SIDE CAPTURE — usable during ordinary play.
+//
+// The existing DEPTHS_DEMO capture is welded to the autopilot, which is no use
+// for photographing a session somebody is actually playing. This is the same
+// mechanism with nothing else attached.
+//
+// It matters that this is an engine capture rather than an OS screen grab.
+// `Screenshot::primary_window()` reads the render target, so the game can be
+// buried behind other windows and the frame still comes out clean and at the
+// render resolution. An OS grab photographs the display, which means it
+// catches whatever is actually in front — verified the hard way.
+// ============================================================================
+
+/// Marker so the capture plugin can be added unconditionally and cost nothing
+/// when neither the env var nor the key is used.
+pub struct CapturePlugin;
+
+#[derive(Resource)]
+struct CaptureState {
+    every: Option<f32>,
+    since: f32,
+    index: u32,
+    dir: String,
+}
+
+impl Plugin for CapturePlugin {
+    fn build(&self, app: &mut App) {
+        let every = std::env::var("DEPTHS_SHOTS")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+            .filter(|v| *v > 0.0);
+        let dir = std::env::var("DEPTHS_SHOTS_DIR")
+            .unwrap_or_else(|_| "/tmp/depths_shots".to_string());
+        if every.is_some() {
+            info!("capture: every {}s into {}  (F7 for one now)", every.unwrap(), dir);
+        }
+        app.insert_resource(CaptureState { every, since: 0.0, index: 0, dir })
+            .add_systems(Update, capture_frames);
+    }
+}
+
+fn capture_frames(
+    mut commands: Commands,
+    time: Res<Time>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut st: ResMut<CaptureState>,
+) {
+    let on_demand = keys.just_pressed(KeyCode::F7);
+
+    let periodic = match st.every {
+        Some(every) => {
+            st.since += time.delta_secs();
+            if st.since >= every {
+                st.since = 0.0;
+                true
+            } else {
+                false
+            }
+        }
+        None => false,
+    };
+
+    if !on_demand && !periodic {
+        return;
+    }
+
+    if std::fs::create_dir_all(&st.dir).is_err() {
+        warn!("capture: cannot create {}", st.dir);
+        return;
+    }
+    let path = format!("{}/shot_{:04}.png", st.dir, st.index);
+    st.index += 1;
+    if on_demand {
+        info!("capture: {}", path);
+    }
     commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path));
 }

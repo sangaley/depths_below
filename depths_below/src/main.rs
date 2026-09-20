@@ -107,6 +107,7 @@ fn main() {
         ))
         .add_plugins(SpatialPlugin)
         .add_plugins(DemoPlugin)
+        .add_plugins(demo::CapturePlugin)
         .add_plugins(AutoplayPlugin)
         .add_plugins(DebugPlugin)
         .add_plugins(GameAudioPlugin)
