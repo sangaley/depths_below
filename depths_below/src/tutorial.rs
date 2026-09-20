@@ -21,7 +21,7 @@ use crate::ui::theme::{ThemeColors, ThemeFonts, ThemeSpacing};
 //     [Space]. Nothing is on a timer, so a slow reader is never rushed.
 //
 // The combat lesson is a real encounter. When the player reaches the scan step
-// a single weak Rust Swarm raider is spawned OFF-SCREEN but inside radar range,
+// a single weak Recursive Kingdom raider is spawned OFF-SCREEN but inside radar range,
 // so the player has to ping to find its bearing and fly out to it. Its weapons
 // are clamped to a short range (`tame_tutorial_enemy`) so it holds near its
 // spawn instead of charging across the system. It dies into a real wreck
@@ -301,7 +301,7 @@ fn spawn_tutorial_card(mut commands: Commands) {
 }
 
 /// Spawns the lone training raider once the player reaches the scan step. Weak
-/// faction (Rust Swarm), off-screen but inside radar range, so the player has
+/// faction (Recursive Kingdom), off-screen but inside radar range, so the player has
 /// to ping to find it and fly out to engage.
 fn spawn_tutorial_enemy(
     mut tutorial: ResMut<Tutorial>,
@@ -323,7 +323,7 @@ fn spawn_tutorial_enemy(
     let spawn_pos = player_tf.translation.truncate() + ENEMY_SPAWN_OFFSET;
 
     let enemy = spawner::spawn_ai_ship(
-        AiShipType::RustSwarm,
+        AiShipType::RecursiveKingdom,
         spawn_pos,
         &mut commands,
         &registry,

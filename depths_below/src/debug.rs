@@ -125,23 +125,23 @@ struct DebugKillNextFrame;
 
 /// Factions the debug menu can spawn.
 ///
-/// Note that two of these -- GlassEye and Leviathan -- are excluded by
+/// Note that two of these -- The Silence and Stellar Preserve -- are excluded by
 /// `faction_fights`, so they will never shoot at anything. That is by design
 /// for them, but it means the "spawn hostile ship" key has to filter them out
 /// or it lies one time in four: you get a ship that closes, tracks you, and
 /// then just watches.
 const SPAWNABLE: [AiShipType; 8] = [
-    AiShipType::IronTide,
-    AiShipType::Blackwater,
-    AiShipType::PressureKing,
-    AiShipType::GlassEye,
-    AiShipType::Drowned,
-    AiShipType::AbyssalCult,
-    AiShipType::RustSwarm,
-    AiShipType::Leviathan,
+    AiShipType::TerranHegemony,
+    AiShipType::GildedThrone,
+    AiShipType::CorpseStars,
+    AiShipType::TheSilence,
+    AiShipType::BrokenChoir,
+    AiShipType::SynthesisCollective,
+    AiShipType::RecursiveKingdom,
+    AiShipType::StellarPreserve,
 ];
 
-const BOSSES: [AiShipType; 2] = [AiShipType::Dreadnought, AiShipType::VoidTitan];
+const BOSSES: [AiShipType; 2] = [AiShipType::EternalHegemony, AiShipType::Shepherd];
 
 fn toggle_debug_menu(
     keyboard: Res<ButtonInput<KeyCode>>,
@@ -495,7 +495,7 @@ fn debug_actions(
         let mut cleared = 0;
         for (entity, gt) in hostiles.hostile_query.iter() {
             if gt.translation().truncate().distance(ship_pos) > 6000.0 { continue; }
-            let ship_type = hostiles.ai_type_query.get(entity).copied().unwrap_or(AiShipType::Drowned);
+            let ship_type = hostiles.ai_type_query.get(entity).copied().unwrap_or(AiShipType::BrokenChoir);
             if let Ok(mut state) = hostiles.ai_state_query.get_mut(entity) {
                 if !state.is_destroyed {
                     state.is_destroyed = true;
@@ -533,7 +533,7 @@ fn debug_actions(
         notify(&mut notifications, "[debug] cargo filled with 5x of everything".into());
     }
 
-    // Spawns a boss (Dreadnought/VoidTitan) for testing endgame-tier fights
+    // Spawns a boss (Eternal Hegemony/Shepherd) for testing endgame-tier fights
     // without needing to actually travel to boss territory.
     if keyboard.just_pressed(KeyCode::Digit5) {
         let ship_type = BOSSES[rng.gen_range(0..BOSSES.len())];

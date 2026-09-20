@@ -1176,7 +1176,7 @@ pub struct Projectile {
     ///
     /// AI weapons have carried a SelectedAmmo from their faction loadouts all
     /// along (apply_module_extras), but nothing read it when they fired — so
-    /// every incoming shot resolved as unspecialised, and an Iron Tide firing
+    /// every incoming shot resolved as unspecialised, and a Terran Hegemony ship firing
     /// APFSDS deflected off your plating exactly like a scrap raider's junk.
     pub kinetic: Option<crate::combat::ammo_types::KineticAmmoType>,
 }

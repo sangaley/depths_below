@@ -30,17 +30,17 @@ pub struct RadarShipDot(pub Entity);
 
 /// Radar dot color by disposition toward the player.
 /// Red = hostile, white = neutral. Blue (ally) is reserved — the game has no
-/// player-allied ships yet. GlassEye is the one faction that never attacks.
+/// player-allied ships yet. The Silence is the one faction that never attacks.
 fn radar_ship_color(faction: AiShipType) -> Color {
     match faction {
-        AiShipType::GlassEye => Color::srgb(0.90, 0.90, 0.95), // neutral
+        AiShipType::TheSilence => Color::srgb(0.90, 0.90, 0.95), // neutral
         _ => Color::srgb(1.0, 0.25, 0.25),                     // hostile
     }
 }
 
 fn radar_ship_size(faction: AiShipType) -> f32 {
     match faction {
-        AiShipType::VoidTitan | AiShipType::Dreadnought => 12.0, // bosses stand out
+        AiShipType::Shepherd | AiShipType::EternalHegemony => 12.0, // bosses stand out
         _ => 8.0,
     }
 }

@@ -807,8 +807,8 @@ pub fn check_missile_hits(
                 // This used to apply the FULL warhead to every module inside
                 // the radius, ignoring plating, hull and distance alike — the
                 // one place in combat where armour did not matter, so the
-                // answer to a heavily belted Pressure King was the same as
-                // for a bare Rust Swarm. Now each block soaks by its own
+                // answer to a heavily belted Corpse Stars was the same as
+                // for a bare Recursive Kingdom. Now each block soaks by its own
                 // thickness through the same resolve_impact the guns use,
                 // and damage falls off across the radius.
                 //

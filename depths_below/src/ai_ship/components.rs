@@ -9,21 +9,66 @@ use serde::{Deserialize, Serialize};
 #[derive(Component)]
 pub struct AiShip;
 
-/// Faction/type of AI ship
+/// Faction/type of AI ship.
+///
+/// The names come from the Space Empire story bible. The behaviour under each
+/// one predates it and is unchanged — every mapping was chosen so the name
+/// never contradicts what the faction already does.
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug, Hash, Serialize, Deserialize)]
 pub enum AiShipType {
-    Leviathan,   // Creature-towed ships, net launchers, specimen vaults
-    AbyssalCult, // Bio-organic hybrids, self-healing, kamikaze
-    Drowned,     // Ghost ships, already damaged, erratic, rare loot
-    PressureKing,// Deep-zone lords, pressure weapons, ram upward
-    GlassEye,    // Silent stalkers, no weapons, broadcasts on death
-    IronTide,    // Heavy battleships, railguns, tanky boss faction
-    Blackwater,  // Elite mercs, tactical flanking, hunt bounties
-    RustSwarm,   // Tiny junk ships, spawn in groups, kamikaze
+    /// Creature-keepers. Protect life at any cost, including pruning the
+    /// diseased branches. Nets and specimen vaults; flees rather than fights.
+    StellarPreserve,
+    /// Flesh-machine merger. Bio-organic hybrids, self-healing, kamikaze.
+    /// The screaming in their networks is just data corruption.
+    SynthesisCollective,
+    /// The shattered gestalt. Ghost ships, already damaged, erratic, rare
+    /// loot. Isolated frequencies carry voices that sound like your own.
+    BrokenChoir,
+    /// Entropy cult out of the previous universe. Territorial deep lords with
+    /// crushing weapons who ram anything that enters their reach.
+    CorpseStars,
+    /// They removed their own ambition to end war, and it worked. No weapons
+    /// at all, never initiates, broadcasts once on death.
+    TheSilence,
+    /// Humanist military. Heavy battleships, railguns, discipline, deep
+    /// reserves. The unification wars are a forbidden topic.
+    TerranHegemony,
+    /// The rich of a thousand civilizations, who bought their way out of three
+    /// dying universes. Elite mercenaries, tactical flanking, bounty hunters.
+    GildedThrone,
+    /// One person cloned into a civilization, still arguing with itself. Tiny
+    /// identical hulls that arrive in groups and ram.
+    RecursiveKingdom,
     // --- True bosses: rare, spawn only at the extreme edge of explored
     // space, dwarf every other ship in the roster. Jackpot bounty targets.
-    Dreadnought, // Mega-battleship — Iron Tide's design taken to its limit
-    VoidTitan,   // Abyssal-leviathan hybrid — the largest, hardest kill in the game
+    /// The Hegemony's own past, still at peak power and still obeying dead
+    /// emperors. Their design taken to its limit.
+    EternalHegemony,
+    /// It does not want to kill you. It wants you to become one. The largest
+    /// and hardest kill in the game.
+    Shepherd,
+}
+
+/// The faction's name as the player should ever see it.
+///
+/// Canonical: every player-facing string goes through here. Formatting an
+/// `AiShipType` with `{:?}` prints the Rust identifier instead, which had
+/// already leaked into a kill notification once.
+pub fn faction_display_name(ship_type: AiShipType) -> &'static str {
+    use AiShipType::*;
+    match ship_type {
+        StellarPreserve => "Stellar Preserve",
+        SynthesisCollective => "Synthesis Collective",
+        BrokenChoir => "Broken Choir",
+        CorpseStars => "Corpse Stars",
+        TheSilence => "The Silence",
+        TerranHegemony => "Terran Hegemony",
+        GildedThrone => "Gilded Throne",
+        RecursiveKingdom => "Recursive Kingdom",
+        EternalHegemony => "Eternal Hegemony",
+        Shepherd => "The Shepherd",
+    }
 }
 
 /// Aggregated state for the AI ship
@@ -116,8 +161,8 @@ impl Default for AiShipNav {
 }
 
 /// The ship's current combat target — separate from AiShipNav.destination
-/// because destination is often an OFFSET from the target (Blackwater's
-/// flank position, PressureKing's ram-from-above point), not the target's
+/// because destination is often an OFFSET from the target (Gilded Throne's
+/// flank position, Corpse Stars's ram-from-above point), not the target's
 /// actual position. Weapons fire at `position`; movement still uses
 /// AiShipNav.destination. Recomputed every brain tick (0.25s) in
 /// ai_brain::ai_brain_system via a faction-agnostic distance/value scoring
@@ -341,77 +386,77 @@ pub struct FactionTerritory {
 /// not a single point.
 pub fn faction_territories() -> Vec<FactionTerritory> {
     vec![
-        // Rust Swarm - shallow scrapyards, closest to spawn
+        // Recursive Kingdom - shallow scrapyards, closest to spawn
         FactionTerritory {
-            faction: AiShipType::RustSwarm,
+            faction: AiShipType::RecursiveKingdom,
             center: Vec2::new(30_000.0, -10_000.0),
             radius: 15_000.0,
             ship_count: 8, // many small ships
         },
-        // Leviathan Riders - shallow hunting grounds
+        // Stellar Preserve - shallow preserves, where the tame things are kept
         FactionTerritory {
-            faction: AiShipType::Leviathan,
+            faction: AiShipType::StellarPreserve,
             center: Vec2::new(-45_000.0, -20_000.0),
             radius: 14_000.0,
             ship_count: 4,
         },
-        // Abyssal Cult - mid-depth sacred waters
+        // Synthesis Collective - mid-depth, where flesh and machine were first married
         FactionTerritory {
-            faction: AiShipType::AbyssalCult,
+            faction: AiShipType::SynthesisCollective,
             center: Vec2::new(60_000.0, -50_000.0),
             radius: 16_000.0,
             ship_count: 6,
         },
-        // Glass Eye - everywhere, lurking
+        // The Silence - everywhere, lurking
         FactionTerritory {
-            faction: AiShipType::GlassEye,
+            faction: AiShipType::TheSilence,
             center: Vec2::new(-85_000.0, -55_000.0),
             radius: 18_000.0,
             ship_count: 5,
         },
-        // Blackwater PMC - mid-depth patrol routes, out toward the outer system
+        // Gilded Throne PMC - mid-depth patrol routes, out toward the outer system
         FactionTerritory {
-            faction: AiShipType::Blackwater,
+            faction: AiShipType::GildedThrone,
             center: Vec2::new(60_000.0, -180_000.0),
             radius: 18_000.0,
             ship_count: 6,
         },
-        // The Drowned - scattered everywhere, no home (biggest spread)
+        // The Broken Choir - scattered everywhere, no home (biggest spread)
         FactionTerritory {
-            faction: AiShipType::Drowned,
+            faction: AiShipType::BrokenChoir,
             center: Vec2::new(-60_000.0, -200_000.0),
             radius: 24_000.0,
             ship_count: 8,
         },
-        // Iron Tide - deep military zone, far outer system
+        // Terran Hegemony - deep military zone, far outer system
         FactionTerritory {
-            faction: AiShipType::IronTide,
+            faction: AiShipType::TerranHegemony,
             center: Vec2::new(150_000.0, -250_000.0),
             radius: 18_000.0,
             ship_count: 4, // rare but powerful
         },
-        // Pressure Kings - deep zone only, farthest out of the "normal"
+        // Corpse Stars - deep zone only, farthest out of the "normal"
         // factions (still a real gap before the star itself at ~492k, which
         // stays a distant endgame destination rather than just another
         // territory)
         FactionTerritory {
-            faction: AiShipType::PressureKing,
+            faction: AiShipType::CorpseStars,
             center: Vec2::new(-140_000.0, -320_000.0),
             radius: 35_000.0,
             ship_count: 3,
         },
-        // Dreadnought — one lone mega-battleship, patrolling well past the
+        // Eternal Hegemony — one lone mega-battleship, patrolling well past the
         // star system. Finding it at all is most of the challenge.
         FactionTerritory {
-            faction: AiShipType::Dreadnought,
+            faction: AiShipType::EternalHegemony,
             center: Vec2::new(400_000.0, -420_000.0), // ~580k out
             radius: 60_000.0,
             ship_count: 1,
         },
-        // Void Titan — the single hardest kill in the game, sitting beyond
+        // The Shepherd — the single hardest kill in the game, sitting beyond
         // everything else in explored space.
         FactionTerritory {
-            faction: AiShipType::VoidTitan,
+            faction: AiShipType::Shepherd,
             center: Vec2::new(-600_000.0, -600_000.0), // ~850k out
             radius: 80_000.0,
             ship_count: 1,
@@ -423,16 +468,16 @@ pub fn faction_territories() -> Vec<FactionTerritory> {
 /// to weight bounty-contract rewards by how dangerous the target is.
 pub fn faction_power(faction: AiShipType) -> f32 {
     match faction {
-        AiShipType::VoidTitan => 8.0,      // the hardest kill in the game
-        AiShipType::Dreadnought => 6.0,    // mega-battleship
-        AiShipType::IronTide => 3.0,      // Battleship - strongest "normal" faction
-        AiShipType::Blackwater => 2.0,     // Elite mercs
-        AiShipType::PressureKing => 2.5,   // Heavy armor + weapons
-        AiShipType::AbyssalCult => 1.5,    // Bio-weapons
-        AiShipType::Leviathan => 1.2,      // Creature + some weapons
-        AiShipType::Drowned => 1.0,        // Already damaged
-        AiShipType::RustSwarm => 0.5,      // Weak individually
-        AiShipType::GlassEye => 0.1,       // No weapons
+        AiShipType::Shepherd => 8.0,      // the hardest kill in the game
+        AiShipType::EternalHegemony => 6.0,    // mega-battleship
+        AiShipType::TerranHegemony => 3.0,      // Battleship - strongest "normal" faction
+        AiShipType::GildedThrone => 2.0,     // Elite mercs
+        AiShipType::CorpseStars => 2.5,   // Heavy armor + weapons
+        AiShipType::SynthesisCollective => 1.5,    // Bio-weapons
+        AiShipType::StellarPreserve => 1.2,      // Creature + some weapons
+        AiShipType::BrokenChoir => 1.0,        // Already damaged
+        AiShipType::RecursiveKingdom => 0.5,      // Weak individually
+        AiShipType::TheSilence => 0.1,       // No weapons
     }
 }
 
@@ -442,21 +487,21 @@ pub fn faction_power(faction: AiShipType) -> f32 {
 /// more useful than a 4-bucket threat color once you're familiar with the
 /// roster). Deliberately a different, brighter palette than
 /// ai_ship::spawner::ship_tint — that one's tuned for a ship sprite lit at
-/// combat distance, several of those hues (Blackwater, PressureKing) are
+/// combat distance, several of those hues (Gilded Throne, Corpse Stars) are
 /// near-black and would be invisible as a small flat map pip.
 pub fn faction_map_color(faction: AiShipType) -> bevy::prelude::Color {
     use bevy::prelude::Color;
     match faction {
-        AiShipType::VoidTitan => Color::srgb(1.0, 0.85, 0.2),      // bright gold
-        AiShipType::Dreadnought => Color::srgb(0.95, 0.2, 0.2),    // crimson
-        AiShipType::Leviathan => Color::srgb(0.25, 0.85, 0.75),    // teal
-        AiShipType::AbyssalCult => Color::srgb(0.75, 0.35, 0.95),  // purple
-        AiShipType::Drowned => Color::srgb(0.6, 0.8, 0.65),        // pale gray-green
-        AiShipType::PressureKing => Color::srgb(0.55, 0.35, 0.9),  // violet
-        AiShipType::GlassEye => Color::srgb(0.9, 0.92, 0.95),      // near-white
-        AiShipType::IronTide => Color::srgb(0.65, 0.7, 0.8),       // steel blue-gray
-        AiShipType::Blackwater => Color::srgb(0.4, 0.45, 0.65),    // slate blue
-        AiShipType::RustSwarm => Color::srgb(0.95, 0.55, 0.2),     // rusty orange
+        AiShipType::Shepherd => Color::srgb(1.0, 0.85, 0.2),      // bright gold
+        AiShipType::EternalHegemony => Color::srgb(0.95, 0.2, 0.2),    // crimson
+        AiShipType::StellarPreserve => Color::srgb(0.25, 0.85, 0.75),    // teal
+        AiShipType::SynthesisCollective => Color::srgb(0.75, 0.35, 0.95),  // purple
+        AiShipType::BrokenChoir => Color::srgb(0.6, 0.8, 0.65),        // pale gray-green
+        AiShipType::CorpseStars => Color::srgb(0.55, 0.35, 0.9),  // violet
+        AiShipType::TheSilence => Color::srgb(0.9, 0.92, 0.95),      // near-white
+        AiShipType::TerranHegemony => Color::srgb(0.65, 0.7, 0.8),       // steel blue-gray
+        AiShipType::GildedThrone => Color::srgb(0.4, 0.45, 0.65),    // slate blue
+        AiShipType::RecursiveKingdom => Color::srgb(0.95, 0.55, 0.2),     // rusty orange
     }
 }
 
@@ -468,29 +513,29 @@ pub fn faction_map_color(faction: AiShipType) -> bevy::prelude::Color {
 /// backfill a gun when its crewman dies. Kept as a per-faction number so a
 /// disciplined battleship still runs deeper reserves than a scrappy raider,
 /// but every faction now sits at 1.0+ so their guns actually fire: the old
-/// sub-1.0 values (RustSwarm 0.6, Drowned 0.55) left weak factions with half
+/// sub-1.0 values (Recursive Kingdom 0.6, Broken Choir 0.55) left weak factions with half
 /// their guns permanently dark, which read in play as "enemies that don't
 /// always shoot." This is deliberately separate from faction_power (a
 /// combat-strength RATING). Weak factions stay weak through lower faction_power
 /// (thinner hull, less damage) — not by leaving their weapons unstaffed.
 pub fn crew_fill_fraction(faction: AiShipType) -> f32 {
     match faction {
-        AiShipType::VoidTitan => 1.6,      // apex predator, crew to spare
-        AiShipType::Dreadnought => 1.5,
-        AiShipType::IronTide => 1.4,       // disciplined battleship, deep reserves
-        AiShipType::Blackwater => 1.3,     // tight professional crew
-        AiShipType::PressureKing => 1.3,
-        AiShipType::AbyssalCult => 1.25,   // reckless zealots, fully manned guns
-        AiShipType::Leviathan => 1.2,
-        AiShipType::GlassEye => 1.1,       // skeleton crew (no weapons anyway)
-        AiShipType::RustSwarm => 1.15,     // scrappy, but now mans all its guns
-        AiShipType::Drowned => 1.1,        // ghost ship, still staffs the guns
+        AiShipType::Shepherd => 1.6,      // apex predator, crew to spare
+        AiShipType::EternalHegemony => 1.5,
+        AiShipType::TerranHegemony => 1.4,       // disciplined battleship, deep reserves
+        AiShipType::GildedThrone => 1.3,     // tight professional crew
+        AiShipType::CorpseStars => 1.3,
+        AiShipType::SynthesisCollective => 1.25,   // reckless zealots, fully manned guns
+        AiShipType::StellarPreserve => 1.2,
+        AiShipType::TheSilence => 1.1,       // skeleton crew (no weapons anyway)
+        AiShipType::RecursiveKingdom => 1.15,     // scrappy, but now mans all its guns
+        AiShipType::BrokenChoir => 1.1,        // ghost ship, still staffs the guns
     }
 }
 
 /// Small AI-only derate on reactor power generation for the factions
-/// already flagged weakest by crew_fill_fraction (RustSwarm, Drowned,
-/// GlassEye). Applied in ai_ship::power's per-ship BFS, NOT the shared
+/// already flagged weakest by crew_fill_fraction (Recursive Kingdom, Broken Choir,
+/// The Silence). Applied in ai_ship::power's per-ship BFS, NOT the shared
 /// building::registry ModuleDef.power_generation the player's own ships
 /// also read from — so this can't touch player or other-faction balance.
 /// Deliberately mild: at full health every faction still runs a healthy
@@ -500,20 +545,20 @@ pub fn crew_fill_fraction(faction: AiShipType) -> f32 {
 /// faction with a fat multi-x buffer.
 pub fn power_output_multiplier(faction: AiShipType) -> f32 {
     match faction {
-        AiShipType::RustSwarm => 0.85,
-        AiShipType::Drowned => 0.8,
-        AiShipType::GlassEye => 0.85,
+        AiShipType::RecursiveKingdom => 0.85,
+        AiShipType::BrokenChoir => 0.8,
+        AiShipType::TheSilence => 0.85,
         _ => 1.0,
     }
 }
 
-/// Whether a faction actually engages in ship-to-ship combat. GlassEye never
-/// attacks (silent stalkers); Leviathan riders flee rather than fight. Every
+/// Whether a faction actually engages in ship-to-ship combat. The Silence never
+/// attacks (silent stalkers); Stellar Preserve riders flee rather than fight. Every
 /// other faction does. Used to gate distress broadcast/response so a
 /// non-combatant never answers — or issues — a call for backup it would never
 /// act on anyway.
 pub fn faction_fights(faction: AiShipType) -> bool {
-    !matches!(faction, AiShipType::GlassEye | AiShipType::Leviathan)
+    !matches!(faction, AiShipType::TheSilence | AiShipType::StellarPreserve)
 }
 
 /// Returns whether two factions are hostile to each other
@@ -523,25 +568,25 @@ pub fn factions_hostile(a: AiShipType, b: AiShipType) -> bool {
     match (a, b) {
         // Bosses are hostile to everything, including each other — rampaging
         // apex threats, not aligned with any faction's politics.
-        (VoidTitan, _) | (_, VoidTitan) => true,
-        (Dreadnought, _) | (_, Dreadnought) => true,
-        // Abyssal Cult attacks Leviathan Riders (they capture creatures)
-        (AbyssalCult, Leviathan) | (Leviathan, AbyssalCult) => true,
-        // Iron Tide attacks everyone except Blackwater (allied mercs)
-        (IronTide, Blackwater) | (Blackwater, IronTide) => false,
-        (IronTide, _) | (_, IronTide) => true,
-        // Blackwater hunts pirates (Rust Swarm) and Cult
-        (Blackwater, RustSwarm) | (RustSwarm, Blackwater) => true,
-        (Blackwater, AbyssalCult) | (AbyssalCult, Blackwater) => true,
-        // Rust Swarm attacks everyone weaker
-        (RustSwarm, GlassEye) | (GlassEye, RustSwarm) => true,
-        (RustSwarm, Leviathan) | (Leviathan, RustSwarm) => true,
-        // Pressure Kings attack anyone in deep zone
-        (PressureKing, _) | (_, PressureKing) => true,
-        // Drowned attack everything (mindless)
-        (Drowned, _) | (_, Drowned) => true,
-        // Glass Eye never attacks
-        (GlassEye, _) | (_, GlassEye) => false,
+        (Shepherd, _) | (_, Shepherd) => true,
+        (EternalHegemony, _) | (_, EternalHegemony) => true,
+        // Synthesis Collective attacks Stellar Preserve (rival claims on what life is for)
+        (SynthesisCollective, StellarPreserve) | (StellarPreserve, SynthesisCollective) => true,
+        // Terran Hegemony attacks everyone except Gilded Throne (allied mercs)
+        (TerranHegemony, GildedThrone) | (GildedThrone, TerranHegemony) => false,
+        (TerranHegemony, _) | (_, TerranHegemony) => true,
+        // Gilded Throne hunts pirates (Recursive Kingdom) and the Collective
+        (GildedThrone, RecursiveKingdom) | (RecursiveKingdom, GildedThrone) => true,
+        (GildedThrone, SynthesisCollective) | (SynthesisCollective, GildedThrone) => true,
+        // Recursive Kingdom attacks everyone weaker
+        (RecursiveKingdom, TheSilence) | (TheSilence, RecursiveKingdom) => true,
+        (RecursiveKingdom, StellarPreserve) | (StellarPreserve, RecursiveKingdom) => true,
+        // Corpse Stars attack anyone in deep zone
+        (CorpseStars, _) | (_, CorpseStars) => true,
+        // Broken Choir attack everything (no consensus left to negotiate with)
+        (BrokenChoir, _) | (_, BrokenChoir) => true,
+        // The Silence never attacks
+        (TheSilence, _) | (_, TheSilence) => false,
         _ => false,
     }
 }

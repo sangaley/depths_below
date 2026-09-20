@@ -202,7 +202,7 @@ pub fn execute_warp_jump(
             // Land IN the faction's population cluster, not just "somewhere
             // safe near the star" — that flat 50k-100k distance used to put
             // the player nowhere near a weak faction's tight cluster (e.g.
-            // RustSwarm's whole territory is only 15k radius), landing them
+            // Recursive Kingdom's whole territory is only 15k radius), landing them
             // in what looked like empty space every time. The cluster is
             // offset clear of the star itself (see
             // celestial::galaxy::faction_cluster_center), so arriving near

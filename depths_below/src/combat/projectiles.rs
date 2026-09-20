@@ -125,7 +125,7 @@ pub(super) fn projectile_collision(
     // for the brief window before that attaches. Without this, hit
     // detection used a flat 60-unit circle around the ship ROOT regardless
     // of actual size, so a shot aimed dead-center at a large ship (most of
-    // the roster — Iron Tide, Dreadnought, Void Titan...) could sail
+    // the roster — Terran Hegemony, Eternal Hegemony, The Shepherd...) could sail
     // straight through its visible hull without ever registering as a hit.
     mut ai_ship_query: Query<(Entity, &Transform, Option<&mut crate::combat::shields::ShipShield>), With<AiShip>>,
     mut damage_events: MessageWriter<ShipDamaged>,

@@ -1,29 +1,93 @@
 {
-  "name": "drowned",
+  "name": "synthesis_collective",
   "hull_cells": [
     {
       "grid_pos": [
+        5,
+        4
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
         6,
+        4
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        7,
+        4
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        8,
+        4
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        2,
         3
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        3,
+        3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        4,
+        3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        5,
+        3
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        6,
+        3
+      ],
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
         7,
         3
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
         8,
         3
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -31,7 +95,7 @@
         3
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -39,39 +103,63 @@
         3
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -1,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        0,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        1,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
     },
     {
       "grid_pos": [
         2,
         2
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
         3,
         2
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
         4,
         2
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
         5,
         2
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -79,7 +167,7 @@
         2
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -87,7 +175,7 @@
         2
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -95,7 +183,7 @@
         2
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -103,7 +191,7 @@
         2
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -111,7 +199,7 @@
         2
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -119,15 +207,15 @@
         2
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
-        12,
-        2
+        -3,
+        1
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -135,31 +223,31 @@
         1
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
         -1,
         1
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
         0,
         1
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
         1,
         1
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -167,7 +255,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -175,7 +263,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -183,7 +271,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -191,7 +279,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -199,7 +287,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -207,7 +295,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -215,7 +303,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -223,39 +311,31 @@
         1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
         10,
         1
       ],
-      "layer": "Inner",
-      "material": "Steel"
+      "layer": "Outer",
+      "material": "Composite"
     },
     {
       "grid_pos": [
-        11,
-        1
-      ],
-      "layer": "Inner",
-      "material": "Steel"
-    },
-    {
-      "grid_pos": [
-        12,
-        1
+        -4,
+        0
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
         -3,
         0
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -263,7 +343,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -271,7 +351,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -279,7 +359,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -287,7 +367,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -295,7 +375,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -303,7 +383,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -311,7 +391,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -319,7 +399,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -327,7 +407,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -335,7 +415,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -343,47 +423,31 @@
         0
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
         9,
         0
       ],
-      "layer": "Inner",
-      "material": "Steel"
+      "layer": "Outer",
+      "material": "Composite"
     },
     {
       "grid_pos": [
-        10,
-        0
-      ],
-      "layer": "Inner",
-      "material": "Steel"
-    },
-    {
-      "grid_pos": [
-        11,
-        0
-      ],
-      "layer": "Inner",
-      "material": "Steel"
-    },
-    {
-      "grid_pos": [
-        12,
-        0
+        -4,
+        -1
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
         -3,
         -1
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -391,7 +455,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -399,7 +463,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -407,7 +471,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -415,7 +479,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -423,7 +487,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -431,7 +495,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -439,7 +503,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -447,7 +511,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -455,7 +519,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -463,39 +527,23 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
         8,
         -1
       ],
-      "layer": "Inner",
-      "material": "Steel"
+      "layer": "Outer",
+      "material": "Composite"
     },
     {
       "grid_pos": [
-        9,
-        -1
-      ],
-      "layer": "Inner",
-      "material": "Steel"
-    },
-    {
-      "grid_pos": [
-        10,
-        -1
+        -3,
+        -2
       ],
       "layer": "Outer",
-      "material": "Steel"
-    },
-    {
-      "grid_pos": [
-        11,
-        -1
-      ],
-      "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -503,31 +551,31 @@
         -2
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
         -1,
         -2
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
         0,
         -2
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
         1,
         -2
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -535,7 +583,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -543,7 +591,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -551,7 +599,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -559,7 +607,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -567,7 +615,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -575,7 +623,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -583,7 +631,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -591,7 +639,31 @@
         -2
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -1,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        0,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        1,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -599,31 +671,31 @@
         -3
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
         3,
         -3
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
         4,
         -3
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
         5,
         -3
       ],
-      "layer": "Outer",
-      "material": "Steel"
+      "layer": "Inner",
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -631,7 +703,7 @@
         -3
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -639,7 +711,7 @@
         -3
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -647,7 +719,7 @@
         -3
       ],
       "layer": "Inner",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -655,7 +727,31 @@
         -3
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        3,
+        -4
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        4,
+        -4
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        5,
+        -4
+      ],
+      "layer": "Outer",
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -663,7 +759,7 @@
         -4
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -671,7 +767,7 @@
         -4
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -679,7 +775,7 @@
         -4
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -687,7 +783,7 @@
         -4
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
     },
     {
       "grid_pos": [
@@ -695,37 +791,15 @@
         -4
       ],
       "layer": "Outer",
-      "material": "Steel"
+      "material": "Composite"
     }
   ],
   "modules": [
     {
-      "module_type": "SmallEngine",
-      "grid_pos": [
-        -2,
-        0
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "SmallEngine",
-      "grid_pos": [
-        -2,
-        -1
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "SmallReactor",
+      "module_type": "StandardReactor",
       "grid_pos": [
         1,
-        0
+        1
       ],
       "rotation": "North",
       "custom_name": null,
@@ -733,9 +807,9 @@
       "extras": null
     },
     {
-      "module_type": "SmallReactor",
+      "module_type": "StandardReactor",
       "grid_pos": [
-        0,
+        1,
         -1
       ],
       "rotation": "North",
@@ -744,89 +818,64 @@
       "extras": null
     },
     {
-      "module_type": "HeavyMissile",
+      "module_type": "StandardReactor",
       "grid_pos": [
-        12,
+        2,
         0
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": {
-        "tuning": {
-          "velocity": 0.9,
-          "fire_rate": 1.0,
-          "damage": 0.9,
-          "traverse": 1.0
-        },
-        "fire_group": 1,
-        "ammo": null
-      }
-    },
-    {
-      "module_type": "HeavyMissile",
-      "grid_pos": [
-        10,
-        -4
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": {
-        "tuning": {
-          "velocity": 0.9,
-          "fire_rate": 1.0,
-          "damage": 0.9,
-          "traverse": 1.0
-        },
-        "fire_group": 1,
-        "ammo": null
-      }
-    },
-    {
-      "module_type": "Gatling",
-      "grid_pos": [
-        6,
-        2
       ],
       "rotation": "North",
       "custom_name": null,
       "subcomponents": null,
-      "extras": {
-        "tuning": {
-          "velocity": 1.0,
-          "fire_rate": 1.3,
-          "damage": 0.85,
-          "traverse": 1.0
-        },
-        "fire_group": 0,
-        "ammo": "Incendiary"
-      }
+      "extras": null
     },
     {
-      "module_type": "Gatling",
+      "module_type": "StandardEngine",
       "grid_pos": [
-        7,
-        -4
+        -3,
+        1
       ],
-      "rotation": "South",
+      "rotation": "West",
       "custom_name": null,
       "subcomponents": null,
-      "extras": {
-        "tuning": {
-          "velocity": 1.0,
-          "fire_rate": 1.3,
-          "damage": 0.85,
-          "traverse": 1.0
-        },
-        "fire_group": 0,
-        "ammo": "Incendiary"
-      }
+      "extras": null
     },
     {
-      "module_type": "ClusterRocket",
+      "module_type": "StandardEngine",
       "grid_pos": [
-        12,
+        -3,
+        -1
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "SmallEngine",
+      "grid_pos": [
+        -3,
+        0
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "ManeuverThruster",
+      "grid_pos": [
+        -1,
+        0
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "PlasmaCaster",
+      "grid_pos": [
+        9,
         1
       ],
       "rotation": "East",
@@ -834,19 +883,141 @@
       "subcomponents": null,
       "extras": {
         "tuning": {
-          "velocity": 0.9,
-          "fire_rate": 1.0,
-          "damage": 0.9,
+          "velocity": 1.1,
+          "fire_rate": 1.2,
+          "damage": 1.25,
+          "traverse": 1.0
+        },
+        "fire_group": 0,
+        "ammo": null
+      }
+    },
+    {
+      "module_type": "PlasmaCaster",
+      "grid_pos": [
+        9,
+        -2
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": {
+        "tuning": {
+          "velocity": 1.1,
+          "fire_rate": 1.2,
+          "damage": 1.25,
+          "traverse": 1.0
+        },
+        "fire_group": 0,
+        "ammo": null
+      }
+    },
+    {
+      "module_type": "PlasmaCaster",
+      "grid_pos": [
+        8,
+        0
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": {
+        "tuning": {
+          "velocity": 1.1,
+          "fire_rate": 1.2,
+          "damage": 1.25,
+          "traverse": 1.0
+        },
+        "fire_group": 0,
+        "ammo": null
+      }
+    },
+    {
+      "module_type": "PlasmaCaster",
+      "grid_pos": [
+        7,
+        2
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": {
+        "tuning": {
+          "velocity": 1.1,
+          "fire_rate": 1.2,
+          "damage": 1.25,
+          "traverse": 1.0
+        },
+        "fire_group": 0,
+        "ammo": null
+      }
+    },
+    {
+      "module_type": "IonDisruptor",
+      "grid_pos": [
+        6,
+        0
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.1,
+          "damage": 1.15,
           "traverse": 1.0
         },
         "fire_group": 1,
         "ammo": null
       }
+    },
+    {
+      "module_type": "IonDisruptor",
+      "grid_pos": [
+        7,
+        -3
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.1,
+          "damage": 1.15,
+          "traverse": 1.0
+        },
+        "fire_group": 1,
+        "ammo": null
+      }
+    },
+    {
+      "module_type": "RepairBay",
+      "grid_pos": [
+        3,
+        0
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "RepairBay",
+      "grid_pos": [
+        4,
+        0
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
     },
     {
       "module_type": "BasicQuarters",
       "grid_pos": [
-        4,
+        5,
         0
       ],
       "rotation": "North",
@@ -855,10 +1026,10 @@
       "extras": null
     },
     {
-      "module_type": "SmallCargo",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
-        6,
-        0
+        9,
+        4
       ],
       "rotation": "North",
       "custom_name": null,
@@ -866,18 +1037,51 @@
       "extras": null
     },
     {
-      "module_type": "SmallCargo",
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        10,
+        4
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        2,
+        4
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
         3,
-        -2
+        4
       ],
-      "rotation": "North",
+      "rotation": "West",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        4,
+        4
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
         11,
         3
@@ -888,10 +1092,43 @@
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
-        12,
+        -1,
         3
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        0,
+        3
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        1,
+        3
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        11,
+        1
       ],
       "rotation": "North",
       "custom_name": null,
@@ -899,10 +1136,10 @@
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
-        2,
-        3
+        -3,
+        2
       ],
       "rotation": "West",
       "custom_name": null,
@@ -910,40 +1147,7 @@
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
-      "grid_pos": [
-        3,
-        3
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledHullPlate",
-      "grid_pos": [
-        4,
-        3
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledHullPlate",
-      "grid_pos": [
-        5,
-        3
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
         -2,
         2
@@ -954,42 +1158,20 @@
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
-        -1,
-        2
+        10,
+        0
       ],
-      "rotation": "West",
+      "rotation": "North",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
-        0,
-        2
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledHullPlate",
-      "grid_pos": [
-        1,
-        2
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledHullPlate",
-      "grid_pos": [
-        -3,
+        -4,
         1
       ],
       "rotation": "West",
@@ -998,9 +1180,9 @@
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
-        12,
+        9,
         -1
       ],
       "rotation": "East",
@@ -1009,31 +1191,9 @@
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
-        10,
-        -2
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledHullPlate",
-      "grid_pos": [
-        11,
-        -2
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledHullPlate",
-      "grid_pos": [
-        -3,
+        -4,
         -2
       ],
       "rotation": "South",
@@ -1042,7 +1202,18 @@
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -3,
+        -3
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
         -2,
         -3
@@ -1053,40 +1224,7 @@
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
-      "grid_pos": [
-        -1,
-        -3
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledHullPlate",
-      "grid_pos": [
-        0,
-        -3
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledHullPlate",
-      "grid_pos": [
-        1,
-        -3
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
         10,
         -3
@@ -1097,7 +1235,40 @@
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -1,
+        -4
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        0,
+        -4
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        1,
+        -4
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
         2,
         -4
@@ -1108,54 +1279,21 @@
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
-        3,
-        -4
+        8,
+        5
       ],
-      "rotation": "South",
+      "rotation": "North",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
-      "grid_pos": [
-        4,
-        -4
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
         5,
-        -4
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledHullPlate",
-      "grid_pos": [
-        10,
-        4
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledHullPlate",
-      "grid_pos": [
-        6,
-        4
+        5
       ],
       "rotation": "West",
       "custom_name": null,
@@ -1163,21 +1301,21 @@
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
-      "grid_pos": [
-        9,
-        4
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
         7,
-        4
+        5
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        6,
+        5
       ],
       "rotation": "West",
       "custom_name": null,
@@ -1185,7 +1323,7 @@
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
         10,
         -5
@@ -1196,9 +1334,9 @@
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
-        6,
+        3,
         -5
       ],
       "rotation": "South",
@@ -1207,7 +1345,7 @@
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
         9,
         -5
@@ -1218,9 +1356,9 @@
       "extras": null
     },
     {
-      "module_type": "AngledHullPlate",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
-        7,
+        4,
         -5
       ],
       "rotation": "South",

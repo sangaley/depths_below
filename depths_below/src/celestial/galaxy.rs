@@ -62,16 +62,16 @@ const MAX_PLACEMENT_ATTEMPTS: u32 = 200;
 /// continuous distance formula (that's exactly what this feature replaces).
 fn faction_roster() -> Vec<AiShipType> {
     vec![
-        AiShipType::GlassEye,
-        AiShipType::RustSwarm,
-        AiShipType::Drowned,
-        AiShipType::Leviathan,
-        AiShipType::AbyssalCult,
-        AiShipType::Blackwater,
-        AiShipType::PressureKing,
-        AiShipType::IronTide,
-        AiShipType::Dreadnought,
-        AiShipType::VoidTitan,
+        AiShipType::TheSilence,
+        AiShipType::RecursiveKingdom,
+        AiShipType::BrokenChoir,
+        AiShipType::StellarPreserve,
+        AiShipType::SynthesisCollective,
+        AiShipType::GildedThrone,
+        AiShipType::CorpseStars,
+        AiShipType::TerranHegemony,
+        AiShipType::EternalHegemony,
+        AiShipType::Shepherd,
     ]
 }
 
@@ -200,7 +200,7 @@ pub fn passive_proximity_discovery_system(
 
 /// Distance a system's faction population cluster sits away from the star
 /// itself. Stars run 40k-150k radius (StarSizeClass::radius) but several
-/// faction territories are smaller than that (RustSwarm's is only 15k) — if
+/// faction territories are smaller than that (Recursive Kingdom's is only 15k) — if
 /// the cluster were centered ON the star like the star's own position, the
 /// player (and the ships) would routinely be inside or right on top of the
 /// star. Offsetting the cluster clear of any star size decouples the two

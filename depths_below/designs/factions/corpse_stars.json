@@ -1,45 +1,37 @@
 {
-  "name": "iron_tide",
+  "name": "corpse_stars",
   "hull_cells": [
     {
       "grid_pos": [
-        5,
-        5
+        -2,
+        4
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
-        6,
-        5
+        -1,
+        4
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
-        7,
-        5
+        0,
+        4
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
-        8,
-        5
+        1,
+        4
       ],
       "layer": "Outer",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        9,
-        5
-      ],
-      "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -47,7 +39,7 @@
         4
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -55,7 +47,7 @@
         4
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -63,79 +55,47 @@
         4
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
-        5,
-        4
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        6,
-        4
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        7,
-        4
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        8,
-        4
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        9,
-        4
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        10,
-        4
+        -3,
+        3
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
-        11,
-        4
+        -2,
+        3
       ],
-      "layer": "Outer",
-      "material": "Titanium"
+      "layer": "Inner",
+      "material": "AbyssalAlloy"
+    },
+    {
+      "grid_pos": [
+        -1,
+        3
+      ],
+      "layer": "Inner",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         0,
         3
       ],
-      "layer": "Outer",
-      "material": "Titanium"
+      "layer": "Inner",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         1,
         3
       ],
-      "layer": "Outer",
-      "material": "Titanium"
+      "layer": "Inner",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -143,7 +103,7 @@
         3
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -151,7 +111,7 @@
         3
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -159,95 +119,63 @@
         3
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         5,
         3
       ],
-      "layer": "Inner",
-      "material": "Titanium"
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         6,
         3
       ],
-      "layer": "Inner",
-      "material": "Titanium"
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         7,
         3
       ],
-      "layer": "Inner",
-      "material": "Titanium"
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
-        8,
-        3
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        9,
-        3
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        10,
-        3
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        11,
-        3
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        12,
-        3
+        -4,
+        2
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
-        13,
-        3
+        -3,
+        2
       ],
-      "layer": "Outer",
-      "material": "Titanium"
+      "layer": "Inner",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         -2,
         2
       ],
-      "layer": "Outer",
-      "material": "Titanium"
+      "layer": "Inner",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         -1,
         2
       ],
-      "layer": "Outer",
-      "material": "Titanium"
+      "layer": "Inner",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -255,7 +183,7 @@
         2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -263,7 +191,7 @@
         2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -271,7 +199,7 @@
         2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -279,7 +207,7 @@
         2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -287,7 +215,7 @@
         2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -295,7 +223,7 @@
         2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -303,7 +231,7 @@
         2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -311,63 +239,31 @@
         2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         8,
         2
       ],
-      "layer": "Inner",
-      "material": "Titanium"
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         9,
         2
       ],
-      "layer": "Inner",
-      "material": "Titanium"
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         10,
         2
       ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        11,
-        2
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        12,
-        2
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        13,
-        2
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        14,
-        2
-      ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -375,15 +271,15 @@
         1
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         -3,
         1
       ],
-      "layer": "Outer",
-      "material": "Titanium"
+      "layer": "Inner",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -391,7 +287,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -399,7 +295,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -407,7 +303,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -415,7 +311,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -423,7 +319,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -431,7 +327,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -439,7 +335,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -447,7 +343,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -455,7 +351,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -463,7 +359,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -471,7 +367,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -479,7 +375,7 @@
         1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -487,47 +383,23 @@
         1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         11,
         1
       ],
-      "layer": "Inner",
-      "material": "Titanium"
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         12,
         1
       ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        13,
-        1
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        14,
-        1
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        15,
-        1
-      ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -535,7 +407,7 @@
         0
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -543,7 +415,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -551,7 +423,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -559,7 +431,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -567,7 +439,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -575,7 +447,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -583,7 +455,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -591,7 +463,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -599,7 +471,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -607,7 +479,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -615,7 +487,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -623,7 +495,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -631,7 +503,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -639,7 +511,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -647,7 +519,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -655,7 +527,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -663,7 +535,7 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -671,31 +543,15 @@
         0
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         13,
         0
       ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        14,
-        0
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        15,
-        0
-      ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -703,7 +559,7 @@
         -1
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -711,7 +567,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -719,7 +575,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -727,7 +583,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -735,7 +591,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -743,7 +599,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -751,7 +607,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -759,7 +615,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -767,7 +623,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -775,7 +631,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -783,7 +639,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -791,7 +647,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -799,7 +655,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -807,7 +663,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -815,7 +671,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -823,7 +679,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -831,7 +687,7 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -839,31 +695,15 @@
         -1
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         13,
         -1
       ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        14,
-        -1
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        15,
-        -1
-      ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -871,15 +711,15 @@
         -2
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         -3,
         -2
       ],
-      "layer": "Outer",
-      "material": "Titanium"
+      "layer": "Inner",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -887,7 +727,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -895,7 +735,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -903,7 +743,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -911,7 +751,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -919,7 +759,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -927,7 +767,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -935,7 +775,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -943,7 +783,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -951,7 +791,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -959,7 +799,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -967,7 +807,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -975,7 +815,7 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -983,63 +823,55 @@
         -2
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         11,
         -2
       ],
-      "layer": "Inner",
-      "material": "Titanium"
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         12,
         -2
       ],
-      "layer": "Inner",
-      "material": "Titanium"
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
-        13,
-        -2
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        14,
-        -2
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        15,
-        -2
+        -4,
+        -3
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
+    },
+    {
+      "grid_pos": [
+        -3,
+        -3
+      ],
+      "layer": "Inner",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         -2,
         -3
       ],
-      "layer": "Outer",
-      "material": "Titanium"
+      "layer": "Inner",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         -1,
         -3
       ],
-      "layer": "Outer",
-      "material": "Titanium"
+      "layer": "Inner",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -1047,7 +879,7 @@
         -3
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -1055,7 +887,7 @@
         -3
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -1063,7 +895,7 @@
         -3
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -1071,7 +903,7 @@
         -3
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -1079,7 +911,7 @@
         -3
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -1087,7 +919,7 @@
         -3
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -1095,7 +927,7 @@
         -3
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -1103,79 +935,71 @@
         -3
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         8,
         -3
       ],
-      "layer": "Inner",
-      "material": "Titanium"
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         9,
         -3
       ],
-      "layer": "Inner",
-      "material": "Titanium"
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         10,
         -3
       ],
-      "layer": "Inner",
-      "material": "Titanium"
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
-        11,
-        -3
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        12,
-        -3
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        13,
-        -3
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        14,
-        -3
+        -3,
+        -4
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
+    },
+    {
+      "grid_pos": [
+        -2,
+        -4
+      ],
+      "layer": "Inner",
+      "material": "AbyssalAlloy"
+    },
+    {
+      "grid_pos": [
+        -1,
+        -4
+      ],
+      "layer": "Inner",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         0,
         -4
       ],
-      "layer": "Outer",
-      "material": "Titanium"
+      "layer": "Inner",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         1,
         -4
       ],
-      "layer": "Outer",
-      "material": "Titanium"
+      "layer": "Inner",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -1183,7 +1007,7 @@
         -4
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -1191,7 +1015,7 @@
         -4
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -1199,79 +1023,63 @@
         -4
       ],
       "layer": "Inner",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         5,
         -4
       ],
-      "layer": "Inner",
-      "material": "Titanium"
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         6,
         -4
       ],
-      "layer": "Inner",
-      "material": "Titanium"
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
         7,
         -4
       ],
-      "layer": "Inner",
-      "material": "Titanium"
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
-        8,
-        -4
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        9,
-        -4
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        10,
-        -4
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        11,
-        -4
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        12,
-        -4
+        -2,
+        -5
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
-        13,
-        -4
+        -1,
+        -5
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
+    },
+    {
+      "grid_pos": [
+        0,
+        -5
+      ],
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
+    },
+    {
+      "grid_pos": [
+        1,
+        -5
+      ],
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -1279,7 +1087,7 @@
         -5
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -1287,7 +1095,7 @@
         -5
       ],
       "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
@@ -1295,110 +1103,14 @@
         -5
       ],
       "layer": "Outer",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        5,
-        -5
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        6,
-        -5
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        7,
-        -5
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        8,
-        -5
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        9,
-        -5
-      ],
-      "layer": "Inner",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        10,
-        -5
-      ],
-      "layer": "Outer",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        11,
-        -5
-      ],
-      "layer": "Outer",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        5,
-        -6
-      ],
-      "layer": "Outer",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        6,
-        -6
-      ],
-      "layer": "Outer",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        7,
-        -6
-      ],
-      "layer": "Outer",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        8,
-        -6
-      ],
-      "layer": "Outer",
-      "material": "Titanium"
-    },
-    {
-      "grid_pos": [
-        9,
-        -6
-      ],
-      "layer": "Outer",
-      "material": "Titanium"
+      "material": "AbyssalAlloy"
     }
   ],
   "modules": [
     {
       "module_type": "LargeEngine",
       "grid_pos": [
-        -4,
+        -3,
         1
       ],
       "rotation": "West",
@@ -1409,7 +1121,7 @@
     {
       "module_type": "LargeEngine",
       "grid_pos": [
-        -4,
+        -3,
         -1
       ],
       "rotation": "West",
@@ -1420,21 +1132,32 @@
     {
       "module_type": "StandardEngine",
       "grid_pos": [
-        -2,
+        -3,
+        0
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "StandardReactor",
+      "grid_pos": [
+        1,
         1
       ],
-      "rotation": "West",
+      "rotation": "North",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
     },
     {
-      "module_type": "StandardEngine",
+      "module_type": "StandardReactor",
       "grid_pos": [
-        -2,
+        1,
         -1
       ],
-      "rotation": "West",
+      "rotation": "North",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
@@ -1442,52 +1165,8 @@
     {
       "module_type": "LargeReactor",
       "grid_pos": [
-        2,
-        1
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "StandardReactor",
-      "grid_pos": [
-        2,
-        -1
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "StandardReactor",
-      "grid_pos": [
-        4,
+        0,
         0
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "FuelTank",
-      "grid_pos": [
-        0,
-        1
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "FuelTank",
-      "grid_pos": [
-        0,
-        -1
       ],
       "rotation": "North",
       "custom_name": null,
@@ -1497,7 +1176,7 @@
     {
       "module_type": "ManeuverThruster",
       "grid_pos": [
-        1,
+        -1,
         0
       ],
       "rotation": "North",
@@ -1506,43 +1185,141 @@
       "extras": null
     },
     {
-      "module_type": "Barracks",
+      "module_type": "FuelTank",
       "grid_pos": [
-        6,
+        -2,
+        0
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "EMPPulse",
+      "grid_pos": [
+        11,
+        0
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.0,
+          "damage": 1.0,
+          "traverse": 1.0
+        },
+        "fire_group": 3,
+        "ammo": null
+      }
+    },
+    {
+      "module_type": "IonDisruptor",
+      "grid_pos": [
+        11,
         1
       ],
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 0.9,
+          "damage": 1.2,
+          "traverse": 1.0
+        },
+        "fire_group": 1,
+        "ammo": null
+      }
     },
     {
-      "module_type": "BasicQuarters",
+      "module_type": "IonDisruptor",
       "grid_pos": [
-        7,
+        11,
+        -2
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 0.9,
+          "damage": 1.2,
+          "traverse": 1.0
+        },
+        "fire_group": 1,
+        "ammo": null
+      }
+    },
+    {
+      "module_type": "Railgun",
+      "grid_pos": [
+        12,
         0
       ],
-      "rotation": "North",
+      "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.1,
+          "fire_rate": 0.7,
+          "damage": 1.4,
+          "traverse": 1.0
+        },
+        "fire_group": 0,
+        "ammo": "HESH"
+      }
     },
     {
-      "module_type": "MessHall",
+      "module_type": "Railgun",
       "grid_pos": [
-        7,
-        -1
+        10,
+        2
       ],
-      "rotation": "North",
+      "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.1,
+          "fire_rate": 0.7,
+          "damage": 1.4,
+          "traverse": 1.0
+        },
+        "fire_group": 0,
+        "ammo": "HESH"
+      }
+    },
+    {
+      "module_type": "HeavyMissile",
+      "grid_pos": [
+        9,
+        -3
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.0,
+          "damage": 1.1,
+          "traverse": 1.0
+        },
+        "fire_group": 2,
+        "ammo": null
+      }
     },
     {
       "module_type": "RepairBay",
       "grid_pos": [
-        3,
-        1
+        4,
+        0
       ],
       "rotation": "North",
       "custom_name": null,
@@ -1552,8 +1329,8 @@
     {
       "module_type": "AdvancedRepairBay",
       "grid_pos": [
-        3,
-        -1
+        5,
+        0
       ],
       "rotation": "North",
       "custom_name": null,
@@ -1561,209 +1338,75 @@
       "extras": null
     },
     {
-      "module_type": "Railgun",
+      "module_type": "BasicQuarters",
       "grid_pos": [
-        13,
+        6,
+        0
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "DepthScanner",
+      "grid_pos": [
+        7,
         0
       ],
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": {
-        "tuning": {
-          "velocity": 1.1,
-          "fire_rate": 0.8,
-          "damage": 1.3,
-          "traverse": 1.0
-        },
-        "fire_group": 2,
-        "ammo": "APFSDS"
-      }
+      "extras": null
     },
     {
-      "module_type": "Railgun",
-      "grid_pos": [
-        13,
-        2
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": {
-        "tuning": {
-          "velocity": 1.1,
-          "fire_rate": 0.8,
-          "damage": 1.3,
-          "traverse": 1.0
-        },
-        "fire_group": 2,
-        "ammo": "APFSDS"
-      }
-    },
-    {
-      "module_type": "Railgun",
-      "grid_pos": [
-        13,
-        -3
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": {
-        "tuning": {
-          "velocity": 1.1,
-          "fire_rate": 0.8,
-          "damage": 1.3,
-          "traverse": 1.0
-        },
-        "fire_group": 2,
-        "ammo": "APFSDS"
-      }
-    },
-    {
-      "module_type": "HeavyMissile",
-      "grid_pos": [
-        15,
-        1
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": {
-        "tuning": {
-          "velocity": 1.0,
-          "fire_rate": 1.0,
-          "damage": 1.1,
-          "traverse": 1.0
-        },
-        "fire_group": 3,
-        "ammo": null
-      }
-    },
-    {
-      "module_type": "HeavyMissile",
-      "grid_pos": [
-        15,
-        -2
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": {
-        "tuning": {
-          "velocity": 1.0,
-          "fire_rate": 1.0,
-          "damage": 1.1,
-          "traverse": 1.0
-        },
-        "fire_group": 3,
-        "ammo": null
-      }
-    },
-    {
-      "module_type": "HeavyMissile",
-      "grid_pos": [
-        11,
-        4
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": {
-        "tuning": {
-          "velocity": 1.0,
-          "fire_rate": 1.0,
-          "damage": 1.1,
-          "traverse": 1.0
-        },
-        "fire_group": 3,
-        "ammo": null
-      }
-    },
-    {
-      "module_type": "Cannon",
-      "grid_pos": [
-        9,
-        3
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": {
-        "tuning": {
-          "velocity": 1.0,
-          "fire_rate": 0.9,
-          "damage": 1.2,
-          "traverse": 1.0
-        },
-        "fire_group": 0,
-        "ammo": "APHE"
-      }
-    },
-    {
-      "module_type": "Cannon",
-      "grid_pos": [
-        9,
-        -4
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": {
-        "tuning": {
-          "velocity": 1.0,
-          "fire_rate": 0.9,
-          "damage": 1.2,
-          "traverse": 1.0
-        },
-        "fire_group": 0,
-        "ammo": "APHE"
-      }
-    },
-    {
-      "module_type": "Gatling",
-      "grid_pos": [
-        8,
-        2
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": {
-        "tuning": {
-          "velocity": 1.0,
-          "fire_rate": 1.1,
-          "damage": 1.0,
-          "traverse": 1.0
-        },
-        "fire_group": 1,
-        "ammo": "Flak"
-      }
-    },
-    {
-      "module_type": "Gatling",
-      "grid_pos": [
-        8,
-        -3
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": {
-        "tuning": {
-          "velocity": 1.0,
-          "fire_rate": 1.1,
-          "damage": 1.0,
-          "traverse": 1.0
-        },
-        "fire_group": 1,
-        "ammo": "Flak"
-      }
-    },
-    {
-      "module_type": "PointDefenseDrone",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
         5,
+        4
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        6,
+        4
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        7,
+        4
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -3,
+        4
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        8,
         3
       ],
       "rotation": "North",
@@ -1772,34 +1415,12 @@
       "extras": null
     },
     {
-      "module_type": "HelmStation",
+      "module_type": "AngledArmorPlate",
       "grid_pos": [
         9,
-        0
+        3
       ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "RadarArray",
-      "grid_pos": [
-        11,
-        0
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "TargetingComputer",
-      "grid_pos": [
-        10,
-        -1
-      ],
-      "rotation": "East",
+      "rotation": "North",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
@@ -1808,139 +1429,7 @@
       "module_type": "AngledArmorPlate",
       "grid_pos": [
         10,
-        5
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        11,
-        5
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        2,
-        5
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        3,
-        5
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        4,
-        5
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        12,
-        4
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        13,
-        4
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        0,
-        4
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        1,
-        4
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        14,
         3
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        -2,
-        3
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        -1,
-        3
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        15,
-        2
       ],
       "rotation": "North",
       "custom_name": null,
@@ -1951,7 +1440,7 @@
       "module_type": "AngledArmorPlate",
       "grid_pos": [
         -4,
-        2
+        3
       ],
       "rotation": "West",
       "custom_name": null,
@@ -1961,10 +1450,32 @@
     {
       "module_type": "AngledArmorPlate",
       "grid_pos": [
-        -3,
+        11,
         2
       ],
-      "rotation": "West",
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        12,
+        2
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        13,
+        1
+      ],
+      "rotation": "North",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
@@ -1983,6 +1494,17 @@
     {
       "module_type": "AngledArmorPlate",
       "grid_pos": [
+        13,
+        -2
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
         -5,
         -2
       ],
@@ -1994,8 +1516,52 @@
     {
       "module_type": "AngledArmorPlate",
       "grid_pos": [
-        15,
+        11,
         -3
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        12,
+        -3
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        8,
+        -4
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        9,
+        -4
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        10,
+        -4
       ],
       "rotation": "East",
       "custom_name": null,
@@ -2006,9 +1572,42 @@
       "module_type": "AngledArmorPlate",
       "grid_pos": [
         -4,
-        -3
+        -4
       ],
       "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        5,
+        -5
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        6,
+        -5
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        7,
+        -5
+      ],
+      "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
@@ -2017,7 +1616,7 @@
       "module_type": "AngledArmorPlate",
       "grid_pos": [
         -3,
-        -3
+        -5
       ],
       "rotation": "South",
       "custom_name": null,
@@ -2027,8 +1626,74 @@
     {
       "module_type": "AngledArmorPlate",
       "grid_pos": [
-        14,
-        -4
+        4,
+        5
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -2,
+        5
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        3,
+        5
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -1,
+        5
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        2,
+        5
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        0,
+        5
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        4,
+        -6
       ],
       "rotation": "East",
       "custom_name": null,
@@ -2039,94 +1704,6 @@
       "module_type": "AngledArmorPlate",
       "grid_pos": [
         -2,
-        -4
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        -1,
-        -4
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        12,
-        -5
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        13,
-        -5
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        0,
-        -5
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        1,
-        -5
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        10,
-        -6
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        11,
-        -6
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        2,
         -6
       ],
       "rotation": "South",
@@ -2140,7 +1717,7 @@
         3,
         -6
       ],
-      "rotation": "South",
+      "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
@@ -2148,7 +1725,7 @@
     {
       "module_type": "AngledArmorPlate",
       "grid_pos": [
-        4,
+        -1,
         -6
       ],
       "rotation": "South",
@@ -2159,52 +1736,8 @@
     {
       "module_type": "AngledArmorPlate",
       "grid_pos": [
-        9,
-        6
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        5,
-        6
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        8,
-        6
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        6,
-        6
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        9,
-        -7
+        2,
+        -6
       ],
       "rotation": "East",
       "custom_name": null,
@@ -2214,30 +1747,8 @@
     {
       "module_type": "AngledArmorPlate",
       "grid_pos": [
-        5,
-        -7
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        8,
-        -7
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        6,
-        -7
+        0,
+        -6
       ],
       "rotation": "South",
       "custom_name": null,

@@ -133,7 +133,7 @@ Bevy 0.19 ECS **space survival game**. 2D, sprite-based, grid-based building sys
 
 ### Combat model
 
-Fights are decided by **subsystems**, not by grinding hull pools (an Iron Tide is 160 tiles x 500 HP — minutes of held fire). Four rules carry it:
+Fights are decided by **subsystems**, not by grinding hull pools (a Terran Hegemony battleship is 160 tiles x 500 HP — minutes of held fire). Four rules carry it:
 
 - **Defeat is a systems condition.** `combat::check_ai_cripple` — once a ship's guns AND engines are both under 25%, the crew strikes colors and it becomes an intact, salvage-rich derelict. `AiShipDestroyed::cause` (`ShipDeathCause::Struck` / `Meltdown` / `Gutted`) shapes the wreck and its loot.
 - **Reactor kills are a phase, not a frame.** Breaching the last live reactor starts `ReactorMeltdown` (8s): shield down for good, ship goes berserk on whoever cracked it, then detonates and guts half the remaining blocks. A spare reactor absorbs the breach — that's why bosses last longer.

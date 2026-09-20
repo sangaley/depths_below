@@ -1,10 +1,18 @@
 {
-  "name": "glass_eye",
+  "name": "synthesis_collective",
   "hull_cells": [
     {
       "grid_pos": [
+        3,
+        4
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
         4,
-        2
+        4
       ],
       "layer": "Outer",
       "material": "Composite"
@@ -12,7 +20,7 @@
     {
       "grid_pos": [
         5,
-        2
+        4
       ],
       "layer": "Outer",
       "material": "Composite"
@@ -20,15 +28,71 @@
     {
       "grid_pos": [
         6,
-        2
+        4
       ],
       "layer": "Outer",
       "material": "Composite"
     },
     {
       "grid_pos": [
+        0,
+        3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        1,
+        3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        2,
+        3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        3,
+        3
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        4,
+        3
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        5,
+        3
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        6,
+        3
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
         7,
-        2
+        3
       ],
       "layer": "Outer",
       "material": "Composite"
@@ -36,7 +100,7 @@
     {
       "grid_pos": [
         8,
-        2
+        3
       ],
       "layer": "Outer",
       "material": "Composite"
@@ -44,30 +108,110 @@
     {
       "grid_pos": [
         9,
+        3
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -2,
         2
       ],
       "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        -1,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        0,
+        2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        1,
+        2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        2,
+        2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        3,
+        2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        4,
+        2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        5,
+        2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        6,
+        2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        7,
+        2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        8,
+        2
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        9,
+        2
+      ],
+      "layer": "Inner",
       "material": "Composite"
     },
     {
       "grid_pos": [
         10,
-        2
-      ],
-      "layer": "Outer",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        11,
-        2
-      ],
-      "layer": "Outer",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        12,
         2
       ],
       "layer": "Outer",
@@ -94,7 +238,7 @@
         -2,
         1
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -102,7 +246,7 @@
         -1,
         1
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -110,7 +254,7 @@
         0,
         1
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -118,7 +262,7 @@
         1,
         1
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -126,7 +270,7 @@
         2,
         1
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -134,7 +278,7 @@
         3,
         1
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -189,46 +333,6 @@
       "grid_pos": [
         10,
         1
-      ],
-      "layer": "Inner",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        11,
-        1
-      ],
-      "layer": "Inner",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        12,
-        1
-      ],
-      "layer": "Inner",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        13,
-        1
-      ],
-      "layer": "Outer",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        14,
-        1
-      ],
-      "layer": "Outer",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        -6,
-        0
       ],
       "layer": "Outer",
       "material": "Composite"
@@ -358,54 +462,6 @@
         10,
         0
       ],
-      "layer": "Inner",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        11,
-        0
-      ],
-      "layer": "Inner",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        12,
-        0
-      ],
-      "layer": "Inner",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        13,
-        0
-      ],
-      "layer": "Inner",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        14,
-        0
-      ],
-      "layer": "Inner",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        15,
-        0
-      ],
-      "layer": "Outer",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        -6,
-        -1
-      ],
       "layer": "Outer",
       "material": "Composite"
     },
@@ -534,46 +590,6 @@
         10,
         -1
       ],
-      "layer": "Inner",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        11,
-        -1
-      ],
-      "layer": "Inner",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        12,
-        -1
-      ],
-      "layer": "Inner",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        13,
-        -1
-      ],
-      "layer": "Inner",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        14,
-        -1
-      ],
-      "layer": "Inner",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        15,
-        -1
-      ],
       "layer": "Outer",
       "material": "Composite"
     },
@@ -598,7 +614,7 @@
         -2,
         -2
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -606,7 +622,7 @@
         -1,
         -2
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -614,7 +630,7 @@
         0,
         -2
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -622,7 +638,7 @@
         1,
         -2
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -630,7 +646,7 @@
         2,
         -2
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -638,7 +654,7 @@
         3,
         -2
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -694,39 +710,55 @@
         10,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "Composite"
     },
     {
       "grid_pos": [
-        11,
-        -2
-      ],
-      "layer": "Inner",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        12,
-        -2
-      ],
-      "layer": "Inner",
-      "material": "Composite"
-    },
-    {
-      "grid_pos": [
-        13,
-        -2
+        -2,
+        -3
       ],
       "layer": "Outer",
       "material": "Composite"
     },
     {
       "grid_pos": [
-        14,
-        -2
+        -1,
+        -3
       ],
       "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        0,
+        -3
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        1,
+        -3
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        2,
+        -3
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        3,
+        -3
+      ],
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -734,7 +766,7 @@
         4,
         -3
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -742,7 +774,7 @@
         5,
         -3
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -750,7 +782,7 @@
         6,
         -3
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -758,7 +790,7 @@
         7,
         -3
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -766,7 +798,7 @@
         8,
         -3
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -774,7 +806,7 @@
         9,
         -3
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Composite"
     },
     {
@@ -787,16 +819,112 @@
     },
     {
       "grid_pos": [
-        11,
-        -3
+        0,
+        -4
       ],
       "layer": "Outer",
       "material": "Composite"
     },
     {
       "grid_pos": [
-        12,
-        -3
+        1,
+        -4
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        2,
+        -4
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        3,
+        -4
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        4,
+        -4
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        5,
+        -4
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        6,
+        -4
+      ],
+      "layer": "Inner",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        7,
+        -4
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        8,
+        -4
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        9,
+        -4
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        3,
+        -5
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        4,
+        -5
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        5,
+        -5
+      ],
+      "layer": "Outer",
+      "material": "Composite"
+    },
+    {
+      "grid_pos": [
+        6,
+        -5
       ],
       "layer": "Outer",
       "material": "Composite"
@@ -804,76 +932,10 @@
   ],
   "modules": [
     {
-      "module_type": "SmallEngine",
-      "grid_pos": [
-        -4,
-        1
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "SmallEngine",
-      "grid_pos": [
-        -4,
-        -1
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "SmallEngine",
-      "grid_pos": [
-        -4,
-        0
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "SmallReactor",
-      "grid_pos": [
-        -1,
-        0
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "SmallReactor",
-      "grid_pos": [
-        0,
-        0
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "ManeuverThruster",
-      "grid_pos": [
-        -2,
-        0
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "StealthCoating",
+      "module_type": "StandardReactor",
       "grid_pos": [
         1,
-        0
+        1
       ],
       "rotation": "North",
       "custom_name": null,
@@ -881,7 +943,18 @@
       "extras": null
     },
     {
-      "module_type": "StealthCoating",
+      "module_type": "StandardReactor",
+      "grid_pos": [
+        1,
+        -1
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "StandardReactor",
       "grid_pos": [
         2,
         0
@@ -892,51 +965,89 @@
       "extras": null
     },
     {
-      "module_type": "AdvancedRadar",
+      "module_type": "StandardEngine",
       "grid_pos": [
-        11,
-        0
+        -3,
+        1
       ],
-      "rotation": "East",
+      "rotation": "West",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
     },
     {
-      "module_type": "PassiveRadar",
+      "module_type": "StandardEngine",
       "grid_pos": [
-        10,
+        -3,
+        -1
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "SmallEngine",
+      "grid_pos": [
+        -3,
+        0
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "ManeuverThruster",
+      "grid_pos": [
+        -1,
+        0
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "PlasmaCaster",
+      "grid_pos": [
+        9,
         1
       ],
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.1,
+          "fire_rate": 1.2,
+          "damage": 1.25
+        },
+        "fire_group": 0,
+        "ammo": null
+      }
     },
     {
-      "module_type": "PassiveRadar",
+      "module_type": "PlasmaCaster",
       "grid_pos": [
-        10,
-        -1
+        9,
+        -2
       ],
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.1,
+          "fire_rate": 1.2,
+          "damage": 1.25
+        },
+        "fire_group": 0,
+        "ammo": null
+      }
     },
     {
-      "module_type": "HydrophoneArray",
-      "grid_pos": [
-        12,
-        0
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "CreatureScanner",
+      "module_type": "PlasmaCaster",
       "grid_pos": [
         8,
         0
@@ -944,37 +1055,102 @@
       "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
-      "extras": null
+      "extras": {
+        "tuning": {
+          "velocity": 1.1,
+          "fire_rate": 1.2,
+          "damage": 1.25
+        },
+        "fire_group": 0,
+        "ammo": null
+      }
     },
     {
-      "module_type": "MineralScanner",
+      "module_type": "PlasmaCaster",
+      "grid_pos": [
+        7,
+        2
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": {
+        "tuning": {
+          "velocity": 1.1,
+          "fire_rate": 1.2,
+          "damage": 1.25
+        },
+        "fire_group": 0,
+        "ammo": null
+      }
+    },
+    {
+      "module_type": "IonDisruptor",
       "grid_pos": [
         6,
         0
       ],
-      "rotation": "East",
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.1,
+          "damage": 1.15
+        },
+        "fire_group": 1,
+        "ammo": null
+      }
+    },
+    {
+      "module_type": "IonDisruptor",
+      "grid_pos": [
+        7,
+        -3
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": {
+        "tuning": {
+          "velocity": 1.0,
+          "fire_rate": 1.1,
+          "damage": 1.15
+        },
+        "fire_group": 1,
+        "ammo": null
+      }
+    },
+    {
+      "module_type": "RepairBay",
+      "grid_pos": [
+        3,
+        0
+      ],
+      "rotation": "North",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
     },
     {
-      "module_type": "DepthScanner",
+      "module_type": "RepairBay",
       "grid_pos": [
         4,
         0
       ],
-      "rotation": "East",
+      "rotation": "North",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
     },
     {
-      "module_type": "SignalBuoy",
+      "module_type": "BasicQuarters",
       "grid_pos": [
-        13,
+        5,
         0
       ],
-      "rotation": "East",
+      "rotation": "North",
       "custom_name": null,
       "subcomponents": null,
       "extras": null

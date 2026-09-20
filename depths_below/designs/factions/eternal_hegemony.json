@@ -1,10 +1,18 @@
 {
-  "name": "dreadnought",
+  "name": "eternal_hegemony",
   "hull_cells": [
     {
       "grid_pos": [
+        8,
+        7
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
         9,
-        6
+        7
       ],
       "layer": "Outer",
       "material": "Titanium"
@@ -12,7 +20,7 @@
     {
       "grid_pos": [
         10,
-        6
+        7
       ],
       "layer": "Outer",
       "material": "Titanium"
@@ -20,7 +28,7 @@
     {
       "grid_pos": [
         11,
-        6
+        7
       ],
       "layer": "Outer",
       "material": "Titanium"
@@ -28,9 +36,73 @@
     {
       "grid_pos": [
         12,
+        7
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        5,
         6
       ],
       "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        6,
+        6
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        7,
+        6
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        8,
+        6
+      ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        9,
+        6
+      ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        10,
+        6
+      ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        11,
+        6
+      ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        12,
+        6
+      ],
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -43,10 +115,58 @@
     },
     {
       "grid_pos": [
-        6,
+        14,
+        6
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        15,
+        6
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        2,
         5
       ],
       "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        3,
+        5
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        4,
+        5
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        5,
+        5
+      ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        6,
+        5
+      ],
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -54,7 +174,7 @@
         7,
         5
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -62,7 +182,7 @@
         8,
         5
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -110,7 +230,7 @@
         14,
         5
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -118,7 +238,47 @@
         15,
         5
       ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        16,
+        5
+      ],
       "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        17,
+        5
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        0,
+        4
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        1,
+        4
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        2,
+        4
+      ],
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -126,7 +286,7 @@
         3,
         4
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -134,7 +294,7 @@
         4,
         4
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -142,7 +302,7 @@
         5,
         4
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -230,6 +390,46 @@
         16,
         4
       ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        17,
+        4
+      ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        18,
+        4
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        -3,
+        3
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        -2,
+        3
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        -1,
+        3
+      ],
       "layer": "Outer",
       "material": "Titanium"
     },
@@ -238,7 +438,7 @@
         0,
         3
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -246,7 +446,7 @@
         1,
         3
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -254,7 +454,7 @@
         2,
         3
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -373,6 +573,30 @@
       "grid_pos": [
         17,
         3
+      ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        18,
+        3
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        -5,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        -4,
+        2
       ],
       "layer": "Outer",
       "material": "Titanium"
@@ -382,7 +606,7 @@
         -3,
         2
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -390,7 +614,7 @@
         -2,
         2
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -398,7 +622,7 @@
         -1,
         2
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -541,6 +765,22 @@
       "grid_pos": [
         17,
         2
+      ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        18,
+        2
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        -7,
+        1
       ],
       "layer": "Outer",
       "material": "Titanium"
@@ -558,7 +798,7 @@
         -5,
         1
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -566,7 +806,7 @@
         -4,
         1
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -732,6 +972,14 @@
     {
       "grid_pos": [
         17,
+        1
+      ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        18,
         1
       ],
       "layer": "Outer",
@@ -750,7 +998,7 @@
         -7,
         0
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -940,6 +1188,14 @@
     {
       "grid_pos": [
         17,
+        0
+      ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        18,
         0
       ],
       "layer": "Outer",
@@ -958,7 +1214,7 @@
         -7,
         -1
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1150,6 +1406,22 @@
         17,
         -1
       ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        18,
+        -1
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        -7,
+        -2
+      ],
       "layer": "Outer",
       "material": "Titanium"
     },
@@ -1166,7 +1438,7 @@
         -5,
         -2
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1174,7 +1446,7 @@
         -4,
         -2
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1342,6 +1614,30 @@
         17,
         -2
       ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        18,
+        -2
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        -5,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        -4,
+        -3
+      ],
       "layer": "Outer",
       "material": "Titanium"
     },
@@ -1350,7 +1646,7 @@
         -3,
         -3
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1358,7 +1654,7 @@
         -2,
         -3
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1366,7 +1662,7 @@
         -1,
         -3
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1510,6 +1806,38 @@
         17,
         -3
       ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        18,
+        -3
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        -3,
+        -4
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        -2,
+        -4
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        -1,
+        -4
+      ],
       "layer": "Outer",
       "material": "Titanium"
     },
@@ -1518,7 +1846,7 @@
         0,
         -4
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1526,7 +1854,7 @@
         1,
         -4
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1534,7 +1862,7 @@
         2,
         -4
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1654,7 +1982,39 @@
         17,
         -4
       ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        18,
+        -4
+      ],
       "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        0,
+        -5
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        1,
+        -5
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        2,
+        -5
+      ],
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1662,7 +2022,7 @@
         3,
         -5
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1670,7 +2030,7 @@
         4,
         -5
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1678,7 +2038,7 @@
         5,
         -5
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1766,7 +2126,55 @@
         16,
         -5
       ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        17,
+        -5
+      ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        18,
+        -5
+      ],
       "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        2,
+        -6
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        3,
+        -6
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        4,
+        -6
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        5,
+        -6
+      ],
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1774,7 +2182,7 @@
         6,
         -6
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1782,7 +2190,7 @@
         7,
         -6
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1790,7 +2198,7 @@
         8,
         -6
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1838,7 +2246,7 @@
         14,
         -6
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1846,7 +2254,55 @@
         15,
         -6
       ],
+      "layer": "Inner",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        16,
+        -6
+      ],
       "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        17,
+        -6
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        5,
+        -7
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        6,
+        -7
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        7,
+        -7
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        8,
+        -7
+      ],
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1854,7 +2310,7 @@
         9,
         -7
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1862,7 +2318,7 @@
         10,
         -7
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1870,7 +2326,7 @@
         11,
         -7
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
@@ -1878,13 +2334,69 @@
         12,
         -7
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "Titanium"
     },
     {
       "grid_pos": [
         13,
         -7
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        14,
+        -7
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        15,
+        -7
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        8,
+        -8
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        9,
+        -8
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        10,
+        -8
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        11,
+        -8
+      ],
+      "layer": "Outer",
+      "material": "Titanium"
+    },
+    {
+      "grid_pos": [
+        12,
+        -8
       ],
       "layer": "Outer",
       "material": "Titanium"
@@ -2113,7 +2625,8 @@
         "tuning": {
           "velocity": 1.1,
           "fire_rate": 0.85,
-          "damage": 1.25
+          "damage": 1.25,
+          "traverse": 1.0
         },
         "fire_group": 2,
         "ammo": "APFSDS"
@@ -2132,7 +2645,8 @@
         "tuning": {
           "velocity": 1.1,
           "fire_rate": 0.85,
-          "damage": 1.25
+          "damage": 1.25,
+          "traverse": 1.0
         },
         "fire_group": 2,
         "ammo": "APFSDS"
@@ -2151,7 +2665,8 @@
         "tuning": {
           "velocity": 1.1,
           "fire_rate": 0.85,
-          "damage": 1.25
+          "damage": 1.25,
+          "traverse": 1.0
         },
         "fire_group": 2,
         "ammo": "APFSDS"
@@ -2170,7 +2685,8 @@
         "tuning": {
           "velocity": 1.1,
           "fire_rate": 0.85,
-          "damage": 1.25
+          "damage": 1.25,
+          "traverse": 1.0
         },
         "fire_group": 2,
         "ammo": "APFSDS"
@@ -2179,7 +2695,7 @@
     {
       "module_type": "HeavyMissile",
       "grid_pos": [
-        14,
+        18,
         2
       ],
       "rotation": "East",
@@ -2189,7 +2705,8 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 1.0,
-          "damage": 1.15
+          "damage": 1.15,
+          "traverse": 1.0
         },
         "fire_group": 3,
         "ammo": null
@@ -2198,7 +2715,7 @@
     {
       "module_type": "HeavyMissile",
       "grid_pos": [
-        14,
+        18,
         -3
       ],
       "rotation": "East",
@@ -2208,7 +2725,8 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 1.0,
-          "damage": 1.15
+          "damage": 1.15,
+          "traverse": 1.0
         },
         "fire_group": 3,
         "ammo": null
@@ -2217,7 +2735,7 @@
     {
       "module_type": "HeavyMissile",
       "grid_pos": [
-        13,
+        18,
         4
       ],
       "rotation": "East",
@@ -2227,7 +2745,8 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 1.0,
-          "damage": 1.15
+          "damage": 1.15,
+          "traverse": 1.0
         },
         "fire_group": 3,
         "ammo": null
@@ -2236,7 +2755,7 @@
     {
       "module_type": "HeavyMissile",
       "grid_pos": [
-        13,
+        18,
         -5
       ],
       "rotation": "East",
@@ -2246,7 +2765,8 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 1.0,
-          "damage": 1.15
+          "damage": 1.15,
+          "traverse": 1.0
         },
         "fire_group": 3,
         "ammo": null
@@ -2265,7 +2785,8 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 0.9,
-          "damage": 1.2
+          "damage": 1.2,
+          "traverse": 1.0
         },
         "fire_group": 0,
         "ammo": "APHE"
@@ -2284,7 +2805,8 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 0.9,
-          "damage": 1.2
+          "damage": 1.2,
+          "traverse": 1.0
         },
         "fire_group": 0,
         "ammo": "APHE"
@@ -2303,7 +2825,8 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 0.9,
-          "damage": 1.2
+          "damage": 1.2,
+          "traverse": 1.0
         },
         "fire_group": 0,
         "ammo": "APHE"
@@ -2322,7 +2845,8 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 0.9,
-          "damage": 1.2
+          "damage": 1.2,
+          "traverse": 1.0
         },
         "fire_group": 0,
         "ammo": "APHE"
@@ -2341,7 +2865,8 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 1.1,
-          "damage": 1.05
+          "damage": 1.05,
+          "traverse": 1.0
         },
         "fire_group": 1,
         "ammo": "Flak"
@@ -2360,7 +2885,8 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 1.1,
-          "damage": 1.05
+          "damage": 1.05,
+          "traverse": 1.0
         },
         "fire_group": 1,
         "ammo": "Flak"
@@ -2379,7 +2905,8 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 1.1,
-          "damage": 1.05
+          "damage": 1.05,
+          "traverse": 1.0
         },
         "fire_group": 1,
         "ammo": "Flak"
@@ -2398,7 +2925,8 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 1.1,
-          "damage": 1.05
+          "damage": 1.05,
+          "traverse": 1.0
         },
         "fire_group": 1,
         "ammo": "Flak"
@@ -2417,7 +2945,8 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 1.0,
-          "damage": 1.15
+          "damage": 1.15,
+          "traverse": 1.0
         },
         "fire_group": 1,
         "ammo": null
@@ -2436,7 +2965,8 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 1.0,
-          "damage": 1.15
+          "damage": 1.15,
+          "traverse": 1.0
         },
         "fire_group": 1,
         "ammo": null
@@ -2504,6 +3034,578 @@
         0
       ],
       "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        13,
+        7
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        14,
+        7
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        15,
+        7
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        5,
+        7
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        6,
+        7
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        7,
+        7
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        16,
+        6
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        17,
+        6
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        2,
+        6
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        3,
+        6
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        4,
+        6
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        18,
+        5
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        0,
+        5
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        1,
+        5
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -3,
+        4
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -2,
+        4
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -1,
+        4
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -5,
+        3
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -4,
+        3
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -7,
+        2
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -6,
+        2
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -8,
+        1
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -8,
+        -2
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -7,
+        -3
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -6,
+        -3
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -5,
+        -4
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -4,
+        -4
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -3,
+        -5
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -2,
+        -5
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        -1,
+        -5
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        18,
+        -6
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        0,
+        -6
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        1,
+        -6
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        16,
+        -7
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        17,
+        -7
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        2,
+        -7
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        3,
+        -7
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        4,
+        -7
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        13,
+        -8
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        14,
+        -8
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        15,
+        -8
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        5,
+        -8
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        6,
+        -8
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        7,
+        -8
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        12,
+        8
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        8,
+        8
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        11,
+        8
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        9,
+        8
+      ],
+      "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        12,
+        -9
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        8,
+        -9
+      ],
+      "rotation": "South",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        11,
+        -9
+      ],
+      "rotation": "East",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "AngledArmorPlate",
+      "grid_pos": [
+        9,
+        -9
+      ],
+      "rotation": "South",
       "custom_name": null,
       "subcomponents": null,
       "extras": null

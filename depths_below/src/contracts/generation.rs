@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use rand::prelude::*;
 
-use crate::ai_ship::components::{faction_power, AiShipType, WorldSimulation};
+use crate::ai_ship::components::{faction_display_name, faction_power, AiShipType, WorldSimulation};
 use crate::components::{CreatureType, PoiType, ZoneType};
 use crate::resources::ItemType;
 use super::{
@@ -140,13 +140,13 @@ fn poi_types() -> &'static [PoiType] {
 /// need more faction rep to unlock) point at farther, tougher targets.
 fn ship_factions_for_star(star: u8) -> &'static [AiShipType] {
     match star {
-        1 => &[AiShipType::RustSwarm],
-        2 => &[AiShipType::RustSwarm, AiShipType::Leviathan, AiShipType::Drowned],
-        3 => &[AiShipType::AbyssalCult, AiShipType::GlassEye, AiShipType::Blackwater],
-        4 => &[AiShipType::Blackwater, AiShipType::IronTide],
+        1 => &[AiShipType::RecursiveKingdom],
+        2 => &[AiShipType::RecursiveKingdom, AiShipType::StellarPreserve, AiShipType::BrokenChoir],
+        3 => &[AiShipType::SynthesisCollective, AiShipType::TheSilence, AiShipType::GildedThrone],
+        4 => &[AiShipType::GildedThrone, AiShipType::TerranHegemony],
         // Bosses only show up at the top star tier (max faction rep) — rare,
         // legendary jackpot bounties, not a routine offering.
-        _ => &[AiShipType::IronTide, AiShipType::PressureKing, AiShipType::Dreadnought, AiShipType::VoidTitan],
+        _ => &[AiShipType::TerranHegemony, AiShipType::CorpseStars, AiShipType::EternalHegemony, AiShipType::Shepherd],
     }
 }
 
@@ -165,7 +165,7 @@ fn destroy_ship_reward(star: u8, ship_type: AiShipType, distance: f32, rng: &mut
     // up to 5x at ~800,000+ out (boss territory).
     let distance_mult = 1.0 + (distance / 175_000.0).min(4.0);
 
-    // 0.6x for the weakest faction (GlassEye) up to 3.8x for Void Titan.
+    // 0.6x for the weakest faction (The Silence) up to 3.8x for The Shepherd.
     let power_mult = 0.6 + faction_power(ship_type) * 0.4;
 
     (base * distance_mult * power_mult).round() as u32
@@ -183,21 +183,6 @@ fn tag_destroy_ship_target(star: u8, sim: &mut WorldSimulation, active_systems: 
         }
     }
     None
-}
-
-fn ship_display_name(ship_type: AiShipType) -> &'static str {
-    match ship_type {
-        AiShipType::VoidTitan => "Void Titan",
-        AiShipType::Dreadnought => "Dreadnought",
-        AiShipType::Leviathan => "Leviathan Rider",
-        AiShipType::AbyssalCult => "Abyssal Cult",
-        AiShipType::Drowned => "Drowned",
-        AiShipType::PressureKing => "Pressure King",
-        AiShipType::GlassEye => "Glass Eye",
-        AiShipType::IronTide => "Iron Tide",
-        AiShipType::Blackwater => "Blackwater",
-        AiShipType::RustSwarm => "Rust Swarm",
-    }
 }
 
 // ============================================================================
@@ -281,8 +266,8 @@ fn generate_single_contract(
                 return None;
             };
             reward = destroy_ship_reward(star, ship_type, distance, rng);
-            let name = ship_display_name(ship_type);
-            let is_boss = matches!(ship_type, AiShipType::Dreadnought | AiShipType::VoidTitan);
+            let name = faction_display_name(ship_type);
+            let is_boss = matches!(ship_type, AiShipType::EternalHegemony | AiShipType::Shepherd);
             let (title, desc) = if is_boss {
                 (
                     format!("JACKPOT BOUNTY: {}", name),

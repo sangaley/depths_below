@@ -1,56 +1,8 @@
 {
-  "name": "pressure_king",
+  "name": "corpse_stars",
   "hull_cells": [
     {
       "grid_pos": [
-        -2,
-        4
-      ],
-      "layer": "Outer",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        -1,
-        4
-      ],
-      "layer": "Outer",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        0,
-        4
-      ],
-      "layer": "Outer",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        1,
-        4
-      ],
-      "layer": "Outer",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        2,
-        4
-      ],
-      "layer": "Outer",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        3,
-        4
-      ],
-      "layer": "Outer",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
         4,
         4
       ],
@@ -59,34 +11,26 @@
     },
     {
       "grid_pos": [
-        -3,
-        3
+        5,
+        4
       ],
       "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
-        -2,
-        3
+        6,
+        4
       ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
-        -1,
-        3
+        7,
+        4
       ],
-      "layer": "Inner",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        0,
-        3
-      ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
@@ -94,7 +38,7 @@
         1,
         3
       ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
@@ -102,7 +46,7 @@
         2,
         3
       ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
@@ -110,7 +54,7 @@
         3,
         3
       ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
@@ -126,7 +70,7 @@
         5,
         3
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "AbyssalAlloy"
     },
     {
@@ -134,7 +78,7 @@
         6,
         3
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "AbyssalAlloy"
     },
     {
@@ -142,31 +86,23 @@
         7,
         3
       ],
-      "layer": "Outer",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        -4,
-        2
-      ],
-      "layer": "Outer",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        -3,
-        2
-      ],
       "layer": "Inner",
       "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
-        -2,
-        2
+        8,
+        3
       ],
-      "layer": "Inner",
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
+    },
+    {
+      "grid_pos": [
+        9,
+        3
+      ],
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
@@ -174,7 +110,7 @@
         -1,
         2
       ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
@@ -182,7 +118,7 @@
         0,
         2
       ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
@@ -246,7 +182,7 @@
         8,
         2
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "AbyssalAlloy"
     },
     {
@@ -254,7 +190,7 @@
         9,
         2
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "AbyssalAlloy"
     },
     {
@@ -267,8 +203,8 @@
     },
     {
       "grid_pos": [
-        -4,
-        1
+        11,
+        2
       ],
       "layer": "Outer",
       "material": "AbyssalAlloy"
@@ -278,7 +214,7 @@
         -3,
         1
       ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
@@ -286,7 +222,7 @@
         -2,
         1
       ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
@@ -390,7 +326,7 @@
         11,
         1
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "AbyssalAlloy"
     },
     {
@@ -403,18 +339,10 @@
     },
     {
       "grid_pos": [
-        -5,
-        0
-      ],
-      "layer": "Outer",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
         -4,
         0
       ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
@@ -555,18 +483,10 @@
     },
     {
       "grid_pos": [
-        -5,
-        -1
-      ],
-      "layer": "Outer",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
         -4,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
@@ -707,7 +627,7 @@
     },
     {
       "grid_pos": [
-        -4,
+        -3,
         -2
       ],
       "layer": "Outer",
@@ -715,18 +635,10 @@
     },
     {
       "grid_pos": [
-        -3,
-        -2
-      ],
-      "layer": "Inner",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
         -2,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
@@ -830,7 +742,7 @@
         11,
         -2
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "AbyssalAlloy"
     },
     {
@@ -843,7 +755,7 @@
     },
     {
       "grid_pos": [
-        -4,
+        -1,
         -3
       ],
       "layer": "Outer",
@@ -851,34 +763,10 @@
     },
     {
       "grid_pos": [
-        -3,
-        -3
-      ],
-      "layer": "Inner",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        -2,
-        -3
-      ],
-      "layer": "Inner",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        -1,
-        -3
-      ],
-      "layer": "Inner",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
         0,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
@@ -942,7 +830,7 @@
         8,
         -3
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "AbyssalAlloy"
     },
     {
@@ -950,7 +838,7 @@
         9,
         -3
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "AbyssalAlloy"
     },
     {
@@ -963,34 +851,10 @@
     },
     {
       "grid_pos": [
-        -3,
-        -4
+        11,
+        -3
       ],
       "layer": "Outer",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        -2,
-        -4
-      ],
-      "layer": "Inner",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        -1,
-        -4
-      ],
-      "layer": "Inner",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        0,
-        -4
-      ],
-      "layer": "Inner",
       "material": "AbyssalAlloy"
     },
     {
@@ -998,7 +862,7 @@
         1,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
@@ -1006,7 +870,7 @@
         2,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
@@ -1014,7 +878,7 @@
         3,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
@@ -1030,7 +894,7 @@
         5,
         -4
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "AbyssalAlloy"
     },
     {
@@ -1038,7 +902,7 @@
         6,
         -4
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "AbyssalAlloy"
     },
     {
@@ -1046,53 +910,21 @@
         7,
         -4
       ],
-      "layer": "Outer",
+      "layer": "Inner",
       "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
-        -2,
-        -5
+        8,
+        -4
       ],
       "layer": "Outer",
       "material": "AbyssalAlloy"
     },
     {
       "grid_pos": [
-        -1,
-        -5
-      ],
-      "layer": "Outer",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        0,
-        -5
-      ],
-      "layer": "Outer",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        1,
-        -5
-      ],
-      "layer": "Outer",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        2,
-        -5
-      ],
-      "layer": "Outer",
-      "material": "AbyssalAlloy"
-    },
-    {
-      "grid_pos": [
-        3,
-        -5
+        9,
+        -4
       ],
       "layer": "Outer",
       "material": "AbyssalAlloy"
@@ -1100,6 +932,30 @@
     {
       "grid_pos": [
         4,
+        -5
+      ],
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
+    },
+    {
+      "grid_pos": [
+        5,
+        -5
+      ],
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
+    },
+    {
+      "grid_pos": [
+        6,
+        -5
+      ],
+      "layer": "Outer",
+      "material": "AbyssalAlloy"
+    },
+    {
+      "grid_pos": [
+        7,
         -5
       ],
       "layer": "Outer",
@@ -1208,8 +1064,7 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 1.0,
-          "damage": 1.0,
-          "traverse": 1.0
+          "damage": 1.0
         },
         "fire_group": 3,
         "ammo": null
@@ -1228,8 +1083,7 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 0.9,
-          "damage": 1.2,
-          "traverse": 1.0
+          "damage": 1.2
         },
         "fire_group": 1,
         "ammo": null
@@ -1248,8 +1102,7 @@
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 0.9,
-          "damage": 1.2,
-          "traverse": 1.0
+          "damage": 1.2
         },
         "fire_group": 1,
         "ammo": null
@@ -1268,8 +1121,7 @@
         "tuning": {
           "velocity": 1.1,
           "fire_rate": 0.7,
-          "damage": 1.4,
-          "traverse": 1.0
+          "damage": 1.4
         },
         "fire_group": 0,
         "ammo": "HESH"
@@ -1288,8 +1140,7 @@
         "tuning": {
           "velocity": 1.1,
           "fire_rate": 0.7,
-          "damage": 1.4,
-          "traverse": 1.0
+          "damage": 1.4
         },
         "fire_group": 0,
         "ammo": "HESH"
@@ -1301,15 +1152,14 @@
         9,
         -3
       ],
-      "rotation": "South",
+      "rotation": "East",
       "custom_name": null,
       "subcomponents": null,
       "extras": {
         "tuning": {
           "velocity": 1.0,
           "fire_rate": 1.0,
-          "damage": 1.1,
-          "traverse": 1.0
+          "damage": 1.1
         },
         "fire_group": 2,
         "ammo": null
@@ -1355,402 +1205,6 @@
         0
       ],
       "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        5,
-        4
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        6,
-        4
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        7,
-        4
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        -3,
-        4
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        8,
-        3
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        9,
-        3
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        10,
-        3
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        -4,
-        3
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        11,
-        2
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        12,
-        2
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        13,
-        1
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        -5,
-        1
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        13,
-        -2
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        -5,
-        -2
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        11,
-        -3
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        12,
-        -3
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        8,
-        -4
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        9,
-        -4
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        10,
-        -4
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        -4,
-        -4
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        5,
-        -5
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        6,
-        -5
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        7,
-        -5
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        -3,
-        -5
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        4,
-        5
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        -2,
-        5
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        3,
-        5
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        -1,
-        5
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        2,
-        5
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        0,
-        5
-      ],
-      "rotation": "West",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        4,
-        -6
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        -2,
-        -6
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        3,
-        -6
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        -1,
-        -6
-      ],
-      "rotation": "South",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        2,
-        -6
-      ],
-      "rotation": "East",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "AngledArmorPlate",
-      "grid_pos": [
-        0,
-        -6
-      ],
-      "rotation": "South",
       "custom_name": null,
       "subcomponents": null,
       "extras": null

@@ -37,27 +37,27 @@ pub fn init_world_simulation(
     // ai_weapon_fire_system) close enough to immediately engage, so the
     // standoff/orbit "keep distance" behavior in ai_ship_movement_system can
     // be watched in isolation without the rest of the world simulation.
-    // Drowned, not IronTide: IronTide is a ~10x16-cell battleship with a
+    // Broken Choir, not Terran Hegemony: Terran Hegemony is a ~10x16-cell battleship with a
     // full hull shell around every module — with the 45-unit "nearest
     // block" hit radius, shots just kept landing on whatever hull was
     // closest across that huge surface and never punched through to a
-    // module, which read as "modules are invincible". Drowned is much
+    // module, which read as "modules are invincible". Broken Choir is much
     // smaller (~6x10) while still holding a real standoff distance
-    // (unlike RustSwarm, which rams point-blank).
+    // (unlike Recursive Kingdom, which rams point-blank).
     if crate::demo::skip_ai_ship_spawn() {
         if std::env::var("DEPTHS_MOVETEST_ENEMY").ok().as_deref() == Some("1") {
             // DEPTHS_MOVETEST_ENEMY_FACTION overrides the dummy's faction for
-            // behavior-tree testing (e.g. "GlassEye", "IronTide") — defaults
-            // to Drowned for the original damage-model testing use case.
+            // behavior-tree testing (e.g. "The Silence", "Terran Hegemony") — defaults
+            // to Broken Choir for the original damage-model testing use case.
             let faction = match std::env::var("DEPTHS_MOVETEST_ENEMY_FACTION").ok().as_deref() {
-                Some("Leviathan") => AiShipType::Leviathan,
-                Some("AbyssalCult") => AiShipType::AbyssalCult,
-                Some("PressureKing") => AiShipType::PressureKing,
-                Some("GlassEye") => AiShipType::GlassEye,
-                Some("IronTide") => AiShipType::IronTide,
-                Some("Blackwater") => AiShipType::Blackwater,
-                Some("RustSwarm") => AiShipType::RustSwarm,
-                _ => AiShipType::Drowned,
+                Some("StellarPreserve") => AiShipType::StellarPreserve,
+                Some("SynthesisCollective") => AiShipType::SynthesisCollective,
+                Some("CorpseStars") => AiShipType::CorpseStars,
+                Some("TheSilence") => AiShipType::TheSilence,
+                Some("TerranHegemony") => AiShipType::TerranHegemony,
+                Some("GildedThrone") => AiShipType::GildedThrone,
+                Some("RecursiveKingdom") => AiShipType::RecursiveKingdom,
+                _ => AiShipType::BrokenChoir,
             };
             sim.ships.push(SimulatedShip {
                 system_id: 0,
@@ -76,13 +76,13 @@ pub fn init_world_simulation(
         }
 
         // TEMP [AI_VS_AI_DIAGNOSTIC]: spawns a tight cluster of guaranteed
-        // combat-capable ships (alternating Iron Tide / Rust Swarm / Drowned
-        // / Blackwater, all "attack anything in range" factions per
+        // combat-capable ships (alternating Terran Hegemony / Recursive Kingdom / Broken Choir
+        // / Gilded Throne, all "attack anything in range" factions per
         // ai_brain.rs) close enough together to be within engage range from
         // the start, for headlessly verifying AI-vs-AI combat actually
         // lands hits. Remove once the diagnosis is confirmed.
         if let Ok(count) = std::env::var("DEPTHS_AI_VS_AI_TEST").unwrap_or_default().parse::<usize>() {
-            let factions = [AiShipType::IronTide, AiShipType::RustSwarm, AiShipType::Drowned, AiShipType::Blackwater];
+            let factions = [AiShipType::TerranHegemony, AiShipType::RecursiveKingdom, AiShipType::BrokenChoir, AiShipType::GildedThrone];
             for i in 0..count {
                 let angle = (i as f32 / count as f32) * std::f32::consts::TAU;
                 let pos = Vec2::new(angle.cos(), angle.sin()) * 400.0;
@@ -342,12 +342,12 @@ pub fn spawn_raider_waves(
     let mut rng = rand::thread_rng();
 
     let faction = match rng.gen_range(0..3) {
-        0 => AiShipType::RustSwarm,   // swarm of junk ships
-        1 => AiShipType::Blackwater,  // tactical mercs
-        _ => AiShipType::Drowned,     // erratic ghost ships
+        0 => AiShipType::RecursiveKingdom,   // swarm of junk ships
+        1 => AiShipType::GildedThrone,  // tactical mercs
+        _ => AiShipType::BrokenChoir,     // erratic ghost ships
     };
     let count = match faction {
-        AiShipType::RustSwarm => rng.gen_range(3..=5),
+        AiShipType::RecursiveKingdom => rng.gen_range(3..=5),
         _ => rng.gen_range(2..=3),
     };
 

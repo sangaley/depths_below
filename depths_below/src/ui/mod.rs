@@ -3107,21 +3107,25 @@ fn spawn_galaxy_map_overlay(
                 width: Val::Px(panel_size),
                 ..default()
             }).with_children(|legend| {
-                use crate::ai_ship::components::{faction_map_color, AiShipType};
-                let entries: &[(Color, &str)] = &[
-                    (Color::srgb(0.3, 0.9, 1.0), "Haven"),
-                    (faction_map_color(AiShipType::RustSwarm), "Rust Swarm"),
-                    (faction_map_color(AiShipType::Drowned), "Drowned"),
-                    (faction_map_color(AiShipType::Leviathan), "Leviathan"),
-                    (faction_map_color(AiShipType::AbyssalCult), "Abyssal Cult"),
-                    (faction_map_color(AiShipType::GlassEye), "Glass Eye"),
-                    (faction_map_color(AiShipType::Blackwater), "Blackwater"),
-                    (faction_map_color(AiShipType::PressureKing), "Pressure King"),
-                    (faction_map_color(AiShipType::IronTide), "Iron Tide"),
-                    (faction_map_color(AiShipType::Dreadnought), "Dreadnought"),
-                    (faction_map_color(AiShipType::VoidTitan), "Void Titan"),
-                    (theme::ThemeColors::TEXT_MUTED, "Located (unknown)"),
+                use crate::ai_ship::components::{faction_display_name, faction_map_color, AiShipType};
+                // Labels come from faction_display_name so the legend can never
+                // drift out of step with the roster.
+                let factions = [
+                    AiShipType::RecursiveKingdom,
+                    AiShipType::BrokenChoir,
+                    AiShipType::StellarPreserve,
+                    AiShipType::SynthesisCollective,
+                    AiShipType::TheSilence,
+                    AiShipType::GildedThrone,
+                    AiShipType::CorpseStars,
+                    AiShipType::TerranHegemony,
+                    AiShipType::EternalHegemony,
+                    AiShipType::Shepherd,
                 ];
+                let mut entries: Vec<(Color, &str)> = vec![(Color::srgb(0.3, 0.9, 1.0), "Haven")];
+                entries.extend(factions.iter().map(|f| (faction_map_color(*f), faction_display_name(*f))));
+                entries.push((theme::ThemeColors::TEXT_MUTED, "Located (unknown)"));
+                let entries: &[(Color, &str)] = &entries;
                 for (color, label) in entries {
                     legend.spawn(Node {
                         flex_direction: FlexDirection::Row,

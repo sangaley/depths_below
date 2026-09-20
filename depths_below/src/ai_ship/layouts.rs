@@ -93,33 +93,40 @@ impl AiShipLayout {
 }
 
 /// Stable file name per faction (designs/factions/<slug>.json).
+/// Filename stem for this faction's design under `designs/factions/`.
+///
+/// These MUST match the files on disk. `faction_design()` in spawner.rs
+/// silently falls back to the built-in layout and re-exports it when a file is
+/// missing, so a slug that no longer matches quietly replaces a hand-armoured
+/// hull with the old one and reports nothing.
 pub fn design_slug(ship_type: AiShipType) -> &'static str {
     match ship_type {
-        AiShipType::Leviathan => "leviathan",
-        AiShipType::AbyssalCult => "abyssal_cult",
-        AiShipType::Drowned => "drowned",
-        AiShipType::PressureKing => "pressure_king",
-        AiShipType::GlassEye => "glass_eye",
-        AiShipType::IronTide => "iron_tide",
-        AiShipType::Blackwater => "blackwater",
-        AiShipType::RustSwarm => "rust_swarm",
-        AiShipType::Dreadnought => "dreadnought",
-        AiShipType::VoidTitan => "void_titan",
+        AiShipType::StellarPreserve => "stellar_preserve",
+        AiShipType::SynthesisCollective => "synthesis_collective",
+        AiShipType::BrokenChoir => "broken_choir",
+        AiShipType::CorpseStars => "corpse_stars",
+        AiShipType::TheSilence => "the_silence",
+        AiShipType::TerranHegemony => "terran_hegemony",
+        AiShipType::GildedThrone => "gilded_throne",
+        AiShipType::RecursiveKingdom => "recursive_kingdom",
+        AiShipType::EternalHegemony => "eternal_hegemony",
+        AiShipType::Shepherd => "shepherd",
     }
 }
 
+
 pub fn get_layout(ship_type: AiShipType) -> AiShipLayout {
     match ship_type {
-        AiShipType::Leviathan => leviathan_layout(),
-        AiShipType::AbyssalCult => abyssal_cult_layout(),
-        AiShipType::Drowned => drowned_layout(),
-        AiShipType::PressureKing => pressure_king_layout(),
-        AiShipType::GlassEye => glass_eye_layout(),
-        AiShipType::IronTide => iron_tide_layout(),
-        AiShipType::Blackwater => blackwater_layout(),
-        AiShipType::RustSwarm => rust_swarm_layout(),
-        AiShipType::Dreadnought => dreadnought_layout(),
-        AiShipType::VoidTitan => void_titan_layout(),
+        AiShipType::StellarPreserve => leviathan_layout(),
+        AiShipType::SynthesisCollective => abyssal_cult_layout(),
+        AiShipType::BrokenChoir => drowned_layout(),
+        AiShipType::CorpseStars => pressure_king_layout(),
+        AiShipType::TheSilence => glass_eye_layout(),
+        AiShipType::TerranHegemony => iron_tide_layout(),
+        AiShipType::GildedThrone => blackwater_layout(),
+        AiShipType::RecursiveKingdom => rust_swarm_layout(),
+        AiShipType::EternalHegemony => dreadnought_layout(),
+        AiShipType::Shepherd => void_titan_layout(),
     }
 }
 
@@ -419,7 +426,7 @@ fn glass_eye_layout() -> AiShipLayout {
 // ============================================================================
 // IRON TIDE - Heavy battleship, massive hull, multiple weapon systems.
 // Titanium, slow but devastating firepower — the strongest "normal" faction,
-// though the true bosses (Dreadnought, Void Titan) now dwarf even this.
+// though the true bosses (Eternal Hegemony, The Shepherd) now dwarf even this.
 // ============================================================================
 fn iron_tide_layout() -> AiShipLayout {
     let material = HullMaterial::Titanium;
@@ -592,8 +599,8 @@ fn rust_swarm_layout() -> AiShipLayout {
 }
 
 // ============================================================================
-// DREADNOUGHT - Iron Tide's design taken to its limit: a true mega-battleship.
-// Titanium, roughly 1.5x Iron Tide's footprint in every dimension, with
+// DREADNOUGHT - Terran Hegemony's design taken to its limit: a true mega-battleship.
+// Titanium, roughly 1.5x Terran Hegemony's footprint in every dimension, with
 // weapon coverage to match. Spawns only far past the star system — finding
 // one at all is most of the fight.
 // ============================================================================
@@ -641,7 +648,7 @@ fn dreadnought_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::AdvancedRepairBay, grid_pos: IVec2::new(4, 1), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::AdvancedRepairBay, grid_pos: IVec2::new(4, -1), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::RepairBay, grid_pos: IVec2::new(4, 0), rotation: Rotation::North },
-        // Weapons array — nearly double Iron Tide's coverage
+        // Weapons array — nearly double Terran Hegemony's coverage
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(16, 0), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(16, 3), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(16, -4), rotation: Rotation::East },
@@ -696,8 +703,8 @@ fn dreadnought_layout() -> AiShipLayout {
 }
 
 // ============================================================================
-// VOID TITAN - The largest, hardest kill in the game. Abyssal Cult's organic
-// hull language taken to a monstrous scale, armed like a Dreadnought and
+// VOID TITAN - The largest, hardest kill in the game. Synthesis Collective's organic
+// hull language taken to a monstrous scale, armed like a Eternal Hegemony and
 // self-healing like the Cult it's descended from. Spawns beyond everything
 // else in explored space.
 // ============================================================================
@@ -838,11 +845,61 @@ mod layout_tests {
     use std::collections::HashSet;
 
     const ALL: [AiShipType; 10] = [
-        AiShipType::Leviathan, AiShipType::AbyssalCult, AiShipType::Drowned,
-        AiShipType::PressureKing, AiShipType::GlassEye, AiShipType::IronTide,
-        AiShipType::Blackwater, AiShipType::RustSwarm, AiShipType::Dreadnought,
-        AiShipType::VoidTitan,
+        AiShipType::StellarPreserve, AiShipType::SynthesisCollective, AiShipType::BrokenChoir,
+        AiShipType::CorpseStars, AiShipType::TheSilence, AiShipType::TerranHegemony,
+        AiShipType::GildedThrone, AiShipType::RecursiveKingdom, AiShipType::EternalHegemony,
+        AiShipType::Shepherd,
     ];
+
+    /// A slug must name a file that is actually there, and no design file may
+    /// be left unclaimed.
+    ///
+    /// `faction_design()` in spawner.rs loads `designs/factions/<slug>.json`
+    /// and, when the file is missing, silently rebuilds from the fallback in
+    /// this file and writes that out instead. Nothing is logged. So renaming a
+    /// faction without moving its JSON swaps a hand-armoured hull for the old
+    /// one and the only symptom is that the ship looks subtly wrong in a fight
+    /// nobody is watching closely.
+    ///
+    /// The orphan half of the check is the half that catches a half-done
+    /// rename: the stale file stays on disk claimed by nobody.
+    #[test]
+    fn design_slugs_and_files_agree() {
+        use std::collections::HashSet;
+        use std::path::Path;
+
+        let dir = Path::new("designs/factions");
+        assert!(dir.is_dir(), "designs/factions missing — run from the crate root");
+
+        let claimed: HashSet<String> = ALL.iter().map(|&f| design_slug(f).to_string()).collect();
+        assert_eq!(claimed.len(), ALL.len(), "two factions share a design slug");
+
+        let on_disk: HashSet<String> = std::fs::read_dir(dir)
+            .expect("read designs/factions")
+            .filter_map(|e| e.ok())
+            .filter_map(|e| e.file_name().to_str()?.strip_suffix(".json").map(str::to_string))
+            .collect();
+
+        let orphans: Vec<_> = on_disk.difference(&claimed).cloned().collect();
+        assert!(
+            orphans.is_empty(),
+            "design files claimed by no faction slug (half-finished rename?): {:?}",
+            orphans
+        );
+
+        // Each present file must also agree with its own filename internally,
+        // since the name field is what a design round-trips under.
+        for slug in claimed.intersection(&on_disk) {
+            let path = dir.join(format!("{}.json", slug));
+            let bp = crate::building::blueprint::load_design_file(&path)
+                .unwrap_or_else(|| panic!("{} exists but will not parse", path.display()));
+            assert_eq!(
+                &bp.name, slug,
+                "{} carries name {:?} — the loader would re-export it under the wrong stem",
+                path.display(), bp.name
+            );
+        }
+    }
 
     fn hull_cells(layout: &AiShipLayout) -> HashSet<IVec2> {
         layout.hull_cells.iter().map(|c| c.grid_pos).collect()
