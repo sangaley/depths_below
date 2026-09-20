@@ -43,7 +43,11 @@ pub fn update_ship_state(
 pub fn check_game_over(
     hull_state: Res<HullState>,
     crew_query: Query<&CrewMember>,
-    core_query: Query<(&Module, &MemoryCoreComp), (Without<DestroyedModule>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
+    // Includes destroyed cores on purpose — see below.
+    core_query: Query<
+        Option<&DestroyedModule>,
+        (With<MemoryCoreComp>, Without<crate::ai_ship::components::OwnedByAiShip>),
+    >,
     mut death_cause: ResMut<DeathCause>,
     mut next_state: ResMut<NextState<GameState>>,
     mut notifications: MessageWriter<ShowNotification>,
@@ -59,8 +63,21 @@ pub fn check_game_over(
     // Cores are the player's own continuity, not just equipment. Losing every
     // one is a different death from losing the hull: the ship can still be
     // structurally fine and full of living people.
-    let cores_alive = core_query.iter().filter(|(m, _)| m.is_active).count();
-    let had_cores = !core_query.is_empty();
+    //
+    // Two things this must NOT do, both of which it did on the first attempt.
+    //
+    // It must not count `is_active`. That tracks whether a module is powered,
+    // and a browned-out core is still a core — the first version ended the run
+    // three seconds after launch, at full hull with nobody hurt, because the
+    // cores had not been energised yet.
+    //
+    // And the query must include destroyed cores, or the condition erases
+    // itself: filtering them out means that once the last one dies the query
+    // is empty, "did this ship ever have cores" reads false, and the death
+    // never fires at all.
+    let cores_total = core_query.iter().count();
+    let cores_alive = core_query.iter().filter(|destroyed| destroyed.is_none()).count();
+    let had_cores = cores_total > 0;
 
     let crew_count = crew_query.iter().count();
     let all_crew_dead = crew_count == 0 || crew_query.iter().all(|c| c.health <= 0.0);

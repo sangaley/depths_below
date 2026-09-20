@@ -2,6 +2,7 @@
 //! simulates rather than through cutscenes.
 
 pub mod logs;
+pub mod doppelganger;
 pub mod reader;
 pub mod truth;
 
@@ -109,6 +110,7 @@ impl Plugin for NarrativePlugin {
         app.init_resource::<FinaleFound>();
         app.add_plugins(reader::LogReaderPlugin);
         app.add_plugins(truth::TruthPlugin);
+        app.add_plugins(doppelganger::DoppelgangerPlugin);
         app.init_resource::<CascadeState>().add_systems(
             Update,
             update_cascade.run_if(in_state(GameState::Exploring).or_else(in_state(GameState::StationDocked))),

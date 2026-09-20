@@ -16,6 +16,46 @@ use super::layouts;
 /// so every faction ship exists as editable JSON after the first encounter.
 static DESIGN_CACHE: OnceLock<Mutex<HashMap<AiShipType, Blueprint>>> = OnceLock::new();
 
+/// A copy of the player's own ship, held aside for the one enemy that is meant
+/// to be built from it.
+///
+/// Set at launch (see narrative::doppelganger). Consulted only for the ship
+/// type the story uses as its host, and only when armed; every other spawn
+/// goes through the ordinary faction design and is unaffected.
+static MIRROR_DESIGN: OnceLock<Mutex<Option<Blueprint>>> = OnceLock::new();
+
+fn mirror_slot() -> &'static Mutex<Option<Blueprint>> {
+    MIRROR_DESIGN.get_or_init(|| Mutex::new(None))
+}
+
+/// Hand the spawner the player's current design.
+pub fn set_mirror_design(design: Option<Blueprint>) {
+    if let Ok(mut slot) = mirror_slot().lock() {
+        *slot = design;
+    }
+}
+
+/// Is there a captured design waiting to be worn?
+pub fn has_mirror_design() -> bool {
+    mirror_slot().lock().map(|s| s.is_some()).unwrap_or(false)
+}
+
+/// Spawn one ship that is built from the player's own design.
+///
+/// Takes the design rather than cloning it into the faction cache, so the
+/// next ordinary ship of that faction is still an ordinary ship. The point is
+/// that one of them is wrong, not that the faction changes.
+pub fn spawn_mirror_ship(
+    ship_type: AiShipType,
+    position: Vec2,
+    commands: &mut Commands,
+    registry: &ModuleRegistry,
+    asset_server: &AssetServer,
+) -> Option<Entity> {
+    let design = mirror_slot().lock().ok()?.clone()?;
+    Some(spawn_ai_ship_with_design(ship_type, position, commands, registry, asset_server, Some(design)))
+}
+
 fn faction_design(ship_type: AiShipType) -> Blueprint {
     let cache = DESIGN_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     let mut cache = cache.lock().unwrap();
@@ -92,7 +132,20 @@ pub fn spawn_ai_ship(
     registry: &ModuleRegistry,
     asset_server: &AssetServer,
 ) -> Entity {
-    let design = faction_design(ship_type);
+    spawn_ai_ship_with_design(ship_type, position, commands, registry, asset_server, None)
+}
+
+/// As `spawn_ai_ship`, but optionally wearing a design that is not this
+/// faction's own.
+pub fn spawn_ai_ship_with_design(
+    ship_type: AiShipType,
+    position: Vec2,
+    commands: &mut Commands,
+    registry: &ModuleRegistry,
+    asset_server: &AssetServer,
+    override_design: Option<Blueprint>,
+) -> Entity {
+    let design = override_design.unwrap_or_else(|| faction_design(ship_type));
     let body_size = design_body_size(&design);
 
     let mut rng = rand::thread_rng();
