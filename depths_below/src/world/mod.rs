@@ -305,7 +305,12 @@ fn tick_market_events(
 /// Discover log entries when near POIs that have them
 fn discover_log_entries(
     ship_query: Query<&GlobalTransform, With<Ship>>,
-    log_query: Query<(&GlobalTransform, &LogEntry, &PointOfInterest), Without<Ship>>,
+    // Deliberately does NOT require PointOfInterest. That component only
+    // exists on the chunk layer, which generates in a narrow band of world Y
+    // around the origin — so requiring it meant a log could only ever be read
+    // near Haven, and celestial derelicts out in the galaxy were invisible to
+    // this system no matter what they carried.
+    log_query: Query<(&GlobalTransform, &LogEntry), Without<Ship>>,
     mut statistics: ResMut<Statistics>,
     mut notifications: MessageWriter<ShowNotification>,
     mut discovered_logs: Local<Vec<String>>,
@@ -313,7 +318,7 @@ fn discover_log_entries(
     let Ok(ship_gt) = ship_query.single() else { return };
     let ship_pos = ship_gt.translation().truncate();
 
-    for (poi_gt, log, _poi) in log_query.iter() {
+    for (poi_gt, log) in log_query.iter() {
         let poi_pos = poi_gt.translation().truncate();
         let dist = ship_pos.distance(poi_pos);
 

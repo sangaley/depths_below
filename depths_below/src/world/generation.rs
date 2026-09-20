@@ -3,89 +3,6 @@ use rand::prelude::*;
 use crate::components::*;
 use crate::sprite_map;
 
-/// Dark & mysterious narrative log entries placed at POIs throughout the void.
-/// Each entry: (title, text, minimum_depth_level)
-const LOG_ENTRIES: &[(&str, &str, i32)] = &[
-    // --- NEAR ORBIT (depth 0-3) ---
-    ("Expedition Log #1",
-     "Day 3: We've pushed past the asteroid fields. Radar shows massive structures ahead. Not natural formations.",
-     1),
-    ("Recovered Note",
-     "To whoever finds this: the company lied about what's out here. Turn back. The station has forgotten this sector for good reason.",
-     2),
-    ("Ship's Log: CSS Meridian",
-     "Engine failure at sector 180. Hull compromised. Three crew missing since last night. Nobody heard them leave.",
-     2),
-
-    // --- ASTEROID BELT (depth 3-6) ---
-    ("Expedition Log #2",
-     "Day 7: Found wreckage of a previous expedition. Their hull was breached from the INSIDE. What could do that?",
-     3),
-    ("Research Note: Acoustics",
-     "We've been recording infrasound from deeper in the void. When played back at normal speed, it sounds like breathing.",
-     4),
-    ("Distress Signal (Decoded)",
-     "MAYDAY MAYDAY. Something is following us. It matches our speed exactly. It's been three days. It never gets closer, never falls behind.",
-     5),
-    ("Research Note: Luminescence",
-     "The creatures here don't just glow - they communicate with light. Patterns too complex to be random. Are they... words?",
-     5),
-
-    // --- DEEP SPACE (depth 6-10) ---
-    ("Expedition Log #3",
-     "Day 12: The ruins are older than anything at the station. Carved metal at sector 800. Impossible engineering. The carvings depict... us. Ships. How?",
-     6),
-    ("Personal Journal: Dr. Vasquez",
-     "The symbols match nothing in any database. But I dream about them now. In the dreams, I can read them perfectly. I just can't remember what they say when I wake.",
-     7),
-    ("Engineering Report",
-     "Hull sensors report external contact - something is running along the hull. Like fingers. There's nothing on radar.",
-     8),
-    ("Audio Transcript #47",
-     "RESEARCHER: The artifact we recovered - it's warm to the touch. CAPTAIN: That's impossible in the void. RESEARCHER: I know. And it's getting warmer.",
-     9),
-    ("Warning Beacon",
-     "AUTOMATED MESSAGE: Do not proceed past sector 1000. Repeat: DO NOT proceed. The watchers are not what they seem.",
-     9),
-
-    // --- NEBULA (depth 10-16) ---
-    ("Expedition Log #4",
-     "Day 18: We can hear it now. A low hum from deeper in. The instruments say nothing is there, but we can all hear it. Chen says it's trying to communicate.",
-     10),
-    ("Recovered Black Box",
-     "Last words of the crew of the DSV Orpheus: 'It opened its eyes. Oh god, the whole void opened its eyes.'",
-     11),
-    ("Research Note: Evolution",
-     "These creatures didn't evolve to live here. They evolved somewhere else and were... placed here. Like prisoners. Or guards.",
-     12),
-    ("Fragment: Ancient Text",
-     "Translation (partial): '...and in the deep void we built our prisons, for what slumbers must never dream of the worlds above...'",
-     13),
-    ("Personal Log: Unknown Author",
-     "Day ??? The compass doesn't work anymore. Neither does time. My watch says it's been 3 hours. My body says weeks. I can feel the hum in my teeth.",
-     14),
-    ("Radio Intercept",
-     "Station control, this is Deep Outpost Seven. We are NOT alone out here. I don't mean the creatures. Something is watching through them. Request immediate extraction.",
-     15),
-
-    // --- BLACK HOLE PROXIMITY (depth 16+) ---
-    ("Final Transmission",
-     "They built this place to contain something. The ruins aren't ruins - they're a cage. And it's waking up.",
-     16),
-    ("Carved Metal (Translated)",
-     "WE WHO GUARD THE DEEP VOID WARN YOU: WHAT SLEEPS BEYOND DREAMS OF YOUR WORLDS. DO NOT WAKE IT. DO NOT LISTEN TO ITS SONGS.",
-     17),
-    ("???",
-     "The hum has stopped. That's worse. That's so much worse.",
-     18),
-    ("Final Entry",
-     "We were wrong about everything. The void isn't hostile. It's terrified. Space itself is trying to keep us away from what lies beyond.",
-     19),
-    ("[UNTITLED]",
-     "You found it. The deepest point. The silence is absolute. The void itself seems alive. You understand now - you were always meant to come here. It was always going to be you.",
-     20),
-];
-
 /// Generates a chunk at the given position
 pub fn generate_chunk(
     commands: &mut Commands,
@@ -275,18 +192,18 @@ fn spawn_poi(
     }
 
     // Attach log entries to Wrecks, Ruins, and Caves
+    // This layer only ever exists near the world origin, which in practice
+    // means the space around Haven, so it only carries the opening band. The
+    // rest of the corpus lives on celestial derelicts and anomalies, which
+    // exist in every system (see celestial::poi::spawn_system_pois).
     let can_have_log = matches!(poi_type, PoiType::Wreck | PoiType::Ruins | PoiType::Cave);
     if can_have_log && rng.gen::<f32>() < 0.45 {
-        // Find all matching log entries for this depth range
-        let matching: Vec<_> = LOG_ENTRIES.iter()
-            .filter(|&&(_, _, min_depth)| depth_level >= min_depth && depth_level < min_depth + 4)
-            .collect();
-
-        if let Some(&&(title, text, min_depth)) = matching.get(rng.gen_range(0..matching.len().max(1))) {
+        let key = ((depth_level as u64) << 32) ^ (rng.gen::<u32>() as u64);
+        if let Some(entry) = crate::narrative::logs::pick_log(0, key) {
             entity_commands.insert(LogEntry {
-                title: title.to_string(),
-                text: text.to_string(),
-                depth_hint: min_depth as f32 * 100.0,
+                title: entry.title.to_string(),
+                text: entry.text.to_string(),
+                depth_hint: 0.0,
             });
         }
     }

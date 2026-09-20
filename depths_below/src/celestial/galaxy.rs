@@ -316,7 +316,7 @@ pub fn spawn_system_contents(
     let planet_positions: Vec<Vec2> = system_info.planet_entities.iter()
         .map(|_| def.local_center + Vec2::new(rng.gen_range(-30_000.0..30_000.0), rng.gen_range(-30_000.0..30_000.0)))
         .collect();
-    super::poi::spawn_system_pois(commands, def.local_center, def.id, &planet_positions, &mut rng);
+    super::poi::spawn_system_pois(commands, def.local_center, def.id, &planet_positions, &mut rng, def.danger_tier);
 
     system_info
 }
@@ -357,4 +357,47 @@ pub fn load_system(
     def.discovery = SystemDiscovery::Visited;
     let def = galaxy_map.systems.iter().find(|s| s.id == system_id)?;
     Some(spawn_system_contents(commands, asset_server, textures, def))
+}
+
+#[cfg(test)]
+mod galaxy_tests {
+    use super::*;
+    use crate::narrative::logs::{tier_for_danger, MAX_TIER};
+
+    /// A generated galaxy must reach every band of the log corpus.
+    ///
+    /// This is the regression guard for the bug the tier system replaced: the
+    /// finale entries sat in the table behind a gate nothing could satisfy, so
+    /// the game shipped an ending that could not be reached and a victory
+    /// check that asked for it. Assert across several seeds, since faction
+    /// placement is random within the weak-near/strong-far bias.
+    #[test]
+    fn every_log_tier_is_reachable_in_a_real_galaxy() {
+        for seed in [1u64, 7, 99, 12_345, 987_654_321] {
+            let map = generate_galaxy_map(seed);
+            let mut seen = [0usize; (MAX_TIER as usize) + 1];
+            for sys in &map.systems {
+                let danger = sys.faction.map(faction_power).unwrap_or(0.0);
+                seen[tier_for_danger(danger) as usize] += 1;
+            }
+            for tier in 0..=MAX_TIER as usize {
+                assert!(
+                    seen[tier] > 0,
+                    "seed {seed}: no system reaches log tier {tier} — those entries \
+                     would be unreachable, which is the bug this replaced. \
+                     counts: {seen:?}"
+                );
+            }
+        }
+    }
+
+    /// Haven must stay the quiet one. It has no faction, and the opening of
+    /// the story depends on nothing being wrong there yet.
+    #[test]
+    fn haven_is_the_lowest_tier() {
+        let map = generate_galaxy_map(42);
+        let haven = map.systems.iter().find(|s| s.id == 0).expect("Haven exists");
+        assert!(haven.faction.is_none(), "Haven should be unclaimed");
+        assert_eq!(tier_for_danger(haven.faction.map(faction_power).unwrap_or(0.0)), 0);
+    }
 }

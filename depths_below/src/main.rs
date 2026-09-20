@@ -11,6 +11,7 @@ mod crew;
 mod building;
 mod ui;
 mod meta;
+mod narrative;
 mod contracts;
 mod combat;
 mod radar;
