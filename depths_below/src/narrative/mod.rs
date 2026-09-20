@@ -67,23 +67,38 @@ impl CascadeState {
 const REACH_WEIGHT: f32 = 0.6;
 const READ_WEIGHT: f32 = 0.4;
 
-fn update_cascade(
-    galaxy: Res<GalaxyMap>,
-    streaming: Res<SystemStreamingManager>,
-    stats: Res<Statistics>,
-    mut cascade: ResMut<CascadeState>,
-) {
-    let radius = crate::celestial::galaxy::GALAXY_RADIUS.max(1.0);
-
-    // High-water mark over everywhere the player has actually been. Located
-    // but unvisited systems do not count: seeing a light is not going there.
-    let reach = galaxy
+/// How far out the player has actually been, as a fraction of the galaxy's
+/// radius. A high-water mark, so retreating never rewinds the story.
+///
+/// Only Visited counts. Systems that are merely Located show up on the map
+/// from passive sensor range, and seeing a light is not the same as going
+/// there — if Located counted, the arc would advance while the player sat
+/// still.
+///
+/// This is the term the whole story rides on, so it is a free function with
+/// tests rather than four lines buried in a system nothing can call.
+pub fn reach_from_visited(galaxy: &GalaxyMap, radius: f32) -> f32 {
+    let radius = radius.max(1.0);
+    galaxy
         .systems
         .iter()
         .filter(|s| matches!(s.discovery, SystemDiscovery::Visited))
         .map(|s| s.galaxy_pos.length() / radius)
         .fold(0.0f32, f32::max)
-        .clamp(0.0, 1.0);
+        .clamp(0.0, 1.0)
+}
+
+fn update_cascade(
+    time: Res<Time>,
+    galaxy: Res<GalaxyMap>,
+    streaming: Res<SystemStreamingManager>,
+    stats: Res<Statistics>,
+    mut cascade: ResMut<CascadeState>,
+    mut last_trace: Local<f32>,
+) {
+    let radius = crate::celestial::galaxy::GALAXY_RADIUS.max(1.0);
+
+    let reach = reach_from_visited(&galaxy, radius);
 
     let total = logs::LOG_ENTRIES.len().max(1) as f32;
     let read = (stats.logs_found.len() as f32 / total).clamp(0.0, 1.0);
@@ -92,6 +107,22 @@ fn update_cascade(
     cascade.read = read;
     cascade.level = CascadeState::override_level()
         .unwrap_or_else(|| (REACH_WEIGHT * reach + READ_WEIGHT * read).clamp(0.0, 1.0));
+
+    // DEPTHS_CASCADE_TRACE=1 prints the arc's state as it moves. Kept rather
+    // than deleted because the open question about this system is pacing --
+    // how long a real player takes to climb it -- and that can only be
+    // answered by watching it during an actual session. Throttled to once a
+    // second so a long run stays readable.
+    if std::env::var("DEPTHS_CASCADE_TRACE").is_ok() {
+        let now = time.elapsed_secs();
+        if now - *last_trace >= 1.0 {
+            *last_trace = now;
+            info!(
+                "[CASCADE] level={:.3} reach={:.3} read={:.3} ring={} sys={:?}",
+                cascade.level, cascade.reach, cascade.read, cascade.ring, streaming.loaded_system
+            );
+        }
+    }
 
     // Where the player is standing right now. A blind warp into empty space
     // has no system, so fall back to raw distance from Haven.
@@ -132,6 +163,81 @@ mod tests {
         assert!((REACH_WEIGHT + READ_WEIGHT - 1.0).abs() < f32::EPSILON);
         assert!(REACH_WEIGHT < 1.0 && READ_WEIGHT < 1.0);
         assert!(REACH_WEIGHT > READ_WEIGHT, "distance is the axis the player steers");
+    }
+
+    use crate::celestial::resources::StarSystemDef;
+
+    fn sys(id: u32, pos: Vec2, discovery: SystemDiscovery) -> StarSystemDef {
+        StarSystemDef {
+            id,
+            name: format!("S{id}"),
+            galaxy_pos: pos,
+            local_center: Vec2::ZERO,
+            seed: 0,
+            faction: None,
+            danger_tier: 0.0,
+            discovery,
+            last_updated: 0.0,
+            resource_fraction_remaining: 1.0,
+        }
+    }
+
+    /// Sitting at Haven must read as zero however long you sit there. Haven is
+    /// at the galaxy origin, and if this were ever non-zero the story would
+    /// start advancing before the player had gone anywhere.
+    #[test]
+    fn haven_alone_is_no_reach() {
+        let g = GalaxyMap {
+            systems: vec![sys(0, Vec2::ZERO, SystemDiscovery::Visited)],
+            galaxy_seed: 1,
+        };
+        assert_eq!(reach_from_visited(&g, 5_000_000.0), 0.0);
+    }
+
+    /// Seeing a system is not going to one. Passive sensors mark neighbours as
+    /// Located from a long way off; if that counted, the arc would advance
+    /// while the player sat still at the station.
+    #[test]
+    fn located_is_not_visited() {
+        let g = GalaxyMap {
+            systems: vec![
+                sys(0, Vec2::ZERO, SystemDiscovery::Visited),
+                sys(1, Vec2::new(5_000_000.0, 0.0), SystemDiscovery::Located),
+                sys(2, Vec2::new(4_000_000.0, 0.0), SystemDiscovery::Unknown),
+            ],
+            galaxy_seed: 1,
+        };
+        assert_eq!(reach_from_visited(&g, 5_000_000.0), 0.0);
+    }
+
+    /// Going somewhere moves it, and the far edge reads as the far edge.
+    #[test]
+    fn visiting_the_edge_reads_as_the_edge() {
+        let g = GalaxyMap {
+            systems: vec![
+                sys(0, Vec2::ZERO, SystemDiscovery::Visited),
+                sys(1, Vec2::new(5_000_000.0, 0.0), SystemDiscovery::Visited),
+            ],
+            galaxy_seed: 1,
+        };
+        assert!((reach_from_visited(&g, 5_000_000.0) - 1.0).abs() < 1e-6);
+    }
+
+    /// It is a high-water mark. Flying home must not rewind the story — the
+    /// player has still been out there, and the point of the whole arc is that
+    /// you cannot take it back.
+    #[test]
+    fn coming_home_does_not_rewind_it() {
+        let far = vec![
+            sys(0, Vec2::ZERO, SystemDiscovery::Visited),
+            sys(1, Vec2::new(2_500_000.0, 0.0), SystemDiscovery::Visited),
+        ];
+        let g = GalaxyMap { systems: far, galaxy_seed: 1 };
+        let out = reach_from_visited(&g, 5_000_000.0);
+        assert!((out - 0.5).abs() < 1e-6, "got {out}");
+        // The player is now back at Haven; the set of visited systems is
+        // unchanged, so the figure must be too.
+        assert_eq!(reach_from_visited(&g, 5_000_000.0), out);
     }
 
     /// The opening must read as zero. If a fresh run starts part-way up the

@@ -24,6 +24,9 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //                          the game is behind other windows and never
 //                          photographs whatever app happens to be in front.
 //                          Dir: DEPTHS_SHOTS_DIR (default /tmp/depths_shots).
+//   DEPTHS_CASCADE=0.85 — pin the story's progress level, so a late beat can
+//                          be looked at without an hour of flying first.
+//   DEPTHS_CASCADE_TRACE=1 — print the arc's state once a second.
 //   DEPTHS_MOVETEST=1   — bare movement sandbox: instant skip (no menu/
 //                          station flash), starter ship, manual control,
 //                          and NO AI ships spawned — just open space and
