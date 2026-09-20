@@ -146,7 +146,9 @@ impl Plugin for NarrativePlugin {
         app.add_plugins(interference::InterferencePlugin);
         app.init_resource::<CascadeState>().add_systems(
             Update,
-            update_cascade.run_if(in_state(GameState::Exploring).or_else(in_state(GameState::StationDocked))),
+            (update_cascade, grant_hull_materials)
+                .chain()
+                .run_if(in_state(GameState::Exploring).or_else(in_state(GameState::StationDocked))),
         );
     }
 }
@@ -247,5 +249,88 @@ mod tests {
         let c = CascadeState::default();
         assert_eq!(c.level, 0.0);
         assert_eq!(c.ring, 0);
+    }
+}
+
+/// Hull materials are earned by going out, not by spending.
+///
+/// `is_hull_material_unlocked` (building/mod.rs) has always gated Titanium,
+/// Composite and Abyssal Alloy behind strings in `Unlocks.hull_types` — and
+/// nothing anywhere ever pushed those strings. The gate could not open. The
+/// player was on Steel for the entire game while the factions at the edge fly
+/// Abyssal Alloy, which is three times the hull health and five times the
+/// absorption, on top of a difficulty multiplier.
+///
+/// Distance is the axis the whole game already rides, so it is the axis this
+/// rides too: the further out you have actually been, the better the plate you
+/// are allowed to lay. `Unlocks` is deliberately not cleared by
+/// `reset_for_new_game` — this is the one thing that carries between runs.
+fn grant_hull_materials(
+    cascade: Res<CascadeState>,
+    mut unlocks: ResMut<crate::resources::Unlocks>,
+    mut notifications: MessageWriter<crate::events::ShowNotification>,
+) {
+    const TIERS: [(f32, &str, &str); 3] = [
+        (0.22, "titanium", "Titanium"),
+        (0.48, "composite", "Composite"),
+        (0.74, "abyssal_alloy", "Abyssal Alloy"),
+    ];
+    for (at, key, label) in TIERS {
+        if cascade.reach < at {
+            continue;
+        }
+        if unlocks.hull_types.iter().any(|h| h == key) {
+            continue;
+        }
+        unlocks.hull_types.push(key.to_string());
+        notifications.write(crate::events::ShowNotification {
+            message: format!("{label} plating unlocked — salvaged from what is out here."),
+            notification_type: crate::events::NotificationType::Success,
+            duration: 6.0,
+        });
+    }
+}
+
+#[cfg(test)]
+mod progression_tests {
+    /// Mirrors the tiers in grant_hull_materials.
+    const TIERS: [(f32, &str); 3] = [(0.22, "titanium"), (0.48, "composite"), (0.74, "abyssal_alloy")];
+
+    fn unlocked_at(reach: f32) -> Vec<&'static str> {
+        TIERS.iter().filter(|(at, _)| reach >= *at).map(|(_, k)| *k).collect()
+    }
+
+    /// A fresh run starts on Steel and nothing else, or the ramp has no floor.
+    #[test]
+    fn nothing_is_granted_at_the_start() {
+        assert!(unlocked_at(0.0).is_empty());
+    }
+
+    /// Every tier must actually become reachable, since the whole defect being
+    /// fixed here is a gate that could never open.
+    #[test]
+    fn every_tier_is_reachable() {
+        assert_eq!(unlocked_at(1.0).len(), TIERS.len());
+    }
+
+    /// And they must arrive in order, spread across the run rather than all at
+    /// once — otherwise the last leg of the journey grants nothing.
+    #[test]
+    fn they_arrive_spread_out_and_in_order() {
+        let counts: Vec<usize> = [0.0, 0.3, 0.6, 0.9].iter().map(|r| unlocked_at(*r).len()).collect();
+        for w in counts.windows(2) {
+            assert!(w[1] >= w[0], "an unlock was revoked: {counts:?}");
+        }
+        assert_eq!(counts, vec![0, 1, 2, 3], "tiers are bunched: {counts:?}");
+    }
+
+    /// The strings must match what building::is_hull_material_unlocked looks
+    /// for. They are compared by literal, so a typo silently re-breaks the
+    /// gate in exactly the way it was broken before.
+    #[test]
+    fn the_keys_match_the_gate() {
+        for (_, key) in TIERS {
+            assert!(matches!(key, "titanium" | "composite" | "abyssal_alloy"), "unknown key {key}");
+        }
     }
 }
