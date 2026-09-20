@@ -21,6 +21,7 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app
+            .init_resource::<pressure_overlay::FlowTrails>()
             .init_resource::<PrePauseState>()
             .init_resource::<OpenDutyDropdown>()
             .init_resource::<CustomizationState>()

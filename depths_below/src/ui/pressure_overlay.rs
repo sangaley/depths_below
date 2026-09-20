@@ -115,32 +115,50 @@ pub fn update_pressure_overlay(
     }
 }
 
-/// Seeds per tile, spread on a 3x3 sub-grid. One line per cell reads as a
-/// field of unrelated darts; nine tells you where the air is going.
-const SEEDS_PER_AXIS: i32 = 3;
+/// How many trails ride the field at once. Deliberately few: a screenful of
+/// lines is a texture, and a texture does not tell you which way anything is
+/// going.
+const TRAILS: usize = 55;
 
-/// Segments per streamline. The curve comes from re-sampling the field at each
-/// step, so more steps means a longer, more sharply bent line.
-const TRACE_STEPS: usize = 14;
+/// Points kept per trail. Long trails are what make a route legible -- you can
+/// follow one from the compartment it is draining to the hole it leaves by.
+const TRAIL_POINTS: usize = 30;
 
-/// Ship-local units per segment.
-const STEP_LEN: f32 = 9.0;
+/// World units per second at flow 1.0. The trails move at the air's pace, so
+/// the picture reads as moving rather than drawn.
+const DRIFT_SPEED: f32 = 150.0;
 
-/// Below this the air is not really moving and the line would be noise.
-const FLOW_FLOOR: f32 = 0.03;
+/// Seconds before a trail is retired and reseeded somewhere else, so the field
+/// keeps being resampled instead of settling into fixed grooves.
+const TRAIL_LIFE: f32 = 5.0;
+
+/// Below this the air is not really moving and the trail is noise.
+const FLOW_FLOOR: f32 = 0.02;
 
 /// Air speed that draws at full brightness.
-const FULL_BRIGHT: f32 = 1.2;
+const FULL_BRIGHT: f32 = 1.0;
+
+/// One drifting thread of air, and where it has just been.
+struct FlowTrail {
+    head: Vec2,
+    points: Vec<Vec2>,
+    age: f32,
+}
+
+/// The trails currently riding the field.
+#[derive(Resource, Default)]
+pub struct FlowTrails {
+    trails: Vec<FlowTrail>,
+}
 
 /// Flow at an arbitrary ship-local point, blended from the four tile centres
 /// around it.
 ///
-/// Sampling the containing tile alone gives every line inside one cell an
-/// identical heading, and they come out as straight parallel darts that snap
-/// direction at the tile border. Blending is what lets a line bend.
+/// Sampling the containing tile alone gives every trail inside one cell an
+/// identical heading, so they run as straight parallel darts and snap
+/// direction at the tile border. Blending is what lets a line bend, and what
+/// lets two trails converge smoothly instead of crossing.
 fn sample_flow(air: &AirField, local: Vec2) -> Vec2 {
-    // Tile centres sit at grid_to_local; work in that space and take the
-    // fractional position between the four nearest.
     let gx = local.x / GRID_SIZE;
     let gy = (local.y + 33.0) / GRID_SIZE;
     let (x0, y0) = (gx.floor(), gy.floor());
@@ -156,58 +174,119 @@ fn sample_flow(air: &AirField, local: Vec2) -> Vec2 {
     bottom * (1.0 - fy) + top * fy
 }
 
-/// Traces the airflow as curving streamlines, weather-map fashion.
+/// Pressure at a ship-local point, for how heavy to draw the line there.
+fn sample_pressure(air: &AirField, local: Vec2) -> f32 {
+    let cell = crate::building::local_to_grid(local);
+    air.pressure.get(&cell).copied().unwrap_or(0.0)
+}
+
+/// Drifts the trails along the field and draws them.
 ///
-/// Each line starts at a seed and walks the field one short step at a time,
-/// re-reading the direction as it goes, so it bends around corners and bunches
-/// where the air is being funnelled — which is the part that tells you a hole
-/// is pulling from three compartments away. Brightness is air speed, so a
-/// still room draws almost nothing and a vent draws a bright fan into it.
+/// Advection rather than a drawing: each trail is carried by the air at the
+/// air's own speed, and the line you see is simply where it has been. Trails
+/// that fall into the same current converge and run together on their own --
+/// no merging logic, just two threads in one stream -- and a vent shows up as
+/// the place they all end.
+///
+/// Line weight is the pressure they are passing through, so a full compartment
+/// emptying draws heavy and the last of the air draws thin. Gizmos have no
+/// per-line width, so weight is drawn as parallel strands.
 pub fn draw_pressure_flow(
     mut gizmos: Gizmos,
+    time: Res<Time>,
     ship_query: Query<(&GlobalTransform, Has<PressureOverlayVisible>), With<Ship>>,
     room_map: Res<RoomMap>,
     air: Res<AirField>,
+    mut trails: ResMut<FlowTrails>,
 ) {
     let Ok((ship_gt, visible)) = ship_query.single() else { return };
     if !visible {
+        trails.trails.clear();
         return;
     }
 
+    let interior: Vec<IVec2> = room_map.tile_to_room.keys().copied().collect();
+    if interior.is_empty() {
+        trails.trails.clear();
+        return;
+    }
+
+    let dt = time.delta_secs();
+    let mut rng = rand::thread_rng();
+
+    // A fresh trail starts somewhere random inside the ship, aged at random so
+    // they do not all expire on the same frame and blink together.
+    let mut seed = |rng: &mut rand::rngs::ThreadRng| {
+        use rand::Rng;
+        let cell = interior[rng.gen_range(0..interior.len())];
+        let jitter = Vec2::new(
+            rng.gen_range(-0.5..0.5) * GRID_SIZE,
+            rng.gen_range(-0.5..0.5) * GRID_SIZE,
+        );
+        FlowTrail {
+            head: grid_to_local(cell) + jitter,
+            points: Vec::with_capacity(TRAIL_POINTS),
+            age: rng.gen_range(0.0..TRAIL_LIFE),
+        }
+    };
+
+    while trails.trails.len() < TRAILS {
+        let t = seed(&mut rng);
+        trails.trails.push(t);
+    }
+
     let to_world = |p: Vec2| ship_gt.transform_point(p.extend(0.5)).truncate();
-    let spacing = GRID_SIZE / SEEDS_PER_AXIS as f32;
 
-    for &cell in room_map.tile_to_room.keys() {
-        let centre = grid_to_local(cell);
-        for sy in 0..SEEDS_PER_AXIS {
-            for sx in 0..SEEDS_PER_AXIS {
-                // Offset from the tile's own corner so seeds tile evenly
-                // across the ship rather than clustering at cell centres.
-                let offset = Vec2::new(
-                    (sx as f32 + 0.5) * spacing - GRID_SIZE * 0.5,
-                    (sy as f32 + 0.5) * spacing - GRID_SIZE * 0.5,
-                );
-                let mut point = centre + offset;
+    for trail in trails.trails.iter_mut() {
+        trail.age += dt;
 
-                for step in 0..TRACE_STEPS {
-                    let flow = sample_flow(&air, point);
-                    let speed = flow.length();
-                    if speed < FLOW_FLOOR {
-                        break;
+        let flow = sample_flow(&air, trail.head);
+        let speed = flow.length();
+
+        // Retired when it runs out of time, drifts out of the ship, or ends up
+        // somewhere the air is still.
+        let stalled = speed < FLOW_FLOOR;
+        let outside = !room_map
+            .tile_to_room
+            .contains_key(&crate::building::local_to_grid(trail.head));
+        if trail.age > TRAIL_LIFE || outside || (stalled && trail.points.is_empty()) {
+            *trail = seed(&mut rng);
+            continue;
+        }
+
+        if !stalled {
+            trail.head += (flow / speed) * (speed * DRIFT_SPEED).min(GRID_SIZE * 4.0) * dt;
+            trail.points.push(trail.head);
+            if trail.points.len() > TRAIL_POINTS {
+                trail.points.remove(0);
+            }
+        }
+
+        // Draw what it has covered. Brightness rises toward the head, so the
+        // leading end is the direction of travel without needing an arrow.
+        for i in 1..trail.points.len() {
+            let a = trail.points[i - 1];
+            let b = trail.points[i];
+            let along = i as f32 / trail.points.len() as f32;
+
+            let here = sample_flow(&air, b).length();
+            let alpha = (here / FULL_BRIGHT).clamp(0.06, 1.0) * along.powf(1.6) * 0.95;
+            let colour = Color::srgba(1.0, 1.0, 1.0, alpha);
+
+            gizmos.line_2d(to_world(a), to_world(b), colour);
+
+            // Weight = how much air is there. Parallel strands, because gizmo
+            // lines have no width of their own.
+            let strands = (sample_pressure(&air, b) * 3.0).round() as i32;
+            if strands > 0 {
+                if let Some(dir) = (b - a).try_normalize() {
+                    let side = Vec2::new(-dir.y, dir.x);
+                    for n in 1..=strands {
+                        let off = side * (n as f32 * 1.15);
+                        let faded = Color::srgba(1.0, 1.0, 1.0, alpha * 0.55);
+                        gizmos.line_2d(to_world(a + off), to_world(b + off), faded);
+                        gizmos.line_2d(to_world(a - off), to_world(b - off), faded);
                     }
-                    let next = point + (flow / speed) * STEP_LEN;
-
-                    // Fade along the trail so the bright end is the one the
-                    // air is heading towards — direction without arrowheads.
-                    let along = step as f32 / TRACE_STEPS as f32;
-                    let alpha =
-                        (speed / FULL_BRIGHT).clamp(0.05, 1.0) * (0.25 + 0.75 * along) * 0.9;
-                    gizmos.line_2d(
-                        to_world(point),
-                        to_world(next),
-                        Color::srgba(1.0, 1.0, 1.0, alpha),
-                    );
-                    point = next;
                 }
             }
         }
