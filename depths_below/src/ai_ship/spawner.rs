@@ -233,8 +233,22 @@ pub fn spawn_ai_ship_with_design(
 
     let (health_mult, damage_mult) = faction_difficulty(ship_type);
 
+    // Enemy ships get a deck, the same way the player's does.
+    //
+    // Every faction hull shipped as solid Inner fill with zero hallway cells,
+    // which had two consequences. Visually, an enemy was a flat slab of
+    // plating with no inside to see. Mechanically, `rebuild_nav_grids` builds
+    // a grid for every AI ship and only hallways are walkable, so every one of
+    // those grids came out empty -- work producing nothing.
+    //
+    // Derived at spawn rather than baked into designs/factions/*.json, so it
+    // applies to every source of a hull: the authored layouts, the exported
+    // files, and a mirror design wearing the player's own ship.
+    let mut hull_cells = design.hull_cells.clone();
+    crate::ship::lay_hallways(&mut hull_cells, &design.modules);
+
     // Spawn hull segments as children
-    spawn_ai_hull(commands, asset_server, root, &design.hull_cells, health_mult);
+    spawn_ai_hull(commands, asset_server, root, &hull_cells, health_mult);
 
     // Spawn modules as children, reusing existing spawn_module
     for mp in &design.modules {

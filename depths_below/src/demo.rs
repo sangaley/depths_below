@@ -125,6 +125,8 @@ fn census(
     hull: Query<&ChildOf, With<crate::components::HullSegment>>,
     ai_roots: Query<Entity, With<AiShip>>,
     navs: Query<&crate::crew::navigation::NavGrid>,
+    dead: Res<crate::crew::burial::DriftingDead>,
+    concealed: Query<(), With<crate::ai_ship::interior::Concealed>>,
 ) {
     *next -= time.delta_secs();
     if *next > 0.0 {
@@ -136,13 +138,15 @@ fn census(
     let nav_cells: usize = navs.iter().map(|n| n.cells.len()).sum();
     let empty_navs = navs.iter().filter(|n| n.cells.is_empty()).count();
     info!(
-        "CENSUS ships={} ai_modules={} ai_hull={} nav_grids={} nav_cells={} empty_grids={}",
+        "CENSUS ships={} ai_modules={} ai_hull={} nav_grids={} nav_cells={} empty_grids={} concealed={} bodies={}",
         ai.iter().count(),
         owned.iter().count(),
         ai_hull,
         navs.iter().count(),
         nav_cells,
-        empty_navs
+        empty_navs,
+        concealed.iter().count(),
+        dead.bodies.len()
     );
 }
 
