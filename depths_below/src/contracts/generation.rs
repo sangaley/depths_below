@@ -129,8 +129,15 @@ fn survey_seconds_for_star(star: u8) -> f32 {
     }
 }
 
+/// Only kinds that exist somewhere other than Haven.
+///
+/// Cave and ThermalVent are chunk-layer only, and the chunk layer generates in
+/// a narrow band around the world origin -- so a contract asking for either was
+/// uncompletable the moment the player warped anywhere. Wreck, Ruins and
+/// Settlement all have celestial equivalents in every system (see
+/// SpacePoiType::as_poi_type).
 fn poi_types() -> &'static [PoiType] {
-    &[PoiType::Wreck, PoiType::Cave, PoiType::Ruins, PoiType::ThermalVent, PoiType::Settlement]
+    &[PoiType::Wreck, PoiType::Ruins, PoiType::Settlement]
 }
 
 // ============================================================================
@@ -350,4 +357,47 @@ pub fn ensure_station_board(
     }
     let contracts = generate_station_board(rep, &mut state.next_id, sim, active_systems);
     *state.board_mut(station) = contracts;
+}
+
+#[cfg(test)]
+mod poi_target_tests {
+    use super::*;
+    use crate::celestial::poi::SpacePoiType;
+
+    /// Every kind an Explore contract can ask for must exist somewhere other
+    /// than Haven.
+    ///
+    /// The two point-of-interest systems grew up apart: contracts speak
+    /// PoiType, which only ever existed on the chunk layer near the world
+    /// origin, while SpacePoi is what actually populates all thirty-one
+    /// systems. Asking for a Cave was uncompletable the moment the player
+    /// warped anywhere -- and the expedition trail sends them exactly there.
+    #[test]
+    fn every_explore_target_exists_outside_haven() {
+        let reachable: Vec<PoiType> = [
+            SpacePoiType::DerelictShip,
+            SpacePoiType::DebrisField,
+            SpacePoiType::Anomaly,
+            SpacePoiType::SignalSource,
+            SpacePoiType::SpaceStation,
+            SpacePoiType::AsteroidNode,
+        ]
+        .iter()
+        .filter_map(|s| s.as_poi_type())
+        .collect();
+
+        for wanted in poi_types() {
+            assert!(
+                reachable.contains(wanted),
+                "Explore contracts can ask for {wanted:?}, which has no celestial \
+                 equivalent and so cannot be found outside Haven"
+            );
+        }
+    }
+
+    /// And the list must not be empty, or Explore silently stops generating.
+    #[test]
+    fn there_are_targets_to_ask_for() {
+        assert!(!poi_types().is_empty());
+    }
 }

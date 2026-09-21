@@ -209,12 +209,37 @@ fn update_biome(
 fn check_poi_discovery(
     ship_query: Query<&GlobalTransform, With<Ship>>,
     mut poi_query: Query<(&GlobalTransform, &mut PointOfInterest)>,
+    // The celestial layer, which is what exists outside Haven. Deliberately
+    // fires the same PoiDiscovered event rather than being given a
+    // PointOfInterest component: that component is also what radar draws, and
+    // making every derelict in the galaxy show up on the sweep is a separate
+    // decision that has not been taken.
+    mut space_query: Query<(&GlobalTransform, &mut crate::celestial::poi::SpacePoi)>,
     mut discovered: ResMut<DiscoveredLocations>,
     mut poi_events: MessageWriter<PoiDiscovered>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     let Ok(ship_gt) = ship_query.single() else { return };
     let ship_pos = ship_gt.translation().truncate();
+
+    for (gt, mut sp) in space_query.iter_mut() {
+        if sp.discovered {
+            continue;
+        }
+        let Some(kind) = sp.poi_type.as_poi_type() else { continue };
+        let pos = gt.translation().truncate();
+        if ship_pos.distance(pos) >= 700.0 {
+            continue;
+        }
+        sp.discovered = true;
+        discovered.special.push((pos, sp.name.clone()));
+        poi_events.write(PoiDiscovered { poi_type: kind, position: pos });
+        notifications.write(ShowNotification {
+            message: format!("Contact logged: {}", sp.name),
+            notification_type: NotificationType::Info,
+            duration: 4.0,
+        });
+    }
 
     for (poi_gt, mut poi) in poi_query.iter_mut() {
         if poi.discovered {

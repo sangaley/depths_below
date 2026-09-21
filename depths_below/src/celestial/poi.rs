@@ -22,11 +22,37 @@ pub enum SpacePoiType {
     SignalSource,       // Distress signal or trap
 }
 
+impl SpacePoiType {
+    /// The chunk-layer equivalent, for anything that speaks in `PoiType`.
+    ///
+    /// The two point-of-interest systems grew up separately and never met:
+    /// contracts, discovery and the map all speak `PoiType`, which only ever
+    /// existed on the chunk layer near the world origin, while `SpacePoi` is
+    /// what actually exists in all thirty-one systems. So Explore contracts
+    /// could only be completed within a few thousand units of Haven, and the
+    /// expedition trail sends people the other way.
+    pub fn as_poi_type(self) -> Option<PoiType> {
+        match self {
+            SpacePoiType::DerelictShip | SpacePoiType::DebrisField => Some(PoiType::Wreck),
+            SpacePoiType::Anomaly | SpacePoiType::SignalSource => Some(PoiType::Ruins),
+            SpacePoiType::SpaceStation => Some(PoiType::Settlement),
+            // A rock is not a place.
+            SpacePoiType::AsteroidNode => None,
+        }
+    }
+}
+
 /// Component marking a space POI
 #[derive(Component)]
 pub struct SpacePoi {
     pub poi_type: SpacePoiType,
     pub looted: bool,
+    /// Whether the ship has been close enough to log it.
+    ///
+    /// Separate from `looted` on purpose: that one gates whether there is
+    /// anything left to take, and reusing it to mean "seen" would have made
+    /// every derelict in the galaxy unlootable the moment you flew past it.
+    pub discovered: bool,
     pub name: String,
     pub loot_value: u32,
 }
@@ -76,6 +102,7 @@ pub fn spawn_system_pois(
             SpacePoi {
                 poi_type: SpacePoiType::DerelictShip,
                 looted: false,
+                discovered: false,
                 name: format!("Derelict-{}-{}", system_id, i),
                 loot_value: rng.gen_range(50..200),
             },
@@ -116,6 +143,7 @@ pub fn spawn_system_pois(
             SpacePoi {
                 poi_type: SpacePoiType::Anomaly,
                 looted: false,
+                discovered: false,
                 name: format!("Anomaly-{}", system_id),
                 loot_value: rng.gen_range(100..500),
             },
@@ -151,6 +179,7 @@ pub fn spawn_system_pois(
             SpacePoi {
                 poi_type: SpacePoiType::SpaceStation,
                 looted: false,
+                discovered: false,
                 name: format!("Station-{}", system_id),
                 loot_value: 0,
             },
