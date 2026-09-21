@@ -8,7 +8,7 @@ file is newer.
 
 Legend: `[ ]` open · `[x]` done · `[~]` partly done · `[-]` cut for after the demo.
 
-**Status 2026-09-21:** 23 items closed on `cascade-story`, verified by an
+**Status 2026-09-21:** 24 items closed on `cascade-story`, verified by an
 eight-minute autoplay run of the real loop: no panics, credits growing, fuel
 draining on throttle, plating unlocking, cascade climbing to 0.17 across two
 warps. Remaining open items are listed below.
@@ -19,6 +19,15 @@ stated objective with a demo wall at tier 1, and hulks can be towed to a
 station for the rare loot a boarding party cannot carry. Creatures stay off by
 decision; the Kill contracts that depend on them are still being issued and
 remain open below.
+
+**Towing is verified.** It had never been exercised: its only tests covered
+the loot maths, and nothing had ever latched onto a hulk. Eighteen tests now
+drive the real systems and found two defects. The beam check counted every
+module in the world, so a Stellar Preserve ship anywhere in the system let you
+tow with nothing aboard. And a derelict kept firing at the salvager, because
+the fire system gated on a behaviour field that nothing updates after death.
+Both fixed. Coming within latch range now says once whether you can tow and,
+if not, what to fit.
 
 ---
 
