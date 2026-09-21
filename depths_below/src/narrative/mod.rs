@@ -3,6 +3,7 @@
 
 pub mod logs;
 pub mod doppelganger;
+pub mod expedition;
 pub mod interference;
 pub mod reader;
 pub mod truth;
@@ -144,6 +145,7 @@ impl Plugin for NarrativePlugin {
         app.add_plugins(truth::TruthPlugin);
         app.add_plugins(doppelganger::DoppelgangerPlugin);
         app.add_plugins(interference::InterferencePlugin);
+        app.add_plugins(expedition::ExpeditionPlugin);
         app.init_resource::<CascadeState>().add_systems(
             Update,
             (update_cascade, grant_hull_materials)

@@ -127,7 +127,7 @@ const STEPS: &[TutorialStep] = &[
     },
     TutorialStep {
         advance: Advance::Continue,
-        body: "That's the loop, captain: explore, fight, salvage, upgrade, and push deeper. Use the Map button anytime for the star map, then Radar there for the whole galaxy. The void is yours now.",
+        body: "That's the loop, captain: hunt, salvage, sell, and pour it back into a stronger ship. One more thing. An expedition came out here before us and never reported back - they left records scattered across the wrecks, and the company wants them recovered. Your progress is tracked under the top bar. Use the Map button for the star map, then Radar there for the whole galaxy.",
     },
 ];
 

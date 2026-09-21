@@ -3560,10 +3560,10 @@ fn spawn_main_menu(mut commands: Commands) {
         });
 
         // Tagline
-        parent.spawn((Text::new("Build your ship. Explore the void. Survive."), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::TEXT_MUTED)));
+        parent.spawn((Text::new("An expedition went out before you. Find out how far it got."), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::TEXT_MUTED)));
 
         // Version / flavor
-        parent.spawn((Text::new("The void remembers those who dare to venture deeper."), TextFont { font_size: FontSize::Px(ThemeFonts::BODY_SMALL), ..default() }, TextColor(Color::srgba(0.25, 0.28, 0.35, 0.6))));
+        parent.spawn((Text::new("They left records the whole way. Follow them."), TextFont { font_size: FontSize::Px(ThemeFonts::BODY_SMALL), ..default() }, TextColor(Color::srgba(0.25, 0.28, 0.35, 0.6))));
 
         // Required attribution. assets/audio/CREDITS.md puts most of the sound
         // under CC-BY 3.0, which obliges a visible credit, and the game had

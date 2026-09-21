@@ -36,7 +36,12 @@ fi
 
 # -u asserts user activity, which WAKES a display that has already slept.
 # -d alone only prevents it sleeping, which is no help once it already has.
-caffeinate -u -t 2 2>/dev/null || true
+# Assert user activity for the whole run, not a two-second blip: -u wakes a
+# slept display, and it has to stay asserted or it dozes again mid-capture.
+caffeinate -u -t $((SECS + 90)) >/dev/null 2>&1 &
+WAKE=$!
+disown "$WAKE" 2>/dev/null || true
+sleep 3
 
 echo "[playtest] running '$LABEL' for ${SECS}s"
 # caffeinate -di: without it the display sleeps during a long session and the
@@ -65,6 +70,7 @@ ALIVE=$(( $(date +%s) - START ))
 if [ -n "$GAME" ]; then kill "$GAME" 2>/dev/null; sleep 2; kill -9 "$GAME" 2>/dev/null; fi
 kill "$RUNNER" 2>/dev/null; wait "$RUNNER" 2>/dev/null
 
+kill "$WAKE" 2>/dev/null
 FRAMES=$(ls "$OUT"/shot_*.png 2>/dev/null | wc -l | tr -d ' ')
 count() { grep -ci "$1" "$LOG" 2>/dev/null | head -1; }
 PANICS=$(count "panicked at")
