@@ -123,26 +123,44 @@ pub fn spawn_starter_ship(
 pub(crate) fn builtin_starter_design() -> crate::building::blueprint::Blueprint {
     use crate::building::blueprint::{Blueprint, BlueprintHullCell, BlueprintModule, BLUEPRINT_VERSION};
 
-    // Isosceles wedge: flat wide stern at -x, tapering to a sharp bow at +x.
-    // Symmetric across y=0. Each row is (y, x_min, x_max).
+    // "Leaning tender" — a working salvage hull, not a warship.
+    //
+    // The previous starter was an isosceles wedge, mirror-symmetric across
+    // y=0: a competent shape and the same shape as everything else in the
+    // genre. Worse, six of the ten faction hulls are also roughly symmetric
+    // lozenges, so the ship the player owns read as one more of them.
+    //
+    // This one leans. The dorsal line climbs forward into a command tower
+    // over the bow; the ventral line bulges aft into a cargo blister under
+    // the stern. Nothing about it is mirrored top to bottom, so it is
+    // recognisable at any range and from either side, and the profile says
+    // what the ship is for before a single label does: eyes forward and high,
+    // weight carried low and behind.
+    //
+    // Each row is (y, x_min, x_max). One span per row is a hard requirement,
+    // not a style: `building::armour::{belt,caps}` derive the plating from
+    // exactly this table and assume a single contiguous run per row. A
+    // genuinely split silhouette (a hammerhead, a catamaran) needs those
+    // helpers taught about gaps first.
     let hull_rows: &[(i32, i32, i32)] = &[
-        ( 5,  -8, -7),
-        ( 4,  -8, -3),
-        ( 3,  -8,  1),
-        ( 2,  -8,  5),
-        ( 1,  -8,  9),
-        ( 0,  -8, 11),   // spine: flat stern (-8) to bow tip (+11)
-        (-1,  -8,  9),
-        (-2,  -8,  5),
-        (-3,  -8,  1),
-        (-4,  -8, -3),
-        (-5,  -8, -7),
+        ( 5,   3,  6),   // tower cap
+        ( 4,   1,  7),
+        ( 3,  -3,  8),
+        ( 2,  -8,  9),
+        ( 1,  -9, 10),
+        ( 0,  -9, 10),   // spine: engine face (-9) to bow tip (+10)
+        (-1,  -9,  9),
+        (-2,  -8,  7),
+        (-3,  -7,  2),
+        (-4,  -6, -1),   // cargo keel, aft
     ];
 
-    // No fixed bulkhead doors in the symmetric starter — an odd door set would
-    // break the mirror symmetry. Typed empty array so the .contains()/loop below
-    // still compile.
-    let bulkheads: [IVec2; 0] = [];
+    // Two transverse doors on the main corridor, where the ship changes job:
+    // engineering to crew amidships, and crew to the forward bay. They are
+    // real `NavCell::Door`s, so sealing one closes a route rather than
+    // decorating it -- the first structural step toward compartmentalisation
+    // being something the player designs around.
+    let bulkheads: [IVec2; 2] = [IVec2::new(-4, 0), IVec2::new(2, 0)];
 
     let mut hull_cells = Vec::new();
     for &(y, x_min, x_max) in hull_rows {
@@ -200,59 +218,86 @@ pub(crate) fn builtin_starter_design() -> crate::building::blueprint::Blueprint 
         }),
     };
 
-    // Symmetric across the centerline: paired modules mirror ±y (same rotation —
-    // these sprites have base_rotation 0 / no directional overhang, so a N<->S
-    // flip would only render the bottom copy upside-down); singletons and
-    // centered T-modules (medbay/bridge) sit on the spine. The one unavoidable
-    // exception is the 2×1 spinal Railgun, which can't straddle an odd-width
-    // spine exactly — a negligible half-cell offset under a centered barrel.
+    // The layout tells the ship's job, stern to bow.
+    //
+    // Engineering aft, where a breach vents away from everyone. Crew
+    // amidships behind a door. Command high and forward in the tower. The
+    // forward bay is the working end: breaker drill, cargo, and the airlock,
+    // all within a few paces of each other, because that is the loop the
+    // player spends their time in.
+    //
+    // Survivability is laid out rather than bought. The two reactors sit on
+    // opposite sides of the spine, so one breach leaves the other running and
+    // the ship browns out instead of dying. The engines are split across
+    // three rows for the same reason: `check_ai_cripple` calls a ship dead
+    // when guns AND engines are both under a quarter, and a single bank is a
+    // single hit away from that.
     let modules = vec![
-        // --- Stern / engineering: 5-wide engine bank, fuel, reactors, life support ---
-        m(ModuleType::StandardEngine, -8, 1, Rotation::West),
-        m(ModuleType::StandardEngine, -8, -1, Rotation::West),
+        // --- Engineering, aft ---
+        m(ModuleType::StandardEngine, -9, 1, Rotation::West),
+        m(ModuleType::StandardEngine, -9, 0, Rotation::West),
+        m(ModuleType::StandardEngine, -9, -1, Rotation::West),
         m(ModuleType::StandardEngine, -8, 2, Rotation::West),
         m(ModuleType::StandardEngine, -8, -2, Rotation::West),
-        m(ModuleType::StandardEngine, -8, 0, Rotation::West),
-        m(ModuleType::FuelTank, -7, 1, Rotation::North),
-        m(ModuleType::FuelTank, -7, -1, Rotation::North),
-        m(ModuleType::ManeuverThruster, -7, 4, Rotation::North),
-        m(ModuleType::ManeuverThruster, -7, -4, Rotation::North),
-        m(ModuleType::StandardReactor, -6, 1, Rotation::North),
-        m(ModuleType::StandardReactor, -6, -1, Rotation::North),
-        m(ModuleType::OxygenScrubber, -5, 2, Rotation::North),
-        m(ModuleType::OxygenScrubber, -5, -2, Rotation::North),
-        m(ModuleType::CoolingPump, -5, 1, Rotation::North),
-        m(ModuleType::CoolingPump, -5, -1, Rotation::North),
-        m(ModuleType::HeatVent, -4, 3, Rotation::North),
-        m(ModuleType::HeatVent, -4, -3, Rotation::North),
-        // --- Crew + mid spine: medbay (centered), quarters, repair ---
-        m(ModuleType::SurgicalBay, -4, 1, Rotation::East),
+        // x=-8 and x=-7 stay clear at y=+-1: that pair of cells is the only
+        // route from the outboard engines down to the spine, and filling
+        // either one walls the engine room off from its own crew.
+        m(ModuleType::FuelTank, -6, 1, Rotation::North),
+        m(ModuleType::FuelTank, -6, -1, Rotation::North),
+        m(ModuleType::StandardReactor, -5, 1, Rotation::North),
+        m(ModuleType::StandardReactor, -5, -1, Rotation::North),
+        m(ModuleType::CoolingPump, -6, 2, Rotation::North),
+        m(ModuleType::CoolingPump, -6, -2, Rotation::North),
+        m(ModuleType::HeatVent, -7, 2, Rotation::North),
+        m(ModuleType::HeatVent, -7, -2, Rotation::North),
+        m(ModuleType::ManeuverThruster, -5, 2, Rotation::North),
+        m(ModuleType::ManeuverThruster, -4, -3, Rotation::North),
+        m(ModuleType::OxygenScrubber, -4, 1, Rotation::North),
+        m(ModuleType::OxygenScrubber, -4, -1, Rotation::North),
+        // --- Crew, amidships, behind the aft door ---
+        // Two berths, not four. Four doubled the roster to forty on the same
+        // pair of scrubbers, which is a life-support change wearing a layout
+        // change's clothes. The hull has room for more; fitting them is the
+        // player's decision to make and to pay for.
         m(ModuleType::BasicQuarters, -3, 1, Rotation::North),
         m(ModuleType::BasicQuarters, -3, -1, Rotation::North),
-        m(ModuleType::RepairBay, -2, 0, Rotation::North),
-        // Galley (+y) + cargo (-y): chiral L-shapes placed so their cells are
-        // exact y-mirrors of each other — a matched 2x2 room on each side.
-        m(ModuleType::GalleyMess, -1, 2, Rotation::North),
-        m(ModuleType::BulkCargoHold, 0, -3, Rotation::West),
-        // --- Gun deck: spinal railgun, twin cannons, twin gatling PD ---
-        mw(ModuleType::Railgun, 0, 0, Rotation::East, 2, 1.15, 0.85, 1.2, Some(crate::combat::ammo_types::KineticAmmoType::APFSDS)),
+        m(ModuleType::GalleyMess, -2, 2, Rotation::North),
+        m(ModuleType::RepairBay, 0, 1, Rotation::North),
+        m(ModuleType::SurgicalBay, -2, -2, Rotation::East),
+        // Ventral tube, aft under the keel: the only clear lane on that side.
+        mw(ModuleType::HeavyMissile, -3, -4, Rotation::South, 3, 1.0, 1.0, 1.1, None),
+        // --- Command: tower forward and high ---
+        m(ModuleType::BridgeWing, 4, 3, Rotation::East),
+        m(ModuleType::RadarArray, 6, 2, Rotation::East),
+        m(ModuleType::Floodlight, 9, 2, Rotation::East),
+        // Dorsal tube on the tower cap, firing into open sky.
+        mw(ModuleType::HeavyMissile, 5, 5, Rotation::North, 3, 1.0, 1.0, 1.1, None),
+        // --- Gun deck, along the shoulder ---
         mw(ModuleType::Cannon, 1, 2, Rotation::East, 0, 1.0, 1.0, 1.15, Some(crate::combat::ammo_types::KineticAmmoType::APHE)),
         mw(ModuleType::Cannon, 1, -2, Rotation::East, 0, 1.0, 1.0, 1.15, Some(crate::combat::ammo_types::KineticAmmoType::APHE)),
-        m(ModuleType::ShieldEmitter, 2, 2, Rotation::North),
-        m(ModuleType::ShieldEmitter, 2, -2, Rotation::North),
-        mw(ModuleType::Gatling, 3, 2, Rotation::East, 1, 1.0, 1.2, 1.0, Some(crate::combat::ammo_types::KineticAmmoType::Flak)),
-        mw(ModuleType::Gatling, 3, -2, Rotation::East, 1, 1.0, 1.2, 1.0, Some(crate::combat::ammo_types::KineticAmmoType::Flak)),
-        // --- Forward / command: sensors, floodlight, bridge (centered), missiles, prow armor ---
-        m(ModuleType::RadarArray, 3, 0, Rotation::East),
-        m(ModuleType::Floodlight, 4, 0, Rotation::East),
-        m(ModuleType::BridgeWing, 5, 1, Rotation::East),
-        // Dorsal and ventral tubes, not forward-firing ones. The bow taper
-        // carries two courses of belt plating, so an East-facing tube here
-        // fires into its own armour; up and down are the only headings off
-        // this hull that are clear. The seeker turns them onto the target
-        // after the pop, and the pair stays mirror-symmetric.
-        mw(ModuleType::HeavyMissile, 7, 1, Rotation::North, 3, 1.0, 1.0, 1.1, None),
-        mw(ModuleType::HeavyMissile, 7, -1, Rotation::South, 3, 1.0, 1.0, 1.1, None),
+        m(ModuleType::ShieldEmitter, 3, 2, Rotation::North),
+        m(ModuleType::ShieldEmitter, 3, -1, Rotation::North),
+        mw(ModuleType::Gatling, 5, -1, Rotation::East, 1, 1.0, 1.2, 1.0, Some(crate::combat::ammo_types::KineticAmmoType::Flak)),
+        mw(ModuleType::Gatling, 7, 2, Rotation::East, 1, 1.0, 1.2, 1.0, Some(crate::combat::ammo_types::KineticAmmoType::Flak)),
+        mw(ModuleType::Railgun, 6, 0, Rotation::East, 2, 1.15, 0.85, 1.2, Some(crate::combat::ammo_types::KineticAmmoType::APFSDS)),
+        // --- Memory cores, one per compartment ---
+        //
+        // Placed by hand, not searched for. The search this replaces took the
+        // first, middle and last free interior cell in (x, y) order, and the
+        // first of those is by construction the aftmost cell on the lowest
+        // row -- which on this hull is the single corridor feeding the
+        // outboard engines. It walled the engine room off from its own crew,
+        // and nothing said so.
+        //
+        // One per compartment, so no single breach takes two and the run
+        // cannot end to one unlucky hit.
+        m(ModuleType::MemoryCore, -3, 2, Rotation::North),
+        m(ModuleType::MemoryCore, 2, -1, Rotation::North),
+        m(ModuleType::MemoryCore, 7, 1, Rotation::North),
+        // --- Forward bay: the working end ---
+        m(ModuleType::SalvageArm, 9, 1, Rotation::East),
+        m(ModuleType::BulkCargoHold, 8, -1, Rotation::North),
+        m(ModuleType::AirlockChamber, 10, 0, Rotation::East),
     ];
 
     // The player's ship gets the same treatment as every faction hull: plating
@@ -284,49 +329,6 @@ pub(crate) fn builtin_starter_design() -> crate::building::blueprint::Blueprint 
             subcomponents: None,
             extras: None,
         });
-    }
-
-    // Memory Cores. These must exist on the built-in design and not only in
-    // designs/starter.json, because the JSON is what normally wins and the
-    // built-in is the fallback when it is missing or regenerated. Without them
-    // here, a regenerated starter silently ships with no cores at all — which
-    // switches off both the autonomy mechanic and the last-core death
-    // condition, with nothing reporting that anything is wrong. Same silent
-    // fallback trap as the faction designs.
-    //
-    // Spread, not clustered: three cores in adjacent cells all die to one hit,
-    // which makes losing the last one an accident rather than a story.
-    // Found rather than hardcoded: the plating above has already claimed
-    // cells by this point, so fixed coordinates silently found nothing free
-    // and added no cores at all.
-    let taken: std::collections::HashSet<IVec2> =
-        modules.iter().map(|m| m.grid_pos).collect();
-    let mut free_inner: Vec<IVec2> = hull_cells
-        .iter()
-        .filter(|c| c.layer == HullLayer::Inner && !taken.contains(&c.grid_pos))
-        .map(|c| c.grid_pos)
-        .collect();
-    free_inner.sort_by_key(|p| (p.x, p.y));
-    if !free_inner.is_empty() {
-        // Take from each end and the middle so one hit cannot take all three.
-        let last = free_inner.len() - 1;
-        let picks = [0usize, last / 2, last];
-        let mut placed: Vec<IVec2> = Vec::new();
-        for i in picks {
-            let grid_pos = free_inner[i];
-            if placed.contains(&grid_pos) {
-                continue;
-            }
-            placed.push(grid_pos);
-            modules.push(BlueprintModule {
-                module_type: ModuleType::MemoryCore,
-                grid_pos,
-                rotation: Rotation::North,
-                custom_name: None,
-                subcomponents: None,
-                extras: None,
-            });
-        }
     }
 
     lay_hallways(&mut hull_cells, &modules);
@@ -1102,7 +1104,7 @@ mod starter_tests {
     }
 
     use super::*;
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
 
     fn is_plate(mt: ModuleType) -> bool {
         matches!(mt, ModuleType::AngledArmorPlate | ModuleType::AngledHullPlate)
@@ -1125,6 +1127,82 @@ mod starter_tests {
             let touching = [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y]
                 .iter().any(|d| hull.contains(&(p.grid_pos + *d)));
             assert!(touching, "plate at {:?} is floating free of the ship", p.grid_pos);
+        }
+    }
+
+    /// The hull must not be mirror-symmetric across its own centreline.
+    ///
+    /// This is the point of the shape. The previous starter was an isosceles
+    /// wedge, and six of the ten faction hulls are roughly symmetric lozenges
+    /// too, so the player's ship read as one more of the same. The lean --
+    /// tower forward and high, cargo keel aft and low -- is what makes it
+    /// recognisable at a distance and from either side. A later edit that
+    /// tidies the rows back into a mirror would undo that silently, because
+    /// every other test here would still pass.
+    #[test]
+    fn the_hull_leans() {
+        let design = builtin_starter_design();
+        let mut span: HashMap<i32, (i32, i32)> = HashMap::new();
+        for cell in &design.hull_cells {
+            let e = span.entry(cell.grid_pos.y).or_insert((i32::MAX, i32::MIN));
+            e.0 = e.0.min(cell.grid_pos.x);
+            e.1 = e.1.max(cell.grid_pos.x);
+        }
+        let mirrored = span
+            .iter()
+            .all(|(y, extent)| span.get(&-y).is_none_or(|other| other == extent));
+        assert!(
+            !mirrored,
+            "every row matches its mirror across y=0, so the hull is a symmetric \
+             wedge again and reads like every other ship in the game"
+        );
+
+        // And the lean must go the way the layout assumes: the tower reaches
+        // higher than the keel drops, because the bridge is up there.
+        let top = span.keys().max().copied().unwrap();
+        let bottom = span.keys().min().copied().unwrap();
+        assert!(
+            top > -bottom,
+            "the dorsal tower (y={top}) no longer out-reaches the ventral keel (y={bottom})"
+        );
+    }
+
+    /// Both transverse doors must be on the main corridor, with deck on each
+    /// side.
+    ///
+    /// A door with a wall behind it is a decoration. These two are the only
+    /// thing dividing the ship into compartments, so if a module ever lands on
+    /// the cell beside one, the division quietly stops existing.
+    #[test]
+    fn the_corridor_doors_divide_something() {
+        let design = builtin_starter_design();
+        let deck: HashMap<IVec2, HullLayer> = design
+            .hull_cells
+            .iter()
+            .map(|c| (c.grid_pos, c.layer))
+            .collect();
+        let occupied: HashSet<IVec2> = design.modules.iter().map(|m| m.grid_pos).collect();
+
+        let doors: Vec<IVec2> = design
+            .hull_cells
+            .iter()
+            .filter(|c| c.layer == HullLayer::BulkheadDoor)
+            .map(|c| c.grid_pos)
+            .collect();
+        assert_eq!(doors.len(), 2, "expected two transverse doors, got {}", doors.len());
+
+        for door in doors {
+            for side in [IVec2::X, IVec2::NEG_X] {
+                let neighbour = door + side;
+                let walkable = matches!(
+                    deck.get(&neighbour),
+                    Some(HullLayer::Hallway) | Some(HullLayer::BulkheadDoor)
+                ) && !occupied.contains(&neighbour);
+                assert!(
+                    walkable,
+                    "the door at {door:?} has no deck at {neighbour:?}, so it divides nothing"
+                );
+            }
         }
     }
 

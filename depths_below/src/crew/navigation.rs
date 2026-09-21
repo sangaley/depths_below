@@ -533,6 +533,63 @@ mod nav_tests {
         );
     }
 
+    /// Regenerates designs/starter.json from the builtin. Run deliberately:
+    ///   cargo test export_starter -- --ignored
+    #[test]
+    #[ignore]
+    fn export_starter() {
+        let design = crate::ship::builtin_starter_design();
+        crate::building::blueprint::write_design_file("designs/starter.json", &design)
+            .expect("write failed");
+        println!(
+            "EXPORTED {} hull cells, {} modules",
+            design.hull_cells.len(),
+            design.modules.len()
+        );
+    }
+
+    /// Prints the starter's deck as ASCII and names anything cut off from it.
+    ///
+    /// Layout work needs to see the deck, and the deck is derived (hallways
+    /// are every enclosed cell no module stands on), so it cannot be read off
+    /// the design file. Run deliberately:
+    ///   cargo test dump_starter_deck -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn dump_starter_deck() {
+        let design = crate::ship::builtin_starter_design();
+        let nav = nav_from_design(&design);
+        let xs: Vec<i32> = nav.cells.keys().map(|c| c.x).collect();
+        let ys: Vec<i32> = nav.cells.keys().map(|c| c.y).collect();
+        let (x0, x1) = (*xs.iter().min().unwrap(), *xs.iter().max().unwrap());
+        let (y0, y1) = (*ys.iter().min().unwrap(), *ys.iter().max().unwrap());
+        for y in (y0..=y1).rev() {
+            let mut row = String::new();
+            for x in x0..=x1 {
+                row.push(match nav.cells.get(&IVec2::new(x, y)) {
+                    Some(NavCell::Hallway) => '.',
+                    Some(NavCell::Post) => 'P',
+                    Some(NavCell::Door { .. }) => 'D',
+                    None => '#',
+                });
+            }
+            println!("{y:3} |{row}|");
+        }
+        let start = *nav
+            .cells
+            .iter()
+            .find(|(_, c)| **c == NavCell::Hallway)
+            .unwrap()
+            .0;
+        let r = reachable_from(&nav, start);
+        let mut bad: Vec<IVec2> = nav.cells.keys().filter(|c| !r.contains(c)).copied().collect();
+        bad.sort_by_key(|c| (c.x, c.y));
+        println!("cells={} reachable={} x0={} y0={}", nav.cells.len(), r.len(), x0, y0);
+        for c in bad {
+            println!("  STRANDED {:?} {:?}", c, nav.cells.get(&c).unwrap());
+        }
+    }
+
     /// The starter has to carry an airlock, and a pallbearer has to be able to
     /// stand next to it.
     ///
