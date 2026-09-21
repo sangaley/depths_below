@@ -468,7 +468,6 @@ impl Plugin for CombatPlugin {
             ).in_set(CombatSet::WeaponFire))
             // Cleanup + limits
             .add_systems(Update, (
-                effects::despawn_dead_creatures,
                 effects::animate_floating_damage,
                 crate::ship::damage::cleanup_hit_effects,
                 limits::enforce_projectile_limit,
