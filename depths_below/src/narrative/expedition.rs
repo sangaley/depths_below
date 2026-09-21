@@ -81,13 +81,21 @@ fn spawn_expedition_hud(mut commands: Commands) {
     commands.spawn((
         Node {
             position_type: PositionType::Absolute,
-            top: Val::Px(92.0),
+            top: Val::Px(88.0),
             left: Val::Px(14.0),
+            padding: UiRect::axes(Val::Px(10.0), Val::Px(5.0)),
+            border: UiRect::left(Val::Px(3.0)),
             ..default()
         },
+        // It is the only thing on screen that says what the player is for, so
+        // it gets a card and an accent rule rather than sitting in the
+        // background as muted caption text -- which read as debug output and
+        // was missed entirely by the first person who looked at it.
+        BackgroundColor(ThemeColors::BG_PANEL),
+        BorderColor::all(ThemeColors::ACCENT_ORANGE),
         Text::new(""),
-        TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() },
-        TextColor(ThemeColors::TEXT_MUTED),
+        TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() },
+        TextColor(ThemeColors::TEXT_PRIMARY),
         ZIndex(6),
         ExpeditionHudText,
     ));
@@ -109,14 +117,23 @@ fn update_expedition_hud(
     }
 
     let want = if exp.trail_exhausted {
-        "EXPEDITION  the records end here".to_string()
+        "EXPEDITION RECORDS   the trail ends here".to_string()
     } else {
-        format!("EXPEDITION  {} of {} records recovered", exp.found, exp.total)
+        format!(
+            "EXPEDITION RECORDS  {}/{}   find the rest",
+            exp.found, exp.total
+        )
     };
     if **text != want {
         **text = want;
     }
-    colour.0 = if exp.trail_exhausted { ThemeColors::ACCENT_ORANGE } else { ThemeColors::TEXT_MUTED };
+    // No em-dash: the default font has no glyph for it and it rendered as a
+    // tofu box on screen. ASCII only in HUD strings.
+    colour.0 = if exp.trail_exhausted {
+        ThemeColors::ACCENT_ORANGE
+    } else {
+        ThemeColors::TEXT_PRIMARY
+    };
 }
 
 fn clear_on_new_run(mut exp: ResMut<Expedition>) {
