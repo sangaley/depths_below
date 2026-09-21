@@ -110,6 +110,42 @@ fn open_build_tab(
     );
 }
 
+/// Counts what is actually resident, once a second, under DEPTHS_CENSUS=1.
+///
+/// The world holds dozens of ships but only simulates most of them as numbers;
+/// a hull becomes real entities inside RENDER_DISTANCE and is despawned again
+/// past DESPAWN_DISTANCE. Any argument about what enemy ships cost has to be
+/// about the resident count, not the fleet count, and the two are very
+/// different numbers.
+fn census(
+    time: Res<Time>,
+    mut next: Local<f32>,
+    ai: Query<(), With<AiShip>>,
+    owned: Query<(), With<crate::ai_ship::components::OwnedByAiShip>>,
+    hull: Query<&ChildOf, With<crate::components::HullSegment>>,
+    ai_roots: Query<Entity, With<AiShip>>,
+    navs: Query<&crate::crew::navigation::NavGrid>,
+) {
+    *next -= time.delta_secs();
+    if *next > 0.0 {
+        return;
+    }
+    *next = 1.0;
+    let roots: std::collections::HashSet<Entity> = ai_roots.iter().collect();
+    let ai_hull = hull.iter().filter(|c| roots.contains(&c.parent())).count();
+    let nav_cells: usize = navs.iter().map(|n| n.cells.len()).sum();
+    let empty_navs = navs.iter().filter(|n| n.cells.is_empty()).count();
+    info!(
+        "CENSUS ships={} ai_modules={} ai_hull={} nav_grids={} nav_cells={} empty_grids={}",
+        ai.iter().count(),
+        owned.iter().count(),
+        ai_hull,
+        navs.iter().count(),
+        nav_cells,
+        empty_navs
+    );
+}
+
 pub fn skip_ai_ship_spawn() -> bool {
     std::env::var("DEPTHS_MOVETEST").ok().as_deref() == Some("1")
 }
@@ -120,6 +156,9 @@ impl Plugin for DemoPlugin {
         let skip_menu = std::env::var("DEPTHS_SKIP_MENU").ok().as_deref() == Some("1");
         let move_test = skip_ai_ship_spawn();
         let build_tab = requested_build_tab();
+        if std::env::var("DEPTHS_CENSUS").ok().as_deref() == Some("1") {
+            app.add_systems(Update, census);
+        }
         if !full_demo && !skip_menu && !move_test && build_tab.is_none() {
             return;
         }
