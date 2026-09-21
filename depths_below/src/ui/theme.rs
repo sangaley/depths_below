@@ -49,6 +49,15 @@ impl ThemeColors {
 
     // --- HUD specific ---
     pub const HUD_BG: Color = Color::srgba(0.02, 0.03, 0.08, 0.88);
+    /// Fully opaque HUD ground, for the panels that sit over the play area.
+    ///
+    /// The translucent HUD_BG is right where there is empty void behind it.
+    /// It is wrong over the middle of the screen: the bottom toolbar and the
+    /// weapon rack sit on top of the ship, the station and passing planets,
+    /// and at 12% transmission a bright station module reads straight through
+    /// a button. Controls have to look like controls, not like something the
+    /// world is showing through.
+    pub const HUD_BG_SOLID: Color = Color::srgb(0.02, 0.03, 0.08);
     pub const HUD_SEPARATOR: Color = Color::srgba(0.20, 0.23, 0.30, 0.4);
 
     // --- Notification backgrounds ---

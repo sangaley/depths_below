@@ -739,7 +739,7 @@ fn setup_ui(mut commands: Commands) {
                 column_gap: Val::Px(ThemeSpacing::XS),
                 align_items: AlignItems::Center,
                 ..default()
-            }, BackgroundColor(ThemeColors::HUD_BG))).with_children(|top_bar| {
+            }, BackgroundColor(ThemeColors::HUD_BG_SOLID))).with_children(|top_bar| {
             // Three scannable clusters: ship vitals (severity meters) · nav
             // (system / depth / noise) · resources (credits / crew / cargo).
             // The nav cluster grows to push resources to the right edge.
@@ -832,7 +832,7 @@ fn setup_ui(mut commands: Commands) {
                 padding: UiRect::new(Val::Px(ThemeSpacing::XL), Val::Px(ThemeSpacing::XL), Val::Px(ThemeSpacing::SM), Val::Px(ThemeSpacing::SM)),
                 align_items: AlignItems::Center,
                 ..default()
-            }, BackgroundColor(ThemeColors::HUD_BG))).with_children(|bar| {
+            }, BackgroundColor(ThemeColors::HUD_BG_SOLID))).with_children(|bar| {
             bar.spawn((
                 // Immediately overwritten every frame by build_ui::update_controls_help
                 // once GameState resolves — this is just the pre-first-frame fallback.
@@ -854,8 +854,13 @@ fn setup_ui(mut commands: Commands) {
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
                 column_gap: Val::Px(4.0),
+                padding: UiRect::all(Val::Px(4.0)),
                 ..default()
             },
+            // The strip had no background at all: only the buttons did, so the
+            // gaps between them were holes onto the play area and the station
+            // showed through the row.
+            BackgroundColor(ThemeColors::HUD_BG_SOLID),
             FlightToolbar,
         ));
 
@@ -870,7 +875,7 @@ fn setup_ui(mut commands: Commands) {
                 border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
-            BackgroundColor(ThemeColors::HUD_BG),
+            BackgroundColor(ThemeColors::HUD_BG_SOLID),
             BorderColor::all(ThemeColors::BORDER_DEFAULT),
             WeaponRackPanel,
         )).with_children(|rack| {
