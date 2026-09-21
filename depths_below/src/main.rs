@@ -6,7 +6,6 @@ mod events;
 mod states;
 mod ship;
 mod world;
-mod creatures;
 mod crew;
 mod building;
 mod ui;
@@ -33,7 +32,6 @@ use events::EventsPlugin;
 use resources::InputState;
 use ship::ShipPlugin;
 use world::WorldPlugin;
-use creatures::CreaturePlugin;
 use crew::CrewPlugin;
 use building::BuildingPlugin;
 use ui::UiPlugin;
@@ -89,7 +87,6 @@ fn main() {
         .add_plugins((
             ShipPlugin,
             WorldPlugin,
-            CreaturePlugin,
             CrewPlugin,
             BuildingPlugin,
             UiPlugin,

@@ -13,28 +13,32 @@ use super::{
 // FACTION → CONTRACT TYPE WEIGHTS
 // ============================================================================
 
+/// No Kill and no CaptureLive: both target creatures, and creatures no longer
+/// exist in this build. The board was issuing jobs that could never be
+/// completed -- a playthrough accepted "Kill 4 VoidDrifters" and then flew
+/// around for seven minutes with nothing to kill. Their weight went to the
+/// objectives that actually resolve.
+///
+/// The ContractType variants themselves are left in place. Kill is the obvious
+/// home for a future hunt-a-ship objective and costs nothing sitting unused;
+/// generating it is what was broken, not having it.
 fn weighted_contract_types(faction: &Faction) -> Vec<(ContractType, u32)> {
     match faction {
         Faction::ResearchInstitute => vec![
-            (ContractType::CaptureLive, 30),
-            (ContractType::ExplorePoi, 25),
-            (ContractType::SurveyZone, 25),
-            (ContractType::Kill, 20),
-            (ContractType::DestroyShip, 10),
+            (ContractType::SurveyZone, 40),
+            (ContractType::ExplorePoi, 30),
+            (ContractType::DestroyShip, 30),
         ],
         Faction::Navy => vec![
-            (ContractType::Kill, 30),
-            (ContractType::DestroyShip, 30),
-            (ContractType::ReachDepth, 20),
-            (ContractType::SurveyZone, 15),
-            (ContractType::ExplorePoi, 10),
+            (ContractType::DestroyShip, 50),
+            (ContractType::ReachDepth, 25),
+            (ContractType::SurveyZone, 25),
         ],
         Faction::SalvageGuild => vec![
-            (ContractType::RetrieveSalvage, 35),
-            (ContractType::ExplorePoi, 25),
+            (ContractType::RetrieveSalvage, 45),
+            (ContractType::ExplorePoi, 20),
             (ContractType::ReachDepth, 15),
-            (ContractType::Kill, 10),
-            (ContractType::DestroyShip, 15),
+            (ContractType::DestroyShip, 20),
         ],
     }
 }
