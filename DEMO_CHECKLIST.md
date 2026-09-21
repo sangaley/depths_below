@@ -8,10 +8,17 @@ file is newer.
 
 Legend: `[ ]` open · `[x]` done · `[~]` partly done · `[-]` cut for after the demo.
 
-**Status 2026-09-20:** 19 items closed on `cascade-story`, verified by an
+**Status 2026-09-21:** 22 items closed on `cascade-story`, verified by an
 eight-minute autoplay run of the real loop: no panics, credits growing, fuel
 draining on throttle, plating unlocking, cascade climbing to 0.17 across two
 warps. Remaining open items are listed below.
+
+**Since:** distance now costs money (docking no longer fills the tank; prices
+scale to 3x at the galaxy's edge), the expedition trail gives the player a
+stated objective with a demo wall at tier 1, and hulks can be towed to a
+station for the rare loot a boarding party cannot carry. Creatures stay off by
+decision; the Kill contracts that depend on them are still being issued and
+remain open below.
 
 ---
 
@@ -34,7 +41,7 @@ warps. Remaining open items are listed below.
       path has the mirror defect: its despawn queries are unscoped too, so
       loading guts every live AI ship.
       `meta.rs:120-122`, `:279-281`, `:428-430`
-- [ ] **Nothing states a goal.** Menu says "Build your ship. Explore the void.
+- [x] **Nothing states a goal.** Menu says "Build your ship. Explore the void.
       Survive." The tutorial ends on "push deeper". No objective is ever named.
       `ui/mod.rs:3556`, `tutorial.rs:130`
 - [x] **"All crew died" never fires while any enemy lives.** The crew query is
@@ -44,7 +51,7 @@ warps. Remaining open items are listed below.
 - [x] **The player can launch with zero crew.** Starter-crew spawn is suppressed
       by any living AI crew. Combined with the above, a total-crew-loss run can
       neither end nor recover by docking. `crew/mod.rs:277-283`
-- [ ] **Docking services bill and heal across ship boundaries.** Repair Hull
+- [x] **Docking services bill and heal across ship boundaries.** Repair Hull
       full-heals every AI ship in the world on the player's credits; Repair
       Modules charges for enemy battle damage; hire cost and the "berths full"
       check count enemy crew. `ui/mod.rs:4437-4442`, `:4530`, `:4824`
@@ -106,7 +113,7 @@ warps. Remaining open items are listed below.
 
 ## 4. Story reachability
 
-- [ ] **Give the player a thread to follow.** The finale log sits in a
+- [x] **Give the player a thread to follow.** The finale log sits in a
       30,000–100,000 unit ring around one of six far systems and appears on no
       radar, map or minimap. Reuse the nav arrow and map marker that
       `contracts/bounty_nav.rs` already draws for DestroyShip contracts.
