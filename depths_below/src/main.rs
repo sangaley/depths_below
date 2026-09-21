@@ -114,6 +114,7 @@ fn main() {
         .add_plugins(GamepadPlugin)
         .add_plugins(TutorialPlugin)
         .add_plugins(narrative::NarrativePlugin)
+        .add_plugins(ship::towing::TowingPlugin)
 
         .run();
 }

@@ -359,7 +359,7 @@ const fn act_mod(label: &'static str, key_disp: &'static str, key: KeyCode,
 /// stay keyboard-only, because a button cannot express "hold".
 fn toolbar_actions(game: &GameState, build: &BuildState) -> &'static [ToolbarAction] {
     use KeyCode as K;
-    const FLYING: [ToolbarAction; 8] = [
+    const FLYING: [ToolbarAction; 9] = [
         act("Map", "M", K::KeyM),
         act("Systems", "N", K::KeyN),
         act("Radar", "Tab", K::Tab),
@@ -368,6 +368,7 @@ fn toolbar_actions(game: &GameState, build: &BuildState) -> &'static [ToolbarAct
         act("Log", "L", K::KeyL),
         act("Ping", "Z", K::KeyZ),
         act("Dock", "F", K::KeyF),
+        act("Tow", "Y", K::KeyY),
     ];
     // Crew belongs here as much as Hire does: the tutorial's second-to-last
     // step tells the player to manage crew while docked, and until this button
