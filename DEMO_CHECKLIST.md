@@ -8,7 +8,7 @@ file is newer.
 
 Legend: `[ ]` open · `[x]` done · `[~]` partly done · `[-]` cut for after the demo.
 
-**Status 2026-09-21:** 24 items closed on `cascade-story`, verified by an
+**Status 2026-09-21:** 25 items closed on `cascade-story`, verified by an
 eight-minute autoplay run of the real loop: no panics, credits growing, fuel
 draining on throttle, plating unlocking, cascade climbing to 0.17 across two
 warps. Remaining open items are listed below.
@@ -19,6 +19,15 @@ stated objective with a demo wall at tier 1, and hulks can be towed to a
 station for the rare loot a boarding party cannot carry. Creatures stay off by
 decision; the Kill contracts that depend on them are still being issued and
 remain open below.
+
+**The starter ship is new.** The old hull was an isosceles wedge, mirror-
+symmetric, and six of the ten faction hulls are symmetric lozenges too, so the
+player's own ship read as one more of them. The replacement leans: command
+tower forward and high, cargo keel aft and low, engineering at the stern, the
+working end at the bow. Two doors divide the main corridor. Building it turned
+up a memory-core placement rule that walled the engine room off from its own
+crew, and closed the long-standing drift between `designs/starter.json` and
+the Rust builtin.
 
 **Towing is verified.** It had never been exercised: its only tests covered
 the loot maths, and nothing had ever latched onto a hulk. Eighteen tests now
