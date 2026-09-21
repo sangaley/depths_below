@@ -25,6 +25,22 @@ use super::components::*;
 /// AiShipTarget.subsystem and re-picked when it's destroyed. Damage is
 /// resolved by impact geometry, so aiming a shot at your engine genuinely
 /// knocks out your engine. Empty-doctrine factions keep aiming centre-of-mass.
+/// Whether a ship should be shooting at all this tick.
+///
+/// Behaviour alone used to be the whole gate, and `ai_brain_system` skips
+/// destroyed ships entirely -- so a dead ship's behaviour froze at whatever it
+/// held when it died. Anything that went down fighting stayed `Engaging` and
+/// kept firing out of a hull the player had just been told was "derelict
+/// adrift, ripe for salvage". Salvage is the loop the demo is built around;
+/// being shot by the thing you came to board is not a difficulty curve.
+///
+/// A reactor meltdown is deliberately still armed: `tick_reactor_meltdown`
+/// only sets `is_destroyed` at detonation, so the eight seconds of berserk
+/// fire between breach and blast survive this check.
+fn ship_may_fire(behavior: &AiShipBehavior, state: &AiShipState) -> bool {
+    !state.is_destroyed && *behavior == AiShipBehavior::Engaging
+}
+
 pub fn ai_weapon_fire_system(
     time: Res<Time>,
     mut commands: Commands,
@@ -37,6 +53,7 @@ pub fn ai_weapon_fire_system(
         &mut AiShipTarget,
         &Children,
         Option<&super::power::AiPowerState>,
+        &AiShipState,
     ), With<AiShip>>,
     mut weapon_query: Query<(
         &mut Weapon,
@@ -83,8 +100,8 @@ pub fn ai_weapon_fire_system(
 
     let player_pos = player_query.single().ok().map(|t| t.translation.truncate());
 
-    for (ai_entity, ai_transform, ship_type, behavior, mut ai_target, children, ai_power) in ai_ships.iter_mut() {
-        if *behavior != AiShipBehavior::Engaging {
+    for (ai_entity, ai_transform, ship_type, behavior, mut ai_target, children, ai_power, state) in ai_ships.iter_mut() {
+        if !ship_may_fire(behavior, state) {
             continue;
         }
 
@@ -931,6 +948,37 @@ fn angle_proof_round(faction: AiShipType) -> KineticAmmoType {
 #[cfg(test)]
 mod gunnery_tests {
     use super::*;
+
+    fn state(destroyed: bool) -> AiShipState {
+        AiShipState { is_destroyed: destroyed, ..default() }
+    }
+
+    /// A ship that has struck its colors does not shoot.
+    ///
+    /// `check_ai_cripple` announces "derelict adrift, ripe for salvage" and
+    /// the game then invites the player to board it with F. It was still
+    /// firing the whole time, because the only gate was a behaviour field
+    /// that nothing updates after death.
+    #[test]
+    fn a_derelict_does_not_shoot() {
+        assert!(
+            !ship_may_fire(&AiShipBehavior::Engaging, &state(true)),
+            "a ship that struck its colors kept firing at the player"
+        );
+    }
+
+    /// The living still do.
+    #[test]
+    fn an_engaging_ship_shoots() {
+        assert!(ship_may_fire(&AiShipBehavior::Engaging, &state(false)));
+    }
+
+    /// And only the engaging ones. A patrolling ship is not firing at you.
+    #[test]
+    fn a_ship_not_engaging_holds_fire() {
+        assert!(!ship_may_fire(&AiShipBehavior::Patrolling, &state(false)));
+        assert!(!ship_may_fire(&AiShipBehavior::Dead, &state(false)));
+    }
     use crate::combat::impact::{obliquity, Obliquity};
     use crate::building::Block;
     use crate::components::HullMaterial;

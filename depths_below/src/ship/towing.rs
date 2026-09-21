@@ -58,7 +58,17 @@ fn toggle_tow(
     keys: Res<ButtonInput<KeyCode>>,
     mut tow: ResMut<Towing>,
     ship: Query<(&GlobalTransform, &ShipPhysics), With<Ship>>,
-    modules: Query<&Module, Without<crate::components::DestroyedModule>>,
+    // Without<OwnedByAiShip>: the player's own beam, not anyone's. Stellar
+    // Preserve hulls carry two TractorBeams each, so an unscoped count let
+    // you latch a hulk with no beam aboard as long as a Preserve ship was
+    // somewhere in the system.
+    modules: Query<
+        &Module,
+        (
+            Without<crate::components::DestroyedModule>,
+            Without<crate::ai_ship::components::OwnedByAiShip>,
+        ),
+    >,
     wrecks: Query<(Entity, &GlobalTransform, &AiShipWreck)>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
@@ -118,6 +128,71 @@ fn toggle_tow(
             });
         }
     }
+}
+
+/// Tell the player, once, that a hulk can come home whole.
+///
+/// Nothing in the game mentioned towing. The wreck notification offers "F:
+/// salvage detail" and stops there, the starter ship carries no tractor beam,
+/// and the key is Y -- so the entire mechanic was reachable only by reading
+/// the source. Two different hints, because the answer depends on what is
+/// aboard: with a beam, say which key; without one, say what to buy. Each
+/// fires once per run.
+fn hint_towing(
+    tow: Res<Towing>,
+    ship: Query<&GlobalTransform, With<Ship>>,
+    modules: Query<
+        &Module,
+        (
+            Without<crate::components::DestroyedModule>,
+            Without<crate::ai_ship::components::OwnedByAiShip>,
+        ),
+    >,
+    wrecks: Query<&GlobalTransform, With<AiShipWreck>>,
+    mut notifications: MessageWriter<ShowNotification>,
+    mut shown: Local<(bool, bool)>,
+) {
+    if tow.hulk.is_some() || (shown.0 && shown.1) {
+        return;
+    }
+    let Ok(ship_gt) = ship.single() else { return };
+    let ship_pos = ship_gt.translation().truncate();
+
+    let in_range = wrecks
+        .iter()
+        .any(|gt| gt.translation().truncate().distance(ship_pos) < LATCH_RANGE);
+    if !in_range {
+        return;
+    }
+
+    let has_beam = modules
+        .iter()
+        .any(|m| m.module_type == ModuleType::TractorBeam && m.is_active);
+
+    let (seen, message) = if has_beam {
+        (
+            &mut shown.0,
+            "Y: tow this hulk to a station. The yard opens it properly - everything \
+             aboard, plus what a boarding party cannot carry. It is heavy and loud."
+                .to_string(),
+        )
+    } else {
+        (
+            &mut shown.1,
+            "A tractor beam would let you tow this hulk home whole, for the classes \
+             a boarding party cannot carry. Fitted from the Weapons tab at any dock."
+                .to_string(),
+        )
+    };
+    if *seen {
+        return;
+    }
+    *seen = true;
+    notifications.write(ShowNotification {
+        message,
+        notification_type: NotificationType::Info,
+        duration: 9.0,
+    });
 }
 
 /// Drag the hulk along behind, and make the ship feel it.
@@ -241,7 +316,9 @@ impl Plugin for TowingPlugin {
         app.init_resource::<Towing>()
             .add_systems(
                 Update,
-                (toggle_tow, drag_hulk).chain().run_if(in_state(GameState::Exploring)),
+                (toggle_tow, drag_hulk, hint_towing)
+                    .chain()
+                    .run_if(in_state(GameState::Exploring)),
             )
             .add_systems(OnEnter(GameState::StationDocked), process_hulk_on_dock)
             .add_systems(OnEnter(GameState::MainMenu), release_on_exit)
@@ -302,6 +379,373 @@ mod tests {
     fn a_tow_is_heavy() {
         assert!(MASS_PER_LOOT > 100.0, "a hulk barely changes how the ship handles");
         assert!(TOW_NOISE > 0.0, "a tow should be loud as well as slow");
+    }
+
+    use crate::ai_ship::components::OwnedByAiShip;
+    use bevy::input::ButtonInput;
+    use std::time::Duration;
+
+    /// The towing systems, wired the way the plugin wires them but without
+    /// states, so a test can step them directly.
+    ///
+    /// These systems had never been exercised by anything. Every existing test
+    /// here covers `hulk_yard_value`, a pure function that decides what a hulk
+    /// is worth -- nothing had ever latched onto one.
+    fn app() -> App {
+        let mut app = App::new();
+        app.init_resource::<Time>()
+            .init_resource::<Towing>()
+            .init_resource::<NoiseState>()
+            .init_resource::<Inventory>()
+            .init_resource::<ButtonInput<KeyCode>>()
+            .add_message::<ShowNotification>()
+            .add_systems(Update, (toggle_tow, drag_hulk).chain());
+        app
+    }
+
+    /// A bare tractor beam module. `Module` has no Default, and every field
+    /// but the two this test cares about is irrelevant here.
+    fn beam(active: bool) -> Module {
+        Module {
+            module_type: ModuleType::TractorBeam,
+            health: 60.0,
+            max_health: 60.0,
+            power_consumption: 25.0,
+            power_generation: 0.0,
+            is_active: active,
+            grid_position: IVec2::ZERO,
+            size: IVec2::ONE,
+            rotation: crate::components::Rotation::North,
+        }
+    }
+
+    /// A player ship at `pos` with `beams` working tractor beams aboard.
+    ///
+    /// GlobalTransform is written directly rather than propagated: there is no
+    /// TransformPlugin here, and a propagated transform would read as the
+    /// origin on the frame the entity is spawned anyway.
+    fn spawn_player(app: &mut App, pos: Vec2, beams: usize) -> Entity {
+        let ship = app
+            .world_mut()
+            .spawn((
+                Ship,
+                ShipPhysics { mass: 1000.0, ..default() },
+                Transform::from_translation(pos.extend(0.0)),
+                GlobalTransform::from_translation(pos.extend(0.0)),
+            ))
+            .id();
+        for i in 0..beams {
+            let mut m = beam(true);
+            m.grid_position = IVec2::new(i as i32, 0);
+            app.world_mut().spawn(m);
+        }
+        ship
+    }
+
+    fn spawn_hulk(app: &mut App, pos: Vec2, loot: u32) -> Entity {
+        app.world_mut()
+            .spawn((
+                hulk(loot, 1.0),
+                Transform::from_translation(pos.extend(0.0)),
+                GlobalTransform::from_translation(pos.extend(0.0)),
+            ))
+            .id()
+    }
+
+    /// One genuine fresh press of Y, the way a player produces one.
+    ///
+    /// `press` on a key already held does not re-register `just_pressed`, so
+    /// without the reset every call after the first is a no-op and the tow
+    /// looks like it can be latched but never dropped. That is the harness,
+    /// not the game: Bevy rebuilds this resource from OS events each frame.
+    fn press_y(app: &mut App) {
+        {
+            let mut input = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            input.clear();
+            input.reset(KeyCode::KeyY);
+            input.press(KeyCode::KeyY);
+        }
+        app.update();
+    }
+
+    /// Advance the clock one frame with no key held.
+    ///
+    /// The clear matters. Nothing here plays the part of Bevy's input plugin,
+    /// which rebuilds `ButtonInput` from OS events every frame, so a
+    /// `just_pressed` left over from `press_y` would still read as pressed on
+    /// the next update -- and `toggle_tow` would latch and release the hulk on
+    /// alternating frames for as long as the test ran.
+    fn tick(app: &mut App, secs: f32) {
+        app.world_mut()
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .clear();
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_secs_f32(secs));
+        app.update();
+    }
+
+    /// The whole point, start to finish: press the key near a hulk and it is
+    /// on the hook.
+    #[test]
+    fn pressing_the_key_latches_a_hulk_in_range() {
+        let mut app = app();
+        spawn_player(&mut app, Vec2::ZERO, 1);
+        let wreck = spawn_hulk(&mut app, Vec2::new(LATCH_RANGE * 0.5, 0.0), 6);
+
+        press_y(&mut app);
+
+        assert_eq!(
+            app.world().resource::<Towing>().hulk,
+            Some(wreck),
+            "a hulk well inside latch range was not picked up"
+        );
+    }
+
+    /// Range has to mean something, or the key is just "collect nearest wreck
+    /// anywhere".
+    #[test]
+    fn a_hulk_out_of_range_is_not_latched() {
+        let mut app = app();
+        spawn_player(&mut app, Vec2::ZERO, 1);
+        spawn_hulk(&mut app, Vec2::new(LATCH_RANGE * 1.5, 0.0), 6);
+
+        press_y(&mut app);
+
+        assert!(app.world().resource::<Towing>().hulk.is_none());
+    }
+
+    /// You must own the beam.
+    ///
+    /// The module query was unscoped, and Stellar Preserve hulls carry two
+    /// TractorBeams each -- so with one of their ships anywhere in the system,
+    /// a player with no beam at all could latch on. Same cross-ship
+    /// contamination this codebase keeps producing: a query that means "the
+    /// player's modules" written as "every module".
+    #[test]
+    fn an_enemys_tractor_beam_is_not_yours() {
+        let mut app = app();
+        spawn_player(&mut app, Vec2::ZERO, 0);
+        // An enemy ship in the same system, carrying beams of its own.
+        for _ in 0..2 {
+            app.world_mut()
+                .spawn((beam(true), OwnedByAiShip { root: Entity::PLACEHOLDER }));
+        }
+        spawn_hulk(&mut app, Vec2::new(100.0, 0.0), 6);
+
+        press_y(&mut app);
+
+        assert!(
+            app.world().resource::<Towing>().hulk.is_none(),
+            "latched a hulk using an enemy ship's tractor beam"
+        );
+    }
+
+    /// An unpowered beam is not a beam.
+    #[test]
+    fn a_dead_beam_cannot_latch() {
+        let mut app = app();
+        spawn_player(&mut app, Vec2::ZERO, 0);
+        app.world_mut().spawn(beam(false));
+        spawn_hulk(&mut app, Vec2::new(100.0, 0.0), 6);
+
+        press_y(&mut app);
+
+        assert!(app.world().resource::<Towing>().hulk.is_none());
+    }
+
+    /// Press again to drop it.
+    #[test]
+    fn pressing_again_releases() {
+        let mut app = app();
+        spawn_player(&mut app, Vec2::ZERO, 1);
+        spawn_hulk(&mut app, Vec2::new(200.0, 0.0), 6);
+
+        press_y(&mut app);
+        assert!(app.world().resource::<Towing>().hulk.is_some());
+        press_y(&mut app);
+        assert!(app.world().resource::<Towing>().hulk.is_none());
+    }
+
+    /// The hulk has to actually come along, or the tow is a status effect.
+    #[test]
+    fn a_towed_hulk_follows_the_ship() {
+        let mut app = app();
+        spawn_player(&mut app, Vec2::ZERO, 1);
+        let wreck = spawn_hulk(&mut app, Vec2::new(300.0, 300.0), 6);
+        press_y(&mut app);
+
+        let start = app.world().entity(wreck).get::<Transform>().unwrap().translation.truncate();
+        for _ in 0..30 {
+            tick(&mut app, 0.1);
+        }
+        let end = app.world().entity(wreck).get::<Transform>().unwrap().translation.truncate();
+
+        assert!(
+            end.distance(start) > 1.0,
+            "the hulk never moved: it latched but nothing dragged it"
+        );
+        // TOW_OFFSET behind a ship facing its default direction.
+        assert!(
+            end.length() <= TOW_OFFSET + 1.0,
+            "the hulk settled {} out, further than the {TOW_OFFSET} tow line",
+            end.length()
+        );
+    }
+
+    /// A tow is heavy and loud while it is on, and both go away when it comes
+    /// off. Mass especially: `ship_movement` divides force by mass, so a mass
+    /// left inflated after release would quietly ruin the ship forever.
+    #[test]
+    fn mass_and_noise_return_when_the_tow_is_dropped() {
+        let mut app = app();
+        let ship = spawn_player(&mut app, Vec2::ZERO, 1);
+        spawn_hulk(&mut app, Vec2::new(200.0, 0.0), 6);
+
+        let base = app.world().entity(ship).get::<ShipPhysics>().unwrap().mass;
+        press_y(&mut app);
+        tick(&mut app, 0.5);
+
+        let towing_mass = app.world().entity(ship).get::<ShipPhysics>().unwrap().mass;
+        assert!(towing_mass > base, "towing a six-unit hulk changed nothing about the ship");
+        assert!(
+            app.world().resource::<NoiseState>().noise_level > 0.0,
+            "a tow should be loud"
+        );
+
+        press_y(&mut app);
+        tick(&mut app, 0.5);
+        assert_eq!(
+            app.world().entity(ship).get::<ShipPhysics>().unwrap().mass,
+            base,
+            "the ship kept the hulk's weight after dropping it"
+        );
+    }
+
+    /// If the hulk is destroyed underneath the tow, the ship must not keep its
+    /// weight.
+    #[test]
+    fn losing_the_hulk_gives_the_weight_back() {
+        let mut app = app();
+        let ship = spawn_player(&mut app, Vec2::ZERO, 1);
+        let wreck = spawn_hulk(&mut app, Vec2::new(200.0, 0.0), 6);
+
+        let base = app.world().entity(ship).get::<ShipPhysics>().unwrap().mass;
+        press_y(&mut app);
+        tick(&mut app, 0.5);
+        app.world_mut().entity_mut(wreck).despawn();
+        tick(&mut app, 0.5);
+
+        assert!(app.world().resource::<Towing>().hulk.is_none());
+        assert_eq!(app.world().entity(ship).get::<ShipPhysics>().unwrap().mass, base);
+    }
+
+    /// Docking with a hulk on the line is what pays.
+    #[test]
+    fn docking_with_a_hulk_pays_out_and_consumes_it() {
+        let mut app = app();
+        spawn_player(&mut app, Vec2::ZERO, 1);
+        let wreck = spawn_hulk(&mut app, Vec2::new(200.0, 0.0), 8);
+        press_y(&mut app);
+        assert!(app.world().resource::<Towing>().hulk.is_some());
+
+        app.world_mut().run_system_cached(process_hulk_on_dock).unwrap();
+        app.update();
+
+        let inv = app.world().resource::<Inventory>();
+        let rare: u32 = inv
+            .items
+            .iter()
+            .filter(|(k, _)| matches!(k, ItemType::RareAlloy | ItemType::AncientArtifact))
+            .map(|(_, v)| *v)
+            .sum();
+        assert!(rare > 0, "docking with a hulk produced nothing rare");
+        assert!(
+            app.world().resource::<Towing>().hulk.is_none(),
+            "the tow was still attached after the yard broke it up"
+        );
+        assert!(
+            app.world().get_entity(wreck).is_err(),
+            "the hulk survived being broken up, so it can be sold twice"
+        );
+    }
+
+    /// Docking with nothing in tow must not touch the inventory.
+    #[test]
+    fn docking_empty_pays_nothing() {
+        let mut app = app();
+        spawn_player(&mut app, Vec2::ZERO, 1);
+        app.world_mut().run_system_cached(process_hulk_on_dock).unwrap();
+        assert_eq!(app.world().resource::<Inventory>().items.len(), 0);
+    }
+
+    fn hints(app: &mut App) -> Vec<String> {
+        app.world_mut()
+            .resource_mut::<bevy::ecs::message::Messages<ShowNotification>>()
+            .drain()
+            .map(|n| n.message)
+            .collect()
+    }
+
+    /// With a beam aboard, the hint names the key.
+    #[test]
+    fn nearing_a_hulk_with_a_beam_names_the_key() {
+        let mut app = app();
+        app.add_systems(Update, hint_towing);
+        spawn_player(&mut app, Vec2::ZERO, 1);
+        spawn_hulk(&mut app, Vec2::new(200.0, 0.0), 6);
+
+        tick(&mut app, 0.1);
+
+        let said = hints(&mut app).join(" ");
+        assert!(said.contains("Y:"), "no hint naming the tow key: {said:?}");
+    }
+
+    /// Without one, it names what to buy -- the starter ship has no tractor
+    /// beam, so this is the hint a new player actually gets.
+    #[test]
+    fn nearing_a_hulk_without_a_beam_says_what_to_buy() {
+        let mut app = app();
+        app.add_systems(Update, hint_towing);
+        spawn_player(&mut app, Vec2::ZERO, 0);
+        spawn_hulk(&mut app, Vec2::new(200.0, 0.0), 6);
+
+        tick(&mut app, 0.1);
+
+        let said = hints(&mut app).join(" ");
+        assert!(
+            said.contains("tractor beam"),
+            "a player with no beam was told nothing: {said:?}"
+        );
+    }
+
+    /// Once per run, not once per frame.
+    #[test]
+    fn the_hint_does_not_repeat() {
+        let mut app = app();
+        app.add_systems(Update, hint_towing);
+        spawn_player(&mut app, Vec2::ZERO, 1);
+        spawn_hulk(&mut app, Vec2::new(200.0, 0.0), 6);
+
+        tick(&mut app, 0.1);
+        let _ = hints(&mut app);
+        for _ in 0..10 {
+            tick(&mut app, 0.1);
+        }
+        assert!(hints(&mut app).is_empty(), "the tow hint repeated");
+    }
+
+    /// And not at all when there is no hulk to tow.
+    #[test]
+    fn no_hint_with_nothing_in_range() {
+        let mut app = app();
+        app.add_systems(Update, hint_towing);
+        spawn_player(&mut app, Vec2::ZERO, 1);
+        spawn_hulk(&mut app, Vec2::new(LATCH_RANGE * 3.0, 0.0), 6);
+
+        tick(&mut app, 0.1);
+
+        assert!(hints(&mut app).is_empty());
     }
 
     fn rare_count(v: &[ItemType]) -> usize {
