@@ -4156,6 +4156,23 @@ fn sell_row(inventory: &Inventory, station_idx: usize, choice: Option<ItemType>,
     }
 }
 
+/// Price multiplier for a station, from how far its system sits from Haven.
+///
+/// station_idx is system_id * STATIONS_PER_SYSTEM + slot, so the system is
+/// recoverable from the index alone.
+fn distance_price_multiplier_for(
+    station_idx: usize,
+    galaxy: &crate::celestial::resources::GalaxyMap,
+) -> f32 {
+    let system_id = (station_idx / crate::world::home_base::STATIONS_PER_SYSTEM) as u32;
+    galaxy
+        .systems
+        .iter()
+        .find(|s| s.id == system_id)
+        .map(|s| crate::world::station_types::distance_price_multiplier(s.galaxy_pos))
+        .unwrap_or(1.0)
+}
+
 fn get_docking_services(
     hull_state: &HullState,
     oxygen_state: &OxygenState,
@@ -4166,6 +4183,7 @@ fn get_docking_services(
     inventory: &Inventory,
     station_idx: usize,
     market: &MarketEvents,
+    far: f32,
 ) -> Vec<DockingService> {
     // Station identity: repairs/fuel/ammo are cheaper at the right outpost
     // type (Mining/Refuel/Military — see world::station_types). These same
@@ -4175,7 +4193,7 @@ fn get_docking_services(
     );
 
     let hull_damage = 1.0 - hull_state.hull_integrity;
-    let hull_repair_full_cost = (hull_damage * 500.0 * discounts.hull_repair) as u32;
+    let hull_repair_full_cost = (hull_damage * 500.0 * discounts.hull_repair * far) as u32;
     let scrap_have = inventory.items.get(&ItemType::ScrapMetal).copied().unwrap_or(0);
     let scrap_usable = (hull_repair_full_cost / 50).min(scrap_have);
     let hull_repair_cost = hull_repair_full_cost.saturating_sub(scrap_usable * 50);
@@ -4197,7 +4215,7 @@ fn get_docking_services(
     }
     let ammo_cost = ammo_cost_raw as u32;
 
-    let hire_full_cost = 200 + (crew_count as u32) * 50;
+    let hire_full_cost = ((200 + (crew_count as u32) * 50) as f32 * far) as u32;
     let bio_have = inventory.items.get(&ItemType::BioSample).copied().unwrap_or(0);
     let bio_usable = (hire_full_cost / 60).min(bio_have);
     let hire_cost = hire_full_cost.saturating_sub(bio_usable * 60);
@@ -4209,7 +4227,7 @@ fn get_docking_services(
     }
 
     let fuel_missing = fuel_state.max_fuel - fuel_state.current_fuel;
-    let fuel_cost = (fuel_missing * 0.5 * discounts.fuel) as u32;
+    let fuel_cost = (fuel_missing * 0.5 * discounts.fuel * far) as u32;
 
     vec![
         DockingService {
@@ -4275,19 +4293,21 @@ fn spawn_docking_menu(
     oxygen_state: Res<OxygenState>,
     fuel_state: Res<FuelState>,
     weapon_query: Query<(&Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), Without<Creature>>,
-    crew_query: Query<&CrewMember>,
+    crew_query: Query<&CrewMember, Without<crate::ai_ship::components::OwnedByAiShip>>,
     inventory: Res<Inventory>,
     currency: Res<Currency>,
     staffing_state: Res<StaffingState>,
     ship_query: Query<&Transform, With<Ship>>,
     market: Res<MarketEvents>,
     stations: Res<crate::world::home_base::SystemStations>,
+    galaxy: Res<crate::celestial::resources::GalaxyMap>,
 ) {
     let crew_count = crew_query.iter().count();
     let station_idx = ship_query.single().ok()
         .and_then(|t| stations.nearest_index(t.translation.truncate()))
         .unwrap_or(0);
-    let services = get_docking_services(&hull_state, &oxygen_state, &fuel_state, &weapon_query, crew_count, staffing_state.total_berths, &inventory, station_idx, &market);
+    let far = distance_price_multiplier_for(station_idx, &galaxy);
+    let services = get_docking_services(&hull_state, &oxygen_state, &fuel_state, &weapon_query, crew_count, staffing_state.total_berths, &inventory, station_idx, &market, far);
 
     commands.spawn((
         (Node {
@@ -4469,10 +4489,14 @@ fn docking_menu_input(
     staffing_state: Res<StaffingState>,
     mut module_query: Query<&mut Module, Without<crate::ai_ship::components::OwnedByAiShip>>,
     ship_query: Query<&Transform, With<Ship>>,
-    world_ctx: (Res<MarketEvents>, Res<crate::world::home_base::SystemStations>),
+    world_ctx: (
+        Res<MarketEvents>,
+        Res<crate::world::home_base::SystemStations>,
+        Res<crate::celestial::resources::GalaxyMap>,
+    ),
 ) {
     let (assets, crew_atlases) = crew_art;
-    let (market, stations) = world_ctx;
+    let (market, stations, galaxy) = world_ctx;
     let (mut hull_state, mut oxygen_state, mut fuel_state, mut currency, mut inventory) = econ_state;
 
     // Keep the menu's own credit readout honest. It is spawned once and
@@ -4491,7 +4515,10 @@ fn docking_menu_input(
         .and_then(|t| stations.nearest_index(t.translation.truncate()))
         .unwrap_or(0);
     // Must match the multipliers used for the displayed costs in
-    // get_docking_services / the refresh block below.
+    // get_docking_services / the refresh block below. That now includes the
+    // distance multiplier: quote one price and charge another and the menu is
+    // lying, which is worse than it being cheap.
+    let far = distance_price_multiplier_for(station_idx, &galaxy);
     let discounts = crate::world::station_types::service_discounts(
         crate::world::station_types::station_type(station_idx),
     );
@@ -4547,7 +4574,7 @@ fn docking_menu_input(
                 // fuel/ammo's partial fill, so a failed attempt must not
                 // waste resources the player can't get back.
                 let hull_damage = 1.0 - hull_state.hull_integrity;
-                let full_cost = (hull_damage * 500.0 * discounts.hull_repair) as u32;
+                let full_cost = (hull_damage * 500.0 * discounts.hull_repair * far) as u32;
                 if hull_damage < 0.01 {
                     notifications.write(ShowNotification {
                         message: "Hull already at full integrity".into(),
@@ -4749,7 +4776,7 @@ fn docking_menu_input(
                     // medical/ration supplies for the new hire) — same
                     // atomic check-then-spend pattern as Repair Hull's
                     // ScrapMetal offset, since hiring is all-or-nothing too.
-                    let full_cost = 200 + (crew_count as u32) * 50;
+                    let full_cost = ((200 + (crew_count as u32) * 50) as f32 * far) as u32;
                     const BIOSAMPLE_VALUE: u32 = 60;
                     let bio_have = inventory.items.get(&ItemType::BioSample).copied().unwrap_or(0);
                     let bio_used = (full_cost / BIOSAMPLE_VALUE).min(bio_have);
@@ -4942,7 +4969,7 @@ fn docking_menu_input(
         .collect();
 
     let hull_damage = 1.0 - hull_state.hull_integrity;
-    let hull_repair_full_cost = (hull_damage * 500.0 * discounts.hull_repair) as u32;
+    let hull_repair_full_cost = (hull_damage * 500.0 * discounts.hull_repair * far) as u32;
     let scrap_have = inventory.items.get(&ItemType::ScrapMetal).copied().unwrap_or(0);
     let scrap_usable = (hull_repair_full_cost / 50).min(scrap_have);
     let hull_repair_cost = hull_repair_full_cost.saturating_sub(scrap_usable * 50);
@@ -4958,7 +4985,7 @@ fn docking_menu_input(
         }
     }
     let ammo_cost = (ammo_cost_raw * discounts.ammo) as u32;
-    let hire_full_cost = 200 + (crew_count as u32) * 50;
+    let hire_full_cost = ((200 + (crew_count as u32) * 50) as f32 * far) as u32;
     let bio_have = inventory.items.get(&ItemType::BioSample).copied().unwrap_or(0);
     let bio_usable = (hire_full_cost / 60).min(bio_have);
     let hire_cost = hire_full_cost.saturating_sub(bio_usable * 60);
@@ -4969,7 +4996,7 @@ fn docking_menu_input(
     };
 
     let fuel_missing = fuel_state.max_fuel - fuel_state.current_fuel;
-    let fuel_cost = (fuel_missing * 0.5 * discounts.fuel) as u32;
+    let fuel_cost = (fuel_missing * 0.5 * discounts.fuel * far) as u32;
 
     let new_idx = selection.0;
     let service_info: Vec<(&str, String, u32, bool)> = vec![

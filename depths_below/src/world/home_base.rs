@@ -416,9 +416,23 @@ pub fn station_docking(
         physics.angular_velocity = 0.0;
         physics.throttle = 0.0;
 
-        // Docking is safety: everything tops up.
+        // Docking is safety, not a free tank.
+        //
+        // This used to fill fuel and oxygen outright, which made the Refuel
+        // and Refill services in the docking menu permanently unavailable --
+        // they were priced, displayed, and could never be bought, because
+        // arriving had already done it for nothing. It also meant distance
+        // cost nothing: with two stations in every system you could cross the
+        // galaxy topping up as you went.
+        //
+        // Air stays free: suffocating at a berth is not a decision, it is a
+        // bug. Fuel tops up to a reserve that guarantees a short jump, so a
+        // broke player is never stranded, and the rest is bought.
         oxygen_state.current_oxygen = oxygen_state.max_oxygen;
-        fuel_state.current_fuel = fuel_state.max_fuel;
+        const DOCK_FUEL_RESERVE: f32 = 260.0;
+        if fuel_state.current_fuel < DOCK_FUEL_RESERVE {
+            fuel_state.current_fuel = DOCK_FUEL_RESERVE.min(fuel_state.max_fuel);
+        }
         for (mut weapon, parent) in weapon_query.iter_mut() {
             if parent.parent() == ship_entity {
                 weapon.ammo = weapon.max_ammo;
