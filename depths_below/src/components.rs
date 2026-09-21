@@ -379,7 +379,13 @@ impl ModuleCategory {
                 ModuleType::SolarCell,
                 ModuleType::Transformer,
                 ModuleType::ThermalVentGenerator,
-            ],
+                            ModuleType::ReactorFuelRod,
+                ModuleType::ReactorCooling,
+                ModuleType::FuelEnrichmentUnit,
+                ModuleType::ContainmentField,
+                ModuleType::EmergencyShutdown,
+                ModuleType::PowerRegulator,
+],
             ModuleCategory::Propulsion => &[
                 ModuleType::SmallEngine,
                 ModuleType::StandardEngine,
@@ -391,7 +397,12 @@ impl ModuleCategory {
                 ModuleType::RudderAssembly,
                 ModuleType::VectorThruster,
                 ModuleType::AttitudeThruster,
-            ],
+                            ModuleType::EngineNozzle,
+                ModuleType::Afterburner,
+                ModuleType::ThrustVectoring,
+                ModuleType::FuelInjector,
+                ModuleType::InertialDampener,
+],
             ModuleCategory::LifeSupport => &[
                 ModuleType::OxygenScrubber,
                 ModuleType::CO2Scrubber,
@@ -409,7 +420,8 @@ impl ModuleCategory {
                 ModuleType::AutopilotCore,
                 ModuleType::AICombatCore,
                 ModuleType::BridgeWing,
-            ],
+                            ModuleType::MemoryCore,
+],
             ModuleCategory::Weapons => &[
                 ModuleType::Cannon,
                 ModuleType::Railgun,
@@ -487,7 +499,18 @@ impl ModuleCategory {
                 ModuleType::MineralExtractor,
                 ModuleType::ResearchLab,
                 ModuleType::DockingHub,
-            ],
+                            ModuleType::ShieldEmitter,
+                ModuleType::DecoyLauncher,
+                ModuleType::ChaffDispenser,
+                ModuleType::AblativeArmor,
+                ModuleType::PointDefenseDrone,
+                ModuleType::HullReinforcePlate,
+                ModuleType::SignalJammer,
+                ModuleType::GravityCompensator,
+                ModuleType::RadiationHardening,
+                ModuleType::EmergencyO2Cache,
+                ModuleType::BlackBox,
+],
             ModuleCategory::Structural => &[
                 // Plating first: it's what you come to this category for, and
                 // the two wedges belong beside each other. AngledArmorPlate
@@ -507,9 +530,20 @@ impl ModuleCategory {
                 ModuleType::ViewPort,
                 ModuleType::EmergencyBulkhead,
                 ModuleType::FirebreakWall,
+                // Adjacency enhancers. All three are live systems in
+                // building::multiblock::enhancers -- brace adds 25% HP to
+                // neighbouring hull, damper adds 10% damage to neighbouring
+                // weapons, joint cuts neighbouring cascade risk by 40%. They
+                // had never appeared in any palette, so the only way to own
+                // one was to start with it.
+                ModuleType::StructuralBrace,
+                ModuleType::VibrationDamper,
+                ModuleType::ReinforcedJoint,
                 // Corridor/LadderShaft/MaintenanceTunnel are deliberately
                 // absent: passages are HullLayer::Hallway now. The variants
-                // stay so old blueprints still deserialize.
+                // stay so old blueprints still deserialize. ThermalInsulator
+                // is absent too -- it has a sprite and a description and no
+                // behaviour anywhere, so offering it would sell nothing.
             ],
         }
     }
@@ -2432,3 +2466,4 @@ mod tests {
     }
 
 }
+

@@ -82,10 +82,16 @@ CATEGORIES = {
     # Custom / player-assembled: a module outline with a plus.
     "cat_custom": svg('<rect x="11" y="11" width="42" height="42" rx="4"/>'
                       '<path d="M32 22 v20 M22 32 h20"/>'),
-    # I-beam / girder.
+    # I-beam / girder -- framing, bracing, bulkheads.
     "cat_structural": svg('<path d="M14 12 h36 M14 52 h36"/>'
                           '<path d="M22 12 v40 M42 12 v40"/>'
                           '<path d="M22 32 h20"/>'),
+    # Hull: staggered plating, the wall you lay rather than the frame inside
+    # it. Hull borrowed the girder until Structural got a tab of its own and
+    # the two sat side by side wearing the same picture.
+    "cat_hull": svg('<rect x="10" y="12" width="44" height="40" rx="3"/>'
+                    '<path d="M10 25.3 h44 M10 38.7 h44"/>'
+                    '<path d="M25 12 v13.3 M39 25.3 v13.4 M25 38.7 v13.3"/>'),
 }
 
 # ------------------------------------------------------- conventional ammo

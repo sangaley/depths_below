@@ -732,6 +732,7 @@ fn category_color(cat: BuildCategory) -> Color {
         BuildCategory::Storage => Color::srgb(0.6, 0.5, 0.3),
         BuildCategory::Crew => Color::srgb(0.7, 0.5, 0.7),
         BuildCategory::Utility => Color::srgb(0.5, 0.6, 0.5),
+        BuildCategory::Structural => Color::srgb(0.62, 0.62, 0.64),
         BuildCategory::Custom => Color::srgb(0.9, 0.6, 0.9),
     }
 }
@@ -741,7 +742,7 @@ fn category_color(cat: BuildCategory) -> Color {
 /// monochrome so the UI can tint them per state.
 fn category_icon(cat: BuildCategory) -> &'static str {
     match cat {
-        BuildCategory::Hull => "ui/icons/cat_structural.png",
+        BuildCategory::Hull => "ui/icons/cat_hull.png",
         BuildCategory::Power => "ui/icons/cat_power.png",
         BuildCategory::Propulsion => "ui/icons/cat_propulsion.png",
         BuildCategory::LifeSupport => "ui/icons/cat_lifesupport.png",
@@ -751,6 +752,7 @@ fn category_icon(cat: BuildCategory) -> &'static str {
         BuildCategory::Storage => "ui/icons/cat_storage.png",
         BuildCategory::Crew => "ui/icons/cat_crew.png",
         BuildCategory::Utility => "ui/icons/cat_utility.png",
+        BuildCategory::Structural => "ui/icons/cat_structural.png",
         BuildCategory::Custom => "ui/icons/cat_custom.png",
     }
 }
@@ -767,6 +769,7 @@ fn category_short_name(cat: BuildCategory) -> &'static str {
         BuildCategory::Storage => "STOR",
         BuildCategory::Crew => "CREW",
         BuildCategory::Utility => "UTIL",
+        BuildCategory::Structural => "STRU",
         BuildCategory::Custom => "CUST",
     }
 }
@@ -980,8 +983,8 @@ fn spawn_item_slots(
             // No custom blueprints yet - show empty
         }
         _ => {
-            if let Some(module_cat) = category.to_module_category() {
-                let types = module_cat.module_types();
+            {
+                let types = category.items();
                 for (i, mt) in types.iter().enumerate() {
                     let def = registry.get(*mt);
                     // Use first 3 chars of name as label
@@ -1071,8 +1074,14 @@ pub fn scroll_item_slots(
     }
 
     // Keep the selected slot visible when the selection moves under the strip.
+    //
+    // Only act once the strip has been measured. A node spawned this frame
+    // reports zero size until layout runs, which makes max_scroll zero and
+    // clamps the computed target back to the left edge -- and because the
+    // selection was recorded anyway, the correction never ran again and the
+    // strip sat pinned at slot 0 with the highlight somewhere off-screen.
     let selection = (build_state.category_index, build_state.selected_index);
-    if *last_selection != Some(selection) {
+    if view_w > 0.0 && *last_selection != Some(selection) {
         *last_selection = Some(selection);
         let left = build_state.selected_index as f32 * (SLOT_SIZE + SLOT_GAP);
         let right = left + SLOT_SIZE + 2.0 * SLOT_PAD;

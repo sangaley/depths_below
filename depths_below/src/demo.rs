@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 use bevy::render::view::window::screenshot::{save_to_disk, Screenshot};
 use crate::components::{Ship, ShipPhysics};
-use crate::resources::InputState;
-use crate::states::GameState;
+use crate::resources::{BuildCategory, BuildingState, InputState};
+use crate::states::{BuildState, GameState};
 use crate::ai_ship::components::{AiShip, WorldSimulation, SimBehavior};
 use crate::combat::targeting::selection::{TargetSelection, TargetType};
 use crate::combat::targeting::fire_groups::FireGroupState;
@@ -27,6 +27,13 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //   DEPTHS_CASCADE=0.85 — pin the story's progress level, so a late beat can
 //                          be looked at without an hour of flying first.
 //   DEPTHS_CASCADE_TRACE=1 — print the arc's state once a second.
+//   DEPTHS_BUILD_TAB=<name> — stop at the station, open build mode and select
+//                          that build tab, so the palette can be looked at
+//                          without clicking through to it. Name matches
+//                          BuildCategory::name() case-insensitively
+//                          ("structural", "life support", "hull").
+//   DEPTHS_BUILD_SLOT=<n> — with the above, park on slot n instead of the
+//                          first, to check the far end of a scrolling strip.
 //   DEPTHS_MOVETEST=1   — bare movement sandbox: instant skip (no menu/
 //                          station flash), starter ship, manual control,
 //                          and NO AI ships spawned — just open space and
@@ -46,6 +53,63 @@ struct DemoAdvanceDelays {
     station: f32,
 }
 
+/// The build tab `DEPTHS_BUILD_TAB` asks for, if it names a real one.
+///
+/// Build mode is only reachable while docked and only by keypress, which made
+/// the palette the one screen that could not be photographed unattended. Two
+/// of the demo's blockers lived there -- a tab whose slots placed blocks other
+/// than their labels, and a whole category with no tab at all -- and neither
+/// was visible from a log line.
+fn requested_build_tab() -> Option<BuildCategory> {
+    let want = std::env::var("DEPTHS_BUILD_TAB").ok()?;
+    let want = want.trim().to_ascii_lowercase();
+    BuildCategory::ALL
+        .iter()
+        .copied()
+        .find(|c| c.name().to_ascii_lowercase() == want)
+        .or_else(|| {
+            warn!(
+                "DEPTHS_BUILD_TAB={want:?} matches no build category; expected one of {:?}",
+                BuildCategory::ALL.iter().map(|c| c.name()).collect::<Vec<_>>()
+            );
+            None
+        })
+}
+
+/// Hold at the station with the palette open on the requested tab.
+fn open_build_tab(
+    category: BuildCategory,
+    state: Res<State<GameState>>,
+    build_state: Res<State<BuildState>>,
+    mut next_build: ResMut<NextState<BuildState>>,
+    mut building: ResMut<BuildingState>,
+    mut done: Local<bool>,
+) {
+    if *done || *state.get() != GameState::StationDocked {
+        return;
+    }
+    let index = BuildCategory::ALL.iter().position(|c| *c == category);
+    let Some(index) = index else { return };
+    building.category_index = index;
+    // DEPTHS_BUILD_SLOT parks on one slot rather than the first, so a strip
+    // long enough to scroll can be checked at its far end.
+    building.selected_index = std::env::var("DEPTHS_BUILD_SLOT")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(0);
+    if *build_state.get() == BuildState::Inactive {
+        next_build.set(BuildState::Placing);
+    }
+    *done = true;
+    info!(
+        "BUILD TAB MODE: docked, palette open on {} ({} items), slot {} = {}",
+        category.name(),
+        category.item_count(),
+        building.selected_index,
+        building.selection_name()
+    );
+}
+
 pub fn skip_ai_ship_spawn() -> bool {
     std::env::var("DEPTHS_MOVETEST").ok().as_deref() == Some("1")
 }
@@ -55,7 +119,24 @@ impl Plugin for DemoPlugin {
         let full_demo = std::env::var("DEPTHS_DEMO").ok().as_deref() == Some("1");
         let skip_menu = std::env::var("DEPTHS_SKIP_MENU").ok().as_deref() == Some("1");
         let move_test = skip_ai_ship_spawn();
-        if !full_demo && !skip_menu && !move_test {
+        let build_tab = requested_build_tab();
+        if !full_demo && !skip_menu && !move_test && build_tab.is_none() {
+            return;
+        }
+
+        // Stop at the station rather than launching: the palette only exists
+        // while docked, so advancing to Exploring would close the thing we
+        // came to look at.
+        if let Some(category) = build_tab {
+            app.insert_resource(DemoAdvanceDelays { menu: 1.0, station: f32::INFINITY })
+                .add_systems(Update, demo_advance_states)
+                .add_systems(Update, move |
+                    state: Res<State<GameState>>,
+                    build_state: Res<State<BuildState>>,
+                    next_build: ResMut<NextState<BuildState>>,
+                    building: ResMut<BuildingState>,
+                    done: Local<bool>,
+                | open_build_tab(category, state, build_state, next_build, building, done));
             return;
         }
 

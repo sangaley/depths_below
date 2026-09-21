@@ -8,7 +8,7 @@ file is newer.
 
 Legend: `[ ]` open · `[x]` done · `[~]` partly done · `[-]` cut for after the demo.
 
-**Status 2026-09-21:** 22 items closed on `cascade-story`, verified by an
+**Status 2026-09-21:** 23 items closed on `cascade-story`, verified by an
 eight-minute autoplay run of the real loop: no panics, credits growing, fuel
 draining on throttle, plating unlocking, cascade climbing to 0.17 across two
 warps. Remaining open items are listed below.
@@ -101,10 +101,16 @@ remain open below.
       `ship/movement.rs:255-278`
 - [~] **Progression gates nothing.** Hull materials now unlock by how far out
       the player has actually been, so the gate opens and there is a reason to
-      go. Still open: `Unlocks.modules` has no reader, and 52 of 157 modules
-      are unreachable because `BuildCategory` has no `Structural` variant —
-      **including ShieldEmitter**, so shield strength is fixed for the whole
-      run.
+      go. The build palette no longer hides anything: 40 modules were in no
+      menu at all, including `ShieldEmitter` (shield strength was frozen for
+      the whole run), `MemoryCore` (losing every one ends the run) and the
+      entire Structural category, which had no `BuildCategory` variant and so
+      took flat Armor Plate with it. 143 of 157 are now offered; the other 14
+      are weapon subcomponents fitted in the customisation panel, superseded
+      passage tiles, and one inert module, all listed in `NOT_IN_PALETTE` with
+      a reason. Three tests in `building/registry.rs` and two in `resources.rs`
+      keep the lists from drifting apart again.
+      Still open: `Unlocks.modules` has no reader.
 - [x] **Deposits are checked but never charged.** Accepting a contract is a
       free option with a downside only on death. `contracts/ui.rs:176-184`
 - [x] **Blind warp can strand you.** Landing further than `SNAP_TOLERANCE` from
