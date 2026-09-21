@@ -157,7 +157,9 @@ pub fn hiring_board_input(
     mut selection: ResMut<HiringSelection>,
     mut currency: ResMut<Currency>,
     staffing: Res<StaffingState>,
-    crew_query: Query<&CrewMember>,
+    // Excludes AI crew: unscoped this reported bunks like 25/20 and
+    // blocked hiring because enemy crew filled the player's berths.
+    crew_query: Query<&CrewMember, Without<crate::ai_ship::components::OwnedByAiShip>>,
     ship_query: Query<Entity, With<Ship>>,
     mut roster: ResMut<CrewRoster>,
     mut notifications: MessageWriter<ShowNotification>,
@@ -241,7 +243,9 @@ pub fn update_hiring_display(
     pool: Res<HiringPool>,
     selection: Res<HiringSelection>,
     staffing: Res<StaffingState>,
-    crew_query: Query<&CrewMember>,
+    // Excludes AI crew: unscoped this reported bunks like 25/20 and
+    // blocked hiring because enemy crew filled the player's berths.
+    crew_query: Query<&CrewMember, Without<crate::ai_ship::components::OwnedByAiShip>>,
     content_query: Query<Entity, With<HiringContent>>,
 ) {
     if !open.0 {

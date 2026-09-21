@@ -4329,7 +4329,16 @@ fn spawn_docking_menu(
             ));
         }
 
-        parent.spawn((Text::new(format!("Credits: {}", currency.credits)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() }, TextColor(theme::ThemeColors::ACCENT_YELLOW)));
+        // Tagged so it can be refreshed. Spawned once and never updated, this
+        // froze at whatever the balance was when the menu opened — a live run
+        // showed "Credits: 750" in the menu while the HUD read 21, which is
+        // the worst possible place to lie about money.
+        parent.spawn((
+            Text::new(format!("Credits: {}", currency.credits)),
+            TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() },
+            TextColor(theme::ThemeColors::ACCENT_YELLOW),
+            DockingCreditsText,
+        ));
 
         // Cargo hold — was invisible inside this menu entirely (only
         // visible via the Map overlay, which doesn't even open while
@@ -4438,22 +4447,44 @@ fn docking_menu_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
     mut menu_query: Query<&mut DockingMenuSelection, With<DockingOverlay>>,
-    mut item_query: Query<(&DockingServiceItem, &mut Text, &mut TextColor, &Children)>,
+    // Grouped: this system is at Bevy's 16-param cap (see the note above), so
+    // the credits readout rides along with the service rows it sits beside.
+    mut menu_text: (
+        Query<(&DockingServiceItem, &mut Text, &mut TextColor, &Children)>,
+        Query<&mut Text, (With<DockingCreditsText>, Without<DockingServiceItem>)>,
+    ),
     mut span_query: Query<&mut TextSpan>,
     econ_state: (ResMut<HullState>, ResMut<OxygenState>, ResMut<FuelState>, ResMut<Currency>, ResMut<Inventory>),
     mut weapon_query: Query<(&mut Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), Without<Creature>>,
-    crew_query: Query<&CrewMember>,
+    // All three MUST exclude AI ships. Unscoped, the docking menu counted
+    // enemy crew into the hire price and the berth check (a live run showed
+    // "Recruit crew (25/20 berths)" at 1450c with twenty crew aboard),
+    // full-healed every AI ship in the system on the player's credits when
+    // they bought Repair Hull, and charged them for enemy battle damage under
+    // Repair Modules.
+    crew_query: Query<&CrewMember, Without<crate::ai_ship::components::OwnedByAiShip>>,
     mut notifications: MessageWriter<ShowNotification>,
     mut next_state: ResMut<NextState<GameState>>,
-    mut hull_query: Query<&mut HullSegment>,
+    mut hull_query: Query<&mut HullSegment, Without<crate::ai_ship::components::OwnedByAiShip>>,
     staffing_state: Res<StaffingState>,
-    mut module_query: Query<&mut Module>,
+    mut module_query: Query<&mut Module, Without<crate::ai_ship::components::OwnedByAiShip>>,
     ship_query: Query<&Transform, With<Ship>>,
     world_ctx: (Res<MarketEvents>, Res<crate::world::home_base::SystemStations>),
 ) {
     let (assets, crew_atlases) = crew_art;
     let (market, stations) = world_ctx;
     let (mut hull_state, mut oxygen_state, mut fuel_state, mut currency, mut inventory) = econ_state;
+
+    // Keep the menu's own credit readout honest. It is spawned once and
+    // everything below can spend, so without this it reports the balance from
+    // whenever the menu happened to open.
+    if let Ok(mut text) = menu_text.1.single_mut() {
+        let want = format!("Credits: {}", currency.credits);
+        if **text != want {
+            **text = want;
+        }
+    }
+
     let Ok(mut selection) = menu_query.single_mut() else { return };
 
     let station_idx = ship_query.single().ok()
@@ -4969,7 +5000,7 @@ fn docking_menu_input(
         ("Undock", "Return to exploring".to_string(), 0, true),
     ];
 
-    for (item, mut text, mut text_color, children) in item_query.iter_mut() {
+    for (item, mut text, mut text_color, children) in menu_text.0.iter_mut() {
         let idx = item.0;
         if idx >= service_info.len() { continue; }
         let (name, desc, cost, available) = &service_info[idx];

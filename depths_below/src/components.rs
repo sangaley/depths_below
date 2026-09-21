@@ -2305,6 +2305,14 @@ pub struct NotificationContainer;
 #[derive(Component)]
 pub struct DockingOverlay;
 
+/// The credits readout inside the docking menu.
+///
+/// Tagged so it can be kept live. Spawned once and never refreshed, it froze
+/// at whatever the balance was when the menu opened — a real run showed
+/// "Credits: 750" in the menu while the HUD read 21.
+#[derive(Component)]
+pub struct DockingCreditsText;
+
 /// Currently selected service in the docking menu
 #[derive(Component)]
 /// (selected service row, sell-cargo choice index — 0 = ALL, then one
