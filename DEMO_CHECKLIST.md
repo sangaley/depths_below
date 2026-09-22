@@ -8,7 +8,7 @@ file is newer.
 
 Legend: `[ ]` open · `[x]` done · `[~]` partly done · `[-]` cut for after the demo.
 
-**Status 2026-09-21:** 26 items closed on `cascade-story`, verified by an
+**Status 2026-09-22:** 29 items closed on `cascade-story`, verified by an
 eight-minute autoplay run of the real loop: no panics, credits growing, fuel
 draining on throttle, plating unlocking, cascade climbing to 0.17 across two
 warps. Remaining open items are listed below.
@@ -158,10 +158,14 @@ if not, what to fit.
       30,000–100,000 unit ring around one of six far systems and appears on no
       radar, map or minimap. Reuse the nav arrow and map marker that
       `contracts/bounty_nav.rs` already draws for DestroyShip contracts.
-- [ ] **The dread audio bed is inaudible for the whole demo.** Both layers gate
-      on cascade ≥0.30 and a demo player sits near zero. Right for a full
-      playthrough; means the demo ships with one drone. Revisit once pacing is
-      tuned. `audio.rs:393-398`
+- [x] **The dread audio bed was inaudible for the whole demo.** Both layers
+      started at cascade 0.30 *and ramped to full only at 1.0*, so even after
+      lowering the start the first layer sat at about five per cent of the
+      drone it was under. A layer can now name the level it peaks at, not just
+      the one it starts at: the low bed runs 0.10 → 0.45, which a demo session
+      (around 0.17) is inside. The tests read the real spawn values now — they
+      used to repeat the numbers as literals, which is exactly why this was
+      tunable out of reach without anything failing.
 
 ## 5. Sound — all from files already licensed and in the repo
 
@@ -175,8 +179,16 @@ if not, what to fit.
 - [x] **Nothing marks launch**, the most cinematic beat in the first minute.
 - [x] **`DockingCompleted` is dead code** — a handler with no writer. Wire it
       or delete it. `audio.rs:559`
-- [ ] Ten licensed files loaded by nothing (~2.4 MB). Three `engine_*_loop`
-      were deliberately rejected; the rest are free content.
+- [x] **The main menu was silent.** Not the station half of this — that was
+      fixed earlier — the menu itself. The first sound in the game arrived
+      about fifty seconds in, at launch, and until then the only evidence the
+      audio worked at all was that the buttons clicked. It now carries the deep
+      drone, fading up over four seconds and sitting under the flight bed.
+- [~] Unused licensed audio is down to six files (1.5 MB) from ten.
+      `machine_loop_3` joined the berth rotation. Three `engine_*_loop` were
+      deliberately rejected and stay out. The remainder are `alarm_loop_2` and
+      two creature-themed ambiences (`alien_hive`, `alien_planet`) with nothing
+      to attach to while creatures are off.
 
 ## 6. Cut for after the demo
 

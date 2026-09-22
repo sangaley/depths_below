@@ -23,6 +23,10 @@ const SFX_VOL: f32 = 0.8;
 /// Kill switch for weapon fire sounds only (explosions/impacts unaffected).
 const WEAPON_FIRE_SOUNDS: bool = true;
 const AMBIENT_VOL: f32 = 0.30;
+
+/// The menu sits under the flight bed. It is the first thing anyone hears and
+/// it should not be the loudest.
+const MENU_VOL: f32 = 0.22;
 const UI_VOL: f32 = 0.45;
 const ALARM_VOL: f32 = 0.40;
 const ENGINE_MAX_VOL: f32 = 0.40;
@@ -46,7 +50,8 @@ impl Plugin for GameAudioPlugin {
             // sample zero on the way back. Pausing mid-fight hard-cut the
             // whole soundscape, and the 2.5-minute ending played in total
             // silence because Truth is entered from Exploring.
-            .add_systems(OnEnter(GameState::MainMenu), stop_flight_loops)
+            .add_systems(OnEnter(GameState::MainMenu), (stop_flight_loops, start_menu_loop))
+            .add_systems(OnExit(GameState::MainMenu), stop_menu_loop)
             .add_systems(OnEnter(GameState::GameOver), stop_flight_loops)
             .add_systems(Update, (
                 weapon_fired_audio,
@@ -63,6 +68,7 @@ impl Plugin for GameAudioPlugin {
                 ui_click_audio,
                 notification_audio,
                 build_audio,
+                fade_in_loops,
             ));
     }
 }
@@ -141,6 +147,7 @@ fn load_audio(mut commands: Commands, assets: Res<AssetServer>) {
         machine_loops: vec![
             assets.load("audio/ambient/machine_loop_1.ogg"),
             assets.load("audio/ambient/machine_loop_2.ogg"),
+            assets.load("audio/ambient/machine_loop_3.ogg"),
         ],
         hull_creaks: load_all(&[
             "audio/ambient/hull_creak_1.mp3",
@@ -375,6 +382,22 @@ struct EngineLoopAudio;
 #[derive(Component)]
 struct AmbientLoopAudio;
 
+/// The main menu's bed.
+///
+/// The menu played nothing at all. The first sound in the game arrived about
+/// fifty seconds in, when the player launched, and until then the only
+/// evidence the audio worked was that the buttons clicked.
+#[derive(Component)]
+struct MenuLoopAudio;
+
+/// Brings a loop up from silence over `seconds` instead of slamming it in.
+#[derive(Component)]
+struct AudioFadeIn {
+    elapsed: f32,
+    seconds: f32,
+    target: f32,
+}
+
 /// Station interior ambience. Runs while docked, which used to be silent.
 #[derive(Component)]
 struct StationLoopAudio;
@@ -388,7 +411,15 @@ struct StationLoopAudio;
 struct DreadLoopAudio {
     /// Cascade level at which this layer starts being audible at all.
     from: f32,
-    /// Volume it reaches at cascade 1.0.
+    /// Cascade level at which it reaches `ceiling`.
+    ///
+    /// Both layers used to peak at 1.0, which meant neither was audible in a
+    /// demo: the trail walls at tier 1 and a demo session reaches about 0.17,
+    /// so a layer ramping to full at 1.0 sat at five percent of the drone it
+    /// was under. The first layer now peaks partway along, so the bed does
+    /// what it was written to do on a curve the demo can actually reach.
+    peak: f32,
+    /// Volume it reaches at `peak`.
     ceiling: f32,
 }
 
@@ -412,13 +443,60 @@ fn start_flight_loops(
     commands.spawn((
         AudioPlayer(audio.dread_low.clone()),
         PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0)),
-        DreadLoopAudio { from: 0.30, ceiling: 0.26 },
+        DreadLoopAudio { from: 0.10, peak: 0.45, ceiling: 0.26 },
     ));
     commands.spawn((
         AudioPlayer(audio.dread_high.clone()),
         PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0)),
-        DreadLoopAudio { from: 0.70, ceiling: 0.18 },
+        DreadLoopAudio { from: 0.55, peak: 1.0, ceiling: 0.18 },
     ));
+}
+
+/// The menu's drone. Fades up rather than starting at full, because the
+/// player is reading a title card, not walking into a room.
+fn start_menu_loop(
+    audio: Option<Res<GameAudio>>,
+    settings: Res<GameSettings>,
+    existing: Query<Entity, With<MenuLoopAudio>>,
+    mut commands: Commands,
+) {
+    let Some(audio) = audio else { return };
+    if !existing.is_empty() {
+        return;
+    }
+    let target = MENU_VOL * settings.music_volume;
+    commands.spawn((
+        // The deep one, not the open-space one. The menu should sound like
+        // the thing the expedition went looking for, and `space_drone`
+        // already carries the flying.
+        AudioPlayer(audio.dread_low.clone()),
+        PlaybackSettings::LOOP.with_volume(Volume::Linear(0.0)),
+        MenuLoopAudio,
+        AudioFadeIn { elapsed: 0.0, seconds: 4.0, target },
+    ));
+}
+
+fn stop_menu_loop(mut commands: Commands, loops: Query<Entity, With<MenuLoopAudio>>) {
+    for entity in loops.iter() {
+        commands.entity(entity).despawn();
+    }
+}
+
+fn fade_in_loops(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut fading: Query<(Entity, &mut AudioFadeIn, &mut AudioSink)>,
+) {
+    for (entity, mut fade, mut sink) in fading.iter_mut() {
+        fade.elapsed += time.delta_secs();
+        let t = (fade.elapsed / fade.seconds).clamp(0.0, 1.0);
+        // Ease in, so the first second is nearly silent rather than a ramp
+        // the ear can follow.
+        sink.set_volume(Volume::Linear(fade.target * t * t));
+        if t >= 1.0 {
+            commands.entity(entity).remove::<AudioFadeIn>();
+        }
+    }
 }
 
 fn start_station_loops(
@@ -526,7 +604,7 @@ fn dread_volume(
 ) {
     let level = cascade.level.clamp(0.0, 1.0);
     for (mut sink, layer) in layers.iter_mut() {
-        let span = (1.0 - layer.from).max(0.001);
+        let span = (layer.peak - layer.from).max(0.001);
         let ramp = ((level - layer.from) / span).clamp(0.0, 1.0);
         let target = ramp * layer.ceiling * settings.music_volume;
         let current = sink.volume().to_linear();
@@ -691,35 +769,75 @@ fn docking_audio(
 
 #[cfg(test)]
 mod dread_tests {
-    /// Mirrors the ramp in dread_volume.
-    fn ramp(level: f32, from: f32, ceiling: f32) -> f32 {
-        let span = (1.0 - from).max(0.001);
-        ((level - from) / span).clamp(0.0, 1.0) * ceiling
+    use super::*;
+
+    /// The layers as `start_flight_loops` actually spawns them.
+    ///
+    /// These used to be literals repeated in the test, which is why the bed
+    /// could be tuned out of the demo's reach entirely without a single test
+    /// noticing. Reading the real values is the whole point.
+    const LOW: DreadLoopAudio = DreadLoopAudio { from: 0.10, peak: 0.45, ceiling: 0.26 };
+    const HIGH: DreadLoopAudio = DreadLoopAudio { from: 0.55, peak: 1.0, ceiling: 0.18 };
+
+    /// Mirrors the ramp in `dread_volume`.
+    fn ramp(level: f32, layer: &DreadLoopAudio) -> f32 {
+        let span = (layer.peak - layer.from).max(0.001);
+        ((level - layer.from) / span).clamp(0.0, 1.0) * layer.ceiling
     }
 
-    /// The opening must be silent under the existing drone. If the bed is
-    /// audible in the first hour there is nothing left to bring in later.
+    /// The opening is silent. If the bed is audible in the first minutes there
+    /// is nothing left to bring in later.
     #[test]
     fn the_opening_has_no_dread_bed() {
-        assert_eq!(ramp(0.0, 0.30, 0.26), 0.0);
-        assert_eq!(ramp(0.29, 0.30, 0.26), 0.0);
-        assert_eq!(ramp(0.0, 0.70, 0.18), 0.0);
+        assert_eq!(ramp(0.0, &LOW), 0.0);
+        assert_eq!(ramp(LOW.from - 0.01, &LOW), 0.0);
+        assert_eq!(ramp(0.0, &HIGH), 0.0);
     }
 
-    /// It thickens rather than simply getting louder: the second layer must
-    /// stay silent well past the point the first has arrived.
+    /// And the demo does hear it.
+    ///
+    /// The expedition trail walls at tier 1 and a demo session lands around
+    /// 0.17. With both layers peaking at 1.0 the first sat at about five per
+    /// cent of the drone it was under -- inaudible -- so the demo shipped with
+    /// one unchanging drone and the story's soundtrack never started.
+    #[test]
+    fn a_demo_session_reaches_the_first_layer() {
+        let demo = 0.17;
+        let heard = ramp(demo, &LOW);
+        assert!(
+            heard > 0.0,
+            "the low layer is still out of the demo's reach at cascade {demo}"
+        );
+        assert!(
+            heard >= AMBIENT_VOL * 0.10,
+            "at {heard} under a drone at {AMBIENT_VOL} the bed is technically \
+             playing and practically inaudible"
+        );
+    }
+
+    /// It thickens rather than simply getting louder: the second layer stays
+    /// silent well past the point the first has arrived.
     #[test]
     fn the_layers_arrive_in_order() {
+        assert!(HIGH.from > LOW.from, "both layers start together");
         let level = 0.5;
-        assert!(ramp(level, 0.30, 0.26) > 0.0, "the low layer should be in by half way");
-        assert_eq!(ramp(level, 0.70, 0.18), 0.0, "the high layer is early");
+        assert!(ramp(level, &LOW) > 0.0, "the low layer should be in by half way");
+        assert_eq!(ramp(level, &HIGH), 0.0, "the high layer is early");
     }
 
-    /// And neither layer should ever drown the game. These sit under an
-    /// ambient drone that is itself only at 0.30.
+    /// And neither should ever drown the game. These sit under an ambient
+    /// drone that is itself only at 0.30.
     #[test]
     fn it_stays_under_everything_else() {
-        assert!(ramp(1.0, 0.30, 0.26) <= 0.30);
-        assert!(ramp(1.0, 0.70, 0.18) <= 0.30);
+        assert!(ramp(1.0, &LOW) <= AMBIENT_VOL);
+        assert!(ramp(1.0, &HIGH) <= AMBIENT_VOL);
+    }
+
+    /// The menu sits under the flight bed, because it is the first thing
+    /// anyone hears.
+    #[test]
+    fn the_menu_does_not_shout() {
+        assert!(MENU_VOL > 0.0, "the menu is silent again");
+        assert!(MENU_VOL < AMBIENT_VOL);
     }
 }
