@@ -52,15 +52,19 @@ impl Plugin for VfxPlugin {
             // commented rather than deleted in case a per-module overlay is
             // wanted again later.
             // .add_systems(Update, block_visuals::attach_block_visuals)
-            // Parallax starfield — active while docked and exploring so the
-            // void reads as space and motion is always perceptible
+            // Parallax starfield — menu, docked and exploring, so the void
+            // reads as space and motion is always perceptible. The menu was
+            // excluded and so opened on text over a flat colour, with the
+            // starfield the game already draws sitting one state away.
             .add_systems(
                 Update,
                 (
                     starfield::spawn_starfield,
                     starfield::update_starfield.after(starfield::spawn_starfield),
                 ).run_if(
-                    in_state(GameState::Exploring).or_else(in_state(GameState::StationDocked))
+                    in_state(GameState::Exploring)
+                        .or_else(in_state(GameState::StationDocked))
+                        .or_else(in_state(GameState::MainMenu))
                 ),
             );
     }

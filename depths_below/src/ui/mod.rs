@@ -3514,7 +3514,7 @@ fn spawn_main_menu(mut commands: Commands) {
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(ThemeSpacing::SECTION),
                 ..default()
-            }, BackgroundColor(ThemeColors::BG_VOID), ZIndex(100)),
+            }, BackgroundColor(ThemeColors::BG_MENU), ZIndex(100)),
         MainMenuOverlay,
     )).with_children(|parent| {
         // Title container

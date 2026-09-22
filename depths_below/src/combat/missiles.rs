@@ -291,6 +291,7 @@ pub fn fire_missiles_system(
             weapon: entity,
             ship: player_ship,
             launch_cell: module.grid_position,
+            launch_axis: module.rotation.facing_offset(),
             muzzle: weapon_pos,
             launch_dir,
             ship_velocity: ship_velocity.0,
@@ -322,6 +323,13 @@ pub struct MissileLaunch {
     pub weapon: Entity,
     pub ship: Entity,
     pub launch_cell: IVec2,
+    /// The tube's axis in ship-LOCAL cells: the module's facing offset.
+    ///
+    /// `launch_dir` is the same heading in world space and drifts out of date
+    /// the moment the ship turns, which is exactly when it matters. The cell
+    /// axis does not move with the ship, so it still says which way is "down
+    /// the tube" a second after launch.
+    pub launch_axis: IVec2,
     pub muzzle: Vec2,
     /// Tube heading in WORLD space: ship rotation + the module's facing.
     pub launch_dir: Vec2,
@@ -398,6 +406,7 @@ pub fn launch_missiles(commands: &mut Commands, l: &MissileLaunch) -> u32 {
                 prev_pos: l.muzzle,
                 owner_ship: Some(l.ship),
                 launch_cell: l.launch_cell,
+                launch_axis: l.launch_axis,
                 ..default()
             },
             MissileTrail::default(),
@@ -694,6 +703,21 @@ const MAX_CREATURE_HIT_RADIUS: f32 = 100.0;
 
 /// Check missile hits — armed missiles explode on contact.
 /// Uses the creature spatial grid to only distance-check nearby creatures.
+/// Is `cell` a genuine obstruction in the tube that fired from `launch_cell`
+/// along `axis`?
+///
+/// True only for cells on the tube's axis, ahead of the mouth. Everything
+/// else the missile touches on its way out is off to one side, and the side
+/// of a tube guides a warhead rather than stopping it.
+fn obstructs_tube(launch_cell: IVec2, axis: IVec2, cell: IVec2) -> bool {
+    if axis == IVec2::ZERO {
+        return false;
+    }
+    let delta = cell - launch_cell;
+    let along = delta.x * axis.x + delta.y * axis.y;
+    along > 0 && delta == axis * along
+}
+
 pub fn check_missile_hits(
     mut commands: Commands,
     fx: Res<crate::vfx::effect_textures::EffectTextures>,
@@ -745,6 +769,29 @@ pub fn check_missile_hits(
                     continue;
                 }
                 if ai_module_query.get(hit).is_ok_and(|(m, _)| crate::building::is_blowout_panel(m.module_type)) {
+                    continue;
+                }
+                // Only something DEAD AHEAD stops it. Blocks to the left and
+                // right of a tube guide a missile rather than stopping it --
+                // `move_missiles` says exactly that and holds the heading
+                // while the warhead is still threading its own ship, but this
+                // check never honoured it, so any cell the missile touched
+                // cooked it off.
+                //
+                // It touches plenty. The missile keeps the world-space
+                // velocity it launched with while the ship goes on turning and
+                // thrusting underneath it, so the hull swings across a warhead
+                // that is flying perfectly straight down its own tube. That
+                // was 3 launches in 22 on the old hull and 8 in 30 on this
+                // one: a weapon that blew up inside the player roughly one
+                // time in five, with a warning that read like a malfunction
+                // rather than a manoeuvre.
+                //
+                // An obstruction is a cell on the tube's axis, ahead of the
+                // mouth. Anything off-axis is drift, and drift is the ship's
+                // doing, not the layout's -- and the layout is already
+                // guaranteed clear by `building::entombed_launchers`.
+                if !obstructs_tube(missile.launch_cell, missile.launch_axis, cell) {
                     continue;
                 }
             }
@@ -894,5 +941,59 @@ pub fn check_missile_hits(
             commands.entity(missile_entity).despawn();
             break;
         }
+    }
+}
+
+#[cfg(test)]
+mod silo_tests {
+    use super::*;
+
+    const UP: IVec2 = IVec2::new(0, 1);
+
+    /// Something in the tube stops the warhead. That is the mechanic.
+    #[test]
+    fn a_block_down_the_tube_is_an_obstruction() {
+        let mouth = IVec2::new(5, 5);
+        assert!(obstructs_tube(mouth, UP, IVec2::new(5, 6)));
+        assert!(obstructs_tube(mouth, UP, IVec2::new(5, 9)));
+    }
+
+    /// The sides of a tube guide it. `move_missiles` has always said so --
+    /// blocks left and right do not stop a missile, it keeps going until it is
+    /// clear -- but the collision check cooked the warhead off on any cell it
+    /// touched, including ones it was never aimed at.
+    #[test]
+    fn the_walls_of_the_tube_are_not_an_obstruction() {
+        let mouth = IVec2::new(5, 5);
+        for beside in [
+            IVec2::new(4, 6),
+            IVec2::new(6, 6),
+            IVec2::new(4, 5),
+            IVec2::new(6, 5),
+            IVec2::new(3, 9),
+        ] {
+            assert!(
+                !obstructs_tube(mouth, UP, beside),
+                "{beside:?} is beside the tube, not in it"
+            );
+        }
+    }
+
+    /// And nothing behind it counts. A ship that turns or accelerates while a
+    /// warhead is still leaving swings its own hull across a missile flying
+    /// perfectly straight; before this rule that was eight cook-offs in thirty
+    /// launches, inside the player's own ship.
+    #[test]
+    fn the_hull_swinging_past_behind_is_not_an_obstruction() {
+        let mouth = IVec2::new(5, 5);
+        assert!(!obstructs_tube(mouth, UP, IVec2::new(5, 4)));
+        assert!(!obstructs_tube(mouth, UP, mouth));
+    }
+
+    /// A launcher with no axis recorded must never cook off, or an old save
+    /// or an untouched code path becomes a bomb in the player's hull.
+    #[test]
+    fn a_missing_axis_never_detonates() {
+        assert!(!obstructs_tube(IVec2::ZERO, IVec2::ZERO, IVec2::new(0, 1)));
     }
 }

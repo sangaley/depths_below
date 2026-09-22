@@ -12,7 +12,13 @@ pub struct ThemeColors;
 
 impl ThemeColors {
     // --- Backgrounds (darkest to lightest) ---
-    pub const BG_VOID: Color = Color::srgba(0.01, 0.02, 0.05, 0.98);       // Fullscreen overlays (menu, pause)
+    pub const BG_VOID: Color = Color::srgba(0.01, 0.02, 0.05, 0.98);       // Fullscreen overlays (pause)
+    /// The main menu only. Thin enough to let the parallax starfield through.
+    ///
+    /// BG_VOID at 0.98 is right for the pause overlay, which has to hide a
+    /// live battle behind it. On the menu it hid the starfield the game
+    /// already draws, leaving text on a flat colour.
+    pub const BG_MENU: Color = Color::srgba(0.01, 0.02, 0.05, 0.72);
     pub const BG_PANEL: Color = Color::srgba(0.04, 0.05, 0.10, 0.95);      // Panel backgrounds
     pub const BG_CARD: Color = Color::srgba(0.06, 0.08, 0.14, 0.92);       // Cards, group containers
     pub const BG_INPUT: Color = Color::srgba(0.08, 0.10, 0.18, 0.90);      // Input fields, slots

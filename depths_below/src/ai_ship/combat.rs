@@ -300,6 +300,7 @@ pub fn ai_weapon_fire_system(
                     weapon: child,
                     ship: ai_entity,
                     launch_cell: module.grid_position,
+                    launch_axis: module.rotation.facing_offset(),
                     muzzle,
                     launch_dir: Vec2::from_angle(
                         ai_transform.rotation.to_euler(EulerRot::ZYX).0 + module.rotation.facing_angle(),

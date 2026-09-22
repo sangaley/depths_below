@@ -158,6 +158,12 @@ pub struct MissileProjectile {
     /// Comparing entities meant a missile treated its own launcher's cell as
     /// solid hull and detonated the instant it spawned.
     pub launch_cell: IVec2,
+    /// The tube's axis in ship-LOCAL cells (the launcher's facing offset).
+    ///
+    /// Kept in cells rather than reusing the world-space `launch_dir`, which
+    /// is fixed at launch and goes stale the instant the ship turns -- which
+    /// is precisely when a warhead is still leaving the tube.
+    pub launch_axis: IVec2,
 }
 
 impl Default for MissileProjectile {
@@ -182,6 +188,7 @@ impl Default for MissileProjectile {
             prev_pos: Vec2::ZERO,
             owner_ship: None,
             launch_cell: IVec2::MAX,
+            launch_axis: IVec2::ZERO,
         }
     }
 }

@@ -8,7 +8,7 @@ file is newer.
 
 Legend: `[ ]` open · `[x]` done · `[~]` partly done · `[-]` cut for after the demo.
 
-**Status 2026-09-22:** 29 items closed on `cascade-story`, verified by an
+**Status 2026-09-22:** 30 items closed on `cascade-story`, verified by an
 eight-minute autoplay run of the real loop: no panics, credits growing, fuel
 draining on throttle, plating unlocking, cascade climbing to 0.17 across two
 warps. Remaining open items are listed below.
@@ -151,6 +151,19 @@ if not, what to fit.
 - [x] **Blind warp can strand you.** Landing further than `SNAP_TOLERANCE` from
       any system spawns nothing — no station, so no refuel. Six minutes later
       you cannot jump out. `celestial/warp.rs:233-243`
+
+- [x] **Your own missiles blew up inside your ship, about one launch in five.**
+      Not a new fault — the old hull did it too, 3 cook-offs in 22 launches;
+      the new hull's more enclosed tubes made it 8 in 30. `move_missiles` has
+      always said blocks to the left and right of a tube guide a warhead
+      rather than stopping it, and holds its heading while it threads its own
+      ship — but the collision check cooked it off on *any* cell it touched.
+      It touches plenty: the missile keeps the world-space velocity it
+      launched with while the ship turns and thrusts underneath it, so the
+      hull swings across a warhead flying straight down its own tube. An
+      obstruction is now a cell on the tube's axis ahead of the mouth, which
+      is what the build-time silo check already guarantees against. Measured
+      after: 0 cook-offs in 45 launches.
 
 ## 4. Story reachability
 
