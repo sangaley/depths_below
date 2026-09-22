@@ -8,7 +8,7 @@ file is newer.
 
 Legend: `[ ]` open · `[x]` done · `[~]` partly done · `[-]` cut for after the demo.
 
-**Status 2026-09-21:** 25 items closed on `cascade-story`, verified by an
+**Status 2026-09-21:** 26 items closed on `cascade-story`, verified by an
 eight-minute autoplay run of the real loop: no panics, credits growing, fuel
 draining on throttle, plating unlocking, cascade climbing to 0.17 across two
 warps. Remaining open items are listed below.
@@ -19,6 +19,13 @@ stated objective with a demo wall at tier 1, and hulks can be towed to a
 station for the rare loot a boarding party cannot carry. Creatures stay off by
 decision; the Kill contracts that depend on them are still being issued and
 remain open below.
+
+**Enemy ships have an inside.** Their hulls carried no hallway cells, so there
+was nothing to see and the nav grids built for them came out empty. They get a
+derived deck now. Everything inboard starts concealed and lights up two cells
+around a hole, and a breach vents crew onto the same drifting-dead register the
+airlock writes to. Living enemy crew still have no body, which is what keeps
+them out of every player-only system and is the line this work does not cross.
 
 **The starter ship is new.** The old hull was an isosceles wedge, mirror-
 symmetric, and six of the ten faction hulls are symmetric lozenges too, so the
@@ -96,13 +103,21 @@ if not, what to fit.
 
 ## 3. The loop
 
-- [ ] **Four of seven contract objectives are dead or free.** `CaptureLive` is
-      impossible (`CargoHold.current_weight` is never written by anything).
-      `ReachDepth` auto-completes on leaving Haven. `SurveyZone` uses a second,
-      different zone function and is either impossible or completes on a timer
-      while you sit still. `ExplorePoi` only fires near Haven. Three share one
-      root cause: they read `DepthState.current_depth`, which is distance from
-      the shared origin and is ≥180,000 in every system but Haven.
+- [x] **Four of seven contract objectives were dead or free.** All four now
+      measure `distance_from_safety` (range to the nearest berth) instead of
+      `DepthState.current_depth`, which was distance from the shared world
+      origin and so read ≥180,000 in every system but Haven. `Kill` and
+      `CaptureLive` both depended on creatures and are no longer generated at
+      all; their weight went to the objectives that resolve. The two variants
+      stay in the enum as the obvious home for a future hunt-a-ship job.
+- [ ] **Reach contracts are still free, for a second reason.** The measurement
+      was fixed; the targets were never rescaled to match it. A one-star job
+      asks for 50-200 units and a five-star for 2000-3500, but 1 km is 1000
+      units, Station Orbit alone reaches 600, and Deep Space does not start
+      until 16,000. Undocking satisfies the low tiers outright and a few
+      minutes of ordinary flying clears the top one. Rescale
+      `depth_range_for_star` to the zone bands in `ui::depth_zone_name`.
+      `contracts/generation.rs:82-90`
 - [x] **Difficulty is a cliff, not a ramp.** Creature biome, density and spawn
       rate read the same broken distance and saturate everywhere outside Haven.
       One warp takes you from harmless drifters to 1500-HP leviathans at
