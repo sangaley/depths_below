@@ -727,6 +727,14 @@ fn setup_ui(mut commands: Commands) {
                 justify_content: JustifyContent::SpaceBetween,
                 ..default()
             }),
+        // Starts hidden. `setup_ui` runs in Startup and the game opens on the
+        // MainMenu, so the HUD existed and was visible behind the menu from
+        // the first frame -- hull, power, fuel, credits and the flight control
+        // hints, all over a title screen. Nobody saw it because the menu's
+        // backdrop was 98% opaque; the moment it was thinned to let the
+        // starfield through, a whole instrument panel came with it.
+        // `show_hud` reveals it on entering flight or a berth.
+        Visibility::Hidden,
         HudRoot,
     )).with_children(|parent| {
         // ===== TOP BAR — Ship Vitals =====

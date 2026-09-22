@@ -216,8 +216,15 @@ if not, what to fit.
 - [-] Radiation (`ship/radiation.rs` entirely unregistered), `ResearchState`
       (write-only), `AICombatCore` (registered no-op), `Unlocks.blueprints_found`
       and `Statistics.ships_lost` (both dead fields).
-- [-] Main menu art and motion. It is text on a flat colour; the parallax
-      starfield already exists but is gated out of `MainMenu`.
+- [~] Main menu art and motion. The parallax starfield the game already draws
+      was gated out of `MainMenu`; it is in now, behind a backdrop thinned from
+      98% to 72% so it shows through. Thinning it also revealed that the whole
+      flight HUD — hull, power, fuel, credits, the control hints — had been
+      sitting visible behind the title screen since the first frame, hidden
+      only by the opaque backdrop. `setup_ui` runs in Startup and the game
+      opens on the menu, so `hide_hud` on entering MainMenu had nothing to
+      hide yet. The HUD now spawns hidden and `show_hud` reveals it on entering
+      flight or a berth. Still open: motion, and any actual art.
 
 ## 7. Not mine to close
 
