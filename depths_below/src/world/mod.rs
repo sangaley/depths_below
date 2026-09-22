@@ -146,7 +146,14 @@ fn check_depth_zone_change(
     }
 }
 
-fn depth_to_zone(depth: f32) -> crate::components::ZoneType {
+/// The zone a given range corresponds to. One function, on purpose.
+///
+/// `contracts::tracking` carried a private copy of this that still used the
+/// old 200/500/1000/2000 thresholds, so the contract board and the HUD
+/// disagreed about where the player was standing: at 2,100 units the HUD said
+/// Near Space and a Survey contract said Black Hole Proximity, and a five-star
+/// survey completed a few seconds after undocking.
+pub fn depth_to_zone(depth: f32) -> crate::components::ZoneType {
     use crate::components::ZoneType;
     // Radial distance from Haven Station (origin). Thresholds sized for the
     // current cruise speeds — the old 200/500/1000/2000 were submarine depths

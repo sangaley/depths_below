@@ -79,13 +79,21 @@ fn zone_for_star(star: u8) -> ZoneType {
     }
 }
 
+/// How far out a reach contract sends you, by star rating.
+///
+/// These are ranges from the nearest berth, and they used to be 50-3500 --
+/// the same submarine numbers `world::depth_to_zone` abandoned. One kilometre
+/// is a thousand units and Station Orbit alone reaches 600, so a one-star job
+/// was satisfied by undocking and the top tier by a few minutes of ordinary
+/// flying. Each tier now lands inside the zone its star rating names, so the
+/// contract asks for the trip its description promises.
 fn depth_range_for_star(star: u8) -> (f32, f32) {
     match star {
-        1 => (50.0, 200.0),
-        2 => (200.0, 500.0),
-        3 => (500.0, 1000.0),
-        4 => (1000.0, 2000.0),
-        _ => (2000.0, 3500.0),
+        1 => (1_200.0, 2_500.0),    // out of Station Orbit, still Near Space
+        2 => (3_500.0, 7_000.0),    // Asteroid Belt
+        3 => (9_000.0, 15_000.0),   // Deep Space
+        4 => (17_000.0, 28_000.0),  // Nebula
+        _ => (32_000.0, 45_000.0),  // past the Nebula edge
     }
 }
 
@@ -399,5 +407,58 @@ mod poi_target_tests {
     #[test]
     fn there_are_targets_to_ask_for() {
         assert!(!poi_types().is_empty());
+    }
+
+    /// A reach contract must send you to the zone its star rating names.
+    ///
+    /// The two tables are written by hand in different places -- one says
+    /// which zone a star rating means, the other how far that is -- and they
+    /// were calibrated against different scales entirely. A five-star job
+    /// promising Black Hole Proximity asked for 3,500 units, which is Near
+    /// Space, and the player was paid five-star money for a two-minute flight.
+    #[test]
+    fn reach_targets_land_in_the_zone_their_stars_name() {
+        for star in 1..=5u8 {
+            let (lo, hi) = depth_range_for_star(star);
+            let want = zone_for_star(star);
+            assert!(lo < hi, "star {star}: empty range {lo}..{hi}");
+            for edge in [lo, hi] {
+                assert_eq!(
+                    crate::world::depth_to_zone(edge),
+                    want,
+                    "star {star} names {want:?} but {edge} is \
+                     {:?}",
+                    crate::world::depth_to_zone(edge)
+                );
+            }
+        }
+    }
+
+    /// And it must be a trip, not a formality.
+    ///
+    /// Station Orbit reaches 600 units. Anything at or inside that is
+    /// satisfied by undocking and drifting.
+    #[test]
+    fn no_reach_contract_completes_on_undocking() {
+        for star in 1..=5u8 {
+            let (lo, _) = depth_range_for_star(star);
+            assert!(
+                lo > 600.0,
+                "star {star} asks for {lo} units, which is still Station Orbit"
+            );
+        }
+    }
+
+    /// Survey contracts ask for a zone the player can actually stand in, and
+    /// the tracker must agree with the world about which one that is.
+    #[test]
+    fn every_survey_zone_is_reachable() {
+        for star in 1..=5u8 {
+            let want = zone_for_star(star);
+            let found = (0..60_000)
+                .step_by(250)
+                .any(|d| crate::world::depth_to_zone(d as f32) == want);
+            assert!(found, "star {star} asks for {want:?}, which no range produces");
+        }
     }
 }

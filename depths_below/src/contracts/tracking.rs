@@ -1,9 +1,9 @@
 use bevy::prelude::*;
 
 use crate::ai_ship::components::WorldSimulation;
-use crate::components::{CargoHold, Module, ModuleType, Ship, ZoneType};
+use crate::components::{CargoHold, Module, ModuleType, Ship};
 use crate::events::*;
-use crate::resources::{Currency, DepthState, Inventory};
+use crate::resources::{Currency, Inventory};
 use crate::world::home_base;
 use super::{ContractObjective, ContractState, ContractStatus, FactionReputation};
 
@@ -115,13 +115,14 @@ pub fn track_salvage_contracts(
 // SURVEY TRACKING
 // ============================================================================
 
-fn current_zone(depth: f32) -> ZoneType {
-    if depth < 200.0 { ZoneType::NearOrbit }
-    else if depth < 500.0 { ZoneType::AsteroidBelt }
-    else if depth < 1000.0 { ZoneType::DeepSpace }
-    else if depth < 2000.0 { ZoneType::Nebula }
-    else { ZoneType::BlackHole }
-}
+/// The world's own answer, not a second one.
+///
+/// This was a private copy using 200/500/1000/2000 -- the submarine depths
+/// `world::depth_to_zone` abandoned when cruise speeds went up, and which a
+/// ship at full burn crosses in a couple of seconds. It meant a five-star
+/// survey ("spend time in Black Hole Proximity") was satisfied 2,000 units off
+/// the berth, while the HUD called that Near Space.
+use crate::world::depth_to_zone as current_zone;
 
 pub fn track_survey_contracts(
     mut state: ResMut<ContractState>,

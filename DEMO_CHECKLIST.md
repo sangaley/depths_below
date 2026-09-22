@@ -110,14 +110,16 @@ if not, what to fit.
       `CaptureLive` both depended on creatures and are no longer generated at
       all; their weight went to the objectives that resolve. The two variants
       stay in the enum as the obvious home for a future hunt-a-ship job.
-- [ ] **Reach contracts are still free, for a second reason.** The measurement
-      was fixed; the targets were never rescaled to match it. A one-star job
-      asks for 50-200 units and a five-star for 2000-3500, but 1 km is 1000
-      units, Station Orbit alone reaches 600, and Deep Space does not start
-      until 16,000. Undocking satisfies the low tiers outright and a few
-      minutes of ordinary flying clears the top one. Rescale
-      `depth_range_for_star` to the zone bands in `ui::depth_zone_name`.
-      `contracts/generation.rs:82-90`
+- [x] **Reach and survey contracts were free, for a second reason.** The
+      measurement was fixed earlier; the targets never were. `contracts::
+      tracking` also carried a private copy of the zone function still using
+      the old 200/500/1000/2000 submarine thresholds that
+      `world::depth_to_zone` abandoned when cruise speeds went up — so the
+      board and the HUD disagreed about where the player stood, and a
+      five-star survey asking for Black Hole Proximity was satisfied 2,000
+      units off the berth while the HUD called that Near Space. The duplicate
+      is deleted and reach targets are rescaled to the zone each star names.
+      Three tests tie the two tables together.
 - [x] **Difficulty is a cliff, not a ramp.** Creature biome, density and spawn
       rate read the same broken distance and saturate everywhere outside Haven.
       One warp takes you from harmless drifters to 1500-HP leviathans at
