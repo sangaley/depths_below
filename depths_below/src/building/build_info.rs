@@ -126,82 +126,118 @@ pub fn toggle_cost_summary(
 // CENTER OF MASS INDICATOR
 // ============================================================================
 
-/// Show/update center of mass crosshair during build mode
+/// Take the balance marker down.
+///
+/// Registered on leaving build mode rather than left to `update_center_of_mass`,
+/// which only runs while docked: launching with the marker up left two sprites
+/// alive with nothing scheduled to remove them, and before they were parented
+/// to the ship they simply stayed floating beside the station.
+pub fn despawn_center_of_mass(
+    mut commands: Commands,
+    existing: Query<Entity, With<CenterOfMassIndicator>>,
+) {
+    for entity in existing.iter() {
+        commands.entity(entity).despawn();
+    }
+}
+
+/// Show the ship's balance point while building.
+///
+/// Three things were wrong with this at once. The module and hull queries were
+/// unscoped, so the "centre of mass" averaged the player's ship together with
+/// every enemy hull loaded in the world and sat wherever that landed. The
+/// marker was spawned in world space rather than on the ship, so it did not
+/// follow it. And it was despawned and respawned every single frame, which is
+/// what made it blink.
+///
+/// It now measures the player's blocks only, in ship-local cells, lives as two
+/// entities parented to the ship, and is moved rather than rebuilt.
 pub fn update_center_of_mass(
     mut commands: Commands,
-    module_query: Query<(&Module, &GlobalTransform), Without<DestroyedModule>>,
-    hull_query: Query<(&HullSegment, &GlobalTransform)>,
-    existing: Query<Entity, With<CenterOfMassIndicator>>,
+    ship_query: Query<Entity, With<crate::components::Ship>>,
+    module_query: Query<
+        &Module,
+        (
+            Without<DestroyedModule>,
+            Without<crate::ai_ship::components::OwnedByAiShip>,
+        ),
+    >,
+    hull_query: Query<
+        &HullSegment,
+        Without<crate::ai_ship::components::OwnedByAiShip>,
+    >,
+    mut existing: Query<(Entity, &mut Transform, &mut Sprite), With<CenterOfMassIndicator>>,
     current_state: Res<State<crate::states::BuildState>>,
 ) {
-    // Only show during build mode
-    if *current_state.get() == crate::states::BuildState::Inactive {
-        for entity in existing.iter() {
+    let building = *current_state.get() != crate::states::BuildState::Inactive;
+    if !building {
+        for (entity, _, _) in existing.iter() {
             commands.entity(entity).despawn();
         }
         return;
     }
+    let Ok(ship) = ship_query.single() else { return };
 
-    // Calculate center of mass
+    // Ship-LOCAL cell centres, matching how every block is placed: a cell sits
+    // at (x*66, y*66 - 33). Measuring from GlobalTransform instead would put
+    // the marker in world space and leave it behind the moment the ship moved.
+    let cell_centre = |c: IVec2| Vec2::new(c.x as f32 * 66.0, c.y as f32 * 66.0 - 33.0);
+
     let mut total_mass = 0.0_f32;
-    let mut weighted_pos = Vec2::ZERO;
+    let mut weighted = Vec2::ZERO;
 
-    for (module, gt) in module_query.iter() {
+    for module in module_query.iter() {
         let mass = match module.module_type.category() {
-            ModuleCategory::Power => 3.0,      // Reactors are heavy
+            ModuleCategory::Power => 3.0,
             ModuleCategory::Weapons => 2.0,
             ModuleCategory::Storage => 2.5,
             _ => 1.0,
         };
-        let pos = gt.translation().truncate();
-        weighted_pos += pos * mass;
+        weighted += cell_centre(module.grid_position) * mass;
         total_mass += mass;
     }
-
-    for (hull, gt) in hull_query.iter() {
-        let mass = hull.material.health_multiplier(); // Heavier materials = more mass
-        let pos = gt.translation().truncate();
-        weighted_pos += pos * mass;
+    for hull in hull_query.iter() {
+        let mass = hull.material.health_multiplier();
+        weighted += cell_centre(hull.grid_position) * mass;
         total_mass += mass;
     }
-
-    if total_mass < 0.01 { return; }
-
-    let com = weighted_pos / total_mass;
-
-    // Despawn old indicator
-    for entity in existing.iter() {
-        commands.entity(entity).despawn();
+    if total_mass < 0.01 {
+        return;
     }
+    let com = weighted / total_mass;
 
-    // Spawn crosshair at center of mass
-    let off_center = com.length();
-    let color = if off_center < 30.0 {
-        Color::srgba(0.3, 0.8, 0.4, 0.5) // Green — well balanced
-    } else if off_center < 80.0 {
-        Color::srgba(0.8, 0.7, 0.2, 0.5) // Yellow — slightly off
+    // Green when the ship is balanced about its own origin, reddening as the
+    // weight walks off to one side.
+    let off = com.length();
+    let color = if off < 40.0 {
+        Color::srgba(0.3, 0.8, 0.4, 0.45)
+    } else if off < 120.0 {
+        Color::srgba(0.8, 0.7, 0.2, 0.45)
     } else {
-        Color::srgba(0.8, 0.2, 0.2, 0.5) // Red — unbalanced
+        Color::srgba(0.8, 0.2, 0.2, 0.45)
     };
 
-    // Horizontal line
-    commands.spawn((
-        (Sprite {
-                color,
-                custom_size: Some(Vec2::new(20.0, 2.0)),
-                ..default()
-            }, Transform::from_xyz(com.x, com.y, 0.8)),
-        CenterOfMassIndicator,
-    ));
-    // Vertical line
-    commands.spawn((
-        (Sprite {
-                color,
-                custom_size: Some(Vec2::new(2.0, 20.0)),
-                ..default()
-            }, Transform::from_xyz(com.x, com.y, 0.8)),
-        CenterOfMassIndicator,
-    ));
+    let mut seen = 0;
+    for (_, mut transform, mut sprite) in existing.iter_mut() {
+        transform.translation.x = com.x;
+        transform.translation.y = com.y;
+        sprite.color = color;
+        seen += 1;
+    }
+    if seen >= 2 {
+        return;
+    }
+
+    for size in [Vec2::new(22.0, 2.0), Vec2::new(2.0, 22.0)] {
+        commands.spawn((
+            (
+                Sprite { color, custom_size: Some(size), ..default() },
+                Transform::from_xyz(com.x, com.y, 0.8),
+            ),
+            CenterOfMassIndicator,
+            ChildOf(ship),
+        ));
+    }
 }
 
 // ============================================================================

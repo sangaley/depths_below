@@ -260,7 +260,14 @@ impl Plugin for UiPlugin {
                 build_ui::despawn_build_grid_lines,
                 build_ui::despawn_module_outlines,
                 build_ui::despawn_power_indicators,
+                crate::building::build_info::despawn_center_of_mass,
             ))
+            // Launching leaves build mode. Nothing used to say so: BuildState
+            // stayed Placing when the player flew off, so none of the teardown
+            // above ever ran and the grid, the outlines, the power indicators
+            // and the balance marker were all still sitting beside the station
+            // afterwards.
+            .add_systems(OnExit(GameState::StationDocked), (leave_build_mode, close_station_panels))
             // Build UI: update systems
             .add_systems(
                 Update,
@@ -713,6 +720,41 @@ fn spawn_stack(
         g.spawn((Text::new(label), TextFont { font_size: FontSize::Px(ThemeFonts::TINY), ..default() }, TextColor(ThemeColors::TEXT_MUTED)));
         value(g);
     });
+}
+
+/// Shut the station's own windows when the ship leaves.
+///
+/// The hiring board and the mission board were both left standing on launch:
+/// nothing closed them, and both keep running while Exploring so that a ship
+/// flying within DOCK_RANGE of a berth can still use them. Open one, press
+/// Enter, and it came along, fully interactive, while the station shrank
+/// behind you.
+///
+/// This closes the windows. It does NOT change the reach rule -- pressing H or
+/// J near a station is deliberate, and `SystemStations::nearest_index` already
+/// limits that to DOCK_RANGE.
+fn close_station_panels(
+    mut commands: Commands,
+    mut hiring_open: ResMut<crate::crew::hiring::HiringBoardOpen>,
+    mut board_open: ResMut<crate::contracts::MissionBoardOpen>,
+    hiring: Query<Entity, With<crate::crew::hiring::HiringPanel>>,
+    board: Query<Entity, With<crate::contracts::ui::MissionBoardPanel>>,
+) {
+    hiring_open.0 = false;
+    board_open.0 = false;
+    for entity in hiring.iter().chain(board.iter()) {
+        commands.entity(entity).despawn();
+    }
+}
+
+/// Drop out of build mode, so every OnEnter(Inactive) teardown fires.
+fn leave_build_mode(
+    current: Res<State<BuildState>>,
+    mut next: ResMut<NextState<BuildState>>,
+) {
+    if *current.get() != BuildState::Inactive {
+        next.set(BuildState::Inactive);
+    }
 }
 
 /// Sets up the UI — themed, clean layout

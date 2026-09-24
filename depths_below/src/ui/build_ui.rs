@@ -84,6 +84,15 @@ pub(crate) struct BuildSummaryText;
 #[derive(Component)]
 pub(crate) struct ControlsHelpText;
 
+/// The build-mode instructions, stacked down the right-hand edge.
+///
+/// They used to share the HUD's bottom strip with flight controls, which the
+/// build panel then covered -- the hints were legible only as ghosts behind
+/// the item slots. A vertical list at the side has room for one instruction
+/// per line and never fights the panel for the same pixels.
+#[derive(Component)]
+pub(crate) struct BuildHintText;
+
 #[derive(Component)]
 pub(crate) struct CategoryTab {
     pub index: usize,
@@ -535,13 +544,13 @@ pub fn despawn_build_grid_lines(
 
 pub fn spawn_module_outlines(
     mut commands: Commands,
-    module_query: Query<(&Module, &Transform, &ChildOf)>,
+    module_query: Query<(&Module, &ChildOf)>,
     ship_query: Query<Entity, With<Ship>>,
     registry: Res<ModuleRegistry>,
 ) {
     let Ok(ship) = ship_query.single() else { return };
 
-    for (module, module_transform, parent) in module_query.iter() {
+    for (module, parent) in module_query.iter() {
         // Player's own ship only — Module is shared with AI ships, and this
         // used to draw an outline for every module in the world regardless
         // of owner.
@@ -551,10 +560,33 @@ pub fn spawn_module_outlines(
         let cat = module.module_type.category();
         let cat_color = module_category_color(cat);
 
-        // Slightly larger sprite behind the module for outline effect
+        // Sized and placed from the CELLS the module occupies, not from its
+        // sprite transform. A weapon's sprite is nudged outward so its barrel
+        // overhangs the hull, and copying that offset put the outline off its
+        // own module by however far the barrel stuck out -- which is why only
+        // some of them looked wrong. Rotation matters too: a 3x2 bridge turned
+        // east occupies a 2x3 footprint, and the raw `def.size` describes
+        // neither its extent nor its centre once it is turned.
+        let cells = crate::building::ShipGrid::cells_for(
+            module.grid_position,
+            def.size,
+            module.rotation,
+            crate::building::footprints::footprint_override(module.module_type),
+        );
+        let (mut lo, mut hi) = (IVec2::MAX, IVec2::MIN);
+        for c in cells.iter() {
+            lo = lo.min(*c);
+            hi = hi.max(*c);
+        }
+        let span = (hi - lo) + IVec2::ONE;
         let outline_size = Vec2::new(
-            def.size.x as f32 * 66.0 + 6.0,
-            def.size.y as f32 * 66.0 + 6.0,
+            span.x as f32 * 66.0 + 6.0,
+            span.y as f32 * 66.0 + 6.0,
+        );
+        // Same cell convention as every block: (x*66, y*66 - 33).
+        let centre = Vec2::new(
+            (lo.x as f32 + hi.x as f32) * 0.5 * 66.0,
+            (lo.y as f32 + hi.y as f32) * 0.5 * 66.0 - 33.0,
         );
 
         // Parented to the ship (same fix as spawn_build_grid_lines) — this
@@ -566,11 +598,7 @@ pub fn spawn_module_outlines(
                     color: Color::srgba(cat_color.to_srgba().red, cat_color.to_srgba().green, cat_color.to_srgba().blue, 0.4),
                     custom_size: Some(outline_size),
                     ..default()
-                }, Transform::from_xyz(
-                    module_transform.translation.x,
-                    module_transform.translation.y,
-                    0.15,
-                )),
+                }, Transform::from_xyz(centre.x, centre.y, 0.15)),
             ModuleBuildOutline,
             ChildOf(ship),
         ));
@@ -792,13 +820,47 @@ pub fn spawn_build_panel(
                     position_type: PositionType::Absolute,
                     left: Val::Px(0.0),
                     right: Val::Px(0.0),
-                    bottom: Val::Px(0.0),
+                    // Stacked above both the HUD's controls strip (24px at the
+                    // very bottom) and the action toolbar, which is absolute at
+                    // bottom 30 and about fifty tall. At 0 this covered the
+                    // hints; at 26 the item slots landed on top of the Rotate
+                    // and Material buttons. The three now sit in a column with
+                    // nothing overlapping anything.
+                    bottom: Val::Px(86.0),
                     flex_direction: FlexDirection::Column,
                     ..default()
                 }),
             BuildPanelRoot,
         ))
         .with_children(|root| {
+            // Instructions, down the right edge, clear of everything else.
+            root.spawn((Node {
+                    position_type: PositionType::Absolute,
+                    right: Val::Px(12.0),
+                    // Above the panel entirely. The root is a column -- a
+                    // 32px tab row over a 116px info row -- so anything
+                    // anchored below 148 sits inside the info panel, which is
+                    // a later sibling and therefore drawn over the top of it.
+                    bottom: Val::Px(156.0),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(2.0),
+                    padding: UiRect::new(
+                        Val::Px(10.0), Val::Px(10.0),
+                        Val::Px(8.0), Val::Px(8.0),
+                    ),
+                    ..default()
+                }, BackgroundColor(ThemeColors::HUD_BG_SOLID)))
+            .with_children(|hints| {
+                hints.spawn((
+                    (
+                        Text::new(""),
+                        TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() },
+                        TextColor(ThemeColors::TEXT_MUTED),
+                    ),
+                    BuildHintText,
+                ));
+            });
+
             // === TOP ROW: Category tabs ===
             root.spawn((Node {
                     width: Val::Percent(100.0),
@@ -862,9 +924,11 @@ pub fn spawn_build_panel(
             });
 
             // === BOTTOM ROW: Items + Info ===
+            // 90px cut the description off mid-sentence on anything longer
+            // than a line and a half, which is most of them.
             root.spawn((Node {
                     width: Val::Percent(100.0),
-                    height: Val::Px(90.0),
+                    height: Val::Px(116.0),
                     flex_direction: FlexDirection::Row,
                     ..default()
                 }, BackgroundColor(Color::srgba(0.03, 0.04, 0.09, 0.94))))
@@ -1365,8 +1429,33 @@ pub fn build_panel_click(
 pub fn update_controls_help(
     current_build_state: Res<State<BuildState>>,
     game_state: Res<State<crate::states::GameState>>,
-    mut help_query: Query<&mut Text, With<ControlsHelpText>>,
+    mut help_query: Query<&mut Text, (With<ControlsHelpText>, Without<BuildHintText>)>,
+    mut hint_query: Query<&mut Text, (With<BuildHintText>, Without<ControlsHelpText>)>,
 ) {
+    // Build instructions go down the right edge, one to a line. The bottom
+    // strip is left EMPTY while building rather than carrying them too: the
+    // build panel sits over it, so anything written there is hidden behind the
+    // item slots and reads as two overlapping labels.
+    let building = *game_state.get() != crate::states::GameState::Exploring;
+    if let Ok(mut hint) = hint_query.single_mut() {
+        hint.0 = if building {
+            match current_build_state.get() {
+                BuildState::Placing => {
+                    "Click to place\nDrag to paint\nRight-click to remove\n\nR  rotate\nM  material\nTab  category\nF2  power view\nEsc  done"
+                }
+                BuildState::Deleting => "Click or drag to remove\n\nX  leave delete mode\nEsc  done",
+                BuildState::PlacingComponent => {
+                    "Click a piece\nthen click the grid\n\nRight-click for options\nEsc  done"
+                }
+                BuildState::CustomizingPiece => "Arrow keys adjust\n\nEsc  done",
+                _ => "",
+            }
+            .to_string()
+        } else {
+            String::new()
+        };
+    }
+
     let Ok(mut text) = help_query.single_mut() else {
         return;
     };
@@ -1381,18 +1470,8 @@ pub fn update_controls_help(
         return;
     }
 
-    text.0 = match current_build_state.get() {
-        BuildState::Inactive => String::new(),
-        BuildState::Placing => {
-            "Click to place      Drag to paint      Right-click to remove".to_string()
-        }
-        BuildState::Deleting => "Click or drag to remove".to_string(),
-        BuildState::PlacingComponent => {
-            "Click a piece, then click the grid      Right-click for options".to_string()
-        }
-        BuildState::CustomizingPiece => "Arrow keys adjust".to_string(),
-        _ => String::new(),
-    };
+    // Nothing here while the build panel is up; the side list has it.
+    text.0 = String::new();
 }
 
 // ============================================================================
