@@ -2,6 +2,7 @@ pub mod celestial_visuals;
 pub mod particles;
 pub mod screen_effects;
 pub mod block_visuals;
+pub mod hull_seams;
 pub mod starfield;
 pub mod procedural_textures;
 pub mod debris;
@@ -56,6 +57,15 @@ impl Plugin for VfxPlugin {
             // reads as space and motion is always perceptible. The menu was
             // excluded and so opened on text over a flat colour, with the
             // starfield the game already draws sitting one state away.
+            // Hull tiles pick their own seams from their neighbours. Visual
+            // only, and gated internally on the live tile count, so it costs
+            // an archetype scan on the frames where nothing was built or shot.
+            .add_systems(
+                Update,
+                hull_seams::update_hull_seams.run_if(
+                    in_state(GameState::Exploring).or_else(in_state(GameState::StationDocked))
+                ),
+            )
             .add_systems(
                 Update,
                 (

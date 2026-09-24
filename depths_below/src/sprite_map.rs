@@ -200,6 +200,26 @@ pub fn hull_layer_sprite_path(material: HullMaterial, layer: HullLayer) -> &'sta
     }
 }
 
+/// The seam-aware variant of a hull tile, chosen by which neighbours match.
+///
+/// `mask` is the four-bit neighbour set: 1 north, 2 south, 4 west, 8 east,
+/// where north is the cell at grid +y. Variant 00 is the untouched artwork, so
+/// a tile that spawns with the plain texture and is corrected a frame later
+/// does not flicker.
+///
+/// Derived from `hull_layer_sprite_path` rather than tabulated separately, so
+/// the two cannot drift: change which texture a layer uses and its variants
+/// follow. `tools/art/gen_hull_tiles.py` writes the files.
+pub fn hull_layer_sprite_variant(
+    material: HullMaterial,
+    layer: HullLayer,
+    mask: u8,
+) -> String {
+    let base = hull_layer_sprite_path(material, layer);
+    let stem = base.strip_suffix(".png").unwrap_or(base);
+    format!("{stem}_{:02}.png", mask & 0x0F)
+}
+
 pub fn hull_sprite_path(material: HullMaterial) -> &'static str {
     match material {
         HullMaterial::Steel => "sprites/hull/hull_steel.png",
