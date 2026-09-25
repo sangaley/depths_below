@@ -46,6 +46,8 @@
   .report{font-family:"IBM Plex Mono",monospace;font-size:11.5px;display:flex;flex-direction:column;gap:3px}
   .report div{display:flex;justify-content:space-between;gap:10px;color:var(--dim)}
   .report b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+  .cutnote{margin:6px 0 0;padding:6px 8px;border-left:2px solid #e2543e;
+    background:rgba(226,84,62,.10);color:var(--ink);line-height:1.45;font-size:11px}
   .ok{color:var(--good)!important}
   .no{color:var(--bad)!important}
 
@@ -175,7 +177,7 @@
     hull = new Map(); mods = new Map();
     d.hull.forEach(function (c) { hull.set(key(c[0], c[1]), c[2]); });
     d.modules.forEach(function (m) { mods.set(key(m[1], m[2]), { t: m[0], r: m[3] || 0 }); });
-    fit(); draw(); survey();
+    fit(); survey(); draw();
   }
 
   // Decking is derived the way the game derives it: an enclosed cell with
@@ -191,30 +193,72 @@
   }
 
   // ---- survey ----------------------------------------------------------
-  function walkable() {
-    var w = new Set(), cover = moduleCover();
-    hull.forEach(function (layer, k) { if (layer === "Hallway") w.add(k); });
+  // The nav map, built the way crew::navigation::rebuild_nav_grids builds it:
+  // hull lays the deck, machinery takes its cells back OFF the map (you do
+  // not walk through a reactor because someone decked the floor first), and
+  // posts go on the map whether or not there is decking under them.
+  //
+  // `skip` leaves one module out, which is how we ask "is THIS the block
+  // cutting the ship in half?" without mutating anything.
+  function enclosed(k) {
+    var p = k.split(","), x = +p[0], y = +p[1];
+    return hull.has(key(x, y + 1)) && hull.has(key(x, y - 1)) &&
+           hull.has(key(x - 1, y)) && hull.has(key(x + 1, y));
+  }
+  function walkable(skip) {
+    var w = new Set(), solid = new Set(), stations = new Set();
     mods.forEach(function (m, k) {
-      if (!window.MODS[m.t].post) return;
+      if (k === skip) return;
       var p = k.split(",");
-      cellsOf(m.t, +p[0], +p[1], m.r).forEach(function (c) { w.add(key(c[0], c[1])); });
+      var into = window.MODS[m.t].post ? stations : solid;
+      cellsOf(m.t, +p[0], +p[1], m.r).forEach(function (c) { into.add(key(c[0], c[1])); });
     });
+    hull.forEach(function (_, k) { if (enclosed(k) && !solid.has(k)) w.add(k); });
+    stations.forEach(function (k) { w.add(k); });
     return w;
   }
-  function survey() {
-    var w = walkable(), regions = 0, seen = new Set();
+  function regionsOf(w) {
+    var seen = new Set(), out = [];
     w.forEach(function (start) {
       if (seen.has(start)) return;
-      regions++;
-      var q = [start]; seen.add(start);
+      var comp = [start], q = [start];
+      seen.add(start);
       while (q.length) {
         var p = q.pop().split(","), x = +p[0], y = +p[1];
         [[0,1],[0,-1],[-1,0],[1,0]].forEach(function (d) {
           var n = key(x + d[0], y + d[1]);
-          if (w.has(n) && !seen.has(n)) { seen.add(n); q.push(n); }
+          if (w.has(n) && !seen.has(n)) { seen.add(n); q.push(n); comp.push(n); }
         });
       }
+      out.push(comp);
     });
+    out.sort(function (a, b) { return b.length - a.length; });
+    return out;
+  }
+  // Which cells are cut off from the main deck, and which blocks did the
+  // cutting. A one-cell-wide corridor with an airlock dropped in it is a
+  // wall: the arm beyond it keeps its guns and its bunks and no one can ever
+  // reach them again. The count alone does not tell you that; naming the
+  // block does.
+  var diag = { stray: new Set(), cuts: [], regions: 1 };
+  function diagnose() {
+    var regions = regionsOf(walkable());
+    var stray = new Set(), cuts = [];
+    for (var i = 1; i < regions.length; i++) {
+      regions[i].forEach(function (k) { stray.add(k); });
+    }
+    if (regions.length > 1) {
+      mods.forEach(function (m, k) {
+        var d = window.MODS[m.t];
+        if (d.post || d.outboard) return;
+        if (regionsOf(walkable(k)).length < regions.length) cuts.push({ k: k, t: m.t });
+      });
+    }
+    diag = { stray: stray, cuts: cuts, regions: regions.length, deck: walkable().size };
+    return diag;
+  }
+  function survey() {
+    var g = diagnose(), regions = g.regions, w = { size: g.deck };
     var cost = 0, cores = [], vitalsOut = 0;
     // where the hull splits into arms
     var byX = new Map();
@@ -250,6 +294,7 @@
       ["modules", mods.size, null],
       ["deck", w.size + " walkable", null],
       ["deck regions", regions, regions === 1],
+      ["cut off", g.stray.size + " cells", g.stray.size === 0],
       ["memory cores", cores.length + (cores.length ? " (" + spread + " apart)" : ""),
         cores.length >= 3 && spread >= 3],
       ["vitals on arms", vitalsOut, vitalsOut === 0],
@@ -266,6 +311,20 @@
       if (r[2] === false) b.className = "no";
       d.appendChild(a); d.appendChild(b); host.appendChild(d);
     });
+    if (g.cuts.length) {
+      var note = document.createElement("p");
+      note.className = "cutnote";
+      var seen = {}, names = [];
+      g.cuts.forEach(function (c) {
+        if (seen[c.t]) return;
+        seen[c.t] = 1;
+        names.push(c.t);
+      });
+      note.textContent = "Severing the deck: " + names.join(", ") +
+        " — " + g.cuts.length + " block" + (g.cuts.length === 1 ? "" : "s") +
+        " sitting in a corridor only one cell wide. Ringed on the plan.";
+      host.appendChild(note);
+    }
   }
 
   // ---- drawing ---------------------------------------------------------
@@ -321,6 +380,30 @@
       ctx.drawImage(s, -d.w * T / 2, -d.h * T / 2, d.w * T, d.h * T);
       ctx.restore();
     });
+
+    // Everything the crew cannot walk to from the main deck, washed red, and
+    // the blocks that made it that way ringed. A ship can look whole and be
+    // four ships with the same paint job.
+    if (diag.stray.size) {
+      ctx.fillStyle = "rgba(226,84,62,0.26)";
+      diag.stray.forEach(function (k) {
+        var p = k.split(",");
+        ctx.fillRect((+p[0] - b.x0) * T, (b.y1 - +p[1]) * T, T, T);
+      });
+    }
+    if (diag.cuts.length) {
+      ctx.save();
+      ctx.strokeStyle = "#ffb03a";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 3]);
+      diag.cuts.forEach(function (c) {
+        var p = c.k.split(",");
+        cellsOf(c.t, +p[0], +p[1], (mods.get(c.k) || {}).r || 0).forEach(function (cell) {
+          ctx.strokeRect((cell[0] - b.x0) * T + 1.5, (b.y1 - cell[1]) * T + 1.5, T - 3, T - 3);
+        });
+      });
+      ctx.restore();
+    }
   }
 
   function cellFrom(e) {
@@ -364,7 +447,7 @@
       }
       if (okToPlace) { mods.set(key(x, y), { t: tool.value, r: rot }); changed = true; }
     }
-    if (changed) { fit(); draw(); survey(); markDirty(); }
+    if (changed) { fit(); survey(); draw(); markDirty(); }
   }
 
   var painting = 0;
@@ -461,7 +544,7 @@
         return hull.has(key(c[0], c[1])) && !clash.has(key(c[0], c[1]));
       });
       mods.set(owner, okHere ? next : m);
-      if (okHere) { fit(); draw(); survey(); markDirty(); }
+      if (okHere) { fit(); survey(); draw(); markDirty(); }
       return;
     }
     setRot(rot + 1);
@@ -483,7 +566,7 @@
     (body.modules || []).forEach(function (m) {
       mods.set(key(m[1], m[2]), { t: m[0], r: m[3] || 0 });
     });
-    fit(); draw(); survey();
+    fit(); survey(); draw();
   }
 
   function openShip() {
