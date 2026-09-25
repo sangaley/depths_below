@@ -533,6 +533,28 @@ mod nav_tests {
         );
     }
 
+    #[test]
+    #[ignore]
+    fn dump_module_table() {
+        let reg = crate::building::registry::build_registry();
+        let mut rows: Vec<String> = reg
+            .defs
+            .iter()
+            .map(|(mt, d)| {
+                let post = d.crew_station
+                    || matches!(d.companion, crate::building::registry::CompanionData::Quarters { .. });
+                format!(
+                    "MOD\t{mt:?}\t{}\t{}\t{}\t{:?}\t{}",
+                    d.size.x, d.size.y, post, d.category, d.cost
+                )
+            })
+            .collect();
+        rows.sort();
+        for r in rows {
+            println!("{r}");
+        }
+    }
+
     /// Regenerates designs/starter.json from the builtin. Run deliberately:
     ///   cargo test export_starter -- --ignored
     #[test]
