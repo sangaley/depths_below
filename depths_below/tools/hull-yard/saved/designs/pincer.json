@@ -158,7 +158,7 @@
     [
       -4,
       0,
-      "Hallway"
+      "Inner"
     ],
     [
       -4,
@@ -253,7 +253,7 @@
     [
       -2,
       -2,
-      "Hallway"
+      "Inner"
     ],
     [
       -2,
@@ -328,7 +328,7 @@
     [
       0,
       -6,
-      "Hallway"
+      "Inner"
     ],
     [
       0,
@@ -343,7 +343,7 @@
     [
       0,
       6,
-      "Hallway"
+      "Inner"
     ],
     [
       0,
@@ -548,12 +548,12 @@
     [
       8,
       -6,
-      "Hallway"
+      "Inner"
     ],
     [
       8,
       6,
-      "Hallway"
+      "Inner"
     ],
     [
       8,
@@ -851,11 +851,6 @@
       "Outer"
     ],
     [
-      -1,
-      2,
-      "Outer"
-    ],
-    [
       -2,
       3,
       "Hallway"
@@ -863,7 +858,7 @@
     [
       -2,
       2,
-      "Hallway"
+      "Inner"
     ],
     [
       -1,
@@ -918,6 +913,11 @@
     [
       3,
       9,
+      "Outer"
+    ],
+    [
+      -1,
+      2,
       "Outer"
     ]
   ],
@@ -1056,12 +1056,6 @@
     ],
     [
       "StandardReactor",
-      -7,
-      1,
-      0
-    ],
-    [
-      "StandardReactor",
       -8,
       1,
       0
@@ -1069,12 +1063,6 @@
     [
       "StandardReactor",
       -8,
-      -1,
-      0
-    ],
-    [
-      "StandardReactor",
-      -7,
       -1,
       0
     ],
@@ -1191,7 +1179,67 @@
       0,
       0,
       1
+    ],
+    [
+      "AirlockChamber",
+      -1,
+      2,
+      1
+    ],
+    [
+      "MemoryCore",
+      -2,
+      -2,
+      0
+    ],
+    [
+      "MemoryCore",
+      -2,
+      2,
+      0
+    ],
+    [
+      "CoolingPump",
+      -7,
+      1,
+      0
+    ],
+    [
+      "HeatVent",
+      -7,
+      -1,
+      0
+    ],
+    [
+      "OxygenScrubber",
+      -4,
+      0,
+      0
+    ],
+    [
+      "AirlockChamber",
+      0,
+      6,
+      0
+    ],
+    [
+      "AirlockChamber",
+      0,
+      -6,
+      0
+    ],
+    [
+      "AirlockChamber",
+      8,
+      -6,
+      0
+    ],
+    [
+      "AirlockChamber",
+      8,
+      6,
+      0
     ]
   ],
-  "savedAt": "2026-09-25T03:43:48.481Z"
+  "savedAt": "2026-09-25T04:00:54.707Z"
 }

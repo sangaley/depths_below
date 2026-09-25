@@ -233,6 +233,13 @@
       if (m.t === "MemoryCore") cores.push([+p[0], +p[1]]);
       if (+p[0] >= split && (d.cat === "Power" || d.cat === "LifeSupport" || d.cat === "Crew")) vitalsOut++;
     });
+    var plates = 0, badPlates = 0;
+    mods.forEach(function (m, k) {
+      if (!window.MODS[m.t].outboard) return;
+      plates++;
+      var p = k.split(",");
+      if (cellsOf(m.t, +p[0], +p[1], m.r).some(function (c) { return hull.has(key(c[0], c[1])); })) badPlates++;
+    });
     var spread = 0;
     cores.forEach(function (a) { cores.forEach(function (b) {
       spread = Math.max(spread, Math.max(Math.abs(a[0]-b[0]), Math.abs(a[1]-b[1])));
@@ -246,6 +253,7 @@
       ["memory cores", cores.length + (cores.length ? " (" + spread + " apart)" : ""),
         cores.length >= 3 && spread >= 3],
       ["vitals on arms", vitalsOut, vitalsOut === 0],
+      ["angled plating", plates + (badPlates ? " (" + badPlates + " inert)" : ""), badPlates === 0],
       ["fit-out", cost + "c", null],
     ];
     var host = document.getElementById("report");
@@ -338,9 +346,22 @@
     } else {
       var cells = cellsOf(tool.value, x, y, rot);
       var cover = moduleCover();
-      var okToPlace = cells.every(function (c) {
-        return hull.has(key(c[0], c[1])) && !cover.has(key(c[0], c[1]));
-      });
+      var free = cells.every(function (c) { return !cover.has(key(c[0], c[1])); });
+      var okToPlace;
+      if (window.MODS[tool.value].outboard) {
+        // Angled plating bolts to the OUTSIDE. Hull wins its own cell in the
+        // game's grid, so a wedge sharing a cell with hull is armour a round
+        // never meets -- the game's own tests reject exactly that. It needs
+        // empty cells that touch the hull somewhere.
+        var clear = cells.every(function (c) { return !hull.has(key(c[0], c[1])); });
+        var attached = cells.some(function (c) {
+          return hull.has(key(c[0], c[1] + 1)) || hull.has(key(c[0], c[1] - 1)) ||
+                 hull.has(key(c[0] - 1, c[1])) || hull.has(key(c[0] + 1, c[1]));
+        });
+        okToPlace = free && clear && attached;
+      } else {
+        okToPlace = free && cells.every(function (c) { return hull.has(key(c[0], c[1])); });
+      }
       if (okToPlace) { mods.set(key(x, y), { t: tool.value, r: rot }); changed = true; }
     }
     if (changed) { fit(); draw(); survey(); markDirty(); }
