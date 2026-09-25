@@ -18,17 +18,17 @@
     [
       -8,
       -1,
-      "Hallway"
+      "Inner"
     ],
     [
       -8,
       0,
-      "Hallway"
+      "Inner"
     ],
     [
       -8,
       1,
-      "Hallway"
+      "Inner"
     ],
     [
       -8,
@@ -43,27 +43,27 @@
     [
       -7,
       -2,
-      "Hallway"
+      "Inner"
     ],
     [
       -7,
       -1,
-      "Hallway"
+      "Inner"
     ],
     [
       -7,
       0,
-      "Hallway"
+      "Inner"
     ],
     [
       -7,
       1,
-      "Hallway"
+      "Inner"
     ],
     [
       -7,
       2,
-      "Hallway"
+      "Inner"
     ],
     [
       -7,
@@ -73,7 +73,7 @@
     [
       -6,
       -3,
-      "Outer"
+      "Inner"
     ],
     [
       -6,
@@ -98,22 +98,22 @@
     [
       -6,
       2,
-      "Hallway"
+      "Inner"
     ],
     [
       -6,
       3,
-      "Outer"
+      "Hallway"
     ],
     [
       -5,
       -3,
-      "Outer"
+      "Inner"
     ],
     [
       -5,
       -2,
-      "Hallway"
+      "Inner"
     ],
     [
       -5,
@@ -133,17 +133,17 @@
     [
       -5,
       2,
-      "Hallway"
+      "Inner"
     ],
     [
       -5,
       3,
-      "Outer"
+      "Inner"
     ],
     [
       -4,
       -3,
-      "Hallway"
+      "Inner"
     ],
     [
       -4,
@@ -173,7 +173,7 @@
     [
       -4,
       3,
-      "Hallway"
+      "Inner"
     ],
     [
       -4,
@@ -198,17 +198,17 @@
     [
       -3,
       -1,
-      "Hallway"
+      "Inner"
     ],
     [
       -3,
       0,
-      "Hallway"
+      "Inner"
     ],
     [
       -3,
       1,
-      "Hallway"
+      "Inner"
     ],
     [
       -3,
@@ -223,7 +223,7 @@
     [
       -3,
       4,
-      "Hallway"
+      "Inner"
     ],
     [
       -3,
@@ -248,37 +248,22 @@
     [
       -2,
       -3,
-      "Outer"
+      "Hallway"
     ],
     [
       -2,
       -2,
-      "Outer"
+      "Hallway"
     ],
     [
       -2,
       -1,
-      "Hallway"
-    ],
-    [
-      -2,
-      0,
-      "Hallway"
+      "Inner"
     ],
     [
       -2,
       1,
-      "Hallway"
-    ],
-    [
-      -2,
-      2,
-      "Outer"
-    ],
-    [
-      -2,
-      3,
-      "Outer"
+      "Inner"
     ],
     [
       -2,
@@ -313,21 +298,6 @@
     [
       -1,
       -4,
-      "Outer"
-    ],
-    [
-      -1,
-      -1,
-      "Outer"
-    ],
-    [
-      -1,
-      0,
-      "Outer"
-    ],
-    [
-      -1,
-      1,
       "Outer"
     ],
     [
@@ -423,12 +393,7 @@
     [
       2,
       -6,
-      "Outer"
-    ],
-    [
-      2,
-      6,
-      "Outer"
+      "Inner"
     ],
     [
       2,
@@ -438,11 +403,6 @@
     [
       2,
       8,
-      "Outer"
-    ],
-    [
-      3,
-      -8,
       "Outer"
     ],
     [
@@ -468,7 +428,7 @@
     [
       3,
       8,
-      "Outer"
+      "Inner"
     ],
     [
       4,
@@ -513,12 +473,12 @@
     [
       5,
       -6,
-      "Outer"
+      "Inner"
     ],
     [
       5,
       6,
-      "Outer"
+      "Inner"
     ],
     [
       5,
@@ -668,12 +628,12 @@
     [
       12,
       -4,
-      "Hallway"
+      "Inner"
     ],
     [
       12,
       4,
-      "Hallway"
+      "Inner"
     ],
     [
       12,
@@ -833,35 +793,405 @@
     [
       -3,
       -4,
+      "Inner"
+    ],
+    [
+      -2,
+      0,
+      "Inner"
+    ],
+    [
+      2,
+      6,
+      "Inner"
+    ],
+    [
+      2,
+      5,
+      "Outer"
+    ],
+    [
+      2,
+      -5,
+      "Outer"
+    ],
+    [
+      5,
+      -5,
+      "Outer"
+    ],
+    [
+      5,
+      5,
+      "Outer"
+    ],
+    [
+      -6,
+      -4,
+      "Outer"
+    ],
+    [
+      -5,
+      -4,
+      "Outer"
+    ],
+    [
+      -6,
+      4,
+      "Outer"
+    ],
+    [
+      -5,
+      4,
+      "Outer"
+    ],
+    [
+      -1,
+      3,
+      "Outer"
+    ],
+    [
+      -1,
+      2,
+      "Outer"
+    ],
+    [
+      -2,
+      3,
       "Hallway"
+    ],
+    [
+      -2,
+      2,
+      "Hallway"
+    ],
+    [
+      -1,
+      -2,
+      "Outer"
+    ],
+    [
+      -1,
+      -3,
+      "Outer"
+    ],
+    [
+      0,
+      1,
+      "Outer"
+    ],
+    [
+      0,
+      0,
+      "Outer"
+    ],
+    [
+      0,
+      -1,
+      "Outer"
+    ],
+    [
+      -1,
+      1,
+      "Hallway"
+    ],
+    [
+      -1,
+      -1,
+      "Hallway"
+    ],
+    [
+      -1,
+      0,
+      "Inner"
+    ],
+    [
+      3,
+      -8,
+      "Inner"
+    ],
+    [
+      3,
+      -9,
+      "Outer"
+    ],
+    [
+      3,
+      9,
+      "Outer"
     ]
   ],
   "modules": [
     [
-      "StandardEngine",
+      "BasicQuarters",
+      -4,
+      3,
+      0
+    ],
+    [
+      "BasicQuarters",
+      -4,
+      -3,
+      0
+    ],
+    [
+      "BasicQuarters",
+      2,
+      6,
+      0
+    ],
+    [
+      "BasicQuarters",
+      5,
+      6,
+      0
+    ],
+    [
+      "BasicQuarters",
+      2,
+      -6,
+      0
+    ],
+    [
+      "BasicQuarters",
+      5,
+      -6,
+      0
+    ],
+    [
+      "BatteryBank",
+      -7,
+      -2,
+      0
+    ],
+    [
+      "BatteryBank",
+      -7,
+      2,
+      0
+    ],
+    [
+      "BulkCargoHold",
+      -6,
+      2,
+      0
+    ],
+    [
+      "BulkCargoHold",
+      -6,
+      -3,
+      0
+    ],
+    [
+      "Floodlight",
+      13,
+      -2,
+      1
+    ],
+    [
+      "Floodlight",
+      13,
+      2,
+      1
+    ],
+    [
+      "BridgeWing",
+      -2,
+      1,
+      1
+    ],
+    [
+      "MemoryCore",
+      -3,
+      -1,
+      0
+    ],
+    [
+      "MemoryCore",
+      -3,
+      1,
+      0
+    ],
+    [
+      "RadarArray",
+      -3,
+      0,
+      0
+    ],
+    [
+      "ShieldEmitter",
+      12,
+      4,
+      0
+    ],
+    [
+      "ShieldEmitter",
+      12,
+      -4,
+      0
+    ],
+    [
+      "ShieldEmitter",
+      3,
+      8,
+      0
+    ],
+    [
+      "ShieldEmitter",
+      3,
+      -8,
+      0
+    ],
+    [
+      "ShieldEmitter",
+      -3,
+      -4,
+      0
+    ],
+    [
+      "ShieldEmitter",
+      -3,
+      4,
+      0
+    ],
+    [
+      "StandardReactor",
+      -7,
+      1,
+      0
+    ],
+    [
+      "StandardReactor",
+      -8,
+      1,
+      0
+    ],
+    [
+      "StandardReactor",
+      -8,
+      -1,
+      0
+    ],
+    [
+      "StandardReactor",
+      -7,
+      -1,
+      0
+    ],
+    [
+      "TractorBeam",
+      -6,
+      4,
+      0
+    ],
+    [
+      "HeavyMissile",
+      2,
+      8,
+      0
+    ],
+    [
+      "HeavyMissile",
+      2,
       -8,
       2
     ],
     [
       "StandardEngine",
-      -9,
+      -8,
+      2,
       1
     ],
     [
       "StandardEngine",
       -9,
-      0
+      1,
+      1
     ],
     [
       "StandardEngine",
       -9,
-      -1
+      0,
+      1
+    ],
+    [
+      "StandardEngine",
+      -9,
+      -1,
+      1
     ],
     [
       "StandardEngine",
       -8,
-      -2
+      -2,
+      1
+    ],
+    [
+      "FuelTank",
+      -8,
+      0,
+      3
+    ],
+    [
+      "FuelTank",
+      -7,
+      0,
+      1
+    ],
+    [
+      "Gatling",
+      11,
+      -6,
+      1
+    ],
+    [
+      "Gatling",
+      11,
+      6,
+      1
+    ],
+    [
+      "Cannon",
+      11,
+      3,
+      3
+    ],
+    [
+      "Cannon",
+      11,
+      -3,
+      3
+    ],
+    [
+      "Gatling",
+      5,
+      -8,
+      2
+    ],
+    [
+      "Gatling",
+      5,
+      8,
+      0
+    ],
+    [
+      "Cannon",
+      9,
+      7,
+      2
+    ],
+    [
+      "Cannon",
+      9,
+      -7,
+      0
+    ],
+    [
+      "Laser",
+      0,
+      0,
+      1
     ]
   ],
-  "savedAt": "2026-09-25T03:17:08.835Z"
+  "savedAt": "2026-09-25T03:43:48.481Z"
 }
