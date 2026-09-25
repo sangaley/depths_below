@@ -50,6 +50,8 @@
   .report{font-family:"IBM Plex Mono",monospace;font-size:11.5px;display:flex;flex-direction:column;gap:3px}
   .report div{display:flex;justify-content:space-between;gap:10px;color:var(--dim)}
   .report b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+  .why{margin:2px 0 0;padding:5px 7px;border-left:2px solid #e2543e;
+    background:rgba(226,84,62,.12);color:var(--ink);font-size:11px;line-height:1.4}
   .cutnote{margin:6px 0 0;padding:6px 8px;border-left:2px solid #e2543e;
     background:rgba(226,84,62,.10);color:var(--ink);line-height:1.45;font-size:11px}
   .ok{color:var(--good)!important}
@@ -107,6 +109,7 @@
             <span class="hint" id="rotname" style="align-self:center">North</span>
           </div>
           <p class="hint" id="sel">Hull plate</p>
+          <p class="why" id="why" hidden></p>
         </div>
       </div>
 
@@ -339,6 +342,7 @@
 
   // ---- drawing ---------------------------------------------------------
   var view = { x0: 0, y1: 0 };
+  var hoverCell = null;
   function bounds() {
     if (!hull.size) return { x0: -10, x1: 10, y0: -8, y1: 8 };
     var xs = [], ys = [];
@@ -416,6 +420,21 @@
         ctx.fillRect((+p[0] - b.x0) * T, (b.y1 - +p[1]) * T, T, T);
       });
     }
+    // The pending placement, under the cursor: green where it will land,
+    // red where it will not. Drawn last so it sits over everything.
+    if (hoverCell) {
+      var v = check(hoverCell.x, hoverCell.y);
+      ctx.save();
+      ctx.fillStyle = v.ok ? "rgba(79,209,165,0.28)" : "rgba(226,84,62,0.32)";
+      ctx.strokeStyle = v.ok ? "#4fd1a5" : "#e2543e";
+      ctx.lineWidth = 2;
+      v.cells.forEach(function (c) {
+        var px = (c[0] - b.x0) * T, py = (b.y1 - c[1]) * T;
+        ctx.fillRect(px, py, T, T);
+        ctx.strokeRect(px + 1, py + 1, T - 2, T - 2);
+      });
+      ctx.restore();
+    }
     if (diag.cuts.length) {
       ctx.save();
       ctx.strokeStyle = "#ffb03a";
@@ -445,32 +464,64 @@
     if (hull.has(key(x, y))) { hull.delete(key(x, y)); return true; }
     return false;
   }
+  // Whether the current tool can land at (x, y), and IN PLAIN WORDS why not.
+  // One function, so the ghost under the cursor can never promise something
+  // the click then refuses -- a silent refusal is indistinguishable from a
+  // broken editor, which is exactly how it was reported.
+  function check(x, y) {
+    if (tool.kind === "hull") {
+      return { cells: [[x, y]], ok: true, why: "" };
+    }
+    var cells = cellsOf(tool.value, x, y, rot);
+    var cover = moduleCover();
+    if (!cells.every(function (c) { return !cover.has(key(c[0], c[1])); })) {
+      return { cells: cells, ok: false, why: "Something is already here. Right-click to clear it first." };
+    }
+    if (window.MODS[tool.value].outboard) {
+      // Angled plating bolts to the OUTSIDE. Hull wins its own cell in the
+      // game's grid, so a wedge sharing a cell with hull is armour a round
+      // never meets -- the game's own tests reject exactly that. It needs
+      // empty cells that touch the hull somewhere.
+      if (!cells.every(function (c) { return !hull.has(key(c[0], c[1])); })) {
+        return { cells: cells, ok: false,
+          why: "Plating bolts to the OUTSIDE of the hull. Aim at the empty cell just beyond the edge, not at the block itself." };
+      }
+      var attached = cells.some(function (c) {
+        return hull.has(key(c[0], c[1] + 1)) || hull.has(key(c[0], c[1] - 1)) ||
+               hull.has(key(c[0] - 1, c[1])) || hull.has(key(c[0] + 1, c[1]));
+      });
+      if (!attached) {
+        return { cells: cells, ok: false, why: "Nothing to bolt to — this plate touches no hull." };
+      }
+      return { cells: cells, ok: true, why: "" };
+    }
+    if (!cells.every(function (c) { return hull.has(key(c[0], c[1])); })) {
+      return { cells: cells, ok: false,
+        why: "Needs hull under every cell. Lay blocks here first, or turn it with R so it fits." };
+    }
+    return { cells: cells, ok: true, why: "" };
+  }
+
+  var whyEl = null;
+  function sayWhy(text) {
+    if (!whyEl) whyEl = document.getElementById("why");
+    if (!whyEl) return;
+    whyEl.textContent = text || "";
+    whyEl.hidden = !text;
+  }
+
   function apply(x, y, erase) {
     var changed = false;
     if (erase) {
       changed = removeAt(x, y);
+      sayWhy("");
     } else if (tool.kind === "hull") {
       if (hull.get(key(x, y)) !== tool.value) { hull.set(key(x, y), tool.value); changed = true; }
+      sayWhy("");
     } else {
-      var cells = cellsOf(tool.value, x, y, rot);
-      var cover = moduleCover();
-      var free = cells.every(function (c) { return !cover.has(key(c[0], c[1])); });
-      var okToPlace;
-      if (window.MODS[tool.value].outboard) {
-        // Angled plating bolts to the OUTSIDE. Hull wins its own cell in the
-        // game's grid, so a wedge sharing a cell with hull is armour a round
-        // never meets -- the game's own tests reject exactly that. It needs
-        // empty cells that touch the hull somewhere.
-        var clear = cells.every(function (c) { return !hull.has(key(c[0], c[1])); });
-        var attached = cells.some(function (c) {
-          return hull.has(key(c[0], c[1] + 1)) || hull.has(key(c[0], c[1] - 1)) ||
-                 hull.has(key(c[0] - 1, c[1])) || hull.has(key(c[0] + 1, c[1]));
-        });
-        okToPlace = free && clear && attached;
-      } else {
-        okToPlace = free && cells.every(function (c) { return hull.has(key(c[0], c[1])); });
-      }
-      if (okToPlace) { mods.set(key(x, y), { t: tool.value, r: rot }); changed = true; }
+      var v = check(x, y);
+      sayWhy(v.ok ? "" : v.why);
+      if (v.ok) { mods.set(key(x, y), { t: tool.value, r: rot }); changed = true; }
     }
     if (changed) { fit(); survey(); draw(); markDirty(); }
   }
@@ -482,9 +533,17 @@
     canvas.setPointerCapture(e.pointerId);
     var c = cellFrom(e); apply(c.x, c.y, painting === 2);
   });
+  var ghostQueued = false;
   canvas.addEventListener("pointermove", function (e) {
-    if (!painting) return;
-    var c = cellFrom(e); apply(c.x, c.y, painting === 2);
+    var c = cellFrom(e);
+    if (painting) { apply(c.x, c.y, painting === 2); return; }
+    if (hoverCell && hoverCell.x === c.x && hoverCell.y === c.y) return;
+    hoverCell = c;
+    if (tool.kind === "mod") { var v = check(c.x, c.y); sayWhy(v.ok ? "" : v.why); }
+    // One redraw a frame however fast the pointer moves.
+    if (ghostQueued) return;
+    ghostQueued = true;
+    requestAnimationFrame(function () { ghostQueued = false; draw(); });
   });
   canvas.addEventListener("pointerup", function () { painting = 0; });
 
@@ -498,6 +557,8 @@
       b.setAttribute("aria-pressed", b === btn ? "true" : "false");
     });
     selLabel.textContent = kind === "hull" ? (value === "Outer" ? "Hull plate" : "Deck") : pretty(value);
+    sayWhy("");
+    draw();
   }
   document.querySelectorAll("[data-tool]").forEach(function (b) {
     b.addEventListener("click", function () { setTool("hull", b.dataset.tool, b); });
@@ -558,9 +619,9 @@
 
   // R turns the next placement; with the pointer over a module it turns that
   // one instead, which is what you reach for once something is already down.
-  var hoverCell = null;
-  canvas.addEventListener("pointermove", function (e) { hoverCell = cellFrom(e); });
-  canvas.addEventListener("pointerleave", function () { hoverCell = null; });
+  canvas.addEventListener("pointerleave", function () {
+    hoverCell = null; sayWhy(""); draw();
+  });
   window.addEventListener("keydown", function (e) {
     if (e.key !== "r" && e.key !== "R") return;
     if (e.target && /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
