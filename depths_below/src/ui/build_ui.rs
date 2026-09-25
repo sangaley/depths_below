@@ -1051,8 +1051,8 @@ fn spawn_item_slots(
                 ("HAL", Color::srgb(0.28, 0.32, 0.30)), // Hallway
                 ("VOD", Color::srgb(0.15, 0.15, 0.2)),  // Void
                 ("BLK", Color::srgb(0.5, 0.4, 0.3)),    // BulkheadDoor
-                ("ANG", Color::srgb(0.52, 0.52, 0.56)), // AngledArmorPlate
-                ("AHP", Color::srgb(0.56, 0.54, 0.48)), // AngledHullPlate
+                ("ANG", crate::sprite_map::HULL_TONE),  // AngledArmorPlate
+                ("AHP", crate::sprite_map::HULL_TONE),  // AngledHullPlate
             ];
             for (i, (label, color)) in hull_items.iter().enumerate() {
                 spawn_single_slot(parent, i, label, *color, 0);

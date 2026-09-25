@@ -562,9 +562,12 @@ pub fn spawn_module(
         const BANDS: usize = 20;
         let band = (H * 2.0) / BANDS as f32;
         let face = def.color;
-        // Matches the hull plating around it rather than reading as a flat
-        // colour chip: a darker body with a lit edge along the cut.
-        let body = face.mix(&Color::BLACK, 0.35);
+        // `face` IS the hull's tone now (sprite_map::HULL_TONE), so the body
+        // is drawn at it unchanged — a wedge should be the same plating as the
+        // block beside it, continued into half a cell. The old 35% darkening
+        // was there to pull a much paler base down towards the hull; applied
+        // to a base that already matches, it just cuts a dark notch instead.
+        let body = face;
         for i in 0..BANDS {
             let y = H - band * (i as f32 + 0.5);
             // `facing` is an outward normal, so the plate's material sits
@@ -588,7 +591,11 @@ pub fn spawn_module(
         // the block that tells you which way it's turned.
         let edge = commands.spawn((
             Sprite {
-                color: face.mix(&Color::WHITE, 0.35),
+                // The sloped face catches the light, and is the only part of
+                // the block that says which way it is turned. Eased from 0.35
+                // to 0.30 so it keeps the contrast it had against the old pale
+                // body rather than becoming a stripe on the new dark one.
+                color: face.mix(&Color::WHITE, 0.30),
                 custom_size: Some(Vec2::new(H * 2.0 * std::f32::consts::SQRT_2 - 2.0, 3.0)),
                 ..default()
             },

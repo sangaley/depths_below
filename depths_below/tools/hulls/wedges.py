@@ -13,9 +13,12 @@ turns it with the block.
 """
 from PIL import Image, ImageDraw
 
+# Both plates take the hull's own tone -- sprite_map::HULL_TONE, the median of
+# the opaque pixels of sprites/hull/hull_steel.png. Keep these in step with the
+# Rust constant or the yard will draw a plate the game does not.
 WEDGE = {
-    "AngledArmorPlate": (0.52, 0.52, 0.56),
-    "AngledHullPlate":  (0.56, 0.54, 0.48),
+    "AngledArmorPlate": (0.231, 0.271, 0.318),
+    "AngledHullPlate":  (0.231, 0.271, 0.318),
 }
 S = 256   # supersampled, then reduced
 
@@ -26,8 +29,11 @@ def mix(c, t, k):
 
 def draw(colour):
     face = colour
-    body = mix(face, (0, 0, 0), 0.35)
-    lit = mix(face, (1, 1, 1), 0.35)
+    # ship::spawner draws the body at the hull tone unchanged and lights only
+    # the hypotenuse. Same numbers here.
+    body = face
+    body = tuple(int(255 * c) for c in body)
+    lit = mix(face, (1, 1, 1), 0.30)
     im = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     d = ImageDraw.Draw(im)
     # x + y <= 0 in a cell spanning -30..30, with image y running downward:
