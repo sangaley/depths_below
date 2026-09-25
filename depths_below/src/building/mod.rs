@@ -154,7 +154,6 @@ impl Plugin for BuildingPlugin {
             .add_systems(
                 Update,
                 (
-                    multiblock::build_helpers::draw_connection_lines,
                     build_history::undo_input,
                     symmetry::toggle_symmetry,
                     build_info::toggle_cost_summary,
