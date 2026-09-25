@@ -820,13 +820,12 @@ pub fn spawn_build_panel(
                     position_type: PositionType::Absolute,
                     left: Val::Px(0.0),
                     right: Val::Px(0.0),
-                    // Stacked above both the HUD's controls strip (24px at the
-                    // very bottom) and the action toolbar, which is absolute at
-                    // bottom 30 and about fifty tall. At 0 this covered the
-                    // hints; at 26 the item slots landed on top of the Rotate
-                    // and Material buttons. The three now sit in a column with
-                    // nothing overlapping anything.
-                    bottom: Val::Px(86.0),
+                    // Just clear of the HUD's controls strip. The action
+                    // toolbar used to sit between them and forced this up to
+                    // 86, which pushed the whole panel into the middle of the
+                    // screen; it is hidden during build mode now, since the
+                    // hint list carries the same keys.
+                    bottom: Val::Px(26.0),
                     flex_direction: FlexDirection::Column,
                     ..default()
                 }),

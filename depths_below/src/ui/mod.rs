@@ -268,6 +268,7 @@ impl Plugin for UiPlugin {
             // and the balance marker were all still sitting beside the station
             // afterwards.
             .add_systems(OnExit(GameState::StationDocked), (leave_build_mode, close_station_panels))
+            .add_systems(Update, hide_hud_while_building)
             // Build UI: update systems
             .add_systems(
                 Update,
@@ -720,6 +721,35 @@ fn spawn_stack(
         g.spawn((Text::new(label), TextFont { font_size: FontSize::Px(ThemeFonts::TINY), ..default() }, TextColor(ThemeColors::TEXT_MUTED)));
         value(g);
     });
+}
+
+/// Clear the HUD out of the way while the player is building.
+///
+/// Build mode is the one screen where the ship itself is the content, and the
+/// flight HUD was competing with it: the cargo readout and the expedition line
+/// stacked on each other in the top-left corner, and the action toolbar
+/// repeated, as buttons across the bottom, the same keys the build panel now
+/// lists down the right-hand side.
+fn hide_hud_while_building(
+    build: Res<State<BuildState>>,
+    mut cargo: Query<&mut Visibility, (With<StationCargoPanel>, Without<FlightToolbar>)>,
+    mut toolbar: Query<&mut Visibility, (With<FlightToolbar>, Without<StationCargoPanel>)>,
+) {
+    let want = if *build.get() == BuildState::Inactive {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
+    for mut v in cargo.iter_mut() {
+        if *v != want {
+            *v = want;
+        }
+    }
+    for mut v in toolbar.iter_mut() {
+        if *v != want {
+            *v = want;
+        }
+    }
 }
 
 /// Shut the station's own windows when the ship leaves.

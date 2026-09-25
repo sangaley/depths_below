@@ -104,13 +104,17 @@ fn spawn_expedition_hud(mut commands: Commands) {
 fn update_expedition_hud(
     exp: Res<Expedition>,
     state: Res<State<GameState>>,
+    build: Res<State<crate::states::BuildState>>,
     mut hud: Query<(&mut Text, &mut TextColor, &mut Visibility), With<ExpeditionHudText>>,
 ) {
     let Ok((mut text, mut colour, mut vis)) = hud.single_mut() else { return };
 
     // Only while actually out there. It has no business over the menu or the
-    // ending.
-    let showing = matches!(*state.get(), GameState::Exploring | GameState::StationDocked);
+    // ending -- nor over the shipyard, where it sat on top of the cargo panel
+    // in the same corner and the two read as one garbled block.
+    let building = *build.get() != crate::states::BuildState::Inactive;
+    let showing = !building
+        && matches!(*state.get(), GameState::Exploring | GameState::StationDocked);
     *vis = if showing { Visibility::Inherited } else { Visibility::Hidden };
     if !showing {
         return;
