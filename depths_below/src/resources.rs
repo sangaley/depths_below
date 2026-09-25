@@ -923,6 +923,14 @@ pub struct BuildingState {
     pub is_valid_placement: bool,
     pub placement_reason: Option<String>,
     pub ghost_position: IVec2,
+    /// Is the cursor actually over a cell of the ship right now?
+    ///
+    /// `ghost_position` keeps its last value when the cursor leaves the hull,
+    /// and its initial value is (0, 0) -- the ship's own origin, which the
+    /// camera centres on. So the placement ghost sat pulsing in the exact
+    /// middle of the screen from the moment build mode opened, before the
+    /// player had pointed at anything.
+    pub cursor_on_grid: bool,
     /// When true, rotation was set by auto-rotate (will be overridden on ghost move).
     /// When false, user manually set rotation with R key.
     pub auto_rotated: bool,
@@ -982,6 +990,7 @@ impl Default for BuildingState {
             is_valid_placement: false,
             placement_reason: None,
             ghost_position: IVec2::ZERO,
+            cursor_on_grid: false,
             auto_rotated: true,
         }
     }

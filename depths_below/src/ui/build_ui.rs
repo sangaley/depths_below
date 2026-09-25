@@ -283,6 +283,20 @@ pub fn update_build_ghost(
         return;
     };
 
+    // Nothing under the cursor, nothing to preview. Without this the ghost
+    // parked at the ship's origin -- the exact centre of the screen, because
+    // the camera follows the ship -- and pulsed there for the whole session,
+    // whether or not the player was pointing at anything.
+    if !build_state.cursor_on_grid {
+        *visibility = Visibility::Hidden;
+        for (_, _, _, mut c_vis) in cell_query.iter_mut() {
+            *c_vis = Visibility::Hidden;
+        }
+        if let Ok((_, _, mut v_vis, _)) = validation_query.single_mut() {
+            *v_vis = Visibility::Hidden;
+        }
+        return;
+    }
     *visibility = Visibility::Visible;
 
     let selection = build_state.current_selection();
@@ -372,7 +386,9 @@ pub fn update_build_ghost(
 
     // Animated pulse with category-colored tint — shared by the main ghost
     // sprite and any extra footprint tiles so they read as one shape.
-    let pulse = 0.45 + 0.15 * (time.elapsed_secs() * 4.0).sin();
+    // A slow breath, not a flash. This was 0.45 +- 0.15 at four radians a
+    // second, which reads as blinking rather than as a highlight.
+    let pulse = 0.46 + 0.06 * (time.elapsed_secs() * 1.6).sin();
     let tile_color = if build_state.is_valid_placement {
         let cat_color = category_color(build_state.current_category());
         Color::srgba(cat_color.to_srgba().red, cat_color.to_srgba().green, cat_color.to_srgba().blue, pulse)

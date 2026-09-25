@@ -260,7 +260,8 @@ impl Plugin for UiPlugin {
                 build_ui::despawn_build_grid_lines,
                 build_ui::despawn_module_outlines,
                 build_ui::despawn_power_indicators,
-                crate::building::build_info::despawn_center_of_mass,
+                crate::building::multiblock::build_helpers::despawn_connection_lines,
+                crate::building::build_info::despawn_build_overlays,
             ))
             // Launching leaves build mode. Nothing used to say so: BuildState
             // stayed Placing when the player flew off, so none of the teardown

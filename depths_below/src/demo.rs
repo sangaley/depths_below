@@ -34,6 +34,11 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //                          ("structural", "life support", "hull").
 //   DEPTHS_BUILD_SLOT=<n> — with the above, park on slot n instead of the
 //                          first, to check the far end of a scrolling strip.
+//   DEPTHS_BUILD_LAUNCH=<s> — with the above, launch after s seconds with the
+//                          build menu still open. Build overlays are drawn in
+//                          world space and torn down by systems that only run
+//                          at the berth, so leaving that way is exactly how
+//                          they get stranded there.
 //   DEPTHS_MOVETEST=1   — bare movement sandbox: instant skip (no menu/
 //                          station flash), starter ship, manual control,
 //                          and NO AI ships spawned — just open space and
@@ -171,6 +176,26 @@ impl Plugin for DemoPlugin {
         // while docked, so advancing to Exploring would close the thing we
         // came to look at.
         if let Some(category) = build_tab {
+            if let Some(secs) = std::env::var("DEPTHS_BUILD_LAUNCH")
+                .ok()
+                .and_then(|v| v.trim().parse::<f32>().ok())
+            {
+                app.add_systems(Update, move |
+                    time: Res<Time>,
+                    state: Res<State<GameState>>,
+                    mut next: ResMut<NextState<GameState>>,
+                    mut waited: Local<f32>,
+                | {
+                    if *state.get() != GameState::StationDocked {
+                        return;
+                    }
+                    *waited += time.delta_secs();
+                    if *waited > secs {
+                        info!("BUILD TAB MODE: launching with the build menu open");
+                        next.set(GameState::Exploring);
+                    }
+                });
+            }
             app.insert_resource(DemoAdvanceDelays { menu: 1.0, station: f32::INFINITY })
                 .add_systems(Update, demo_advance_states)
                 .add_systems(Update, move |

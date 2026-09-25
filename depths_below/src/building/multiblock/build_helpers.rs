@@ -30,23 +30,66 @@ pub struct WeaponTemplate {
 // CONNECTION LINE VISUALIZATION
 // ============================================================================
 
+/// Take the connection lines down.
+///
+/// Registered on leaving build mode, because `draw_connection_lines` clears
+/// the previous frame's lines at the top of its own body and is gated to the
+/// shipyard -- so the moment it stopped running, the last frame it drew was
+/// orphaned. Launching left a green line and a red square or two floating at
+/// the berth, in world space, for the rest of the run.
+pub fn despawn_connection_lines(
+    mut commands: Commands,
+    lines: Query<Entity, With<ConnectionLine>>,
+) {
+    for entity in lines.iter() {
+        commands.entity(entity).despawn();
+    }
+}
+
 /// Draw colored lines between connected blocks. Green=connected, red=disconnected.
+///
+/// Player's ship only, in ship-LOCAL space, and only while building. All three
+/// used to be otherwise: it ran whenever docked whether or not the build menu
+/// was open, it measured GlobalTransforms and spawned unparented so the marks
+/// stayed behind when the ship moved, and it drew over every AI hull in the
+/// world too, since `MachineBlock` is not the player's alone.
 pub fn draw_connection_lines(
     mut commands: Commands,
-    block_query: Query<(&Module, &MachineBlock, &GlobalTransform)>,
+    build_state: Res<State<crate::states::BuildState>>,
+    ship_query: Query<Entity, With<Ship>>,
+    block_query: Query<
+        (&Module, &MachineBlock, &Transform, &ChildOf),
+        Without<crate::ai_ship::components::OwnedByAiShip>,
+    >,
     existing_lines: Query<Entity, With<ConnectionLine>>,
 ) {
-    // Despawn old lines
     for entity in existing_lines.iter() {
         commands.entity(entity).despawn();
     }
+    // Only while actually fitting weapon pieces. These marks exist to show
+    // which sub-component is wired to a core and which is orphaned, which is
+    // a question that only arises in the customisation flow -- drawing them
+    // through all of build mode put green lines and red squares over a ship
+    // whose owner was laying hull.
+    if *build_state.get() != crate::states::BuildState::PlacingComponent {
+        return;
+    }
+    let Ok(ship) = ship_query.single() else { return };
 
-    // Draw new lines for each connection
-    for (_module, block, global_transform) in block_query.iter() {
+    for (_module, block, transform, parent) in block_query.iter() {
+        if parent.parent() != ship {
+            continue;
+        }
+
         if let Some(next_entity) = block.next_in_chain {
-            if let Ok((_, _, next_gt)) = block_query.get(next_entity) {
-                let from = global_transform.translation().truncate();
-                let to = next_gt.translation().truncate();
+            if let Ok((_, _, next_tf, next_parent)) = block_query.get(next_entity) {
+                if next_parent.parent() != ship {
+                    continue;
+                }
+                // Ship-local throughout, so the line is a child of the hull it
+                // describes and turns with it.
+                let from = transform.translation.truncate();
+                let to = next_tf.translation.truncate();
                 let midpoint = (from + to) / 2.0;
                 let diff = to - from;
                 let length = diff.length();
@@ -69,13 +112,14 @@ pub fn draw_connection_lines(
                             ..default()
                         }),
                     ConnectionLine,
+                    ChildOf(ship),
                 ));
             }
         }
 
         // Disconnected blocks pulse red
         if block.connected_core.is_none() && block.role != BlockRole::Core {
-            let pos = global_transform.translation().truncate();
+            let pos = transform.translation.truncate();
             commands.spawn((
                 (Sprite {
                         color: Color::srgba(0.8, 0.1, 0.1, 0.3),
@@ -83,6 +127,7 @@ pub fn draw_connection_lines(
                         ..default()
                     }, Transform::from_xyz(pos.x, pos.y, 0.16)),
                 ConnectionLine,
+                ChildOf(ship),
             ));
         }
     }
