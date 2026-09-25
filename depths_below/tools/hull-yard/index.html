@@ -456,21 +456,53 @@
     loadShip(shipKey); markDirty();
   });
 
+  function adopt(body) {
+    hull = new Map(); mods = new Map();
+    body.hull.forEach(function (c) { hull.set(key(c[0], c[1]), c[2]); });
+    (body.modules || []).forEach(function (m) {
+      mods.set(key(m[1], m[2]), { t: m[0], r: m[3] || 0 });
+    });
+    fit(); draw(); survey();
+  }
+
   function openShip() {
     loadShip(shipKey);
     if (!db) return;
     say("loading…", "busy");
     db.doc("designs/" + shipKey).get().then(function (snap) {
-      if (snap && snap.exists && snap.data && snap.data.hull) {
-        hull = new Map(); mods = new Map();
-        snap.data.hull.forEach(function (c) { hull.set(key(c[0], c[1]), c[2]); });
-        (snap.data.modules || []).forEach(function (m) { mods.set(key(m[1], m[2]), { t: m[0], r: m[3] || 0 }); });
-        fit(); draw(); survey();
-        say("your saved " + shipKey, "saved");
+      // `data` is a METHOD on the snapshot, not a field. Reading it as a
+      // property gave a function -- truthy, with no `.hull` on it -- so every
+      // saved ship read as "no save" and quietly reopened the shipped one.
+      var body = snap && snap.exists ? snap.data() : null;
+      if (body && body.hull) {
+        adopt(body);
+        say("your saved " + shipKey + (body.savedAt ? " — " + new Date(body.savedAt).toLocaleString() : ""), "saved");
       } else {
         say("fresh " + shipKey);
       }
     }).catch(function () { say("could not load your save"); });
+  }
+
+  /// Open on whatever was worked on last, rather than always the first ship.
+  function openLatest() {
+    if (!db) return;
+    say("looking for your work…", "busy");
+    db.collection("designs").get().then(function (q) {
+      var best = null;
+      (q && q.docs ? q.docs : []).forEach(function (d) {
+        var body = d.data();
+        if (!body || !body.hull) return;
+        if (!best || String(body.savedAt) > String(best.body.savedAt)) {
+          best = { id: d.id, body: body };
+        }
+      });
+      if (!best) { say("nothing saved yet"); return; }
+      shipKey = best.id;
+      var sel = document.getElementById("pick");
+      if (sel) sel.value = shipKey;
+      adopt(best.body);
+      say("your saved " + shipKey + (best.body.savedAt ? " — " + new Date(best.body.savedAt).toLocaleString() : ""), "saved");
+    }).catch(function () { openShip(); });
   }
 
   // Render first, then light up saving when the viewer answers.
@@ -482,7 +514,7 @@
     window.claude.use("db").then(function (d) {
       db = d;
       if (!db) { say("not saved — editing locally only"); return; }
-      openShip();
+      openLatest();
     }).catch(function () { say("not saved — editing locally only"); });
   }
 })();
