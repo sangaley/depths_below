@@ -1,0 +1,418 @@
+<title>Hull Yard</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{--void:#070a11;--ground:#0c1019;--panel:#141a26;--panelhi:#1c2433;--line:#26303f;
+        --ink:#ccd6e6;--dim:#7b8798;--faint:#4d5866;--signal:#6f9dff;--warn:#e08a3c;--good:#5fc9a3;--bad:#e06a6a;
+        color-scheme:dark;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--void);color:var(--ink);
+       font:400 14px/1.55 "IBM Plex Sans",ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1280px;margin:0 auto;padding:22px 20px 60px}
+  header{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 16px;margin-bottom:6px}
+  h1{margin:0;font-size:22px;font-weight:600;letter-spacing:-.015em}
+  .eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:10px;
+           letter-spacing:.18em;text-transform:uppercase;color:var(--faint)}
+  .lede{margin:0 0 16px;color:var(--dim);max-width:70ch;font-size:13.5px}
+
+  .app{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:16px;align-items:start}
+  @media(max-width:900px){.app{grid-template-columns:1fr}}
+
+  .stage{border:1px solid var(--line);background:var(--ground);position:relative;overflow:auto;max-height:70vh}
+  canvas{display:block;image-rendering:auto;cursor:crosshair;touch-action:none}
+
+  .side{display:flex;flex-direction:column;gap:14px}
+  .card{border:1px solid var(--line);background:var(--ground)}
+  .card h2{margin:0;padding:9px 12px;border-bottom:1px solid var(--line);
+    font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--faint);font-weight:600}
+  .card .in{padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+
+  .row{display:flex;gap:6px;flex-wrap:wrap}
+  button,select{
+    font:500 12.5px/1 "IBM Plex Sans",sans-serif;color:var(--ink);
+    background:var(--panel);border:1px solid var(--line);border-radius:2px;
+    padding:7px 10px;cursor:pointer}
+  button:hover,select:hover{background:var(--panelhi)}
+  button[aria-pressed="true"]{border-color:var(--signal);color:#fff;background:var(--panelhi)}
+  button:focus-visible,select:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+  select{width:100%}
+
+  .tools{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
+  .pal{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;max-height:240px;overflow-y:auto;padding-right:2px}
+  .pal button{padding:0;aspect-ratio:1;display:grid;place-items:center;position:relative;background:var(--panel)}
+  .pal img{width:82%;height:82%;object-fit:contain;display:block}
+  .pal button[aria-pressed="true"]{outline:2px solid var(--signal);outline-offset:-2px}
+
+  .report{font-family:"IBM Plex Mono",monospace;font-size:11.5px;display:flex;flex-direction:column;gap:3px}
+  .report div{display:flex;justify-content:space-between;gap:10px;color:var(--dim)}
+  .report b{color:var(--ink);font-weight:500;font-variant-numeric:tabular-nums}
+  .ok{color:var(--good)!important}
+  .no{color:var(--bad)!important}
+
+  .status{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--faint);min-height:1.4em}
+  .status.saved{color:var(--good)}
+  .status.busy{color:var(--warn)}
+  .hint{font-size:12px;color:var(--faint);margin:0}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Depths Below</div>
+    <h1>Hull Yard</h1>
+  </header>
+  <p class="lede">
+    Edit any of the claw hulls, or your current ship. Left click lays the
+    selected thing, right click removes. Your work saves itself, and I can read
+    it back and put it in the game.
+  </p>
+
+  <div class="app">
+    <div class="stage"><canvas id="c" width="1200" height="820"></canvas></div>
+
+    <div class="side">
+      <div class="card">
+        <h2>Ship</h2>
+        <div class="in">
+          <select id="pick">
+            <option value="pincer">Pincer</option>
+            <option value="crab">Crab</option>
+            <option value="trident">Trident</option>
+            <option value="starter">Current starter</option>
+          </select>
+          <div class="row">
+            <button id="revert" type="button">Start over</button>
+            <button id="save" type="button">Save now</button>
+          </div>
+          <div class="status" id="status">&nbsp;</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Lay</h2>
+        <div class="in">
+          <div class="tools">
+            <button data-tool="Outer" aria-pressed="true" type="button">Hull plate</button>
+            <button data-tool="Hallway" aria-pressed="false" type="button">Deck</button>
+          </div>
+          <div class="pal" id="pal"></div>
+          <p class="hint" id="sel">Hull plate</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Survey</h2>
+        <div class="in"><div class="report" id="report"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="data.js"></script>
+<script>
+(function () {
+  "use strict";
+  var T = 26, PAD = 3;
+  var canvas = document.getElementById("c"), ctx = canvas.getContext("2d");
+  var hull = new Map();      // "x,y" -> "Outer" | "Inner" | "Hallway"
+  var mods = new Map();      // "x,y" -> type   (anchor cell)
+  var tool = { kind: "hull", value: "Outer" };
+  var shipKey = "pincer";
+  var db = null, dirty = false, saving = false;
+
+  // ---- images ----------------------------------------------------------
+  var img = {}, pending = 0, ready = false;
+  function load(key, src) {
+    pending++;
+    var i = new Image();
+    i.onload = i.onerror = function () { if (--pending === 0) { ready = true; draw(); } };
+    i.src = src; img[key] = i;
+  }
+  ["hull_steel", "hull_hallway"].forEach(function (n) {
+    for (var m = 0; m < 16; m++) {
+      var s = m < 10 ? "0" + m : "" + m;
+      load(n + "_" + s, "tiles/" + n + "_" + s + ".png");
+    }
+  });
+  Object.keys(window.MODS || {}).forEach(function (t) { load("mod:" + t, "mod/" + t + ".png"); });
+
+  // ---- model -----------------------------------------------------------
+  function key(x, y) { return x + "," + y; }
+  function cellsOf(type, x, y) {
+    var d = window.MODS[type];
+    return d.cells.map(function (o) { return [x + o[0], y + o[1]]; });
+  }
+  function moduleCover() {
+    var cover = new Map();
+    mods.forEach(function (type, k) {
+      var p = k.split(",");
+      cellsOf(type, +p[0], +p[1]).forEach(function (c) { cover.set(key(c[0], c[1]), k); });
+    });
+    return cover;
+  }
+  function loadShip(k) {
+    var d = window.DESIGNS[k];
+    hull = new Map(); mods = new Map();
+    d.hull.forEach(function (c) { hull.set(key(c[0], c[1]), c[2]); });
+    d.modules.forEach(function (m) { mods.set(key(m[1], m[2]), m[0]); });
+    fit(); draw(); survey();
+  }
+
+  // Decking is derived the way the game derives it: an enclosed cell with
+  // nothing standing on it is corridor, everything else is structure.
+  function fit() {
+    var cover = moduleCover();
+    hull.forEach(function (_, k) {
+      var p = k.split(","), x = +p[0], y = +p[1];
+      var enclosed = hull.has(key(x, y + 1)) && hull.has(key(x, y - 1)) &&
+                     hull.has(key(x - 1, y)) && hull.has(key(x + 1, y));
+      hull.set(k, !enclosed ? "Outer" : (cover.has(k) ? "Inner" : "Hallway"));
+    });
+  }
+
+  // ---- survey ----------------------------------------------------------
+  function walkable() {
+    var w = new Set(), cover = moduleCover();
+    hull.forEach(function (layer, k) { if (layer === "Hallway") w.add(k); });
+    mods.forEach(function (type, k) {
+      if (!window.MODS[type].post) return;
+      var p = k.split(",");
+      cellsOf(type, +p[0], +p[1]).forEach(function (c) { w.add(key(c[0], c[1])); });
+    });
+    return w;
+  }
+  function survey() {
+    var w = walkable(), regions = 0, seen = new Set();
+    w.forEach(function (start) {
+      if (seen.has(start)) return;
+      regions++;
+      var q = [start]; seen.add(start);
+      while (q.length) {
+        var p = q.pop().split(","), x = +p[0], y = +p[1];
+        [[0,1],[0,-1],[-1,0],[1,0]].forEach(function (d) {
+          var n = key(x + d[0], y + d[1]);
+          if (w.has(n) && !seen.has(n)) { seen.add(n); q.push(n); }
+        });
+      }
+    });
+    var cost = 0, cores = [], vitalsOut = 0;
+    // where the hull splits into arms
+    var byX = new Map();
+    hull.forEach(function (_, k) { var p = k.split(","); if (!byX.has(+p[0])) byX.set(+p[0], []); byX.get(+p[0]).push(+p[1]); });
+    var split = Infinity;
+    Array.from(byX.keys()).sort(function (a, b) { return a - b; }).forEach(function (x) {
+      if (split !== Infinity) return;
+      var ys = byX.get(x).slice().sort(function (a, b) { return a - b; });
+      var runs = 1;
+      for (var i = 1; i < ys.length; i++) if (ys[i] - ys[i-1] > 1) runs++;
+      if (runs > 1) split = x;
+    });
+    mods.forEach(function (type, k) {
+      var d = window.MODS[type], p = k.split(",");
+      cost += d.cost;
+      if (type === "MemoryCore") cores.push([+p[0], +p[1]]);
+      if (+p[0] >= split && (d.cat === "Power" || d.cat === "LifeSupport" || d.cat === "Crew")) vitalsOut++;
+    });
+    var spread = 0;
+    cores.forEach(function (a) { cores.forEach(function (b) {
+      spread = Math.max(spread, Math.max(Math.abs(a[0]-b[0]), Math.abs(a[1]-b[1])));
+    }); });
+
+    var rows = [
+      ["hull cells", hull.size, null],
+      ["modules", mods.size, null],
+      ["deck", w.size + " walkable", null],
+      ["deck regions", regions, regions === 1],
+      ["memory cores", cores.length + (cores.length ? " (" + spread + " apart)" : ""),
+        cores.length >= 3 && spread >= 3],
+      ["vitals on arms", vitalsOut, vitalsOut === 0],
+      ["fit-out", cost + "c", null],
+    ];
+    var host = document.getElementById("report");
+    host.textContent = "";
+    rows.forEach(function (r) {
+      var d = document.createElement("div");
+      var a = document.createElement("span"); a.textContent = r[0];
+      var b = document.createElement("b"); b.textContent = r[1];
+      if (r[2] === true) b.className = "ok";
+      if (r[2] === false) b.className = "no";
+      d.appendChild(a); d.appendChild(b); host.appendChild(d);
+    });
+  }
+
+  // ---- drawing ---------------------------------------------------------
+  var view = { x0: 0, y1: 0 };
+  function bounds() {
+    if (!hull.size) return { x0: -10, x1: 10, y0: -8, y1: 8 };
+    var xs = [], ys = [];
+    hull.forEach(function (_, k) { var p = k.split(","); xs.push(+p[0]); ys.push(+p[1]); });
+    return { x0: Math.min.apply(null, xs) - PAD, x1: Math.max.apply(null, xs) + PAD,
+             y0: Math.min.apply(null, ys) - PAD, y1: Math.max.apply(null, ys) + PAD };
+  }
+  function draw() {
+    var b = bounds();
+    var w = (b.x1 - b.x0 + 1) * T, h = (b.y1 - b.y0 + 1) * T;
+    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+    view.x0 = b.x0; view.y1 = b.y1;
+    ctx.fillStyle = "#0c1019"; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = "#1a2230"; ctx.lineWidth = 1;
+    for (var gx = 0; gx <= w; gx += T) { ctx.beginPath(); ctx.moveTo(gx + .5, 0); ctx.lineTo(gx + .5, h); ctx.stroke(); }
+    for (var gy = 0; gy <= h; gy += T) { ctx.beginPath(); ctx.moveTo(0, gy + .5); ctx.lineTo(w, gy + .5); ctx.stroke(); }
+    if (!ready) return;
+
+    function kindAt(k) {
+      var l = hull.get(k);
+      if (!l) return null;
+      return l === "Hallway" ? "hull_hallway" : "hull_steel";
+    }
+    hull.forEach(function (_, k) {
+      var p = k.split(","), x = +p[0], y = +p[1], n = kindAt(k), mask = 0;
+      [[1,0,1],[2,0,-1],[4,-1,0],[8,1,0]].forEach(function (s) {
+        if (kindAt(key(x + s[1], y + s[2])) === n) mask |= s[0];
+      });
+      var t = img[n + "_" + (mask < 10 ? "0" + mask : mask)];
+      if (t && t.width) ctx.drawImage(t, (x - b.x0) * T, (b.y1 - y) * T, T, T);
+    });
+    mods.forEach(function (type, k) {
+      var p = k.split(","), x = +p[0], y = +p[1], d = window.MODS[type];
+      var s = img["mod:" + type];
+      if (s && s.width) ctx.drawImage(s, (x - b.x0) * T, (b.y1 - (y + d.h - 1)) * T, d.w * T, d.h * T);
+    });
+  }
+
+  function cellFrom(e) {
+    var r = canvas.getBoundingClientRect();
+    var sx = canvas.width / r.width;
+    return { x: Math.floor((e.clientX - r.left) * sx / T) + view.x0,
+             y: view.y1 - Math.floor((e.clientY - r.top) * sx / T) };
+  }
+
+  // ---- editing ---------------------------------------------------------
+  function removeAt(x, y) {
+    var cover = moduleCover(), owner = cover.get(key(x, y));
+    if (owner) { mods.delete(owner); return true; }
+    if (hull.has(key(x, y))) { hull.delete(key(x, y)); return true; }
+    return false;
+  }
+  function apply(x, y, erase) {
+    var changed = false;
+    if (erase) {
+      changed = removeAt(x, y);
+    } else if (tool.kind === "hull") {
+      if (hull.get(key(x, y)) !== tool.value) { hull.set(key(x, y), tool.value); changed = true; }
+    } else {
+      var cells = cellsOf(tool.value, x, y);
+      var cover = moduleCover();
+      var okToPlace = cells.every(function (c) {
+        return hull.has(key(c[0], c[1])) && !cover.has(key(c[0], c[1]));
+      });
+      if (okToPlace) { mods.set(key(x, y), tool.value); changed = true; }
+    }
+    if (changed) { fit(); draw(); survey(); markDirty(); }
+  }
+
+  var painting = 0;
+  canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+  canvas.addEventListener("pointerdown", function (e) {
+    painting = e.button === 2 ? 2 : 1;
+    canvas.setPointerCapture(e.pointerId);
+    var c = cellFrom(e); apply(c.x, c.y, painting === 2);
+  });
+  canvas.addEventListener("pointermove", function (e) {
+    if (!painting) return;
+    var c = cellFrom(e); apply(c.x, c.y, painting === 2);
+  });
+  canvas.addEventListener("pointerup", function () { painting = 0; });
+
+  // ---- palette ---------------------------------------------------------
+  var palHost = document.getElementById("pal");
+  var selLabel = document.getElementById("sel");
+  function pretty(t) { return t.replace(/([a-z])([A-Z])/g, "$1 $2"); }
+  function setTool(kind, value, btn) {
+    tool = { kind: kind, value: value };
+    document.querySelectorAll("[data-tool],.pal button").forEach(function (b) {
+      b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+    });
+    selLabel.textContent = kind === "hull" ? (value === "Outer" ? "Hull plate" : "Deck") : pretty(value);
+  }
+  document.querySelectorAll("[data-tool]").forEach(function (b) {
+    b.addEventListener("click", function () { setTool("hull", b.dataset.tool, b); });
+  });
+  Object.keys(window.MODS || {}).sort().forEach(function (t) {
+    var b = document.createElement("button");
+    b.type = "button"; b.title = pretty(t) + " — " + window.MODS[t].cost + "c";
+    b.setAttribute("aria-pressed", "false");
+    var i = document.createElement("img"); i.src = "mod/" + t + ".png"; i.alt = pretty(t);
+    b.appendChild(i);
+    b.addEventListener("click", function () { setTool("mod", t, b); });
+    palHost.appendChild(b);
+  });
+
+  // ---- persistence -----------------------------------------------------
+  var statusEl = document.getElementById("status");
+  function say(text, cls) { statusEl.textContent = text; statusEl.className = "status " + (cls || ""); }
+
+  function snapshot() {
+    var h = [], m = [];
+    hull.forEach(function (layer, k) { var p = k.split(","); h.push([+p[0], +p[1], layer]); });
+    mods.forEach(function (type, k) { var p = k.split(","); m.push([type, +p[0], +p[1]]); });
+    return { hull: h, modules: m, savedAt: new Date().toISOString() };
+  }
+
+  var timer = null;
+  function markDirty() {
+    dirty = true;
+    if (!db) { say("not saved — editing locally only"); return; }
+    say("unsaved", "busy");
+    clearTimeout(timer);
+    timer = setTimeout(save, 1200);
+  }
+  function save() {
+    if (!db || saving) return;
+    saving = true; say("saving…", "busy");
+    db.doc("designs/" + shipKey).set(snapshot()).then(function () {
+      saving = false; dirty = false;
+      say("saved " + new Date().toLocaleTimeString(), "saved");
+    }).catch(function (err) {
+      saving = false;
+      say("not saved (" + (err && err.code ? err.code : "error") + ")", "busy");
+    });
+  }
+  document.getElementById("save").addEventListener("click", save);
+
+  document.getElementById("pick").addEventListener("change", function (e) {
+    shipKey = e.target.value;
+    openShip();
+  });
+  document.getElementById("revert").addEventListener("click", function () {
+    loadShip(shipKey); markDirty();
+  });
+
+  function openShip() {
+    loadShip(shipKey);
+    if (!db) return;
+    say("loading…", "busy");
+    db.doc("designs/" + shipKey).get().then(function (snap) {
+      if (snap && snap.exists && snap.data && snap.data.hull) {
+        hull = new Map(); mods = new Map();
+        snap.data.hull.forEach(function (c) { hull.set(key(c[0], c[1]), c[2]); });
+        (snap.data.modules || []).forEach(function (m) { mods.set(key(m[1], m[2]), m[0]); });
+        fit(); draw(); survey();
+        say("your saved " + shipKey, "saved");
+      } else {
+        say("fresh " + shipKey);
+      }
+    }).catch(function () { say("could not load your save"); });
+  }
+
+  // Render first, then light up saving when the viewer answers.
+  loadShip(shipKey);
+  setTool("hull", "Outer", document.querySelector('[data-tool="Outer"]'));
+  say("editing locally");
+  if (window.claude && window.claude.use) {
+    window.claude.use("db").then(function (d) {
+      db = d;
+      if (!db) { say("not saved — editing locally only"); return; }
+      openShip();
+    }).catch(function () { say("not saved — editing locally only"); });
+  }
+})();
