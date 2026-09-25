@@ -155,6 +155,62 @@ fn census(
     );
 }
 
+/// Name every sprite sitting near the ship's origin, under DEPTHS_WHATSTHERE=1.
+///
+/// Built because three separate guesses at "what is that green thing in the
+/// middle of the screen" were all wrong, and counting green pixels in a
+/// screenshot was worse than useless -- it matched the main menu's own text
+/// and the red power numbers scattered over the hull.
+///
+/// An exclusive system so it can ask the world what components an entity
+/// actually carries. Component names need Bevy's `debug` feature to print;
+/// without it the colour, size and distance are still enough to identify a
+/// sprite in a codebase you can grep. `ViewVisibility` here is last frame's
+/// value, since it is computed in PostUpdate -- treat a hit as "exists and is
+/// probably drawn", then crop the frame and look before concluding anything.
+fn whats_there(world: &mut World) {
+    use bevy::ecs::system::SystemState;
+    let mut once: SystemState<(
+        Query<&GlobalTransform, With<Ship>>,
+        Query<(Entity, &Sprite, &GlobalTransform, &ViewVisibility)>,
+    )> = SystemState::new(world);
+    let Ok((ships, sprites)) = once.get(world) else { return };
+    let Ok(ship_gt) = ships.single() else { return };
+    let origin = ship_gt.translation().truncate();
+
+    let mut hits: Vec<(Entity, String, f32)> = Vec::new();
+    for (entity, sprite, gt, view) in sprites.iter() {
+        // Only what is actually drawn. Listing every sprite regardless caught
+        // four hidden footprint tiles parked at the origin and sent me after
+        // the wrong thing entirely.
+        if !view.get() {
+            continue;
+        }
+        let p = gt.translation().truncate();
+        let d = p.distance(origin);
+        if d > 60.0 {
+            continue;
+        }
+        let c = sprite.color.to_srgba();
+        hits.push((
+            entity,
+            format!(
+                "rgba({:.2},{:.2},{:.2},{:.2}) size={:?}",
+                c.red, c.green, c.blue, c.alpha, sprite.custom_size
+            ),
+            d,
+        ));
+    }
+
+    for (entity, desc, d) in hits {
+        let names: Vec<String> = world
+            .inspect_entity(entity)
+            .map(|infos| infos.map(|i| i.name().to_string()).collect())
+            .unwrap_or_default();
+        info!("WHATSTHERE {entity:?} d={d:.0} {desc}\n    components: {}", names.join(", "));
+    }
+}
+
 pub fn skip_ai_ship_spawn() -> bool {
     std::env::var("DEPTHS_MOVETEST").ok().as_deref() == Some("1")
 }
@@ -165,6 +221,11 @@ impl Plugin for DemoPlugin {
         let skip_menu = std::env::var("DEPTHS_SKIP_MENU").ok().as_deref() == Some("1");
         let move_test = skip_ai_ship_spawn();
         let build_tab = requested_build_tab();
+        if std::env::var("DEPTHS_WHATSTHERE").ok().as_deref() == Some("1") {
+            app.add_systems(Update, whats_there.run_if(bevy::time::common_conditions::on_timer(
+                std::time::Duration::from_millis(900),
+            )));
+        }
         if std::env::var("DEPTHS_CENSUS").ok().as_deref() == Some("1") {
             app.add_systems(Update, census);
         }
