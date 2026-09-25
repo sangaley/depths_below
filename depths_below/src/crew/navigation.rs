@@ -458,7 +458,17 @@ mod nav_tests {
                 ShipGrid::cells_for(module.grid_pos, def.size, module.rotation, footprint);
             let is_post = def.crew_station
                 || matches!(def.companion, crate::building::registry::CompanionData::Quarters { .. });
-            if is_post {
+            if module.module_type.is_containment_door() {
+                // A doorway, not machinery — the same branch `rebuild_nav_grids`
+                // takes. This helper had drifted: it took a door's cells OFF the
+                // map like any other module, so the first hull to put an
+                // emergency bulkhead in a one-cell corridor — which is the only
+                // sensible place for one — read as a ship cut into six pieces
+                // with 34 crew posts stranded, none of which was true in play.
+                for cell in occupied {
+                    cells.insert(cell, NavCell::Door { sealed: false });
+                }
+            } else if is_post {
                 posts.extend(occupied);
             } else {
                 for cell in occupied {
