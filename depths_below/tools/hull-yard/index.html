@@ -42,6 +42,10 @@
   .pal button{padding:0;aspect-ratio:1;display:grid;place-items:center;position:relative;background:var(--panel)}
   .pal img{width:82%;height:82%;object-fit:contain;display:block}
   .pal button[aria-pressed="true"]{outline:2px solid var(--signal);outline-offset:-2px}
+  /* Pressure doors share their art with blocks that are solid walls. The
+     corner tab is the only thing on the icon that says which is which. */
+  .pal button.door::after{content:"";position:absolute;top:2px;right:2px;
+    width:7px;height:7px;border-radius:2px;background:#4fd1a5}
 
   .report{font-family:"IBM Plex Mono",monospace;font-size:11.5px;display:flex;flex-direction:column;gap:3px}
   .report div{display:flex;justify-content:space-between;gap:10px;color:var(--dim)}
@@ -209,8 +213,11 @@
     var w = new Set(), solid = new Set(), stations = new Set();
     mods.forEach(function (m, k) {
       if (k === skip) return;
-      var p = k.split(",");
-      var into = window.MODS[m.t].post ? stations : solid;
+      var d = window.MODS[m.t], p = k.split(",");
+      // A containment door is a doorway, not machinery. Taking its cells off
+      // the map the way the game does for a reactor would wall the corridor
+      // off permanently -- open or shut, forever.
+      var into = (d.post || d.door) ? stations : solid;
       cellsOf(m.t, +p[0], +p[1], m.r).forEach(function (c) { into.add(key(c[0], c[1])); });
     });
     hull.forEach(function (_, k) { if (enclosed(k) && !solid.has(k)) w.add(k); });
@@ -250,7 +257,7 @@
     if (regions.length > 1) {
       mods.forEach(function (m, k) {
         var d = window.MODS[m.t];
-        if (d.post || d.outboard) return;
+        if (d.post || d.outboard || d.door) return;
         if (regionsOf(walkable(k)).length < regions.length) cuts.push({ k: k, t: m.t });
       });
     }
@@ -277,6 +284,8 @@
       if (m.t === "MemoryCore") cores.push([+p[0], +p[1]]);
       if (+p[0] >= split && (d.cat === "Power" || d.cat === "LifeSupport" || d.cat === "Crew")) vitalsOut++;
     });
+    var doors = 0;
+    mods.forEach(function (m) { if (window.MODS[m.t].door) doors++; });
     var plates = 0, badPlates = 0;
     mods.forEach(function (m, k) {
       if (!window.MODS[m.t].outboard) return;
@@ -295,6 +304,7 @@
       ["deck", w.size + " walkable", null],
       ["deck regions", regions, regions === 1],
       ["cut off", g.stray.size + " cells", g.stray.size === 0],
+      ["pressure doors", doors, doors > 0],
       ["memory cores", cores.length + (cores.length ? " (" + spread + " apart)" : ""),
         cores.length >= 3 && spread >= 3],
       ["vitals on arms", vitalsOut, vitalsOut === 0],
@@ -380,6 +390,21 @@
       ctx.drawImage(s, -d.w * T / 2, -d.h * T / 2, d.w * T, d.h * T);
       ctx.restore();
     });
+
+    // Pressure doors get a ring of their own. They share a sprite with blocks
+    // that are solid walls, and the whole point of one is that it is not --
+    // you should be able to see at a glance where the ship can divide.
+    ctx.save();
+    ctx.strokeStyle = "#4fd1a5";
+    ctx.lineWidth = 2;
+    mods.forEach(function (m, k) {
+      if (!window.MODS[m.t].door) return;
+      var p = k.split(",");
+      cellsOf(m.t, +p[0], +p[1], m.r).forEach(function (cell) {
+        ctx.strokeRect((cell[0] - b.x0) * T + 1, (b.y1 - cell[1]) * T + 1, T - 2, T - 2);
+      });
+    });
+    ctx.restore();
 
     // Everything the crew cannot walk to from the main deck, washed red, and
     // the blocks that made it that way ringed. A ship can look whole and be
@@ -483,6 +508,12 @@
     b.setAttribute("aria-pressed", "false");
     var i = document.createElement("img"); i.src = "mod/" + t + ".png"; i.alt = pretty(t);
     b.appendChild(i);
+    if (window.MODS[t].door) {
+      b.classList.add("door");
+      b.title = pretty(t) + " — " + window.MODS[t].cost +
+        "c · crew walk through it, it shuts on its own when the compartment " +
+        "beyond loses pressure, and reopens when the pressure comes back";
+    }
     b.addEventListener("click", function () { setTool("mod", t, b); });
     palHost.appendChild(b);
   });
