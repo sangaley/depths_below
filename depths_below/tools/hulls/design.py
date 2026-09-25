@@ -93,13 +93,33 @@ def cells_of(art):
     return {(x + ox, y + oy) for (x, y) in out}
 
 # -------------------------------------------------------------- fitting ----
+# Non-rectangular footprints, mirroring building::footprints. Reading size.x
+# by size.y instead cost an afternoon: the bridge is a T of four cells, not a
+# 3x2 block of six, and the two cells my model invented for it were the only
+# thing holding an arm onto the body. The game disagreed and the game was
+# right.
+FOOTPRINTS = {
+    'GalleyMess':     [(0,0),(1,0),(1,1)],
+    'BulkCargoHold':  [(0,0),(1,0),(1,1)],
+    'BridgeWing':     [(0,0),(1,0),(2,0),(1,1)],
+    'SurgicalBay':    [(0,0),(1,0),(2,0),(1,1)],
+    'CornerArmorPlate':   [(0,0),(1,0),(0,1)],
+    'StaggeredArmorPlate':[(0,0),(1,0),(1,1),(2,1)],
+    'DockingHub':     [(1,0),(0,1),(1,1),(2,1),(1,2)],
+    'WellnessHub':    [(1,0),(0,1),(1,1),(2,1),(1,2)],
+}
+
+def cells_for(t, x, y):
+    """Exactly what ShipGrid::cells_for returns, for rotation North."""
+    if t in FOOTPRINTS:
+        return [(x+dx, y+dy) for (dx, dy) in FOOTPRINTS[t]]
+    d = MODS[t]
+    return [(x+dx, y+dy) for dx in range(d['w']) for dy in range(d['h'])]
+
 def occupied(cells, mods):
     taken = set()
     for m in mods:
-        d = MODS[m['t']]
-        for dx in range(d['w']):
-            for dy in range(d['h']):
-                taken.add((m['x'] + dx, m['y'] + dy))
+        taken.update(cells_for(m['t'], m['x'], m['y']))
     return taken
 
 def interior(cells):
@@ -113,12 +133,8 @@ def deck(cells, mods):
 def posts(mods):
     out = set()
     for m in mods:
-        d = MODS[m['t']]
-        if not d['post']:
-            continue
-        for dx in range(d['w']):
-            for dy in range(d['h']):
-                out.add((m['x'] + dx, m['y'] + dy))
+        if MODS[m['t']]['post']:
+            out.update(cells_for(m['t'], m['x'], m['y']))
     return out
 
 def walkable(cells, mods):
@@ -141,14 +157,8 @@ def connected(cells, mods):
 
 # ------------------------------------------------------------ placement ----
 def fits(cells, mods, t, x, y):
-    d = MODS[t]
     taken = occupied(cells, mods)
-    for dx in range(d['w']):
-        for dy in range(d['h']):
-            c = (x+dx, y+dy)
-            if c not in cells or c in taken:
-                return False
-    return True
+    return all(c in cells and c not in taken for c in cells_for(t, x, y))
 
 def deck_is_whole(cells, mods):
     """Is every walkable cell reachable from every other?
@@ -192,8 +202,7 @@ def place(cells, mods, t, ax, ay, outboard=False):
             # A crewed module has to touch somewhere a crewman can stand, or
             # it is a gun on an arm tip that nobody can ever reach.
             here = walkable(cells, mods)
-            cover = {(c[0]+dx, c[1]+dy)
-                     for dx in range(d['w']) for dy in range(d['h'])}
+            cover = set(cells_for(t, c[0], c[1]))
             touching = any((cx+ddx, cy+ddy) in here
                            for (cx, cy) in cover
                            for (ddx, ddy) in ((0,1),(0,-1),(-1,0),(1,0)))

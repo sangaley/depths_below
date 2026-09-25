@@ -59,3 +59,41 @@ for key in ('pincer', 'crab', 'trident'):
           % (key, len(cells), len(mods), reach, total, len(stranded), in_arms or 'none'))
     if stranded:
         print('        ', stranded[:6])
+
+# ------------------------------------------------------------- export -----
+def to_blueprint(name, cells, mods):
+    """A real design file the game can fly and build-mode can edit."""
+    taken = occupied(cells, mods)
+    inner = interior(cells)
+    hull = []
+    for c in sorted(cells):
+        if c not in inner:
+            layer = "Outer"
+        elif c in taken:
+            layer = "Inner"
+        else:
+            layer = "Hallway"
+        hull.append({"grid_pos": [c[0], c[1]], "layer": layer, "material": "Steel"})
+    out_mods = []
+    for m in sorted(mods, key=lambda m: (m['x'], m['y'])):
+        out_mods.append({
+            "module_type": m['t'],
+            "grid_pos": [m['x'], m['y']],
+            "rotation": m['r'],
+            "custom_name": None,
+            "subcomponents": None,
+            "extras": None,
+        })
+    return {"name": name, "hull_cells": hull, "modules": out_mods,
+            "created_at": "tools/hulls", "version": 2}
+
+
+if __name__ == "__main__":
+    import json
+    dest = "/Users/shhh/depths_below-cascade/depths_below/designs/"
+    for key, s in SHIPS.items():
+        bp = to_blueprint(key, s['cells'], s['mods'])
+        with open(dest + key + ".json", "w") as f:
+            json.dump(bp, f, indent=2)
+        print("  wrote designs/%s.json  %d hull, %d modules"
+              % (key, len(bp['hull_cells']), len(bp['modules'])))
