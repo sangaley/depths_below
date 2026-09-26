@@ -70,7 +70,7 @@
         5,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -78,7 +78,7 @@
         6,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -86,7 +86,7 @@
         7,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -94,7 +94,7 @@
         8,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -102,7 +102,7 @@
         9,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -142,7 +142,7 @@
         2,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -150,7 +150,7 @@
         3,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -158,7 +158,7 @@
         4,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -174,7 +174,7 @@
         6,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -182,7 +182,7 @@
         7,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -190,7 +190,7 @@
         8,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -206,7 +206,7 @@
         10,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -214,7 +214,7 @@
         11,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -254,7 +254,7 @@
         0,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -262,7 +262,7 @@
         1,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -270,7 +270,7 @@
         2,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -278,7 +278,7 @@
         3,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -286,7 +286,7 @@
         4,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -294,7 +294,7 @@
         5,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -302,7 +302,7 @@
         6,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -310,7 +310,7 @@
         7,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -326,7 +326,7 @@
         9,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -334,7 +334,7 @@
         10,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -342,7 +342,7 @@
         11,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -350,7 +350,7 @@
         12,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -398,7 +398,7 @@
         -1,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -414,7 +414,7 @@
         1,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -438,7 +438,7 @@
         4,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -446,7 +446,7 @@
         5,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -462,7 +462,7 @@
         7,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -470,7 +470,7 @@
         8,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -478,7 +478,7 @@
         9,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -486,7 +486,7 @@
         10,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -494,7 +494,7 @@
         11,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -502,7 +502,7 @@
         12,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -518,7 +518,7 @@
         14,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -550,7 +550,7 @@
         -3,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -558,7 +558,7 @@
         -2,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -566,7 +566,7 @@
         -1,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -574,7 +574,7 @@
         0,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -590,7 +590,7 @@
         2,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -614,7 +614,7 @@
         5,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -638,7 +638,7 @@
         8,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -654,7 +654,7 @@
         10,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -670,7 +670,7 @@
         12,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -686,7 +686,7 @@
         14,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -718,7 +718,7 @@
         -3,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -734,7 +734,7 @@
         -1,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -750,7 +750,7 @@
         1,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -782,7 +782,7 @@
         5,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -790,7 +790,7 @@
         6,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -806,7 +806,7 @@
         8,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -814,7 +814,7 @@
         9,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -830,7 +830,7 @@
         11,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -838,7 +838,7 @@
         12,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -854,7 +854,7 @@
         14,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -886,7 +886,7 @@
         -2,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -894,7 +894,7 @@
         -1,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -902,7 +902,7 @@
         0,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -910,7 +910,7 @@
         1,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -918,7 +918,7 @@
         2,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -926,7 +926,7 @@
         3,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -934,7 +934,7 @@
         4,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -942,7 +942,7 @@
         5,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -950,7 +950,7 @@
         6,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -958,7 +958,7 @@
         7,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -966,7 +966,7 @@
         8,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -974,7 +974,7 @@
         9,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -982,7 +982,7 @@
         10,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -990,7 +990,7 @@
         11,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -998,7 +998,7 @@
         12,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1006,7 +1006,7 @@
         13,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1014,7 +1014,7 @@
         14,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1046,7 +1046,7 @@
         0,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1054,7 +1054,7 @@
         1,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1062,7 +1062,7 @@
         2,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1070,7 +1070,7 @@
         3,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1078,7 +1078,7 @@
         4,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1086,7 +1086,7 @@
         5,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1094,7 +1094,7 @@
         6,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1102,7 +1102,7 @@
         7,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1118,7 +1118,7 @@
         9,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1126,7 +1126,7 @@
         10,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1134,7 +1134,7 @@
         11,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1142,7 +1142,7 @@
         12,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1182,7 +1182,7 @@
         2,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1190,7 +1190,7 @@
         3,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1198,7 +1198,7 @@
         4,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1206,7 +1206,7 @@
         5,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1214,7 +1214,7 @@
         6,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1222,7 +1222,7 @@
         7,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1230,7 +1230,7 @@
         8,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1246,7 +1246,7 @@
         10,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1254,7 +1254,7 @@
         11,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1302,7 +1302,7 @@
         5,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1310,7 +1310,7 @@
         6,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1318,7 +1318,7 @@
         7,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1326,7 +1326,7 @@
         8,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1334,7 +1334,7 @@
         9,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "Titanium"
     },
     {
@@ -1542,7 +1542,7 @@
       "module_type": "RepairBay",
       "grid_pos": [
         3,
-        1
+        0
       ],
       "rotation": "North",
       "custom_name": null,
@@ -1950,8 +1950,8 @@
     {
       "module_type": "AngledArmorPlate",
       "grid_pos": [
-        -4,
-        2
+        -6,
+        0
       ],
       "rotation": "West",
       "custom_name": null,

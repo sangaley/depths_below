@@ -366,7 +366,7 @@
         -2,
         -4
       ],
-      "layer": "Hallway",
+      "layer": "Inner",
       "material": "Steel"
     },
     {
@@ -382,7 +382,7 @@
         -2,
         -2
       ],
-      "layer": "Hallway",
+      "layer": "Inner",
       "material": "Steel"
     },
     {
@@ -1310,7 +1310,7 @@
         -1,
         1
       ],
-      "layer": "Hallway",
+      "layer": "Inner",
       "material": "Steel"
     },
     {
@@ -2533,7 +2533,7 @@
     {
       "module_type": "TractorBeam",
       "grid_pos": [
-        -1,
+        0,
         -1
       ],
       "rotation": "North",

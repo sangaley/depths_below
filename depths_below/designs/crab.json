@@ -430,7 +430,7 @@
         -3,
         1
       ],
-      "layer": "Hallway",
+      "layer": "Inner",
       "material": "Steel"
     },
     {
@@ -510,7 +510,7 @@
         -2,
         -1
       ],
-      "layer": "Hallway",
+      "layer": "Inner",
       "material": "Steel"
     },
     {
@@ -1966,7 +1966,7 @@
     {
       "module_type": "MemoryCore",
       "grid_pos": [
-        -2,
+        -3,
         1
       ],
       "rotation": "North",

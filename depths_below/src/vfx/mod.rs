@@ -3,7 +3,6 @@ pub mod particles;
 pub mod screen_effects;
 pub mod block_visuals;
 pub mod hull_seams;
-pub mod footprint_tiles;
 pub mod starfield;
 pub mod procedural_textures;
 pub mod debris;
@@ -61,10 +60,6 @@ impl Plugin for VfxPlugin {
             // Hull tiles pick their own seams from their neighbours. Visual
             // only, and gated internally on the live tile count, so it costs
             // an archetype scan on the frames where nothing was built or shot.
-            // Non-rectangular blocks get their art cut to the cells they
-            // actually own. Unstated, and it must run in the builder too --
-            // that is where you are looking at the block while you place it.
-            .add_systems(Update, footprint_tiles::cut_art_to_footprint)
             .add_systems(
                 Update,
                 hull_seams::update_hull_seams.run_if(

@@ -99,14 +99,6 @@ def cells_of(art):
 # thing holding an arm onto the body. The game disagreed and the game was
 # right.
 FOOTPRINTS = {
-    'GalleyMess':     [(0,0),(1,0),(0,1),(1,1)],
-    'BulkCargoHold':  [(0,0),(1,0),(0,1),(1,1)],
-    'BridgeWing':     [(0,0),(1,0),(2,0),(1,1)],
-    'SurgicalBay':    [(0,0),(1,0),(2,0),(1,1)],
-    'CornerArmorPlate':   [(0,0),(1,0),(0,1)],
-    'StaggeredArmorPlate':[(0,0),(1,0),(1,1),(2,1)],
-    'DockingHub':     [(1,0),(0,1),(1,1),(2,1),(1,2)],
-    'WellnessHub':    [(1,0),(0,1),(1,1),(2,1),(1,2)],
 }
 
 def cells_for(t, x, y):

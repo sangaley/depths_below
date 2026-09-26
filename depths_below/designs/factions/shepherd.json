@@ -102,7 +102,7 @@
         15,
         7
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -110,7 +110,7 @@
         16,
         7
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -118,7 +118,7 @@
         17,
         7
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -126,7 +126,7 @@
         18,
         7
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -134,7 +134,7 @@
         19,
         7
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -142,7 +142,7 @@
         20,
         7
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -198,7 +198,7 @@
         10,
         6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -206,7 +206,7 @@
         11,
         6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -222,7 +222,7 @@
         13,
         6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -230,7 +230,7 @@
         14,
         6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -238,7 +238,7 @@
         15,
         6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -246,7 +246,7 @@
         16,
         6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -254,7 +254,7 @@
         17,
         6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -270,7 +270,7 @@
         19,
         6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -278,7 +278,7 @@
         20,
         6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -286,7 +286,7 @@
         21,
         6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -334,7 +334,7 @@
         5,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -342,7 +342,7 @@
         6,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -350,7 +350,7 @@
         7,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -358,7 +358,7 @@
         8,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -366,7 +366,7 @@
         9,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -374,7 +374,7 @@
         10,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -382,7 +382,7 @@
         11,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -390,7 +390,7 @@
         12,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -398,7 +398,7 @@
         13,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -406,7 +406,7 @@
         14,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -414,7 +414,7 @@
         15,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -422,7 +422,7 @@
         16,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -430,7 +430,7 @@
         17,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -446,7 +446,7 @@
         19,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -454,7 +454,7 @@
         20,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -462,7 +462,7 @@
         21,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -470,7 +470,7 @@
         22,
         5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -518,7 +518,7 @@
         1,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -526,7 +526,7 @@
         2,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -534,7 +534,7 @@
         3,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -542,7 +542,7 @@
         4,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -550,7 +550,7 @@
         5,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -558,7 +558,7 @@
         6,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -566,7 +566,7 @@
         7,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -574,7 +574,7 @@
         8,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -582,7 +582,7 @@
         9,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -590,7 +590,7 @@
         10,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -598,7 +598,7 @@
         11,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -606,7 +606,7 @@
         12,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -614,7 +614,7 @@
         13,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -622,7 +622,7 @@
         14,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -630,7 +630,7 @@
         15,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -638,7 +638,7 @@
         16,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -646,7 +646,7 @@
         17,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -654,7 +654,7 @@
         18,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -670,7 +670,7 @@
         20,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -678,7 +678,7 @@
         21,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -686,7 +686,7 @@
         22,
         4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -726,7 +726,7 @@
         -3,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -734,7 +734,7 @@
         -2,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -742,7 +742,7 @@
         -1,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -750,7 +750,7 @@
         0,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -758,7 +758,7 @@
         1,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -766,7 +766,7 @@
         2,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -774,7 +774,7 @@
         3,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -782,7 +782,7 @@
         4,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -790,7 +790,7 @@
         5,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -798,7 +798,7 @@
         6,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -806,7 +806,7 @@
         7,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -814,7 +814,7 @@
         8,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -822,7 +822,7 @@
         9,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -830,7 +830,7 @@
         10,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -838,7 +838,7 @@
         11,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -846,7 +846,7 @@
         12,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -854,7 +854,7 @@
         13,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -862,7 +862,7 @@
         14,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -870,7 +870,7 @@
         15,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -878,7 +878,7 @@
         16,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -886,7 +886,7 @@
         17,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -894,7 +894,7 @@
         18,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -910,7 +910,7 @@
         20,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -918,7 +918,7 @@
         21,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -926,7 +926,7 @@
         22,
         3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -974,7 +974,7 @@
         -5,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -982,7 +982,7 @@
         -4,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -990,7 +990,7 @@
         -3,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -998,7 +998,7 @@
         -2,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1006,7 +1006,7 @@
         -1,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1022,7 +1022,7 @@
         1,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1030,7 +1030,7 @@
         2,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1038,7 +1038,7 @@
         3,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1046,7 +1046,7 @@
         4,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1062,7 +1062,7 @@
         6,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1070,7 +1070,7 @@
         7,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1078,7 +1078,7 @@
         8,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1086,7 +1086,7 @@
         9,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1094,7 +1094,7 @@
         10,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1102,7 +1102,7 @@
         11,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1110,7 +1110,7 @@
         12,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1118,7 +1118,7 @@
         13,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1126,7 +1126,7 @@
         14,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1142,7 +1142,7 @@
         16,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1150,7 +1150,7 @@
         17,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1158,7 +1158,7 @@
         18,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1166,7 +1166,7 @@
         19,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1174,7 +1174,7 @@
         20,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1182,7 +1182,7 @@
         21,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1190,7 +1190,7 @@
         22,
         2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1230,7 +1230,7 @@
         -8,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1238,7 +1238,7 @@
         -7,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1246,7 +1246,7 @@
         -6,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1254,7 +1254,7 @@
         -5,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1262,7 +1262,7 @@
         -4,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1270,7 +1270,7 @@
         -3,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1286,7 +1286,7 @@
         -1,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1294,7 +1294,7 @@
         0,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1302,7 +1302,7 @@
         1,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1326,7 +1326,7 @@
         4,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1334,7 +1334,7 @@
         5,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1358,7 +1358,7 @@
         8,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1366,7 +1366,7 @@
         9,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1374,7 +1374,7 @@
         10,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1382,7 +1382,7 @@
         11,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1390,7 +1390,7 @@
         12,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1406,7 +1406,7 @@
         14,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1414,7 +1414,7 @@
         15,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1422,7 +1422,7 @@
         16,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1430,7 +1430,7 @@
         17,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1438,7 +1438,7 @@
         18,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1446,7 +1446,7 @@
         19,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1462,7 +1462,7 @@
         21,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1470,7 +1470,7 @@
         22,
         1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1494,7 +1494,7 @@
         -11,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1502,7 +1502,7 @@
         -10,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1518,7 +1518,7 @@
         -8,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1526,7 +1526,7 @@
         -7,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1534,7 +1534,7 @@
         -6,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1542,7 +1542,7 @@
         -5,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1550,7 +1550,7 @@
         -4,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1558,7 +1558,7 @@
         -3,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1566,7 +1566,7 @@
         -2,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1582,7 +1582,7 @@
         0,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1590,7 +1590,7 @@
         1,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1598,7 +1598,7 @@
         2,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1606,7 +1606,7 @@
         3,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1622,7 +1622,7 @@
         5,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1630,7 +1630,7 @@
         6,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1646,7 +1646,7 @@
         8,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1654,7 +1654,7 @@
         9,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1662,7 +1662,7 @@
         10,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1670,7 +1670,7 @@
         11,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1678,7 +1678,7 @@
         12,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1694,7 +1694,7 @@
         14,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1702,7 +1702,7 @@
         15,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1710,7 +1710,7 @@
         16,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1718,7 +1718,7 @@
         17,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1726,7 +1726,7 @@
         18,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1734,7 +1734,7 @@
         19,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1742,7 +1742,7 @@
         20,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1758,7 +1758,7 @@
         22,
         0
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1782,7 +1782,7 @@
         -11,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1790,7 +1790,7 @@
         -10,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1806,7 +1806,7 @@
         -8,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1814,7 +1814,7 @@
         -7,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1822,7 +1822,7 @@
         -6,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1830,7 +1830,7 @@
         -5,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1838,7 +1838,7 @@
         -4,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1846,7 +1846,7 @@
         -3,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1862,7 +1862,7 @@
         -1,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1870,7 +1870,7 @@
         0,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1878,7 +1878,7 @@
         1,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1902,7 +1902,7 @@
         4,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1910,7 +1910,7 @@
         5,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1934,7 +1934,7 @@
         8,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1942,7 +1942,7 @@
         9,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1950,7 +1950,7 @@
         10,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1958,7 +1958,7 @@
         11,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1966,7 +1966,7 @@
         12,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1982,7 +1982,7 @@
         14,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1990,7 +1990,7 @@
         15,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -1998,7 +1998,7 @@
         16,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2006,7 +2006,7 @@
         17,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2014,7 +2014,7 @@
         18,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2022,7 +2022,7 @@
         19,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2038,7 +2038,7 @@
         21,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2046,7 +2046,7 @@
         22,
         -1
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2086,7 +2086,7 @@
         -8,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2094,7 +2094,7 @@
         -7,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2110,7 +2110,7 @@
         -5,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2118,7 +2118,7 @@
         -4,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2126,7 +2126,7 @@
         -3,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2134,7 +2134,7 @@
         -2,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2142,7 +2142,7 @@
         -1,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2150,7 +2150,7 @@
         0,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2158,7 +2158,7 @@
         1,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2166,7 +2166,7 @@
         2,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2174,7 +2174,7 @@
         3,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2182,7 +2182,7 @@
         4,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2198,7 +2198,7 @@
         6,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2206,7 +2206,7 @@
         7,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2214,7 +2214,7 @@
         8,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2222,7 +2222,7 @@
         9,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2230,7 +2230,7 @@
         10,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2238,7 +2238,7 @@
         11,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2246,7 +2246,7 @@
         12,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2254,7 +2254,7 @@
         13,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2262,7 +2262,7 @@
         14,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2270,7 +2270,7 @@
         15,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2278,7 +2278,7 @@
         16,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2286,7 +2286,7 @@
         17,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2294,7 +2294,7 @@
         18,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2302,7 +2302,7 @@
         19,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2310,7 +2310,7 @@
         20,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2318,7 +2318,7 @@
         21,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2326,7 +2326,7 @@
         22,
         -2
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2366,7 +2366,7 @@
         -6,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2374,7 +2374,7 @@
         -5,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2382,7 +2382,7 @@
         -4,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2390,7 +2390,7 @@
         -3,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2398,7 +2398,7 @@
         -2,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2406,7 +2406,7 @@
         -1,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2414,7 +2414,7 @@
         0,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2422,7 +2422,7 @@
         1,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2430,7 +2430,7 @@
         2,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2438,7 +2438,7 @@
         3,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2446,7 +2446,7 @@
         4,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2454,7 +2454,7 @@
         5,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2462,7 +2462,7 @@
         6,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2470,7 +2470,7 @@
         7,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2478,7 +2478,7 @@
         8,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2486,7 +2486,7 @@
         9,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2494,7 +2494,7 @@
         10,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2502,7 +2502,7 @@
         11,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2510,7 +2510,7 @@
         12,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2518,7 +2518,7 @@
         13,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2526,7 +2526,7 @@
         14,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2542,7 +2542,7 @@
         16,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2550,7 +2550,7 @@
         17,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2558,7 +2558,7 @@
         18,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2566,7 +2566,7 @@
         19,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2574,7 +2574,7 @@
         20,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2582,7 +2582,7 @@
         21,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2590,7 +2590,7 @@
         22,
         -3
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2630,7 +2630,7 @@
         -3,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2638,7 +2638,7 @@
         -2,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2646,7 +2646,7 @@
         -1,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2654,7 +2654,7 @@
         0,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2662,7 +2662,7 @@
         1,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2670,7 +2670,7 @@
         2,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2678,7 +2678,7 @@
         3,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2686,7 +2686,7 @@
         4,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2694,7 +2694,7 @@
         5,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2702,7 +2702,7 @@
         6,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2710,7 +2710,7 @@
         7,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2718,7 +2718,7 @@
         8,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2726,7 +2726,7 @@
         9,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2734,7 +2734,7 @@
         10,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2742,7 +2742,7 @@
         11,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2750,7 +2750,7 @@
         12,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2758,7 +2758,7 @@
         13,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2766,7 +2766,7 @@
         14,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2774,7 +2774,7 @@
         15,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2782,7 +2782,7 @@
         16,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2790,7 +2790,7 @@
         17,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2798,7 +2798,7 @@
         18,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2806,7 +2806,7 @@
         19,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2814,7 +2814,7 @@
         20,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2822,7 +2822,7 @@
         21,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2830,7 +2830,7 @@
         22,
         -4
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2878,7 +2878,7 @@
         1,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2886,7 +2886,7 @@
         2,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2894,7 +2894,7 @@
         3,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2902,7 +2902,7 @@
         4,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2910,7 +2910,7 @@
         5,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2918,7 +2918,7 @@
         6,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2926,7 +2926,7 @@
         7,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2934,7 +2934,7 @@
         8,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2942,7 +2942,7 @@
         9,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2950,7 +2950,7 @@
         10,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2958,7 +2958,7 @@
         11,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2966,7 +2966,7 @@
         12,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2974,7 +2974,7 @@
         13,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2982,7 +2982,7 @@
         14,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2990,7 +2990,7 @@
         15,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -2998,7 +2998,7 @@
         16,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3006,7 +3006,7 @@
         17,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3014,7 +3014,7 @@
         18,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3030,7 +3030,7 @@
         20,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3038,7 +3038,7 @@
         21,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3046,7 +3046,7 @@
         22,
         -5
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3094,7 +3094,7 @@
         5,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3102,7 +3102,7 @@
         6,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3110,7 +3110,7 @@
         7,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3118,7 +3118,7 @@
         8,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3126,7 +3126,7 @@
         9,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3134,7 +3134,7 @@
         10,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3142,7 +3142,7 @@
         11,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3150,7 +3150,7 @@
         12,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3158,7 +3158,7 @@
         13,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3166,7 +3166,7 @@
         14,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3174,7 +3174,7 @@
         15,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3182,7 +3182,7 @@
         16,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3190,7 +3190,7 @@
         17,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3198,7 +3198,7 @@
         18,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3214,7 +3214,7 @@
         20,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3222,7 +3222,7 @@
         21,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3230,7 +3230,7 @@
         22,
         -6
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3286,7 +3286,7 @@
         10,
         -7
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3294,7 +3294,7 @@
         11,
         -7
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3310,7 +3310,7 @@
         13,
         -7
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3318,7 +3318,7 @@
         14,
         -7
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3326,7 +3326,7 @@
         15,
         -7
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3334,7 +3334,7 @@
         16,
         -7
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3342,7 +3342,7 @@
         17,
         -7
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3358,7 +3358,7 @@
         19,
         -7
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3366,7 +3366,7 @@
         20,
         -7
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3374,7 +3374,7 @@
         21,
         -7
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3430,7 +3430,7 @@
         15,
         -8
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3438,7 +3438,7 @@
         16,
         -8
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3446,7 +3446,7 @@
         17,
         -8
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3462,7 +3462,7 @@
         19,
         -8
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -3470,7 +3470,7 @@
         20,
         -8
       ],
-      "layer": "Inner",
+      "layer": "Hallway",
       "material": "AbyssalAlloy"
     },
     {
@@ -4406,8 +4406,8 @@
     {
       "module_type": "AngledArmorPlate",
       "grid_pos": [
-        -9,
-        3
+        -13,
+        0
       ],
       "rotation": "West",
       "custom_name": null,

@@ -498,13 +498,7 @@ pub fn spawn_module(
     // outline never actually got cut. The triangle is built from child quads
     // below instead, so the block's shape is the shape.
     let is_wedge = matches!(module_type, ModuleType::AngledArmorPlate | ModuleType::AngledHullPlate);
-    // A block whose footprint is not its bounding box draws nothing here
-    // either, for the same reason a wedge does not: one sprite stretched over
-    // the box paints cells the block does not own, right over the neighbour.
-    // vfx::footprint_tiles cuts the art into one tile per owned cell instead,
-    // once the image has a size to cut by.
-    let shaped = footprint.is_some_and(|cells| cells.len() < (def.size.x * def.size.y) as usize);
-    let module_base_color = if is_wedge || shaped { Color::NONE } else { Color::WHITE };
+    let module_base_color = if is_wedge { Color::NONE } else { Color::WHITE };
 
     let module_entity = commands.spawn((
         (Sprite {
@@ -532,19 +526,6 @@ pub fn spawn_module(
         crate::building::Block::for_module(grid_pos, module_type, rotation),
         Selectable,
     )).id();
-
-    if shaped {
-        // Authored in the UNROTATED frame; the parent's rotation turns the
-        // tiles with the block.
-        let unrotated = footprint.unwrap_or(&[]);
-        let (ox, oy) = unrotated.iter().fold((i32::MAX, i32::MAX), |(x, y), c| (x.min(c.x), y.min(c.y)));
-        commands.entity(module_entity).insert(crate::vfx::footprint_tiles::FootprintTiles {
-            image: asset_server.load(sprite_path),
-            cells: unrotated.to_vec(),
-            origin: IVec2::new(ox, oy),
-            span: def.size,
-        });
-    }
 
     insert_companion_components(commands, module_entity, &def.companion);
 
