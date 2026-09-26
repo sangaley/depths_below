@@ -391,7 +391,25 @@
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(m.r * Math.PI / 2);
-      ctx.drawImage(s, -d.w * T / 2, -d.h * T / 2, d.w * T, d.h * T);
+      // A block whose footprint is not its bounding box -- the T-shaped
+      // sickbay and bridge wing, the L-shaped galley and hold -- must not be
+      // drawn as one stretched rectangle: that paints the corners it does not
+      // own, over the neighbour. The art is a clean grid, so cut it and lay
+      // one tile per cell. Authored unrotated; the ctx.rotate above turns it.
+      if (d.cells.length < d.w * d.h && s.naturalWidth) {
+        var ox = Math.min.apply(null, d.cells.map(function (c) { return c[0]; }));
+        var oy = Math.min.apply(null, d.cells.map(function (c) { return c[1]; }));
+        var tw = s.naturalWidth / d.w, th = s.naturalHeight / d.h;
+        var hx = ox + (d.w - 1) / 2, hy = oy + (d.h - 1) / 2;
+        d.cells.forEach(function (c) {
+          // Texture rows run top-down, grid rows bottom-up.
+          var row = d.h - 1 - (c[1] - oy);
+          ctx.drawImage(s, (c[0] - ox) * tw, row * th, tw, th,
+            (c[0] - hx) * T - T / 2, -(c[1] - hy) * T - T / 2, T, T);
+        });
+      } else {
+        ctx.drawImage(s, -d.w * T / 2, -d.h * T / 2, d.w * T, d.h * T);
+      }
       ctx.restore();
     });
 
