@@ -21,15 +21,6 @@ const L_TROMINO_A: [IVec2; 3] = [
     IVec2::new(0, 1),
 ];
 
-// L-tromino, notch open toward -x/-y (bottom-left) — the mirror orientation.
-// Used for the "long run + a nook" shape (galley corridor + dining nook,
-// cargo hold filling a leftover corner).
-const L_TROMINO_B: [IVec2; 3] = [
-    IVec2::new(0, 0),
-    IVec2::new(1, 0),
-    IVec2::new(1, 1),
-];
-
 // T-tetromino — a 3-wide bar with a single stem, 3x2 bounding box.
 // Used for "wide top for field of view / treatment area, narrow stem for
 // access back into the ship" (bridge wings, triage-to-treatment sickbay).
@@ -64,7 +55,9 @@ const PLUS_PENTOMINO: [IVec2; 5] = [
 pub fn footprint_override(module_type: ModuleType) -> Option<&'static [IVec2]> {
     match module_type {
         ModuleType::CornerArmorPlate => Some(&L_TROMINO_A),
-        ModuleType::GalleyMess | ModuleType::BulkCargoHold => Some(&L_TROMINO_B),
+        // GalleyMess and BulkCargoHold were the "long run + a nook" L. They
+        // are plain 2x2 rooms now: a galley you can seat people in and a hold
+        // that stacks square, rather than a notch to fit around.
         ModuleType::BridgeWing | ModuleType::SurgicalBay => Some(&T_TETROMINO),
         ModuleType::StaggeredArmorPlate => Some(&S_TETROMINO),
         ModuleType::DockingHub | ModuleType::WellnessHub => Some(&PLUS_PENTOMINO),

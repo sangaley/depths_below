@@ -105,8 +105,10 @@ mod tests {
         (n(16), n(20))
     }
 
-    /// The eight shapes in `footprints::footprint_override`, and what has to
-    /// be true of each for the art to be cuttable.
+    /// The shapes in `footprints::footprint_override`, and what has to be
+    /// true of each for the art to be cuttable. GalleyMess and BulkCargoHold
+    /// were here until they went back to plain 2x2 rooms -- this list going
+    /// stale is what this assert is for, so keep it in step with the table.
     ///
     /// Two things. It must claim FEWER cells than its bounding box, or it does
     /// not belong in the table at all. And its texture must divide into a
@@ -117,8 +119,6 @@ mod tests {
         let registry = crate::building::registry::build_registry();
         let shaped = [
             ModuleType::CornerArmorPlate,
-            ModuleType::GalleyMess,
-            ModuleType::BulkCargoHold,
             ModuleType::BridgeWing,
             ModuleType::SurgicalBay,
             ModuleType::StaggeredArmorPlate,

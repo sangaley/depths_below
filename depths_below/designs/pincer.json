@@ -126,7 +126,7 @@
         -6,
         -1
       ],
-      "layer": "Hallway",
+      "layer": "Inner",
       "material": "Steel"
     },
     {
@@ -2542,28 +2542,6 @@
       "extras": null
     },
     {
-      "module_type": "HeatVent",
-      "grid_pos": [
-        -5,
-        3
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
-      "module_type": "MemoryCore",
-      "grid_pos": [
-        -6,
-        -2
-      ],
-      "rotation": "North",
-      "custom_name": null,
-      "subcomponents": null,
-      "extras": null
-    },
-    {
       "module_type": "MemoryCore",
       "grid_pos": [
         -4,
@@ -2856,6 +2834,28 @@
         4
       ],
       "rotation": "West",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "HeatVent",
+      "grid_pos": [
+        -5,
+        4
+      ],
+      "rotation": "North",
+      "custom_name": null,
+      "subcomponents": null,
+      "extras": null
+    },
+    {
+      "module_type": "MemoryCore",
+      "grid_pos": [
+        -6,
+        -1
+      ],
+      "rotation": "North",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
