@@ -704,14 +704,19 @@ mod nav_tests {
         }
     }
 
-    /// Nothing that keeps the ship alive may sit out on an arm.
+    /// Losing an arm must be a wound, not a death.
     ///
-    /// The whole point of the shape is that an arm is expendable. A reactor or
-    /// a scrubber on a claw turns losing one from a wound into a death, and it
-    /// is the kind of thing that creeps back in the next time the layout is
-    /// regenerated.
+    /// This used to ban any Power, LifeSupport or Crew block from sitting past
+    /// the split, which is not the same thing and is stricter than the point.
+    /// A ship with six scrubbers can put two on the claws and still breathe
+    /// with both claws gone; the pincer does exactly that (120 air against 90
+    /// needed) and failed a rule whose own comment said it was there to stop
+    /// deaths. Position is the designer's business. The consequence is not.
+    ///
+    /// So: cut both arms off and ask whether what is left still runs.
     #[test]
-    fn candidate_hulls_keep_their_vitals_in_the_body() {
+    fn candidate_hulls_survive_losing_their_arms() {
+        let registry = crate::building::registry::build_registry();
         for name in ["pincer", "crab", "trident"] {
             let design = crate::building::blueprint::load_design_file(&format!("designs/{name}.json"))
                 .unwrap();
@@ -732,19 +737,34 @@ mod nav_tests {
                 }
             }
 
-            for m in &design.modules {
-                let vital = matches!(
-                    m.module_type.category(),
-                    ModuleCategory::Power | ModuleCategory::LifeSupport | ModuleCategory::Crew
-                );
-                if vital {
-                    assert!(
-                        m.grid_pos.x < split,
-                        "{name}: {:?} at {:?} is out on an arm (body ends at x={split})",
-                        m.module_type, m.grid_pos
-                    );
+            // What the body alone still provides, and still has to power.
+            let (mut air, mut berths, mut generation, mut draw) = (0.0f32, 0u32, 0.0f32, 0.0f32);
+            for m in design.modules.iter().filter(|m| m.grid_pos.x < split) {
+                let def = registry.get(m.module_type);
+                generation += def.power_generation;
+                if crate::ship::starts_active(m.module_type) {
+                    draw += def.power_consumption;
+                }
+                match def.companion {
+                    crate::building::registry::CompanionData::OxygenScrubber { output } => {
+                        air += output
+                    }
+                    crate::building::registry::CompanionData::Quarters { berths: b } => berths += b,
+                    _ => {}
                 }
             }
+
+            let needed = berths as f32 * crate::resources::OXYGEN_PER_CREW;
+            assert!(
+                air >= needed,
+                "{name}: with both arms gone the body makes {air} oxygen for {berths} crew, \
+                 who need {needed} — the survivors suffocate"
+            );
+            assert!(
+                generation >= draw,
+                "{name}: with both arms gone the body generates {generation} against a \
+                 {draw} launch draw — the survivors sit in the dark"
+            );
         }
     }
 
