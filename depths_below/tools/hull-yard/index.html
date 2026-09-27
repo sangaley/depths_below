@@ -38,10 +38,20 @@
   select{width:100%}
 
   .tools{display:grid;grid-template-columns:repeat(2,1fr);gap:6px}
-  .pal{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;max-height:240px;overflow-y:auto;padding-right:2px}
-  .pal button{padding:0;aspect-ratio:1;display:grid;place-items:center;position:relative;background:var(--panel)}
-  .pal img{width:82%;height:82%;object-fit:contain;display:block}
+  .pal{max-height:300px;overflow-y:auto;padding-right:2px}
+  /* Icons alone were unfindable: 34 of them, alphabetical, in a scroll box.
+     "I do not see the crew block" -- it was sixth from the top the whole
+     time. Grouped under the heading you would look under, and named. */
+  .pal h3{margin:8px 0 4px;font-size:10px;font-weight:600;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--dim)}
+  .pal h3:first-child{margin-top:0}
+  .pal .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+  .pal button{padding:4px 2px 3px;display:grid;justify-items:center;gap:2px;
+    position:relative;background:var(--panel);line-height:1.15}
+  .pal img{width:34px;height:34px;object-fit:contain;display:block}
+  .pal span{font-size:9px;color:var(--dim);text-align:center;word-break:break-word}
   .pal button[aria-pressed="true"]{outline:2px solid var(--signal);outline-offset:-2px}
+  .pal button[aria-pressed="true"] span{color:var(--ink)}
   /* Pressure doors share their art with blocks that are solid walls. The
      corner tab is the only thing on the icon that says which is which. */
   .pal button.door::after{content:"";position:absolute;top:2px;right:2px;
@@ -581,21 +591,51 @@
   document.querySelectorAll("[data-tool]").forEach(function (b) {
     b.addEventListener("click", function () { setTool("hull", b.dataset.tool, b); });
   });
-  Object.keys(window.MODS || {}).sort().forEach(function (t) {
+  // Ordered the way you go looking: who is aboard, what keeps them alive,
+  // what moves the ship, what shoots, then the fittings.
+  var CATS = [
+    ["Crew", "Crew"], ["LifeSupport", "Life support"], ["Power", "Power"],
+    ["Propulsion", "Propulsion"], ["Control", "Control"], ["Detection", "Detection"],
+    ["Weapons", "Weapons"], ["Storage", "Storage"], ["Structural", "Structural"],
+    ["Utility", "Utility"]
+  ];
+  var all = Object.keys(window.MODS || {}).sort();
+  var placed = {};
+  CATS.forEach(function (c) {
+    var members = all.filter(function (t) { return window.MODS[t].cat === c[0]; });
+    if (!members.length) return;
+    var h = document.createElement("h3"); h.textContent = c[1];
+    var grid = document.createElement("div"); grid.className = "grid";
+    palHost.appendChild(h); palHost.appendChild(grid);
+    members.forEach(function (t) { placed[t] = 1; grid.appendChild(palButton(t)); });
+  });
+  var rest = all.filter(function (t) { return !placed[t]; });
+  if (rest.length) {
+    var h = document.createElement("h3"); h.textContent = "Other";
+    var grid = document.createElement("div"); grid.className = "grid";
+    palHost.appendChild(h); palHost.appendChild(grid);
+    rest.forEach(function (t) { grid.appendChild(palButton(t)); });
+  }
+
+  function palButton(t) {
+    var d = window.MODS[t];
     var b = document.createElement("button");
-    b.type = "button"; b.title = pretty(t) + " — " + window.MODS[t].cost + "c";
+    b.type = "button";
+    b.title = pretty(t) + " — " + d.cost + "c" +
+      (d.w * d.h > 1 ? " · " + d.w + "x" + d.h : "");
     b.setAttribute("aria-pressed", "false");
-    var i = document.createElement("img"); i.src = "mod/" + t + ".png"; i.alt = pretty(t);
-    b.appendChild(i);
-    if (window.MODS[t].door) {
+    var i = document.createElement("img"); i.src = "mod/" + t + ".png"; i.alt = "";
+    var n = document.createElement("span"); n.textContent = pretty(t);
+    b.appendChild(i); b.appendChild(n);
+    if (d.door) {
       b.classList.add("door");
-      b.title = pretty(t) + " — " + window.MODS[t].cost +
+      b.title = pretty(t) + " — " + d.cost +
         "c · crew walk through it, it shuts on its own when the compartment " +
         "beyond loses pressure, and reopens when the pressure comes back";
     }
     b.addEventListener("click", function () { setTool("mod", t, b); });
-    palHost.appendChild(b);
-  });
+    return b;
+  }
 
   // ---- persistence -----------------------------------------------------
   var statusEl = document.getElementById("status");
