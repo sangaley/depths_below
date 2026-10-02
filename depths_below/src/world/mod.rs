@@ -13,6 +13,10 @@ pub mod station_types;
 #[allow(unused_imports)]
 pub use generation::*;
 pub use chunks::*;
+// Biome selection is parked for the demo — see `update_biome` below. The
+// table stays compiled (and tested) so turning it back on is a one-line
+// change rather than an archaeology exercise.
+#[allow(unused_imports)]
 pub use biomes::*;
 
 pub struct WorldPlugin;
@@ -42,7 +46,7 @@ impl Plugin for WorldPlugin {
                 (
                     update_chunks,
                     check_depth_zone_change,
-                    update_biome,
+                    // update_biome is OFF for the demo — see the function.
                     tick_market_events,
                     // Both claim the shared F press (resources::InteractPress),
                     // so they must sit behind the salvage handler: crew on the
@@ -167,7 +171,26 @@ pub fn depth_to_zone(depth: f32) -> crate::components::ZoneType {
     }
 }
 
-/// Updates current biome based on ship position
+/// Updates current biome based on ship position. PARKED for the demo.
+///
+/// Two things were wrong with it and the second is the fatal one.
+///
+/// The bands are 200, 500, 1000 and 2000 units from the nearest berth, and a
+/// ship crosses all five in a few seconds of ordinary flight — so it fired
+/// "Entered DeadZone biome" toasts continuously while you were still in sight
+/// of the station.
+///
+/// And nothing reads the result. `WorldState.current_biome` is written here
+/// and the only other mention of it in the whole tree is its default. The one
+/// consumer, `biome_creature_weights`, is called from `src/parked/creatures`,
+/// which is not compiled — there is no `mod parked` anywhere. So the system
+/// cost a notification every few seconds and changed nothing about the game.
+///
+/// To bring it back: give the bands a scale that matches how far a ship
+/// actually travels (the system's own `danger_tier` is the authored
+/// near-weak/far-strong curve and is the natural input), and wire a consumer
+/// that does something with the biome before the toast is worth showing.
+#[allow(dead_code)]
 fn update_biome(
     ship_query: Query<&Transform, With<Ship>>,
     stations: Res<home_base::SystemStations>,
