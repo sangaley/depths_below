@@ -252,6 +252,45 @@ pub struct SimulatedShip {
     /// spawns, and read back off when it's destroyed so contract tracking
     /// can tell "this exact ship died" from "some ship of that faction died".
     pub bounty_id: Option<u32>,
+    /// Where this ship is currently going. Patrols used to be a random walk:
+    /// a 30 u/s velocity nudged by a random turn every tick, which from the
+    /// map reads as a dot vibrating in place rather than a ship with somewhere
+    /// to be. Now it steers for a point, arrives, and picks another — and the
+    /// points are weighted toward whatever is worth guarding or robbing.
+    pub destination: Vec2,
+    /// This ship's own cruise speed. Per-ship rather than a shared constant so
+    /// a lane of traffic has fast and slow movers in it instead of a rank of
+    /// identical dots.
+    pub cruise: f32,
+}
+
+impl SimulatedShip {
+    /// Everything that is the same for every spawn, so the four construction
+    /// sites cannot drift apart on the fields none of them care about.
+    pub fn patrolling(
+        system_id: u32,
+        faction: AiShipType,
+        position: Vec2,
+        home_zone: Vec2,
+        patrol_radius: f32,
+        cruise: f32,
+    ) -> Self {
+        SimulatedShip {
+            system_id,
+            faction,
+            position,
+            velocity: Vec2::ZERO,
+            health: 1.0,
+            fuel: 1.0,
+            behavior: SimBehavior::Patrolling,
+            home_zone,
+            patrol_radius,
+            spawned: false,
+            bounty_id: None,
+            destination: position,
+            cruise,
+        }
+    }
 }
 
 /// Attached to an AI ship's root entity when it was spawned from a
