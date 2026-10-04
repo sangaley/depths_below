@@ -4,6 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build & Run Commands
 
+The crate is NESTED: `Cargo.toml` sits beside this file in `depths_below/`,
+one level below the git repository root. Every command here runs from this
+directory. Run them from the repo root and cargo reports "could not find
+`Cargo.toml`", which reads like a broken checkout rather than a wrong `cd`.
+
 ```bash
 cargo build              # Build (dev profile, dynamic linking enabled)
 cargo run                # Run the game
@@ -11,11 +16,31 @@ cargo build --release    # Release build (LTO enabled, single codegen unit)
 cargo check              # Fast type-check without full build
 cargo clippy             # Lint (if clippy installed)
 cargo test               # Unit tests (in-file `#[cfg(test)]` modules)
+
+# Write designs/factions/<slug>.json for any faction that has none. Normally
+# a layout self-exports on its first spawn, so a faction nobody has met yet
+# has no file -- which is how Void Titan stayed unexported from July 2026,
+# when designs started winning over layouts, until October.
+cargo test export_missing_faction_designs -- --ignored
 ```
 
-No CI/CD pipeline. Tests are sparse and cover mostly pure logic — registry
-integrity, material tiers, stat calculation, inventory, grid indexing. Most
-systems are verified by playtesting, not by tests.
+No CI/CD pipeline, and playtesting is still how most behaviour gets judged.
+The test suite is no longer thin, though: ~166 in-file tests, and they are not
+all pure logic. Several modules stand up a headless `App` and run real systems
+over it — air pressure and venting, crew suction, interior walking, engine-room
+staffing, deaths and burial, faction layout invariants.
+
+Two things to know before writing one:
+
+- Test modules are named for what they cover (`air_tests`, `suit_tests`,
+  `walking_tests`), NOT `mod tests`. Grepping for `mod tests` finds nothing
+  and makes a well-covered file look untested.
+- Do NOT use `MinimalPlugins` for anything rate-based. Its `TimePlugin`
+  rewrites `Time` from the wall clock every update, so a hand-advanced delta
+  is discarded and per-second rates measure as frozen — which looks like a
+  physics bug, not a harness bug. Use `App::new()` plus
+  `init_resource::<Time>()` and drive the clock yourself; see
+  `air_tests::sim_app`.
 
 ## Parallel sessions: one worktree each
 
