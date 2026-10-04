@@ -1344,3 +1344,265 @@ pub fn project_force_fields(
         }
     }
 }
+
+#[cfg(test)]
+mod suction_tests {
+    use super::*;
+    use crate::crew::burial::{DriftingCorpse, DriftingDead};
+
+    /// No `MinimalPlugins`, for the reason spelled out on `air_tests::sim_app`:
+    /// its `TimePlugin` rewrites `Time` from the wall clock, and every rate in
+    /// this file is per-second.
+    ///
+    /// `crew_suction` alone, with no `sync_air_tiles` ahead of it -- that
+    /// system clears `flow` at the top of every frame, and these tests want to
+    /// state a draught and watch what it does to somebody rather than generate
+    /// one from a hull.
+    fn suction_app() -> App {
+        let mut app = App::new();
+        app.init_resource::<Time>();
+        app.init_resource::<AirField>();
+        app.init_resource::<crate::celestial::resources::SystemStreamingManager>();
+        app.init_resource::<DriftingDead>();
+        app.add_message::<CrewDamaged>();
+        app.add_message::<CrewDied>();
+        app.add_systems(Update, crew_suction);
+        app.world_mut().spawn((Ship, Velocity(Vec2::ZERO)));
+        app
+    }
+
+    /// Someone standing in the middle of cell `(0, 0)`.
+    fn crew_at_origin(app: &mut App, health: f32) -> Entity {
+        let local = crate::building::grid_to_local(IVec2::ZERO).extend(0.6);
+        let transform = Transform::from_translation(local);
+        app.world_mut()
+            .spawn((
+                CrewMember {
+                    name: "Vasquez".into(),
+                    health,
+                    max_health: 100.0,
+                    oxygen: 100.0,
+                    morale: 100.0,
+                    state: CrewState::Idle,
+                },
+                transform,
+                GlobalTransform::from(transform),
+            ))
+            .id()
+    }
+
+    /// A draught running +X along the row through cell `(0, 0)`. `vent` makes
+    /// that one cell a hole, which is what ejection additionally requires.
+    ///
+    /// Deliberately a RUN of cells rather than the single cell everyone starts
+    /// on. A one-tile draught blows you out of itself: at `SUCTION_COUPLING`
+    /// a body crosses a 66-unit cell in about a quarter of a second, after
+    /// which `air.flow` has no entry for where it is standing and the draught
+    /// stops reaching it. That self-limiting is correct behaviour, and it also
+    /// means a one-tile draught can never be held in long enough to measure
+    /// anything that accumulates. Real breaches pull down a whole compartment.
+    fn draught(app: &mut App, strength: f32, vent: bool) {
+        let mut air = app.world_mut().resource_mut::<AirField>();
+        for x in 0..12 {
+            air.flow.insert(IVec2::new(x, 0), Vec2::X * strength);
+        }
+        if vent {
+            air.vents.insert(IVec2::ZERO, (Vec2::X, 1.0));
+        }
+    }
+
+    fn step(app: &mut App, seconds: f32, steps: u32) {
+        for _ in 0..steps {
+            let delta = std::time::Duration::from_secs_f32(seconds / steps as f32);
+            app.world_mut().resource_mut::<Time>().advance_by(delta);
+            app.update();
+        }
+    }
+
+    fn crew(app: &App, e: Entity) -> &CrewMember {
+        app.world().get::<CrewMember>(e).unwrap()
+    }
+
+    fn corpses(app: &mut App) -> usize {
+        app.world_mut()
+            .query::<&DriftingCorpse>()
+            .iter(app.world())
+            .count()
+    }
+
+    /// The drag itself: a body in moving air is carried with it, at
+    /// `SUCTION_COUPLING` per unit of flow.
+    #[test]
+    fn a_draught_carries_a_body_with_it() {
+        let mut app = suction_app();
+        let hand = crew_at_origin(&mut app, 100.0);
+        draught(&mut app, 0.3, false);
+
+        let before = app.world().get::<Transform>(hand).unwrap().translation.x;
+        step(&mut app, 0.1, 1);
+        let after = app.world().get::<Transform>(hand).unwrap().translation.x;
+
+        let expected = 0.3 * SUCTION_COUPLING * 0.1;
+        assert!(
+            (after - before - expected).abs() < 0.5,
+            "moved {} units, expected about {expected}",
+            after - before
+        );
+    }
+
+    /// The promise in `crew_suction`'s own comment: a hard draught in open
+    /// corridor shoves you about, but only a cell with a hole in it can take
+    /// you out of the ship. Without the vent check, any strong flow anywhere
+    /// would delete whoever was standing in it.
+    #[test]
+    fn a_hard_draught_mid_corridor_cannot_delete_anyone() {
+        let mut app = suction_app();
+        let hand = crew_at_origin(&mut app, 100.0);
+        draught(&mut app, 0.95, false);
+        step(&mut app, 1.0, 10);
+
+        assert_eq!(crew(&app, hand).health, 100.0, "killed by a draught with no hole in it");
+        assert_eq!(corpses(&mut app), 0, "left a body in a sealed corridor");
+        assert!(
+            app.world().resource::<DriftingDead>().bodies.is_empty(),
+            "registered a death with no hole to go out of"
+        );
+    }
+
+    /// And the other half: on a vent, hard enough, you go through it.
+    #[test]
+    fn air_takes_a_body_out_through_the_hole() {
+        let mut app = suction_app();
+        let hand = crew_at_origin(&mut app, 100.0);
+        draught(&mut app, 0.95, true);
+        step(&mut app, 0.1, 1);
+
+        assert_eq!(crew(&app, hand).health, 0.0, "survived being blown out of the hull");
+        assert_eq!(corpses(&mut app), 1, "no body left behind");
+
+        let dead = app.world().resource::<DriftingDead>();
+        assert_eq!(dead.bodies.len(), 1, "body never reached the drifting-dead register");
+        assert_eq!(dead.bodies[0].name, "Vasquez", "the register lost who they were");
+    }
+
+    /// Flow under `EJECT_FLOW` is a tug, not an exit, even standing on the hole.
+    #[test]
+    fn a_weak_draught_over_a_hole_holds_on_to_them() {
+        let mut app = suction_app();
+        let hand = crew_at_origin(&mut app, 100.0);
+        draught(&mut app, EJECT_FLOW - 0.05, true);
+        step(&mut app, 1.0, 10);
+
+        assert_eq!(crew(&app, hand).health, 100.0, "a draught too weak to eject killed them anyway");
+        assert_eq!(corpses(&mut app), 0);
+    }
+
+    /// Ejection must report a WOUND and let `report_crew_deaths` name the
+    /// death. Writing `CrewDied` here as well kills the same person twice --
+    /// the roster is decremented twice and two bodies are left. The comment in
+    /// `crew_suction` records that this already happened once.
+    #[test]
+    fn ejection_reports_a_wound_and_not_a_death() {
+        let mut app = suction_app();
+        let hand = crew_at_origin(&mut app, 100.0);
+        draught(&mut app, 0.95, true);
+        step(&mut app, 0.1, 1);
+
+        let wounds = app.world().resource::<Messages<CrewDamaged>>();
+        let mut cursor = wounds.get_cursor();
+        let written: Vec<_> = cursor.read(wounds).collect();
+        assert_eq!(written.len(), 1, "expected exactly one wound report");
+        assert_eq!(written[0].crew, hand);
+        assert!(
+            matches!(written[0].source, CrewDamageSource::Decompression),
+            "wound was not attributed to decompression"
+        );
+        assert_eq!(written[0].amount, 100.0, "wound did not account for all their health");
+
+        let deaths = app.world().resource::<Messages<CrewDied>>();
+        let mut cursor = deaths.get_cursor();
+        assert_eq!(
+            cursor.read(deaths).count(),
+            0,
+            "crew_suction raised CrewDied itself -- report_crew_deaths will raise it again"
+        );
+    }
+
+    /// A force field over the hole holds people in as well as air. The cell is
+    /// still a vent -- the plate still wants patching -- but nothing leaves.
+    #[test]
+    fn a_force_field_keeps_them_inside() {
+        let mut app = suction_app();
+        let hand = crew_at_origin(&mut app, 100.0);
+        draught(&mut app, 0.95, true);
+        app.world_mut().resource_mut::<AirField>().shielded.insert(IVec2::ZERO);
+        step(&mut app, 1.0, 10);
+
+        assert_eq!(crew(&app, hand).health, 100.0, "pulled through a held breach");
+        assert_eq!(corpses(&mut app), 0);
+    }
+
+    /// Being dragged toward a hole is frightening, and morale is how this game
+    /// says so. Sized so roughly five seconds of it breaks someone sound.
+    #[test]
+    fn a_hard_draught_breaks_morale() {
+        let mut app = suction_app();
+        let hand = crew_at_origin(&mut app, 100.0);
+        draught(&mut app, PANIC_FLOW + 0.05, false);
+        step(&mut app, 2.0, 20);
+
+        let expected = 100.0 - PANIC_MORALE_DRAIN * 2.0;
+        let morale = crew(&app, hand).morale;
+        assert!(
+            (morale - expected).abs() < 2.0,
+            "morale {morale} after two seconds in a draught, expected about {expected}"
+        );
+    }
+
+    /// And a glancing tug on the way past costs nothing, which is what keeps
+    /// the morale drain from firing on every small air movement.
+    #[test]
+    fn a_glancing_tug_costs_no_morale() {
+        let mut app = suction_app();
+        let hand = crew_at_origin(&mut app, 100.0);
+        draught(&mut app, PANIC_FLOW - 0.05, false);
+        step(&mut app, 2.0, 20);
+
+        assert_eq!(crew(&app, hand).morale, 100.0, "a weak draught frightened them");
+    }
+
+    /// Someone already dead is not ejected again. Without the health guard a
+    /// body lying on a vent tile would be re-registered and re-spawned every
+    /// frame until the compartment emptied.
+    #[test]
+    fn the_dead_are_not_blown_out_twice() {
+        let mut app = suction_app();
+        crew_at_origin(&mut app, 0.0);
+        draught(&mut app, 0.95, true);
+        step(&mut app, 1.0, 10);
+
+        assert_eq!(corpses(&mut app), 0, "spawned a second body for someone already dead");
+        assert!(
+            app.world().resource::<DriftingDead>().bodies.is_empty(),
+            "re-registered a body that was already accounted for"
+        );
+    }
+
+    /// A cell with no flow entry is still air, not a draught. `sync_air_tiles`
+    /// clears the whole map each frame and only vented or diffusing cells get
+    /// an entry back, so "absent" is the common case and must be inert.
+    #[test]
+    fn still_air_moves_nobody() {
+        let mut app = suction_app();
+        let hand = crew_at_origin(&mut app, 100.0);
+        let before = app.world().get::<Transform>(hand).unwrap().translation;
+        step(&mut app, 1.0, 10);
+
+        assert_eq!(
+            app.world().get::<Transform>(hand).unwrap().translation,
+            before,
+            "a body moved with no air moving"
+        );
+        assert_eq!(crew(&app, hand).morale, 100.0);
+    }
+}

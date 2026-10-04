@@ -303,3 +303,108 @@ pub fn cleanup_pressure_overlay_on_exit(
         commands.entity(entity).try_despawn();
     }
 }
+
+#[cfg(test)]
+mod overlay_tests {
+    use super::*;
+
+    fn field(cells: &[(IVec2, Vec2)]) -> AirField {
+        let mut air = AirField::default();
+        for &(cell, flow) in cells {
+            air.flow.insert(cell, flow);
+        }
+        air
+    }
+
+    /// `sample_flow` rolls its own grid mapping -- `floor` plus a fraction,
+    /// rather than `local_to_grid`'s `round` -- because bilinear blending needs
+    /// the fraction, not the nearest cell. The two must still agree at a cell
+    /// centre, and they only do while both carry the same 33-unit Y offset.
+    /// Drop it from one of them and the whole overlay draws half a tile out.
+    #[test]
+    fn flow_at_a_cell_centre_is_that_cells_own_flow() {
+        for cell in [IVec2::ZERO, IVec2::new(3, 2), IVec2::new(-4, -2), IVec2::new(0, -7)] {
+            let air = field(&[(cell, Vec2::new(0.8, -0.3))]);
+            let sampled = sample_flow(&air, grid_to_local(cell));
+            assert!(
+                sampled.distance(Vec2::new(0.8, -0.3)) < 1e-4,
+                "cell {cell} sampled as {sampled}, not its own flow -- grid mapping is skewed"
+            );
+        }
+    }
+
+    /// Halfway between two centres reads as the blend of both. This is what
+    /// lets a trail bend instead of snapping direction at each tile border.
+    #[test]
+    fn flow_between_two_cells_is_the_blend_of_them() {
+        let air = field(&[(IVec2::ZERO, Vec2::X), (IVec2::new(1, 0), Vec2::NEG_X)]);
+        let midpoint = grid_to_local(IVec2::ZERO) + Vec2::X * (GRID_SIZE / 2.0);
+
+        let sampled = sample_flow(&air, midpoint);
+        assert!(
+            sampled.length() < 1e-4,
+            "two opposed cells blended to {sampled}, expected them to cancel"
+        );
+
+        let quarter = grid_to_local(IVec2::ZERO) + Vec2::X * (GRID_SIZE / 4.0);
+        assert!(
+            sample_flow(&air, quarter).x > 0.4,
+            "a quarter of the way across should still read mostly like the cell it is in"
+        );
+    }
+
+    /// Nothing outside the field. A trail that drifts off the ship has to come
+    /// to rest rather than inherit whatever the last cell was doing.
+    #[test]
+    fn flow_outside_the_field_is_still() {
+        let air = field(&[(IVec2::ZERO, Vec2::X * 0.9)]);
+        let far = grid_to_local(IVec2::new(40, 40));
+        assert_eq!(sample_flow(&air, far), Vec2::ZERO, "air moving where there is no ship");
+    }
+
+    /// Pressure reads the containing cell, and an undescribed cell reads as
+    /// VACUUM -- opposite to `AirField::mean`, which reads an unknown tile as
+    /// full so a ship with no detected rooms never looks like it is
+    /// suffocating. Here the default has to be empty: off the ship there is no
+    /// air, and drawing it heavy would outline the hull in bright lines.
+    #[test]
+    fn pressure_samples_the_containing_cell_and_defaults_to_vacuum() {
+        let mut air = AirField::default();
+        air.pressure.insert(IVec2::new(2, -1), 0.6);
+
+        let centre = grid_to_local(IVec2::new(2, -1));
+        assert_eq!(sample_pressure(&air, centre), 0.6);
+        assert_eq!(
+            sample_pressure(&air, centre + Vec2::splat(GRID_SIZE * 0.3)),
+            0.6,
+            "a point well inside the cell sampled a different cell"
+        );
+        assert_eq!(
+            sample_pressure(&air, grid_to_local(IVec2::new(9, 9))),
+            0.0,
+            "an undescribed cell read as holding air"
+        );
+    }
+
+    /// Vacuum draws darker AND more opaque than air: the tint is how the
+    /// overlay says "there is nothing here", so the empty end of the scale has
+    /// to be the one you notice. The alpha term runs backwards on purpose.
+    #[test]
+    fn vacuum_draws_darker_and_heavier_than_full_air() {
+        let empty = pressure_color(0.0).to_srgba();
+        let full = pressure_color(1.0).to_srgba();
+
+        assert!(empty.blue < full.blue, "vacuum is not darker than air");
+        assert!(empty.alpha > full.alpha, "vacuum is not more opaque than air");
+        assert_eq!(
+            pressure_color(-5.0).to_srgba(),
+            empty,
+            "pressure below zero was not clamped"
+        );
+        assert_eq!(
+            pressure_color(9.0).to_srgba(),
+            full,
+            "pressure above full was not clamped"
+        );
+    }
+}
