@@ -906,4 +906,89 @@ mod layout_tests {
             }
         }
     }
+
+    /// Every faction must exist as an exported design on disk.
+    ///
+    /// `designs/factions/<slug>.json` WINS over the layout in this file, and
+    /// a layout self-exports there the first time one of its ships spawns.
+    /// That means a faction nobody has met yet has no file, and the only copy
+    /// of its ship is the Rust fallback -- so what a fresh clone fights is
+    /// whatever this file happens to say, not what was tuned in the hull yard.
+    ///
+    /// Void Titan was missing exactly this way: it spawns only at the extreme
+    /// edge of explored space, so no run had ever produced one.
+    ///
+    /// Deliberately NOT compared against `get_layout`. The JSON is allowed to
+    /// diverge -- editing it is the documented workflow and the whole reason
+    /// it wins -- so this asserts only what stays true however it is edited.
+    /// If this fails, run:
+    ///
+    ///     cargo test export_missing_faction_designs -- --ignored
+    #[test]
+    fn every_faction_has_an_exported_design() {
+        let mut missing: Vec<String> = Vec::new();
+
+        for ship in ALL {
+            let slug = design_slug(ship);
+            let path = format!("designs/factions/{slug}.json");
+            match crate::building::blueprint::load_design_file(&path) {
+                None => missing.push(format!("{slug}: absent, or failed to parse")),
+                Some(design) => {
+                    if design.name != slug {
+                        missing.push(format!(
+                            "{slug}: file names itself {:?}, which is the name the game shows",
+                            design.name
+                        ));
+                    }
+                    if design.hull_cells.is_empty() {
+                        missing.push(format!("{slug}: no hull cells -- ship has no body"));
+                    }
+                    if design.modules.is_empty() {
+                        missing.push(format!("{slug}: no modules -- ship cannot act"));
+                    }
+                }
+            }
+        }
+
+        assert!(
+            missing.is_empty(),
+            "faction designs not on disk:\n{}\n\nregenerate with: \
+             cargo test export_missing_faction_designs -- --ignored",
+            missing.join("\n")
+        );
+    }
+
+    /// Writes an exported design for any faction that has none, through the
+    /// same `to_design` path the game self-exports with.
+    ///
+    /// Ignored by default because it writes into the repository. It exists so
+    /// that filling the gap is one command, rather than hunting for a boss at
+    /// the edge of the galaxy to make the game export it for you.
+    #[test]
+    #[ignore = "writes into designs/factions; run deliberately"]
+    fn export_missing_faction_designs() {
+        let mut written: Vec<String> = Vec::new();
+
+        for ship in ALL {
+            let slug = design_slug(ship);
+            let path = format!("designs/factions/{slug}.json");
+            if crate::building::blueprint::load_design_file(&path).is_some() {
+                continue;
+            }
+            let design = get_layout(ship).to_design(slug);
+            crate::building::blueprint::write_design_file(&path, &design)
+                .unwrap_or_else(|e| panic!("could not write {path}: {e}"));
+            written.push(format!(
+                "{slug} ({} hull cells, {} modules)",
+                design.hull_cells.len(),
+                design.modules.len()
+            ));
+        }
+
+        if written.is_empty() {
+            println!("every faction already has an exported design");
+        } else {
+            println!("exported:\n  {}", written.join("\n  "));
+        }
+    }
 }
