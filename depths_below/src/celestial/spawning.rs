@@ -195,17 +195,12 @@ fn asteroid_sprite(size: f32, resource: ResourceNodeType, variant: usize) -> Str
 /// system to stumble into, and since this is the one function both the
 /// initial system and every warp jump call, mining works everywhere for
 /// free instead of only in the system you started in.
-pub fn spawn_asteroid_belt(
+pub fn spawn_asteroid_field(
     commands: &mut Commands,
     asset_server: &AssetServer,
-    // The STAR's centre, not the belt's. The belt is an annulus around it.
-    star_center: Vec2,
-    // Distance from the star to the middle of the belt.
-    belt_radius: f32,
-    // Radial thickness. Rocks land within +/- half of this of belt_radius, so
-    // the belt reads as a band rather than a shell.
-    belt_width: f32,
+    center: Vec2,
     count: u32,
+    spread: f32,
     system_id: u32,
     rng: &mut impl Rng,
     // 1.0 = untouched, scales down toward 0.0 as the system's ambient
@@ -224,17 +219,11 @@ pub fn spawn_asteroid_belt(
         let mass = size * 0.5;
         let radius = size * 0.5;
 
-        let mut pos = star_center;
+        let mut pos = center;
         for _attempt in 0..8 {
             let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-            // Offset from the belt's own radius, not from the star -- a disc
-            // sample would put rocks at every distance from the star,
-            // including inside it. The old field was a disc centred 50k out
-            // with a 30k spread, which for a Main-or-larger star (80k-150k
-            // radius) left every single rock inside the star's solid body.
-            let offset = rng.gen_range(-belt_width * 0.5..belt_width * 0.5);
-            let dist = belt_radius + offset;
-            pos = star_center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
+            let dist = rng.gen_range(0.0..spread);
+            pos = center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
             if placed.iter().all(|(p, r)| pos.distance(*p) > (radius + r) * 1.1 + 40.0) {
                 break;
             }

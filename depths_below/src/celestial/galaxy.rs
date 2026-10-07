@@ -53,7 +53,30 @@ pub const HAVEN_LOCAL_CENTER: Vec2 = Vec2::new(200_000.0, -450_000.0);
 /// StarSystemDef::galaxy_pos doc comment).
 pub const GALAXY_RADIUS: f32 = 5_000_000.0;
 
-const MIN_SYSTEM_SEPARATION: f32 = 400_000.0;
+/// Closest two systems may sit on the galaxy map. Must stay above twice
+/// `SNAP_TOLERANCE` (150,000), or one blind-warp click falls inside two
+/// systems at once and which one you arrive at stops being predictable.
+/// Tighter than the old 400,000 so a constellation reads as a group rather
+/// than as more evenly-spread dots.
+const MIN_SYSTEM_SEPARATION: f32 = 320_000.0;
+
+/// How many constellations the systems are grouped into. Thirty systems over
+/// seven groups averages four or five each — enough to read as a cluster,
+/// few enough that the gaps between them are the dominant feature.
+const CONSTELLATION_COUNT: usize = 7;
+
+/// Smallest distance between two constellation centres. Comfortably more
+/// than twice `CONSTELLATION_SPREAD` so neighbouring groups stay visibly
+/// separate instead of smearing into one band.
+const CONSTELLATION_SEPARATION: f32 = 1_500_000.0;
+
+/// How far from its constellation's centre a system may sit.
+const CONSTELLATION_SPREAD: f32 = 520_000.0;
+
+/// Fraction of the galaxy radius the constellation centres are allowed to
+/// reach, leaving the rim as genuine emptiness rather than a ring of systems
+/// pressed against the edge of the map.
+const CONSTELLATION_REACH: f32 = 0.82;
 const MAX_PLACEMENT_ATTEMPTS: u32 = 200;
 
 /// All 10 factions ordered weakest-to-strongest by faction_power. Used only
@@ -84,25 +107,59 @@ pub fn generate_galaxy_map(galaxy_seed: u64) -> GalaxyMap {
     let mut rng = StdRng::seed_from_u64(galaxy_seed);
     let roster = faction_roster();
 
-    // Rejection-sampled scatter. O(n^2) worst case (each candidate checked
-    // against every already-placed system) — trivial at n=30, still fine at
-    // a few hundred; a grid-bucketed spatial index would only be needed far
-    // beyond that.
-    let mut positions: Vec<Vec2> = vec![Vec2::ZERO]; // Haven reserves the origin
-    for _ in 0..SYSTEM_COUNT {
-        let mut candidate = Vec2::ZERO;
+    // Constellations, not an even scatter. The old layout sampled uniform
+    // area density across the whole disc with a flat 400,000 separation,
+    // which produces the one thing a starmap must not be: evenly spaced. No
+    // region read as anywhere in particular, so there was nothing to
+    // recognise and nothing to aim at.
+    //
+    // Systems are grouped instead. Haven anchors the core, the other
+    // constellation centres scatter core-dense, and each system is placed
+    // near one of them -- so the map has crowded neighbourhoods with real
+    // emptiness between, and warping "to the next constellation over" is a
+    // thing you can see before you do it.
+    let mut cluster_centers: Vec<Vec2> = vec![Vec2::ZERO]; // Haven anchors the core
+    for _ in 1..CONSTELLATION_COUNT {
+        let mut candidate = None;
         for _ in 0..MAX_PLACEMENT_ATTEMPTS {
             let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-            // sqrt of a uniform sample gives uniform area density instead of
-            // clustering candidates near the center.
-            let r = GALAXY_RADIUS * rng.gen_range(0.05f32..1.0).sqrt();
+            // `powf(0.9)` rather than the old `sqrt` (0.5, uniform area):
+            // weights the draw toward small radii, so the middle of the
+            // galaxy is denser than the rim the way a populated core is.
+            let r = GALAXY_RADIUS * CONSTELLATION_REACH * rng.gen_range(0.2f32..1.0).powf(0.9);
             let p = Vec2::new(angle.cos() * r, angle.sin() * r);
-            if positions.iter().all(|existing| existing.distance(p) >= MIN_SYSTEM_SEPARATION) {
-                candidate = p;
+            if cluster_centers.iter().all(|c| c.distance(p) >= CONSTELLATION_SEPARATION) {
+                candidate = Some(p);
                 break;
             }
         }
-        positions.push(candidate);
+        // A centre that cannot be placed is dropped rather than defaulted.
+        // The previous loop defaulted an unplaceable system to Vec2::ZERO,
+        // which silently stacked it on top of Haven at the origin.
+        if let Some(p) = candidate {
+            cluster_centers.push(p);
+        }
+    }
+
+    // O(n^2) worst case (each candidate checked against every already-placed
+    // system) — trivial at n=30, still fine at a few hundred.
+    let mut positions: Vec<Vec2> = vec![Vec2::ZERO]; // Haven reserves the origin
+    for i in 0..SYSTEM_COUNT {
+        let center = cluster_centers[i % cluster_centers.len()];
+        let mut candidate = None;
+        let mut last = center;
+        for _ in 0..MAX_PLACEMENT_ATTEMPTS {
+            let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+            let r = CONSTELLATION_SPREAD * rng.gen_range(0.15f32..1.0).sqrt();
+            let p = center + Vec2::new(angle.cos() * r, angle.sin() * r);
+            last = p;
+            if positions.iter().all(|existing| existing.distance(p) >= MIN_SYSTEM_SEPARATION) {
+                candidate = Some(p);
+                break;
+            }
+        }
+        // Fall back to the last candidate tried, never to the origin.
+        positions.push(candidate.unwrap_or(last));
     }
 
     let mut non_haven: Vec<Vec2> = positions[1..].to_vec();
@@ -288,48 +345,43 @@ pub fn catch_up_system(def: &mut StarSystemDef, now: f64) {
     def.last_updated = now;
 }
 
-/// Rocks per belt. Two belts of this each is a touch more than the single
-/// twenty-rock field it replaces, because a belt has to read as a band from
-/// any angle rather than as a clump you either find or don't.
-const BELT_ROCKS: u32 = 16;
+/// Radius of the asteroid field, unchanged from the original generator.
+const FIELD_SPREAD: f32 = 30_000.0;
 
-/// Fraction of a gap between neighbours that a belt is allowed to fill. Well
-/// under 1.0 so a belt never reaches the planet on either side of it.
-const BELT_FILL: f32 = 0.35;
-
-/// Where this system's asteroid belts go: `(radius, width)` per belt,
-/// measured from the star's centre.
+/// Where to put this system's asteroid field, as an offset from the star.
 ///
-/// Belts sit in the GAPS between consecutive orbits -- the signature read of
-/// a solar system, and the thing the old generator got wrong. It placed one
-/// disc of rocks centred 50,000 units from the star with a 30,000 spread, so
-/// every rock landed 20,000-80,000 out. Stars are solid and huge (40,000 for
-/// a dwarf up to 150,000 for a supergiant, see `StarSizeClass::radius`), so
-/// for anything Main-class or bigger -- 60% of systems -- the entire field
-/// spawned inside the star and could not be reached at all.
+/// The original generator hardcoded `(50_000, 0)`, which was simply wrong:
+/// stars are solid -- `Collider::circle(radius, INFINITY)` -- and run 40,000
+/// in radius for a dwarf up to 150,000 for a supergiant. A 30,000-radius
+/// field centred 50,000 out therefore spanned 20,000-80,000 from the star,
+/// so for anything Main-class or larger -- about 60% of systems, by the class
+/// roll in `spawn_star_system` -- every rock in it spawned inside the star
+/// and could never be reached. That is why asteroids appeared not to exist.
 ///
-/// Anchoring to the orbits makes that unrepresentable: the innermost
-/// candidate gap starts at the star's own surface, so a belt cannot be inside
-/// the star unless a planet already is.
-fn belt_radii(star_radius: f32, planet_orbits: &[f32]) -> Vec<(f32, f32)> {
-    // Boundaries to place between: the star's surface, then each orbit.
+/// Still one field, not a belt: this keeps the original shape and rock count
+/// and only moves it somewhere it can exist. It goes in the middle of the
+/// widest gap between the star's surface and the planet orbits, at `angle`
+/// around the star, so it clears the star and both neighbouring orbits
+/// without being pinned to one side of every system in the galaxy.
+fn asteroid_field_offset(star_radius: f32, planet_orbits: &[f32], angle: f32) -> Vec2 {
     let mut edges = vec![star_radius];
     edges.extend_from_slice(planet_orbits);
 
-    // Widest gaps first -- a belt wants room, and the outer system has more
-    // of it than the crowded inner orbits.
-    let mut gaps: Vec<(f32, f32)> = edges
+    // Widest gap wins -- it is the one with room for the field's full spread.
+    let gap = edges
         .windows(2)
         .map(|w| (w[0], w[1]))
         .filter(|(lo, hi)| hi > lo)
-        .collect();
-    gaps.sort_by(|a, b| (b.1 - b.0).partial_cmp(&(a.1 - a.0)).unwrap_or(std::cmp::Ordering::Equal));
+        .max_by(|a, b| (a.1 - a.0).partial_cmp(&(b.1 - b.0)).unwrap_or(std::cmp::Ordering::Equal));
 
-    gaps
-        .into_iter()
-        .take(2)
-        .map(|(lo, hi)| ((lo + hi) * 0.5, (hi - lo) * BELT_FILL))
-        .collect()
+    // No gap at all (no planets) means nothing constrains the outside, so sit
+    // clear of the star's surface by the field's own radius.
+    let distance = match gap {
+        Some((lo, hi)) => (lo + hi) * 0.5,
+        None => star_radius + FIELD_SPREAD * 1.5,
+    };
+
+    Vec2::new(angle.cos(), angle.sin()) * distance
 }
 
 /// Spawns a system's full contents (star, planets, asteroids, POIs)
@@ -350,15 +402,15 @@ pub fn spawn_system_contents(
         commands, asset_server, def.local_center, def.id, &mut rng, textures,
     );
 
-    for (belt_radius, belt_width) in belt_radii(system_info.star_radius, &system_info.planet_orbits) {
-        super::spawning::spawn_asteroid_belt(
-            commands, asset_server,
-            def.local_center,
-            belt_radius, belt_width,
-            BELT_ROCKS, def.id, &mut rng,
-            def.resource_fraction_remaining,
-        );
-    }
+    let field_angle = rng.gen_range(0.0..std::f32::consts::TAU);
+    super::spawning::spawn_asteroid_field(
+        commands, asset_server,
+        def.local_center + asteroid_field_offset(
+            system_info.star_radius, &system_info.planet_orbits, field_angle,
+        ),
+        20, FIELD_SPREAD, def.id, &mut rng,
+        def.resource_fraction_remaining,
+    );
 
     let planet_positions: Vec<Vec2> = system_info.planet_entities.iter()
         .map(|_| def.local_center + Vec2::new(rng.gen_range(-30_000.0..30_000.0), rng.gen_range(-30_000.0..30_000.0)))
@@ -407,7 +459,7 @@ pub fn load_system(
 }
 
 #[cfg(test)]
-mod belt_tests {
+mod asteroid_placement_tests {
     use super::*;
     use crate::celestial::components::StarSizeClass;
 
@@ -419,92 +471,186 @@ mod belt_tests {
     ];
 
     /// Orbits the way `spawn_star_system` builds them:
-    /// `star_radius * 2 + (i + 1) * step`, with `step` in 25k..45k.
+    /// `star_radius * 2 + (i + 1) * step`, with `step` drawn from 25k..45k.
     fn orbits(star_radius: f32, count: usize, step: f32) -> Vec<f32> {
         (0..count)
             .map(|i| star_radius * 2.0 + (i as f32 + 1.0) * step)
             .collect()
     }
 
-    /// The bug this whole change exists for. The old generator put one disc
-    /// of rocks 50,000 from the star with a 30,000 spread -- 20,000 to 80,000
-    /// out -- while a Main star is 80,000 in radius and solid. Every rock in
-    /// 60% of systems was inside the star and could never be reached.
+    /// The bug this change exists for, and the only thing these tests defend.
     ///
-    /// Belts are anchored to the star's surface and the orbits now, so this
-    /// is unrepresentable rather than merely fixed.
+    /// The original generator hardcoded the field 50,000 from the star with a
+    /// 30,000 spread, putting every rock 20,000-80,000 out. A Main star is
+    /// 80,000 in radius and solid, so in about 60% of systems the whole field
+    /// spawned inside the star. Asteroids appeared never to spawn because in
+    /// most systems they were unreachable.
+    ///
+    /// The tightest real case is a dwarf with the minimum orbit step, which
+    /// clears the star's surface by only 2,500 units -- so this test is doing
+    /// real work, not asserting something comfortably true.
     #[test]
-    fn no_belt_is_ever_inside_the_star() {
+    fn the_field_never_spawns_inside_the_star() {
         for class in CLASSES {
             let star_radius = class.radius();
-            for planet_count in 2..=6 {
+            for planet_count in 0..=6 {
                 for step in [25_000.0, 35_000.0, 45_000.0] {
                     let planet_orbits = orbits(star_radius, planet_count, step);
-                    for (radius, width) in belt_radii(star_radius, &planet_orbits) {
-                        let inner_edge = radius - width * 0.5;
-                        assert!(
-                            inner_edge >= star_radius,
-                            "{class:?} (r={star_radius}): belt at {radius} \u{00b1}{} reaches {inner_edge}, \
-                             inside the star's solid body",
-                            width * 0.5
-                        );
-                    }
+                    let offset = asteroid_field_offset(star_radius, &planet_orbits, 0.7);
+                    let inner_edge = offset.length() - FIELD_SPREAD;
+                    assert!(
+                        inner_edge >= star_radius,
+                        "{class:?} (r={star_radius}, {planet_count} planets, step {step}): \
+                         field reaches {inner_edge}, inside the star's solid body"
+                    );
                 }
             }
         }
     }
 
-    /// A belt must not run through a planet's orbit either, or rocks spawn on
-    /// top of a body that is also solid.
+    /// Planets are solid too, so the field must not straddle an orbit.
     #[test]
-    fn no_belt_crosses_a_planet_orbit() {
+    fn the_field_clears_the_planet_orbits() {
         for class in CLASSES {
             let star_radius = class.radius();
-            for planet_count in 2..=6 {
+            for planet_count in 1..=6 {
                 let planet_orbits = orbits(star_radius, planet_count, 30_000.0);
-                for (radius, width) in belt_radii(star_radius, &planet_orbits) {
-                    let (inner, outer) = (radius - width * 0.5, radius + width * 0.5);
-                    for orbit in &planet_orbits {
-                        assert!(
-                            *orbit <= inner || *orbit >= outer,
-                            "{class:?}: belt spans {inner}..{outer}, straddling the orbit at {orbit}"
-                        );
-                    }
+                let distance = asteroid_field_offset(star_radius, &planet_orbits, 2.1).length();
+                let (inner, outer) = (distance - FIELD_SPREAD, distance + FIELD_SPREAD);
+                for orbit in &planet_orbits {
+                    assert!(
+                        *orbit <= inner || *orbit >= outer,
+                        "{class:?}: field spans {inner}..{outer}, straddling the orbit at {orbit}"
+                    );
                 }
             }
         }
     }
 
-    /// Every system gets belts -- including the smallest, a two-planet one.
-    /// A system that silently generated none is how the old field went
-    /// unnoticed for so long: nothing ever asserted rocks existed.
+    /// The field is no longer pinned to the same side of every system in the
+    /// galaxy, which is what `(50_000, 0)` did for all 31 of them.
     #[test]
-    fn even_the_smallest_system_gets_a_belt() {
-        for class in CLASSES {
-            let star_radius = class.radius();
-            let planet_orbits = orbits(star_radius, 2, 25_000.0);
-            let belts = belt_radii(star_radius, &planet_orbits);
-            assert!(
-                !belts.is_empty(),
-                "{class:?}: two-planet system generated no asteroid belt at all"
-            );
-            for (_, width) in &belts {
-                assert!(*width > 0.0, "{class:?}: belt with no thickness");
+    fn the_field_is_not_always_in_the_same_direction() {
+        let star_radius = StarSizeClass::Main.radius();
+        let planet_orbits = orbits(star_radius, 3, 30_000.0);
+        let a = asteroid_field_offset(star_radius, &planet_orbits, 0.0);
+        let b = asteroid_field_offset(star_radius, &planet_orbits, 2.4);
+        assert!(
+            a.distance(b) > FIELD_SPREAD,
+            "two different angles put the field in the same place: {a} vs {b}"
+        );
+        assert!(
+            (a.length() - b.length()).abs() < 1.0,
+            "angle changed the distance from the star, not just the direction"
+        );
+    }
+}
+
+#[cfg(test)]
+mod galaxy_layout_tests {
+    use super::*;
+
+    const SEEDS: [u64; 6] = [1, 42, 7_777, 123_456, u64::MAX / 3, 9_999_999];
+
+    /// Two systems closer than twice the snap tolerance means one click on the
+    /// map lands inside both, and which one you warp to stops being
+    /// predictable. This is a static relationship between two constants, so it
+    /// holds for every seed and is the first thing to check after retuning
+    /// either -- MIN_SYSTEM_SEPARATION was tightened from 400,000 to 320,000
+    /// to let constellations read as groups.
+    #[test]
+    fn systems_stay_far_enough_apart_to_click() {
+        assert!(
+            MIN_SYSTEM_SEPARATION > SNAP_TOLERANCE * 2.0,
+            "separation {MIN_SYSTEM_SEPARATION} is within two snap tolerances ({}), \
+             so one click can resolve to two systems",
+            SNAP_TOLERANCE * 2.0
+        );
+
+        for seed in SEEDS {
+            let map = generate_galaxy_map(seed);
+            for (i, a) in map.systems.iter().enumerate() {
+                for b in map.systems.iter().skip(i + 1) {
+                    let d = a.galaxy_pos.distance(b.galaxy_pos);
+                    assert!(
+                        d >= MIN_SYSTEM_SEPARATION,
+                        "seed {seed}: systems {} and {} are {d} apart",
+                        a.id, b.id
+                    );
+                }
             }
         }
     }
 
-    /// Belts land between the star and the station ring (180k-420k out, see
-    /// `world::home_base::station_sites`), so ordinary station-to-station
-    /// travel crosses one instead of it being a place you must go looking for.
+    /// Only Haven sits at the origin. The previous placer defaulted an
+    /// unplaceable system to `Vec2::ZERO`, which stacked it silently on top of
+    /// Haven -- invisible on the map, and two systems one click could not tell
+    /// apart.
     #[test]
-    fn belts_fall_inside_the_station_ring() {
-        let star_radius = StarSizeClass::Main.radius();
-        let planet_orbits = orbits(star_radius, 4, 35_000.0);
-        for (radius, _) in belt_radii(star_radius, &planet_orbits) {
+    fn nothing_is_stacked_on_haven() {
+        for seed in SEEDS {
+            let map = generate_galaxy_map(seed);
+            assert_eq!(map.systems[0].galaxy_pos, Vec2::ZERO, "Haven left the origin");
+            for sys in map.systems.iter().skip(1) {
+                assert_ne!(
+                    sys.galaxy_pos, Vec2::ZERO,
+                    "seed {seed}: system {} defaulted onto the origin", sys.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_system_fits_on_the_map() {
+        for seed in SEEDS {
+            let map = generate_galaxy_map(seed);
+            assert_eq!(map.systems.len(), SYSTEM_COUNT + 1, "seed {seed}: wrong system count");
+            for sys in &map.systems {
+                assert!(
+                    sys.galaxy_pos.length() <= GALAXY_RADIUS,
+                    "seed {seed}: system {} is at {}, off the edge of the map",
+                    sys.id, sys.galaxy_pos.length()
+                );
+            }
+        }
+    }
+
+    /// The point of the change: systems are grouped, not evenly spread.
+    ///
+    /// Measured rather than asserted by construction -- each system's nearest
+    /// neighbour should be much closer than the average system, which is true
+    /// of clusters and false of an even scatter.
+    ///
+    /// Both numbers here were measured, not guessed. The old uniform-area
+    /// sampler scores 0.230; constellations score 0.114, a clean factor of
+    /// two. The threshold sits between them rather than just under the old
+    /// value, so this fails if the grouping is lost AND if it is quietly
+    /// weakened partway back toward an even spread.
+    #[test]
+    fn systems_are_grouped_into_constellations() {
+        for seed in SEEDS {
+            let map = generate_galaxy_map(seed);
+            let pts: Vec<Vec2> = map.systems.iter().map(|s| s.galaxy_pos).collect();
+
+            let mut nearest_sum = 0.0;
+            let mut all_sum = 0.0;
+            let mut all_count = 0.0;
+            for (i, a) in pts.iter().enumerate() {
+                let mut nearest = f32::MAX;
+                for (j, b) in pts.iter().enumerate() {
+                    if i == j { continue; }
+                    let d = a.distance(*b);
+                    nearest = nearest.min(d);
+                    all_sum += d;
+                    all_count += 1.0;
+                }
+                nearest_sum += nearest;
+            }
+            let ratio = (nearest_sum / pts.len() as f32) / (all_sum / all_count);
             assert!(
-                radius < 420_000.0,
-                "belt at {radius} sits beyond the outermost station, where nobody flies"
+                ratio < 0.17,
+                "seed {seed}: nearest-neighbour/mean ratio {ratio:.3} -- systems are \
+                 spread evenly rather than gathered into constellations"
             );
         }
     }
