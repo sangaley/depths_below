@@ -47,7 +47,19 @@ pub const SYSTEM_COUNT: usize = 30;
 /// before the galaxy has been generated: the game opens docked at Haven, a
 /// couple of frames before OnEnter(Exploring) rolls the galaxy, and Haven's
 /// station has to exist for that whole time.
-pub const HAVEN_LOCAL_CENTER: Vec2 = Vec2::new(200_000.0, -450_000.0);
+/// Where Haven's star sits, in the shared local frame.
+///
+/// 95,000 units from `world::home_base::STATION_POS`, the fixed spot the ship
+/// spawns beside. The old value was (200,000, -450,000) -- 492,000 from the
+/// station -- so the player began half a million units OUTSIDE their own
+/// solar system. Haven's star is a dwarf (radius 40,000, from seed 42) with
+/// its innermost planet near 124,000, so this drops the spawn into the gap
+/// between the star's surface and the first orbit: clear of the star by
+/// 55,000, and inside every planet orbit rather than far beyond all of them.
+///
+/// This is the one hand-placed system in the galaxy, which is appropriate --
+/// it is home, and the tutorial runs here.
+pub const HAVEN_LOCAL_CENTER: Vec2 = Vec2::new(39_500.0, -86_500.0);
 
 /// Abstract galaxy-map radius (NOT a real Transform coordinate — see
 /// StarSystemDef::galaxy_pos doc comment).
@@ -353,6 +365,34 @@ const FIELD_SPREAD: f32 = 30_000.0;
 /// at pack spacing still reads as scattered singles.
 const FIELD_ROCKS: u32 = 30;
 
+/// How much room to leave around the station a player arrives at. Rocks are
+/// solid, and the field is aimed at that station now, so without a bubble one
+/// could spawn on top of the ship. Wide enough that the nearest rock is a
+/// short burn (~180 cells) rather than a collision.
+const STATION_KEEP_CLEAR: f32 = 12_000.0;
+
+/// This system's primary station, which is where the player turns up.
+fn station_pos(def: &StarSystemDef) -> Vec2 {
+    crate::world::home_base::station_sites(def.id, def.local_center)
+        .first()
+        .map(|s| s.pos)
+        .unwrap_or(def.local_center)
+}
+
+/// Bearing from a system's star to its primary station, so the asteroid
+/// field can be put on the side of the star the player arrives on.
+///
+/// Falls back to due east only if the station resolves exactly onto the star,
+/// which `station_sites` never produces.
+fn station_field_bearing(def: &StarSystemDef) -> f32 {
+    let to_station = station_pos(def) - def.local_center;
+    if to_station.length_squared() < 1.0 {
+        0.0
+    } else {
+        to_station.to_angle()
+    }
+}
+
 /// Where to put this system's asteroid field, as an offset from the star.
 ///
 /// The original generator hardcoded `(50_000, 0)`, which was simply wrong:
@@ -407,13 +447,21 @@ pub fn spawn_system_contents(
         commands, asset_server, def.local_center, def.id, &mut rng, textures,
     );
 
-    let field_angle = rng.gen_range(0.0..std::f32::consts::TAU);
+    // Toward this system's primary station, not a free roll. A field at a
+    // random bearing is a field you have to go hunting for: you arrive at a
+    // station, and the rocks are as likely to be on the far side of the star
+    // as near you. Aiming it at the station you dock at means every system
+    // has visible rocks from where you actually turn up, without the field
+    // being any denser or larger.
+    let field_angle = station_field_bearing(def);
     super::spawning::spawn_asteroid_field(
         commands, asset_server,
         def.local_center + asteroid_field_offset(
             system_info.star_radius, &system_info.planet_orbits, field_angle,
         ),
-        FIELD_ROCKS, FIELD_SPREAD, def.id, &mut rng,
+        FIELD_ROCKS, FIELD_SPREAD,
+        Some((station_pos(def), STATION_KEEP_CLEAR)),
+        def.id, &mut rng,
         def.resource_fraction_remaining,
     );
 
@@ -656,6 +704,107 @@ mod galaxy_layout_tests {
                 ratio < 0.17,
                 "seed {seed}: nearest-neighbour/mean ratio {ratio:.3} -- systems are \
                  spread evenly rather than gathered into constellations"
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod haven_spawn_tests {
+    use super::*;
+    use crate::celestial::components::StarSizeClass;
+    use crate::world::home_base::STATION_POS;
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
+
+    /// Haven's star class, the way `spawn_star_system` rolls it: the first
+    /// draw off a stream seeded with the system's own seed, which for Haven is
+    /// the fixed 42. Derived rather than hardcoded so this keeps telling the
+    /// truth if that roll is ever retuned.
+    fn havens_star_radius() -> f32 {
+        let mut rng = StdRng::seed_from_u64(42);
+        let class = match rng.gen_range(0..10) {
+            0..=3 => StarSizeClass::Dwarf,
+            4..=7 => StarSizeClass::Main,
+            8 => StarSizeClass::Giant,
+            _ => StarSizeClass::Supergiant,
+        };
+        class.radius()
+    }
+
+    fn spawn_to_star() -> f32 {
+        STATION_POS.distance(HAVEN_LOCAL_CENTER)
+    }
+
+    /// The ship must not spawn inside its own sun. Stars are solid and
+    /// infinitely massive, so this is not a cosmetic concern.
+    #[test]
+    fn the_spawn_is_outside_havens_star() {
+        let radius = havens_star_radius();
+        let distance = spawn_to_star();
+        assert!(
+            distance > radius * 1.2,
+            "spawn is {distance} from a star of radius {radius} -- inside it, or too close to it"
+        );
+    }
+
+    /// ...and inside the planet orbits, which is the whole point of moving it.
+    /// The innermost orbit is `star_radius * 2 + step` with `step` drawn from
+    /// 25,000..45,000, so 2r + 25,000 is the floor regardless of the roll.
+    #[test]
+    fn the_spawn_is_inside_the_planet_orbits() {
+        let radius = havens_star_radius();
+        let nearest_possible_orbit = radius * 2.0 + 25_000.0;
+        let distance = spawn_to_star();
+        assert!(
+            distance < nearest_possible_orbit,
+            "spawn is {distance} out, beyond the closest an orbit can be \
+             ({nearest_possible_orbit}) -- the player starts outside their own system again"
+        );
+    }
+
+    /// The fault this fixes, stated as a number. The old centre put the spawn
+    /// 492,000 units from Haven's star, so every planet and every rock in the
+    /// home system was unreachable and the only planet anyone ever saw was the
+    /// parallax one glued to the camera.
+    #[test]
+    fn the_spawn_is_not_half_a_million_units_from_home() {
+        let distance = spawn_to_star();
+        assert!(
+            distance < 150_000.0,
+            "spawn is {distance} from Haven's star; the old value was 492,000 and that \
+             is what made the home system unvisitable"
+        );
+    }
+
+    /// Asteroids land on the side of the star the player arrives on, within a
+    /// short flight rather than somewhere around the far limb.
+    #[test]
+    fn havens_asteroids_are_near_the_spawn() {
+        let radius = havens_star_radius();
+        let def = StarSystemDef {
+            id: 0,
+            name: "Haven".into(),
+            galaxy_pos: Vec2::ZERO,
+            local_center: HAVEN_LOCAL_CENTER,
+            seed: 42,
+            faction: None,
+            danger_tier: 0.0,
+            discovery: SystemDiscovery::Visited,
+            last_updated: 0.0,
+            resource_fraction_remaining: 1.0,
+        };
+
+        // Across every orbit step the generator can roll.
+        for step in [25_000.0f32, 35_000.0, 45_000.0] {
+            let orbits: Vec<f32> = (0..3).map(|i| radius * 2.0 + (i as f32 + 1.0) * step).collect();
+            let field = HAVEN_LOCAL_CENTER
+                + asteroid_field_offset(radius, &orbits, station_field_bearing(&def));
+            let from_spawn = field.distance(STATION_POS);
+            assert!(
+                from_spawn < FIELD_SPREAD,
+                "step {step}: field centre is {from_spawn} from the spawn, further than the \
+                 field's own radius -- rocks would not be visible from where the player starts"
             );
         }
     }

@@ -200,14 +200,30 @@ fn asteroid_sprite(size: f32, resource: ResourceNodeType, variant: usize) -> Str
 /// Separated from the spawner so the layout can be tested without a Bevy
 /// world — `spawn_asteroid_field` needs Commands and an AssetServer, which
 /// is why nothing ever checked the old field's density.
-fn pack_centers(center: Vec2, spread: f32, rng: &mut impl Rng) -> Vec<Vec2> {
+fn pack_centers(
+    center: Vec2,
+    spread: f32,
+    keep_clear: Option<(Vec2, f32)>,
+    rng: &mut impl Rng,
+) -> Vec<Vec2> {
     (0..PACK_COUNT)
         .map(|_| {
-            let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-            // sqrt keeps the packs spread evenly over the field's AREA rather
-            // than bunched at its middle.
-            let dist = spread * rng.gen_range(0.0f32..1.0).sqrt();
-            center + Vec2::new(angle.cos() * dist, angle.sin() * dist)
+            let mut pos = center;
+            for _attempt in 0..16 {
+                let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+                // sqrt keeps the packs spread evenly over the field's AREA
+                // rather than bunched at its middle.
+                let dist = spread * rng.gen_range(0.0f32..1.0).sqrt();
+                pos = center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
+                match keep_clear {
+                    // A pack centre this far out keeps the pack's whole
+                    // radius outside the bubble, so no individual rock needs
+                    // checking afterwards.
+                    Some((point, radius)) if pos.distance(point) < radius + PACK_RADIUS => continue,
+                    _ => break,
+                }
+            }
+            pos
         })
         .collect()
 }
@@ -249,6 +265,10 @@ pub fn spawn_asteroid_field(
     center: Vec2,
     count: u32,
     spread: f32,
+    // Somewhere no rock may be placed, as (point, radius). Rocks are solid, so
+    // without this the field -- now aimed at the station the player arrives
+    // at -- could put one on top of the ship at the moment it spawns.
+    keep_clear: Option<(Vec2, f32)>,
     system_id: u32,
     rng: &mut impl Rng,
     // 1.0 = untouched, scales down toward 0.0 as the system's ambient
@@ -264,7 +284,7 @@ pub fn spawn_asteroid_field(
     // and a "field" never read as one. Rocks are drawn around a handful of
     // pack centres instead: 21 cells to the nearest neighbour, which puts
     // several on screen together and leaves real emptiness between packs.
-    let packs = pack_centers(center, spread, rng);
+    let packs = pack_centers(center, spread, keep_clear, rng);
 
     // Rocks are solid now (see ship::collision) — nudge overlapping rolls
     // apart so a field doesn't generate asteroids fused into each other.
@@ -398,9 +418,14 @@ mod field_density_tests {
 
     /// Reproduces the spawner's layout loop exactly, minus the Bevy entities.
     /// Returns every rock as `(position, radius)`.
-    fn layout(count: u32, spread: f32, seed: u64) -> Vec<(Vec2, f32)> {
+    fn layout_clear(
+        count: u32,
+        spread: f32,
+        keep_clear: Option<(Vec2, f32)>,
+        seed: u64,
+    ) -> Vec<(Vec2, f32)> {
         let mut rng = StdRng::seed_from_u64(seed);
-        let packs = pack_centers(Vec2::ZERO, spread, &mut rng);
+        let packs = pack_centers(Vec2::ZERO, spread, keep_clear, &mut rng);
         let mut placed: Vec<(Vec2, f32)> = Vec::new();
         for i in 0..count {
             let size = rng.gen_range(200.0..800.0);
@@ -410,6 +435,31 @@ mod field_density_tests {
             placed.push((pos, radius));
         }
         placed
+    }
+
+    fn layout(count: u32, spread: f32, seed: u64) -> Vec<(Vec2, f32)> {
+        layout_clear(count, spread, None, seed)
+    }
+
+    /// The field is aimed at the station the player arrives at, so without a
+    /// keep-clear bubble a solid rock can spawn on top of the ship at the
+    /// moment it appears. Checked at the pack level because a pack centre
+    /// outside the bubble by its own radius keeps every rock in it outside.
+    #[test]
+    fn no_rock_lands_on_the_station() {
+        let station = Vec2::new(8_000.0, -3_000.0);
+        let clear = 12_000.0;
+        for seed in [1u64, 42, 5_000, 123_456, 777] {
+            let rocks = layout_clear(30, 30_000.0, Some((station, clear)), seed);
+            for (pos, radius) in &rocks {
+                let gap = pos.distance(station) - radius;
+                assert!(
+                    gap >= clear - PACK_RADIUS,
+                    "seed {seed}: a rock sits {gap:.0} from the station, inside the \
+                     {clear:.0} bubble the ship spawns in"
+                );
+            }
+        }
     }
 
     /// Rocks are solid, so two overlapping ones are a wall with a resource
@@ -493,3 +543,4 @@ mod field_density_tests {
         }
     }
 }
+
