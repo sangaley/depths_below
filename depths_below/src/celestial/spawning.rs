@@ -7,21 +7,42 @@ use crate::vfx::procedural_textures::CelestialTextures;
 
 /// Generate a star system at a given center position.
 /// Returns the StarSystemInfo for tracking.
-/// Hand-picked real planet art (Kenney "Planets" pack, CC0 — see
-/// assets/sprites/celestial/CREDITS.txt) grouped loosely by PlanetType so a
-/// Lava world reads as fiery, an Ice world as pale/blue, etc. Exact match
-/// isn't precise (all 10 are decent for any type) but this keeps the flavor
-/// roughly honest.
+/// Real planet art (Kenney "Planets" pack, CC0 — see
+/// assets/sprites/celestial/CREDITS.txt). The candidate list per type lives
+/// on `PlanetType::sprites`, matched to what each image actually depicts.
 fn planet_sprite_path(planet_type: PlanetType, rng: &mut impl Rng) -> String {
-    let variants: &[u32] = match planet_type {
-        PlanetType::Rocky => &[1, 4, 6],
-        PlanetType::Gas => &[2, 9],
-        PlanetType::Ice => &[0, 3],
-        PlanetType::Lava => &[5, 7, 8],
-        PlanetType::Shattered => &[4, 6],
-    };
+    let variants = planet_type.sprites();
     let idx = variants[rng.gen_range(0..variants.len())];
     format!("sprites/celestial/planets/planet{:02}.png", idx)
+}
+
+/// Which temperature band the `i`th of `count` planets falls in.
+///
+/// By position rather than by roll, so a system reads as a system: scorched
+/// worlds close to the star, ice and giants at the back. Every system gets at
+/// least one hot and one cold slot, since the minimum planet count is two.
+fn band_for_orbit(i: usize, count: usize) -> OrbitBand {
+    let t = if count <= 1 { 0.0 } else { i as f32 / (count - 1) as f32 };
+    if t < 0.34 {
+        OrbitBand::Hot
+    } else if t < 0.67 {
+        OrbitBand::Temperate
+    } else {
+        OrbitBand::Cold
+    }
+}
+
+/// Per-planet brightness wobble, so two worlds of one type in one system are
+/// not the same image twice. Brightness only -- the sprites carry their own
+/// palette and a hue shift turns detailed pixel art into a flat wash.
+fn vary(tint: Color, rng: &mut impl Rng) -> Color {
+    let k = rng.gen_range(0.88f32..1.08);
+    let c = tint.to_srgba();
+    Color::srgb(
+        (c.red * k).clamp(0.0, 1.0),
+        (c.green * k).clamp(0.0, 1.0),
+        (c.blue * k).clamp(0.0, 1.0),
+    )
 }
 
 pub fn spawn_star_system(
@@ -84,10 +105,10 @@ pub fn spawn_star_system(
     let mut planet_entities = Vec::new();
     let mut planet_orbits: Vec<f32> = Vec::new();
 
-    let planet_types = [PlanetType::Rocky, PlanetType::Gas, PlanetType::Ice, PlanetType::Lava];
-
     for i in 0..planet_count {
-        let planet_type = planet_types[rng.gen_range(0..planet_types.len())];
+        let band = band_for_orbit(i, planet_count);
+        let candidates = PlanetType::for_band(band);
+        let planet_type = candidates[rng.gen_range(0..candidates.len())];
         let (r_min, r_max) = planet_type.radius_range();
         let (m_min, m_max) = planet_type.mass_range();
 
@@ -108,6 +129,7 @@ pub fn spawn_star_system(
         let planet_entity = commands.spawn((
             (Sprite {
                     image: asset_server.load(planet_sprite_path(planet_type, rng)),
+                    color: vary(planet_type.tint(), rng),
                     custom_size: Some(Vec2::splat(planet_radius * 2.0)),
                     ..default()
                 }, Transform::from_xyz(initial_x, initial_y, -0.9)),
@@ -119,7 +141,8 @@ pub fn spawn_star_system(
             },
             Planet {
                 planet_type,
-                has_atmosphere: matches!(planet_type, PlanetType::Gas | PlanetType::Rocky) && rng.gen_bool(0.4),
+                has_atmosphere: rng.gen_bool(planet_type.atmosphere_chance()),
+                has_rings: rng.gen_bool(planet_type.ring_chance()),
                 resource_richness: rng.gen_range(0.1..1.0),
             },
             OrbitalPath {
@@ -544,3 +567,130 @@ mod field_density_tests {
     }
 }
 
+
+#[cfg(test)]
+mod planet_variety_tests {
+    use super::*;
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
+
+    const ALL: [PlanetType; 12] = [
+        PlanetType::Lava, PlanetType::Volcanic, PlanetType::Desert,
+        PlanetType::Rocky, PlanetType::Barren, PlanetType::Ocean,
+        PlanetType::Terran, PlanetType::Toxic, PlanetType::Ice,
+        PlanetType::Gas, PlanetType::IceGiant, PlanetType::Shattered,
+    ];
+
+    const BANDS: [OrbitBand; 3] = [OrbitBand::Hot, OrbitBand::Temperate, OrbitBand::Cold];
+
+    /// Every sprite a type can ask for has to exist. An index with no file
+    /// behind it is an invisible planet at runtime and nothing else: the load
+    /// fails quietly and the sprite never appears.
+    #[test]
+    fn every_planet_sprite_exists_on_disk() {
+        for kind in ALL {
+            let variants = kind.sprites();
+            assert!(!variants.is_empty(), "{kind:?} has no sprite to draw");
+            for &idx in variants {
+                let path = format!("assets/sprites/celestial/planets/planet{idx:02}.png");
+                assert!(
+                    std::path::Path::new(&path).exists(),
+                    "{kind:?} wants {path}, which is not in the asset folder"
+                );
+            }
+        }
+    }
+
+    /// Every type must be reachable from some band. `Shattered` spent the
+    /// project so far defined but never constructed -- the old spawner picked
+    /// from a hardcoded four-type array -- so it existed in the data model and
+    /// could not occur in a game.
+    #[test]
+    fn every_planet_type_can_actually_occur() {
+        for kind in ALL {
+            let found = BANDS.iter().any(|b| PlanetType::for_band(*b).contains(&kind));
+            assert!(found, "{kind:?} is in no band, so it can never spawn");
+        }
+    }
+
+    /// A system should read as a system: scorched close in, cold at the back.
+    #[test]
+    fn the_innermost_is_hot_and_the_outermost_is_cold() {
+        for count in 2..=6 {
+            assert_eq!(band_for_orbit(0, count), OrbitBand::Hot, "{count} planets: innermost");
+            assert_eq!(
+                band_for_orbit(count - 1, count),
+                OrbitBand::Cold,
+                "{count} planets: outermost"
+            );
+        }
+    }
+
+    /// Hot bands must not offer ice, cold bands must not offer lava. This is
+    /// the whole point of banding, and it is easy to break by adding a type to
+    /// the wrong list.
+    #[test]
+    fn bands_do_not_offer_contradictory_worlds() {
+        let hot = PlanetType::for_band(OrbitBand::Hot);
+        for banned in [PlanetType::Ice, PlanetType::IceGiant, PlanetType::Ocean, PlanetType::Gas] {
+            assert!(!hot.contains(&banned), "{banned:?} offered next to the star");
+        }
+        let cold = PlanetType::for_band(OrbitBand::Cold);
+        for banned in [PlanetType::Lava, PlanetType::Volcanic, PlanetType::Desert] {
+            assert!(!cold.contains(&banned), "{banned:?} offered out in the cold");
+        }
+    }
+
+    /// Giants have to be giants, or the size ladder carries no information.
+    #[test]
+    fn giants_outsize_every_rocky_world() {
+        let smallest_giant = PlanetType::IceGiant.radius_range().0;
+        for kind in ALL {
+            if matches!(kind, PlanetType::Gas | PlanetType::IceGiant) {
+                continue;
+            }
+            assert!(
+                kind.radius_range().1 <= smallest_giant,
+                "{kind:?} can reach {}, overlapping the giants at {smallest_giant}",
+                kind.radius_range().1
+            );
+        }
+    }
+
+    #[test]
+    fn every_type_has_a_sane_size_and_mass_range() {
+        for kind in ALL {
+            let (r_lo, r_hi) = kind.radius_range();
+            let (m_lo, m_hi) = kind.mass_range();
+            assert!(r_lo > 0.0 && r_lo < r_hi, "{kind:?}: radius range {r_lo}..{r_hi}");
+            assert!(m_lo > 0.0 && m_lo < m_hi, "{kind:?}: mass range {m_lo}..{m_hi}");
+            assert!(
+                (0.0..=1.0).contains(&kind.atmosphere_chance()),
+                "{kind:?}: atmosphere chance out of range"
+            );
+            assert!(
+                (0.0..=1.0).contains(&kind.ring_chance()),
+                "{kind:?}: ring chance out of range"
+            );
+        }
+    }
+
+    /// The tint is for telling two worlds of one type apart, not recolouring
+    /// them. If the wobble ever drives a channel far from the art's own
+    /// palette, the pixel work turns into a flat wash.
+    #[test]
+    fn the_tint_wobble_stays_subtle() {
+        let mut rng = StdRng::seed_from_u64(9);
+        for kind in ALL {
+            for _ in 0..200 {
+                let c = vary(kind.tint(), &mut rng).to_srgba();
+                for (name, v) in [("r", c.red), ("g", c.green), ("b", c.blue)] {
+                    assert!(
+                        (0.65..=1.0).contains(&v),
+                        "{kind:?}: {name} channel at {v} -- that is a recolour, not a wobble"
+                    );
+                }
+            }
+        }
+    }
+}

@@ -30,6 +30,14 @@ pub struct StarCorona;
 #[derive(Component)]
 pub struct StarFlareGlow;
 
+/// How flat a ring lies. Near enough to edge-on to read as a disc seen at an
+/// angle rather than as a halo around the planet.
+const RING_TILT: f32 = 0.28;
+
+/// Marker for a planet's ring layer.
+#[derive(Component)]
+pub struct PlanetRing;
+
 /// Planet atmosphere layer
 #[derive(Component)]
 pub struct PlanetAtmosphere {
@@ -117,12 +125,41 @@ pub fn attach_planet_visuals(
     for (entity, body, planet) in planet_query.iter() {
         let radius = body.radius;
 
-        // Atmosphere glow for gas/rocky planets with atmosphere
+        // Rings sit BEHIND the body, as a wide flat ellipse. One sprite
+        // squashed on Y rather than two halves composited around the planet:
+        // the far side of a real ring passes behind the globe, but at the
+        // sizes these are drawn the seam costs more than the occlusion buys.
+        if planet.has_rings {
+            let ring = commands.spawn((
+                (Sprite {
+                        image: textures.ring.clone(),
+                        color: match planet.planet_type {
+                            PlanetType::IceGiant => Color::srgba(0.80, 0.90, 1.0, 0.40),
+                            PlanetType::Shattered => Color::srgba(0.70, 0.66, 0.66, 0.45),
+                            _ => Color::srgba(0.90, 0.85, 0.72, 0.38),
+                        },
+                        custom_size: Some(Vec2::new(radius * 4.4, radius * 4.4 * RING_TILT)),
+                        ..default()
+                    }, Transform::from_xyz(0.0, 0.0, -0.08)),
+                PlanetRing,
+            )).id();
+            commands.entity(entity).add_child(ring);
+        }
+
+        // Atmosphere glow, where the world has one worth drawing
         if planet.has_atmosphere {
             let atmo_color = match planet.planet_type {
-                PlanetType::Gas => Color::srgba(0.4, 0.5, 0.7, 0.15),
-                PlanetType::Rocky => Color::srgba(0.5, 0.6, 0.8, 0.10),
-                _ => Color::srgba(0.4, 0.4, 0.5, 0.08),
+                PlanetType::Gas => Color::srgba(0.40, 0.50, 0.70, 0.15),
+                PlanetType::IceGiant => Color::srgba(0.45, 0.65, 0.80, 0.16),
+                PlanetType::Toxic => Color::srgba(0.55, 0.70, 0.30, 0.17),
+                PlanetType::Ocean => Color::srgba(0.40, 0.60, 0.85, 0.13),
+                PlanetType::Terran => Color::srgba(0.50, 0.70, 0.80, 0.12),
+                PlanetType::Volcanic => Color::srgba(0.70, 0.40, 0.25, 0.12),
+                PlanetType::Lava => Color::srgba(0.85, 0.45, 0.25, 0.14),
+                PlanetType::Desert => Color::srgba(0.75, 0.65, 0.45, 0.10),
+                PlanetType::Rocky => Color::srgba(0.50, 0.60, 0.80, 0.10),
+                PlanetType::Ice => Color::srgba(0.65, 0.80, 0.90, 0.10),
+                PlanetType::Barren | PlanetType::Shattered => Color::srgba(0.40, 0.40, 0.50, 0.06),
             };
 
             let atmosphere = commands.spawn((
