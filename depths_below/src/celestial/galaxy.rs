@@ -348,6 +348,11 @@ pub fn catch_up_system(def: &mut StarSystemDef, now: f64) {
 /// Radius of the asteroid field, unchanged from the original generator.
 const FIELD_SPREAD: f32 = 30_000.0;
 
+/// Rocks per field. Up from the original twenty so that the five packs the
+/// field breaks into hold six rocks each rather than four -- a pack of four
+/// at pack spacing still reads as scattered singles.
+const FIELD_ROCKS: u32 = 30;
+
 /// Where to put this system's asteroid field, as an offset from the star.
 ///
 /// The original generator hardcoded `(50_000, 0)`, which was simply wrong:
@@ -408,7 +413,7 @@ pub fn spawn_system_contents(
         def.local_center + asteroid_field_offset(
             system_info.star_radius, &system_info.planet_orbits, field_angle,
         ),
-        20, FIELD_SPREAD, def.id, &mut rng,
+        FIELD_ROCKS, FIELD_SPREAD, def.id, &mut rng,
         def.resource_fraction_remaining,
     );
 

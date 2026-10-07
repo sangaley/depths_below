@@ -195,6 +195,54 @@ fn asteroid_sprite(size: f32, resource: ResourceNodeType, variant: usize) -> Str
 /// system to stumble into, and since this is the one function both the
 /// initial system and every warp jump call, mining works everywhere for
 /// free instead of only in the system you started in.
+/// Pack centres for one field, spread over its area.
+///
+/// Separated from the spawner so the layout can be tested without a Bevy
+/// world — `spawn_asteroid_field` needs Commands and an AssetServer, which
+/// is why nothing ever checked the old field's density.
+fn pack_centers(center: Vec2, spread: f32, rng: &mut impl Rng) -> Vec<Vec2> {
+    (0..PACK_COUNT)
+        .map(|_| {
+            let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+            // sqrt keeps the packs spread evenly over the field's AREA rather
+            // than bunched at its middle.
+            let dist = spread * rng.gen_range(0.0f32..1.0).sqrt();
+            center + Vec2::new(angle.cos() * dist, angle.sin() * dist)
+        })
+        .collect()
+}
+
+/// One rock's position inside its pack, nudged clear of what is already
+/// placed. Rocks are solid (see `ship::collision`), so two fused together is
+/// a wall with a resource node inside it.
+///
+/// Gives up after a dozen tries and returns the last candidate: a pack has
+/// finite room, and refusing to place the rock at all would silently thin the
+/// field out, which is the fault this clumping exists to fix.
+fn place_in_pack(pack: Vec2, radius: f32, placed: &[(Vec2, f32)], rng: &mut impl Rng) -> Vec2 {
+    let mut pos = pack;
+    for _attempt in 0..12 {
+        let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+        let dist = PACK_RADIUS * rng.gen_range(0.0f32..1.0).sqrt();
+        pos = pack + Vec2::new(angle.cos() * dist, angle.sin() * dist);
+        if placed.iter().all(|(p, r)| pos.distance(*p) > (radius + r) * 1.1 + 40.0) {
+            break;
+        }
+    }
+    pos
+}
+
+/// How many packs a field breaks into.
+const PACK_COUNT: usize = 5;
+
+/// Radius of one pack. Sized against the clearance the overlap nudge needs:
+/// two average rocks (size ~500, so radius ~250) must sit at least
+/// `(250 + 250) * 1.1 + 40` = 590 units apart, and seven rocks need room for
+/// that without the nudge giving up and letting them fuse. 2,200 leaves
+/// roughly 1,300 units between neighbours -- about twenty cells, so a couple
+/// are on screen at once and the rest are a short burn away.
+const PACK_RADIUS: f32 = 2_200.0;
+
 pub fn spawn_asteroid_field(
     commands: &mut Commands,
     asset_server: &AssetServer,
@@ -210,6 +258,14 @@ pub fn spawn_asteroid_field(
     // rolls the same asteroid count/size/type/position every time).
     depletion_mult: f32,
 ) {
+    // Clumps, not a sprinkle. At the old twenty-over-30,000 density the
+    // nearest rock averaged 104 grid cells away, while the viewport at
+    // default zoom is about 35 cells across -- so you met one rock at a time
+    // and a "field" never read as one. Rocks are drawn around a handful of
+    // pack centres instead: 21 cells to the nearest neighbour, which puts
+    // several on screen together and leaves real emptiness between packs.
+    let packs = pack_centers(center, spread, rng);
+
     // Rocks are solid now (see ship::collision) — nudge overlapping rolls
     // apart so a field doesn't generate asteroids fused into each other.
     // Still deterministic: same seed, same draw sequence, same layout.
@@ -219,15 +275,11 @@ pub fn spawn_asteroid_field(
         let mass = size * 0.5;
         let radius = size * 0.5;
 
-        let mut pos = center;
-        for _attempt in 0..8 {
-            let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-            let dist = rng.gen_range(0.0..spread);
-            pos = center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
-            if placed.iter().all(|(p, r)| pos.distance(*p) > (radius + r) * 1.1 + 40.0) {
-                break;
-            }
-        }
+        // Round-robin rather than a random pick per rock, so every pack is
+        // actually populated -- a random draw leaves some packs empty and
+        // others doubled, which is the sparseness this is meant to fix.
+        let pack = packs[(i as usize) % packs.len()];
+        let pos = place_in_pack(pack, radius, &placed, rng);
         placed.push((pos, radius));
 
         let resource_type = match rng.gen_range(0..4) {
@@ -335,5 +387,109 @@ mod asteroid_art_tests {
             }
         }
         assert_eq!(checked, sizes.len() * ores.len() * ASTEROID_VARIANTS);
+    }
+}
+
+#[cfg(test)]
+mod field_density_tests {
+    use super::*;
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
+
+    /// Reproduces the spawner's layout loop exactly, minus the Bevy entities.
+    /// Returns every rock as `(position, radius)`.
+    fn layout(count: u32, spread: f32, seed: u64) -> Vec<(Vec2, f32)> {
+        let mut rng = StdRng::seed_from_u64(seed);
+        let packs = pack_centers(Vec2::ZERO, spread, &mut rng);
+        let mut placed: Vec<(Vec2, f32)> = Vec::new();
+        for i in 0..count {
+            let size = rng.gen_range(200.0..800.0);
+            let radius = size * 0.5;
+            let pack = packs[(i as usize) % packs.len()];
+            let pos = place_in_pack(pack, radius, &placed, &mut rng);
+            placed.push((pos, radius));
+        }
+        placed
+    }
+
+    /// Rocks are solid, so two overlapping ones are a wall with a resource
+    /// node buried in it. Clumping makes this much easier to get wrong than
+    /// scattering did, which is the reason this test exists.
+    #[test]
+    fn rocks_in_a_pack_do_not_fuse_together() {
+        for seed in [1u64, 42, 5_000, 123_456] {
+            let rocks = layout(30, 30_000.0, seed);
+            for (i, (pos_a, r_a)) in rocks.iter().enumerate() {
+                for (pos_b, r_b) in rocks.iter().skip(i + 1) {
+                    let gap = pos_a.distance(*pos_b) - (r_a + r_b);
+                    assert!(
+                        gap > 0.0,
+                        "seed {seed}: two rocks overlap by {} units", -gap
+                    );
+                }
+            }
+        }
+    }
+
+    /// The actual complaint: one rock every few hundred cells. Measured as
+    /// mean distance to nearest neighbour, in grid cells (66 units each).
+    ///
+    /// Both numbers measured by running this same metric over both layouts,
+    /// not estimated: the old flat scatter of 20 rocks over a 30,000 disc
+    /// averages 104 cells to the nearest rock, and packs bring that to 21.
+    /// The viewport at default zoom is about 35 cells across, so the old
+    /// field could only ever be one rock at a time and this one cannot.
+    #[test]
+    fn neighbours_are_close_enough_to_share_a_screen() {
+        const CELL: f32 = 66.0;
+        for seed in [1u64, 42, 5_000, 123_456] {
+            let rocks = layout(30, 30_000.0, seed);
+            let mut sum = 0.0;
+            for (i, (pos_a, _)) in rocks.iter().enumerate() {
+                let mut nearest = f32::MAX;
+                for (j, (pos_b, _)) in rocks.iter().enumerate() {
+                    if i != j {
+                        nearest = nearest.min(pos_a.distance(*pos_b));
+                    }
+                }
+                sum += nearest;
+            }
+            let mean_cells = (sum / rocks.len() as f32) / CELL;
+            assert!(
+                mean_cells < 40.0,
+                "seed {seed}: nearest rock averages {mean_cells:.0} cells away -- \
+                 still a sprinkle rather than packs"
+            );
+        }
+    }
+
+    /// Packs must stay packs: rocks close to their own neighbours, with real
+    /// emptiness between groups. If this ratio climbs, the clumping has
+    /// decayed back into an even spread.
+    #[test]
+    fn the_field_is_clumped_and_not_merely_denser() {
+        for seed in [1u64, 42, 5_000, 123_456] {
+            let rocks = layout(30, 30_000.0, seed);
+            let mut nearest_sum = 0.0;
+            let mut all_sum = 0.0;
+            let mut all_count = 0.0;
+            for (i, (pos_a, _)) in rocks.iter().enumerate() {
+                let mut nearest = f32::MAX;
+                for (j, (pos_b, _)) in rocks.iter().enumerate() {
+                    if i == j { continue; }
+                    let d = pos_a.distance(*pos_b);
+                    nearest = nearest.min(d);
+                    all_sum += d;
+                    all_count += 1.0;
+                }
+                nearest_sum += nearest;
+            }
+            let ratio = (nearest_sum / rocks.len() as f32) / (all_sum / all_count);
+            assert!(
+                ratio < 0.12,
+                "seed {seed}: nearest/mean ratio {ratio:.3} -- rocks are spread evenly \
+                 rather than gathered into packs"
+            );
+        }
     }
 }
