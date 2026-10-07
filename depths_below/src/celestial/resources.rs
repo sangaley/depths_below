@@ -120,6 +120,13 @@ pub struct StarSystemInfo {
     pub planet_entities: Vec<Entity>,
     pub center: Vec2,
     pub is_alive: bool,
+    /// The star's own radius. Published because the star is SOLID and
+    /// enormous (40k-150k by class), so anything placed in the system has to
+    /// be placed outside it -- see `galaxy::belt_radii`.
+    pub star_radius: f32,
+    /// Orbit radius of each planet, in spawn order (innermost first). Belts
+    /// go in the gaps between them, the way a real system reads.
+    pub planet_orbits: Vec<f32>,
 }
 
 /// Global galaxy state

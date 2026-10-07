@@ -82,6 +82,7 @@ pub fn spawn_star_system(
     // Generate 2-6 planets
     let planet_count = rng.gen_range(2..=6);
     let mut planet_entities = Vec::new();
+    let mut planet_orbits: Vec<f32> = Vec::new();
 
     let planet_types = [PlanetType::Rocky, PlanetType::Gas, PlanetType::Ice, PlanetType::Lava];
 
@@ -138,6 +139,7 @@ pub fn spawn_star_system(
         )).id();
 
         planet_entities.push(planet_entity);
+        planet_orbits.push(orbit_distance);
     }
 
     StarSystemInfo {
@@ -146,6 +148,8 @@ pub fn spawn_star_system(
         planet_entities,
         center,
         is_alive: true,
+        star_radius,
+        planet_orbits,
     }
 }
 
@@ -191,12 +195,17 @@ fn asteroid_sprite(size: f32, resource: ResourceNodeType, variant: usize) -> Str
 /// system to stumble into, and since this is the one function both the
 /// initial system and every warp jump call, mining works everywhere for
 /// free instead of only in the system you started in.
-pub fn spawn_asteroid_field(
+pub fn spawn_asteroid_belt(
     commands: &mut Commands,
     asset_server: &AssetServer,
-    center: Vec2,
+    // The STAR's centre, not the belt's. The belt is an annulus around it.
+    star_center: Vec2,
+    // Distance from the star to the middle of the belt.
+    belt_radius: f32,
+    // Radial thickness. Rocks land within +/- half of this of belt_radius, so
+    // the belt reads as a band rather than a shell.
+    belt_width: f32,
     count: u32,
-    spread: f32,
     system_id: u32,
     rng: &mut impl Rng,
     // 1.0 = untouched, scales down toward 0.0 as the system's ambient
@@ -215,11 +224,17 @@ pub fn spawn_asteroid_field(
         let mass = size * 0.5;
         let radius = size * 0.5;
 
-        let mut pos = center;
+        let mut pos = star_center;
         for _attempt in 0..8 {
             let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-            let dist = rng.gen_range(0.0..spread);
-            pos = center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
+            // Offset from the belt's own radius, not from the star -- a disc
+            // sample would put rocks at every distance from the star,
+            // including inside it. The old field was a disc centred 50k out
+            // with a 30k spread, which for a Main-or-larger star (80k-150k
+            // radius) left every single rock inside the star's solid body.
+            let offset = rng.gen_range(-belt_width * 0.5..belt_width * 0.5);
+            let dist = belt_radius + offset;
+            pos = star_center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
             if placed.iter().all(|(p, r)| pos.distance(*p) > (radius + r) * 1.1 + 40.0) {
                 break;
             }

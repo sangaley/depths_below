@@ -288,6 +288,50 @@ pub fn catch_up_system(def: &mut StarSystemDef, now: f64) {
     def.last_updated = now;
 }
 
+/// Rocks per belt. Two belts of this each is a touch more than the single
+/// twenty-rock field it replaces, because a belt has to read as a band from
+/// any angle rather than as a clump you either find or don't.
+const BELT_ROCKS: u32 = 16;
+
+/// Fraction of a gap between neighbours that a belt is allowed to fill. Well
+/// under 1.0 so a belt never reaches the planet on either side of it.
+const BELT_FILL: f32 = 0.35;
+
+/// Where this system's asteroid belts go: `(radius, width)` per belt,
+/// measured from the star's centre.
+///
+/// Belts sit in the GAPS between consecutive orbits -- the signature read of
+/// a solar system, and the thing the old generator got wrong. It placed one
+/// disc of rocks centred 50,000 units from the star with a 30,000 spread, so
+/// every rock landed 20,000-80,000 out. Stars are solid and huge (40,000 for
+/// a dwarf up to 150,000 for a supergiant, see `StarSizeClass::radius`), so
+/// for anything Main-class or bigger -- 60% of systems -- the entire field
+/// spawned inside the star and could not be reached at all.
+///
+/// Anchoring to the orbits makes that unrepresentable: the innermost
+/// candidate gap starts at the star's own surface, so a belt cannot be inside
+/// the star unless a planet already is.
+fn belt_radii(star_radius: f32, planet_orbits: &[f32]) -> Vec<(f32, f32)> {
+    // Boundaries to place between: the star's surface, then each orbit.
+    let mut edges = vec![star_radius];
+    edges.extend_from_slice(planet_orbits);
+
+    // Widest gaps first -- a belt wants room, and the outer system has more
+    // of it than the crowded inner orbits.
+    let mut gaps: Vec<(f32, f32)> = edges
+        .windows(2)
+        .map(|w| (w[0], w[1]))
+        .filter(|(lo, hi)| hi > lo)
+        .collect();
+    gaps.sort_by(|a, b| (b.1 - b.0).partial_cmp(&(a.1 - a.0)).unwrap_or(std::cmp::Ordering::Equal));
+
+    gaps
+        .into_iter()
+        .take(2)
+        .map(|(lo, hi)| ((lo + hi) * 0.5, (hi - lo) * BELT_FILL))
+        .collect()
+}
+
 /// Spawns a system's full contents (star, planets, asteroids, POIs)
 /// deterministically from its seed — one continuous RNG stream shared
 /// across all three spawn calls (see spawning.rs's seeding-fix doc
@@ -306,12 +350,15 @@ pub fn spawn_system_contents(
         commands, asset_server, def.local_center, def.id, &mut rng, textures,
     );
 
-    super::spawning::spawn_asteroid_field(
-        commands, asset_server,
-        def.local_center + Vec2::new(50_000.0, 0.0),
-        20, 30_000.0, def.id, &mut rng,
-        def.resource_fraction_remaining,
-    );
+    for (belt_radius, belt_width) in belt_radii(system_info.star_radius, &system_info.planet_orbits) {
+        super::spawning::spawn_asteroid_belt(
+            commands, asset_server,
+            def.local_center,
+            belt_radius, belt_width,
+            BELT_ROCKS, def.id, &mut rng,
+            def.resource_fraction_remaining,
+        );
+    }
 
     let planet_positions: Vec<Vec2> = system_info.planet_entities.iter()
         .map(|_| def.local_center + Vec2::new(rng.gen_range(-30_000.0..30_000.0), rng.gen_range(-30_000.0..30_000.0)))
@@ -357,4 +404,108 @@ pub fn load_system(
     def.discovery = SystemDiscovery::Visited;
     let def = galaxy_map.systems.iter().find(|s| s.id == system_id)?;
     Some(spawn_system_contents(commands, asset_server, textures, def))
+}
+
+#[cfg(test)]
+mod belt_tests {
+    use super::*;
+    use crate::celestial::components::StarSizeClass;
+
+    const CLASSES: [StarSizeClass; 4] = [
+        StarSizeClass::Dwarf,
+        StarSizeClass::Main,
+        StarSizeClass::Giant,
+        StarSizeClass::Supergiant,
+    ];
+
+    /// Orbits the way `spawn_star_system` builds them:
+    /// `star_radius * 2 + (i + 1) * step`, with `step` in 25k..45k.
+    fn orbits(star_radius: f32, count: usize, step: f32) -> Vec<f32> {
+        (0..count)
+            .map(|i| star_radius * 2.0 + (i as f32 + 1.0) * step)
+            .collect()
+    }
+
+    /// The bug this whole change exists for. The old generator put one disc
+    /// of rocks 50,000 from the star with a 30,000 spread -- 20,000 to 80,000
+    /// out -- while a Main star is 80,000 in radius and solid. Every rock in
+    /// 60% of systems was inside the star and could never be reached.
+    ///
+    /// Belts are anchored to the star's surface and the orbits now, so this
+    /// is unrepresentable rather than merely fixed.
+    #[test]
+    fn no_belt_is_ever_inside_the_star() {
+        for class in CLASSES {
+            let star_radius = class.radius();
+            for planet_count in 2..=6 {
+                for step in [25_000.0, 35_000.0, 45_000.0] {
+                    let planet_orbits = orbits(star_radius, planet_count, step);
+                    for (radius, width) in belt_radii(star_radius, &planet_orbits) {
+                        let inner_edge = radius - width * 0.5;
+                        assert!(
+                            inner_edge >= star_radius,
+                            "{class:?} (r={star_radius}): belt at {radius} \u{00b1}{} reaches {inner_edge}, \
+                             inside the star's solid body",
+                            width * 0.5
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// A belt must not run through a planet's orbit either, or rocks spawn on
+    /// top of a body that is also solid.
+    #[test]
+    fn no_belt_crosses_a_planet_orbit() {
+        for class in CLASSES {
+            let star_radius = class.radius();
+            for planet_count in 2..=6 {
+                let planet_orbits = orbits(star_radius, planet_count, 30_000.0);
+                for (radius, width) in belt_radii(star_radius, &planet_orbits) {
+                    let (inner, outer) = (radius - width * 0.5, radius + width * 0.5);
+                    for orbit in &planet_orbits {
+                        assert!(
+                            *orbit <= inner || *orbit >= outer,
+                            "{class:?}: belt spans {inner}..{outer}, straddling the orbit at {orbit}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Every system gets belts -- including the smallest, a two-planet one.
+    /// A system that silently generated none is how the old field went
+    /// unnoticed for so long: nothing ever asserted rocks existed.
+    #[test]
+    fn even_the_smallest_system_gets_a_belt() {
+        for class in CLASSES {
+            let star_radius = class.radius();
+            let planet_orbits = orbits(star_radius, 2, 25_000.0);
+            let belts = belt_radii(star_radius, &planet_orbits);
+            assert!(
+                !belts.is_empty(),
+                "{class:?}: two-planet system generated no asteroid belt at all"
+            );
+            for (_, width) in &belts {
+                assert!(*width > 0.0, "{class:?}: belt with no thickness");
+            }
+        }
+    }
+
+    /// Belts land between the star and the station ring (180k-420k out, see
+    /// `world::home_base::station_sites`), so ordinary station-to-station
+    /// travel crosses one instead of it being a place you must go looking for.
+    #[test]
+    fn belts_fall_inside_the_station_ring() {
+        let star_radius = StarSizeClass::Main.radius();
+        let planet_orbits = orbits(star_radius, 4, 35_000.0);
+        for (radius, _) in belt_radii(star_radius, &planet_orbits) {
+            assert!(
+                radius < 420_000.0,
+                "belt at {radius} sits beyond the outermost station, where nobody flies"
+            );
+        }
+    }
 }
