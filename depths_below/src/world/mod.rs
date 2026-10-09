@@ -236,6 +236,15 @@ fn update_biome(
 }
 
 /// Discovers POIs when ship gets close
+/// Chunks stream out and back in, and each time their POIs are rebuilt from
+/// the chunk's seed as fresh entities with `discovered: false` -- so every lap
+/// past the same wreck announced it again, and logged it again. The seed puts
+/// a rebuilt POI exactly where it was, which is how one already logged is
+/// recognised.
+fn same_spot(a: Vec2, b: Vec2) -> bool {
+    a.distance_squared(b) < 1.0
+}
+
 fn check_poi_discovery(
     ship_query: Query<&GlobalTransform, With<Ship>>,
     mut poi_query: Query<(&GlobalTransform, &mut PointOfInterest)>,
@@ -262,6 +271,9 @@ fn check_poi_discovery(
             continue;
         }
         sp.discovered = true;
+        if discovered.special.iter().any(|(p, _)| same_spot(*p, pos)) {
+            continue;
+        }
         discovered.special.push((pos, sp.name.clone()));
         poi_events.write(PoiDiscovered { poi_type: kind, position: pos });
         notifications.write(ShowNotification {
@@ -284,6 +296,16 @@ fn check_poi_discovery(
         // is parked on top of the POI.
         if dist < 700.0 {
             poi.discovered = true;
+
+            let logged = match poi.poi_type {
+                PoiType::Wreck => discovered.wrecks.iter().any(|p| same_spot(*p, poi_pos)),
+                PoiType::Cave => discovered.caves.iter().any(|p| same_spot(*p, poi_pos)),
+                PoiType::Settlement => discovered.settlements.iter().any(|p| same_spot(*p, poi_pos)),
+                _ => discovered.special.iter().any(|(p, _)| same_spot(*p, poi_pos)),
+            };
+            if logged {
+                continue;
+            }
 
             match poi.poi_type {
                 PoiType::Wreck => discovered.wrecks.push(poi_pos),
@@ -316,6 +338,7 @@ fn check_docking_proximity(
     mut docking_events: MessageWriter<DockingStarted>,
     mut notifications: MessageWriter<ShowNotification>,
     mut next_state: ResMut<NextState<GameState>>,
+    stations: Res<home_base::SystemStations>,
 ) {
     if !press.pending() {
         return;
@@ -323,6 +346,14 @@ fn check_docking_proximity(
 
     let Ok(ship_gt) = ship_query.single() else { return };
     let ship_pos = ship_gt.translation().truncate();
+
+    // A station in range has already said "press F to dock" and this has
+    // said nothing, so the press is the station's. Without this the two
+    // raced for it and a settlement beside Haven kept winning: F docked at
+    // an outpost colony, and again on every try.
+    if stations.nearest_in_range(ship_pos).is_some() {
+        return;
+    }
 
     for (entity, poi_gt, poi) in poi_query.iter() {
         if poi.poi_type != PoiType::Settlement {
@@ -517,5 +548,121 @@ fn apply_hazard_damage(
     if !near_any {
         *warned_thermal = false;
         *warned_current = false;
+    }
+}
+
+#[cfg(test)]
+mod rediscovery_tests {
+    use super::*;
+
+    fn app() -> App {
+        let mut app = App::new();
+        app.init_resource::<DiscoveredLocations>();
+        app.add_message::<PoiDiscovered>();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, check_poi_discovery);
+        app.world_mut().spawn((Ship, GlobalTransform::from_xyz(0.0, 0.0, 0.0)));
+        app
+    }
+
+    fn wreck_at(app: &mut App, pos: Vec2) -> Entity {
+        app.world_mut()
+            .spawn((
+                GlobalTransform::from_xyz(pos.x, pos.y, 0.0),
+                PointOfInterest { poi_type: PoiType::Wreck, discovered: false },
+            ))
+            .id()
+    }
+
+    fn announcements(app: &App) -> usize {
+        app.world().resource::<Messages<ShowNotification>>().iter_current_update_messages().count()
+    }
+
+    /// A chunk that streams back in rebuilds its wreck as a new entity on
+    /// the same spot. It is the same wreck: no second announcement, no
+    /// second entry in the log.
+    #[test]
+    fn a_wreck_rebuilt_on_the_same_spot_is_not_rediscovered() {
+        let mut app = app();
+        let first = wreck_at(&mut app, Vec2::new(300.0, 0.0));
+        app.update();
+        assert_eq!(announcements(&app), 1);
+
+        app.world_mut().despawn(first);
+        let again = wreck_at(&mut app, Vec2::new(300.0, 0.0));
+        app.update();
+        assert_eq!(announcements(&app), 0, "the same wreck was announced twice");
+        assert!(app.world().get::<PointOfInterest>(again).unwrap().discovered);
+        assert_eq!(app.world().resource::<DiscoveredLocations>().wrecks.len(), 1);
+    }
+
+    #[test]
+    fn a_different_wreck_nearby_still_is() {
+        let mut app = app();
+        wreck_at(&mut app, Vec2::new(300.0, 0.0));
+        app.update();
+        wreck_at(&mut app, Vec2::new(-250.0, 100.0));
+        app.update();
+        assert_eq!(announcements(&app), 1);
+        assert_eq!(app.world().resource::<DiscoveredLocations>().wrecks.len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod settlement_dock_tests {
+    use super::*;
+    use bevy::state::app::StatesPlugin;
+    use crate::resources::InteractPress;
+    use home_base::{StationSite, SystemStations};
+
+    fn app(station_beside: bool) -> App {
+        let mut app = App::new();
+        app.add_plugins(StatesPlugin);
+        app.insert_state(GameState::Exploring);
+        app.insert_resource(crate::vfx::effect_textures::EffectTextures::empty());
+        app.init_resource::<InteractPress>();
+        app.init_resource::<ButtonInput<KeyCode>>();
+        app.add_message::<DockingStarted>();
+        app.add_message::<ShowNotification>();
+        let mut stations = SystemStations::default();
+        if station_beside {
+            stations.sites.push(StationSite {
+                index: 0,
+                system_id: 0,
+                pos: Vec2::new(-600.0, 0.0),
+                name: "Haven Station".into(),
+                kind: crate::world::station_types::station_type(0),
+            });
+        }
+        app.insert_resource(stations);
+        app.add_systems(Update, (crate::resources::refresh_interact_press, check_docking_proximity).chain());
+        app.world_mut().spawn((Ship, GlobalTransform::default()));
+        app.world_mut().spawn((
+            GlobalTransform::from_xyz(400.0, 0.0, 0.0),
+            PointOfInterest { poi_type: PoiType::Settlement, discovered: true },
+        ));
+        app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::KeyF);
+        app
+    }
+
+    fn docked_at_settlement(app: &mut App) -> bool {
+        app.update();
+        matches!(
+            app.world().resource::<NextState<GameState>>(),
+            NextState::Pending(GameState::Docked)
+        )
+    }
+
+    #[test]
+    fn f_docks_at_a_settlement_on_its_own() {
+        assert!(docked_at_settlement(&mut app(false)));
+    }
+
+    /// The station's prompt is the one on screen; the press is its.
+    #[test]
+    fn a_station_in_range_keeps_the_press() {
+        let mut app = app(true);
+        assert!(!docked_at_settlement(&mut app));
+        assert!(app.world().resource::<InteractPress>().pending(), "the press was swallowed");
     }
 }
