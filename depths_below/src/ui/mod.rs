@@ -1162,10 +1162,12 @@ struct WeaponRackPanel;
 /// Container the per-weapon rows are spawned into.
 #[derive(Component)]
 struct WeaponRackRoot;
-/// One rack row, bound to a weapon module entity, caching its dynamic children.
+/// One rack row: every weapon of one kind in one fire group, caching its
+/// dynamic children.
 #[derive(Component)]
 struct WeaponRackRow {
-    weapon: Entity,
+    key: (u8, &'static str),
+    name: Entity,
     bar: Entity,
     ammo: Entity,
     state: Entity,
@@ -1194,14 +1196,65 @@ fn weapon_rack_name(m: ModuleType) -> &'static str {
     }
 }
 
-/// Rebuilds/updates the weapon rack: one row per player weapon with a reload
-/// bar (fills 0→ready), its fire-group tag, ammo count, and a READY / countdown
-/// state. Rows are reconciled by weapon entity, so adding/removing a gun in the
-/// yard updates the rack on next entry to flight.
+/// What one rack row says about a stack of identical weapons.
+#[derive(Debug, Clone, PartialEq)]
+struct RackLine {
+    name: String,
+    frac: f32,
+    ammo: String,
+    state: String,
+    state_color: Color,
+}
+
+/// One weapon as the rack sees it.
+struct RackWeapon {
+    frac: f32,
+    ready: bool,
+    remaining: f32,
+    ammo: u32,
+    max: u32,
+    alive: bool,
+}
+
+/// Folds a stack of identical weapons into one line. A starter carrying four
+/// cannons and four gatlings used to get eight near-identical rows; the rack
+/// filled the lower right of the screen and said less than "Cannon x4 READY".
+fn rack_line(name: &str, weapons: &[RackWeapon]) -> RackLine {
+    use theme::ThemeColors;
+    let n = weapons.len();
+    let live: Vec<&RackWeapon> = weapons.iter().filter(|w| w.alive).collect();
+    let label = if n > 1 { format!("{name} x{n}") } else { name.to_string() };
+    if live.is_empty() {
+        return RackLine { name: label, frac: 0.0, ammo: "-".into(), state: "DOWN".into(), state_color: ThemeColors::STATUS_DANGER };
+    }
+    let frac = live.iter().map(|w| w.frac).sum::<f32>() / live.len() as f32;
+    // Beams and other power-fed guns carry 999 as a stand-in for "no
+    // magazine"; printing it read as a real count.
+    let ammo = if live.iter().all(|w| w.max >= 999) {
+        "power".to_string()
+    } else {
+        format!("{}/{}", live.iter().map(|w| w.ammo).sum::<u32>(), live.iter().map(|w| w.max).sum::<u32>())
+    };
+    let ready = live.iter().filter(|w| w.ready).count();
+    let (state, state_color) = if ready == live.len() {
+        ("READY".to_string(), ThemeColors::ACCENT_GREEN)
+    } else if ready > 0 {
+        (format!("{ready}/{} RDY", live.len()), ThemeColors::ACCENT_YELLOW)
+    } else {
+        let soonest = live.iter().map(|w| w.remaining).fold(f32::INFINITY, f32::min);
+        (format!("{soonest:.1}s"), ThemeColors::ACCENT_ORANGE)
+    };
+    RackLine { name: label, frac, ammo, state, state_color }
+}
+
+/// Rebuilds/updates the weapon rack: one row per kind of weapon in each fire
+/// group, with a reload bar, the group tag, combined ammo, and READY /
+/// partly ready / countdown. Rows are reconciled by (group, kind), so adding
+/// or losing a gun in the yard updates the rack on next entry to flight.
 fn update_weapon_rack(
     rack_root: Query<Entity, With<WeaponRackRoot>>,
     ship_query: Query<Entity, With<Ship>>,
-    weapon_query: Query<(Entity, &Module, &Weapon, Option<&WeaponCooldown>, Option<&crate::combat::targeting::fire_groups::FireGroup>, &ChildOf)>,
+    weapon_query: Query<(&Module, &Weapon, Option<&WeaponCooldown>, Option<&crate::combat::targeting::fire_groups::FireGroup>, &ChildOf, Option<&ModuleTemperature>)>,
     rows: Query<(Entity, &WeaponRackRow)>,
     mut texts: Query<(&mut Text, &mut TextColor), With<WeaponRackDynText>>,
     mut bars: Query<(&mut Node, &mut BackgroundColor), With<WeaponRackBarFill>>,
@@ -1211,61 +1264,72 @@ fn update_weapon_rack(
     let Ok(root) = rack_root.single() else { return };
     let Ok(player) = ship_query.single() else { return };
 
-    struct W { e: Entity, name: &'static str, grp: u8, frac: f32, ready: bool, remaining: f32, ammo: u32, max: u32 }
-    let mut ws: Vec<W> = Vec::new();
-    for (e, module, weapon, cd, fg, parent) in weapon_query.iter() {
+    let mut stacks: std::collections::BTreeMap<(u8, &'static str), Vec<RackWeapon>> = std::collections::BTreeMap::new();
+    for (module, weapon, cd, fg, parent, temp) in weapon_query.iter() {
         if parent.parent() != player { continue; }
-        let (frac, ready, remaining) = match cd {
-            Some(cd) => (cd.timer.fraction(), cd.timer.is_finished(), cd.timer.remaining_secs()),
-            None => (1.0, true, 0.0),
-        };
-        ws.push(W {
-            e,
-            name: weapon_rack_name(module.module_type),
-            grp: fg.map(|f| f.group).unwrap_or(0),
-            frac, ready, remaining,
-            ammo: weapon.ammo, max: weapon.max_ammo,
-        });
-    }
-    ws.sort_by(|a, b| a.grp.cmp(&b.grp).then(a.name.cmp(b.name)));
-
-    // Update existing rows; despawn rows whose weapon is gone.
-    let mut have: HashSet<Entity> = HashSet::new();
-    for (row_e, row) in rows.iter() {
-        if let Some(w) = ws.iter().find(|w| w.e == row.weapon) {
-            have.insert(row.weapon);
-            if let Ok((mut node, mut bg)) = bars.get_mut(row.bar) {
-                node.width = Val::Percent((w.frac * 100.0).clamp(0.0, 100.0));
-                *bg = if w.ready { ThemeColors::ACCENT_GREEN } else { ThemeColors::ACCENT_ORANGE }.into();
-            }
-            if let Ok((mut t, _)) = texts.get_mut(row.ammo) {
-                t.0 = format!("{}/{}", w.ammo, w.max);
-            }
-            if let Ok((mut t, mut col)) = texts.get_mut(row.state) {
-                if w.ready { t.0 = "READY".into(); col.0 = ThemeColors::ACCENT_GREEN; }
-                else { t.0 = format!("{:.1}s", w.remaining); col.0 = ThemeColors::ACCENT_ORANGE; }
-            }
+        // The tractor beam carries a Weapon for its reach, but it's the tow
+        // tool (Y), not a gun -- it sat in the rack as a row called "Weapon".
+        if module.module_type == ModuleType::TractorBeam { continue; }
+        let (frac, ready, remaining) = if module.module_type == ModuleType::Laser {
+            // A continuous beam fires through its own path and never runs a
+            // WeaponCooldown, so the timer sat at its initial "1.0s" forever.
+            // What can stop a beam is heat.
+            let hot = temp.is_some_and(|t| t.current >= t.max_temp * 0.95);
+            (if hot { 0.0 } else { 1.0 }, !hot, 0.0)
         } else {
+            match cd {
+                Some(cd) => (cd.timer.fraction(), cd.timer.is_finished(), cd.timer.remaining_secs()),
+                None => (1.0, true, 0.0),
+            }
+        };
+        stacks
+            .entry((fg.map(|f| f.group).unwrap_or(0), weapon_rack_name(module.module_type)))
+            .or_default()
+            .push(RackWeapon { frac, ready, remaining, ammo: weapon.ammo, max: weapon.max_ammo, alive: module.health > 0.0 });
+    }
+    let lines: Vec<((u8, &'static str), RackLine)> =
+        stacks.iter().map(|(key, ws)| (*key, rack_line(key.1, ws))).collect();
+
+    // Update existing rows; despawn rows whose stack is gone.
+    let mut have: HashSet<(u8, &'static str)> = HashSet::new();
+    for (row_e, row) in rows.iter() {
+        let Some((_, line)) = lines.iter().find(|(k, _)| *k == row.key) else {
             commands.entity(row_e).despawn();
+            continue;
+        };
+        have.insert(row.key);
+        if let Ok((mut node, mut bg)) = bars.get_mut(row.bar) {
+            node.width = Val::Percent((line.frac * 100.0).clamp(0.0, 100.0));
+            *bg = line.state_color.into();
+        }
+        for (entity, text) in [(row.name, &line.name), (row.ammo, &line.ammo)] {
+            if let Ok((mut t, _)) = texts.get_mut(entity) {
+                if t.0 != *text { t.0 = text.clone(); }
+            }
+        }
+        if let Ok((mut t, mut col)) = texts.get_mut(row.state) {
+            if t.0 != line.state { t.0 = line.state.clone(); }
+            col.0 = line.state_color;
         }
     }
-    // Spawn rows for weapons that don't have one yet.
-    for w in ws.iter().filter(|w| !have.contains(&w.e)) {
+    // Spawn rows for stacks that don't have one yet.
+    for (key, line) in lines.iter().filter(|(k, _)| !have.contains(k)) {
         let grp = commands.spawn((
-            Text::new(format!("{}", w.grp + 1)),
+            Text::new(format!("{}", key.0 + 1)),
             Node { min_width: Val::Px(16.0), ..default() },
             TextFont { font_size: FontSize::Px(ThemeFonts::TINY), ..default() },
             TextColor(ThemeColors::TEXT_MUTED),
         )).id();
         let name = commands.spawn((
-            Text::new(w.name),
+            Text::new(line.name.clone()),
             Node { flex_grow: 1.0, ..default() },
             TextFont { font_size: FontSize::Px(ThemeFonts::BODY_SMALL), ..default() },
             TextColor(ThemeColors::TEXT_PRIMARY),
+            WeaponRackDynText,
         )).id();
         let bar_fill = commands.spawn((
-            (Node { width: Val::Percent(w.frac * 100.0), height: Val::Percent(100.0), ..default() },
-             BackgroundColor(if w.ready { ThemeColors::ACCENT_GREEN } else { ThemeColors::ACCENT_ORANGE })),
+            (Node { width: Val::Percent(line.frac * 100.0), height: Val::Percent(100.0), ..default() },
+             BackgroundColor(line.state_color)),
             WeaponRackBarFill,
         )).id();
         let bar_track = commands.spawn((
@@ -1274,17 +1338,17 @@ fn update_weapon_rack(
         )).id();
         commands.entity(bar_track).add_child(bar_fill);
         let ammo = commands.spawn((
-            Text::new(format!("{}/{}", w.ammo, w.max)),
-            Node { min_width: Val::Px(48.0), ..default() },
+            Text::new(line.ammo.clone()),
+            Node { min_width: Val::Px(56.0), ..default() },
             TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() },
             TextColor(ThemeColors::TEXT_SECONDARY),
             WeaponRackDynText,
         )).id();
         let state = commands.spawn((
-            Text::new(if w.ready { "READY" } else { "..." }),
-            Node { min_width: Val::Px(44.0), ..default() },
+            Text::new(line.state.clone()),
+            Node { min_width: Val::Px(52.0), ..default() },
             TextFont { font_size: FontSize::Px(ThemeFonts::TINY), ..default() },
-            TextColor(ThemeColors::ACCENT_GREEN),
+            TextColor(line.state_color),
             WeaponRackDynText,
         )).id();
         let row = commands.spawn((
@@ -1296,7 +1360,7 @@ fn update_weapon_rack(
                 padding: UiRect::axes(Val::Px(4.0), Val::Px(3.0)),
                 ..default()
             },
-            WeaponRackRow { weapon: w.e, bar: bar_fill, ammo, state },
+            WeaponRackRow { key: *key, name, bar: bar_fill, ammo, state },
         )).id();
         commands.entity(row).add_children(&[grp, name, bar_track, ammo, state]);
         commands.entity(root).add_child(row);
@@ -5718,3 +5782,45 @@ mod station_services_tests {
         assert!(app.world().get_entity(overlay).is_err());
     }
 }
+
+#[cfg(test)]
+mod weapon_rack_tests {
+    use super::*;
+
+    fn gun(ready: bool, remaining: f32, alive: bool) -> RackWeapon {
+        RackWeapon { frac: if ready { 1.0 } else { 0.5 }, ready, remaining, ammo: 30, max: 30, alive }
+    }
+
+    #[test]
+    fn a_stack_reads_as_one_line() {
+        let line = rack_line("Cannon", &[gun(true, 0.0, true), gun(true, 0.0, true), gun(true, 0.0, true), gun(true, 0.0, true)]);
+        assert_eq!((line.name.as_str(), line.ammo.as_str(), line.state.as_str()), ("Cannon x4", "120/120", "READY"));
+    }
+
+    #[test]
+    fn partly_reloaded_says_how_many_can_fire() {
+        let line = rack_line("Cannon", &[gun(true, 0.0, true), gun(false, 0.7, true), gun(false, 0.3, true)]);
+        assert_eq!(line.state, "1/3 RDY");
+    }
+
+    #[test]
+    fn none_ready_counts_down_to_the_soonest() {
+        let line = rack_line("Gatling", &[gun(false, 0.7, true), gun(false, 0.3, true)]);
+        assert_eq!(line.state, "0.3s");
+    }
+
+    /// Dead guns don't count as loaded or ready; a stack of only dead guns is DOWN.
+    #[test]
+    fn destroyed_guns_drop_out() {
+        assert_eq!(rack_line("Cannon", &[gun(true, 0.0, true), gun(false, 0.0, false)]).state, "READY");
+        assert_eq!(rack_line("Cannon", &[gun(false, 0.0, false)]).state, "DOWN");
+    }
+
+    /// A power-fed gun has no magazine to count.
+    #[test]
+    fn power_weapons_show_no_fake_ammo() {
+        let beam = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 999, max: 999, alive: true };
+        assert_eq!(rack_line("Laser", &[beam]).ammo, "power");
+    }
+}
+
