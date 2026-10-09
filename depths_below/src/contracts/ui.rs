@@ -363,14 +363,21 @@ pub fn update_mission_board_display(
 // CONTRACT HUD (top-right during Exploring)
 // ============================================================================
 
+/// Top edge of the contract tracker: just below the HUD's top bar.
+pub const CONTRACT_HUD_TOP: f32 = 48.0;
+
 pub fn spawn_contract_hud(
     mut commands: Commands,
 ) {
     commands.spawn((
         (Node {
                 position_type: PositionType::Absolute,
-                right: Val::Px(12.0),
-                top: Val::Px(12.0),
+                // Under the top bar, in line with the notification stack --
+                // which then starts below this (ui::stack_notifications_under_tracker).
+                // At top 12 it was drawn over CRED/CREW/CARGO, and the
+                // notifications ran underneath it.
+                right: Val::Px(crate::ui::theme::ThemeSpacing::LG),
+                top: Val::Px(CONTRACT_HUD_TOP),
                 flex_direction: FlexDirection::Column,
                 padding: UiRect::all(Val::Px(8.0)),
                 ..default()
@@ -414,11 +421,37 @@ pub fn toggle_contract_hud(
     });
 }
 
+/// Where a bounty's ship is, as the tracker says it: a range when it's in
+/// this system, the system's name when it isn't. Tracked bounties used to
+/// read "Hunting" and nothing else for as long as they were open -- three of
+/// them sat that way through a whole playtest with no clue which way to go.
+fn bounty_whereabouts(
+    target_id: u32,
+    live: Option<Vec2>,
+    sim: &crate::ai_ship::components::WorldSimulation,
+    here: Option<u32>,
+    ship_pos: Vec2,
+) -> Option<String> {
+    if let Some(pos) = live {
+        return Some(crate::ui::format_range_km(pos.distance(ship_pos)));
+    }
+    let ship = sim.ships.iter().find(|s| s.bounty_id == Some(target_id))?;
+    if Some(ship.system_id) == here {
+        Some(crate::ui::format_range_km(ship.position.distance(ship_pos)))
+    } else {
+        Some(format!("in {}", crate::celestial::galaxy::system_name(ship.system_id)))
+    }
+}
+
 pub fn update_contract_hud(
     state: Res<ContractState>,
     visible: Res<ContractHudVisible>,
     mut root_query: Query<&mut Node, With<ContractHudRoot>>,
     mut text_query: Query<&mut Text, With<ContractHudText>>,
+    sim: Res<crate::ai_ship::components::WorldSimulation>,
+    streaming: Res<crate::celestial::resources::SystemStreamingManager>,
+    player: Query<&Transform, With<crate::components::Ship>>,
+    live_bounties: Query<(&Transform, &crate::ai_ship::components::BountyTarget)>,
 ) {
     // Hide the whole panel — not just its text — when it's toggled off or
     // there's nothing to track, so its background box doesn't sit empty in the
@@ -438,12 +471,24 @@ pub fn update_contract_hud(
         return;
     }
 
+    let ship_pos = player.single().map(|t| t.translation.truncate()).unwrap_or(Vec2::ZERO);
     let mut lines = Vec::new();
     for contract in &state.active_contracts {
-        let status = match contract.status {
+        let mut status = match contract.status {
             ContractStatus::Completed => "DONE".to_string(),
             _ => contract.progress_text(),
         };
+        if let ContractObjective::DestroyShip { target_id, destroyed: false, .. } = &contract.objective {
+            if contract.status != ContractStatus::Completed {
+                let live = live_bounties
+                    .iter()
+                    .find(|(_, b)| b.0 == *target_id)
+                    .map(|(t, _)| t.translation.truncate());
+                if let Some(at) = bounty_whereabouts(*target_id, live, &sim, streaming.loaded_system, ship_pos) {
+                    status = format!("{status} - {at}");
+                }
+            }
+        }
         lines.push(format!(
             "{} {}: {}",
             contract.star_display(),
@@ -453,4 +498,37 @@ pub fn update_contract_hud(
     }
 
     text.0 = lines.join("\n");
+}
+
+#[cfg(test)]
+mod bounty_whereabouts_tests {
+    use super::*;
+    use crate::ai_ship::components::{AiShipType, SimulatedShip, WorldSimulation};
+
+    fn sim_with(system_id: u32, position: Vec2) -> WorldSimulation {
+        let mut sim = WorldSimulation::default();
+        let mut ship = SimulatedShip::patrolling(system_id, AiShipType::RecursiveKingdom, position, position, 1000.0, 100.0);
+        ship.bounty_id = Some(7);
+        sim.ships.push(ship);
+        sim
+    }
+
+    #[test]
+    fn a_target_in_this_system_reads_as_a_range() {
+        let sim = sim_with(0, Vec2::new(12_000.0, 0.0));
+        assert_eq!(bounty_whereabouts(7, None, &sim, Some(0), Vec2::ZERO).as_deref(), Some("12 km"));
+    }
+
+    #[test]
+    fn a_target_elsewhere_names_its_system() {
+        let sim = sim_with(2, Vec2::ZERO);
+        assert_eq!(bounty_whereabouts(7, None, &sim, Some(0), Vec2::ZERO).as_deref(), Some("in Calder"));
+    }
+
+    /// Once it's a real ship nearby, its live position wins.
+    #[test]
+    fn a_live_target_uses_where_it_actually_is() {
+        let sim = sim_with(0, Vec2::new(50_000.0, 0.0));
+        assert_eq!(bounty_whereabouts(7, Some(Vec2::new(3_000.0, 0.0)), &sim, Some(0), Vec2::ZERO).as_deref(), Some("3.0 km"));
+    }
 }
