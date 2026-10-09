@@ -533,8 +533,26 @@ pub struct MapWarpCharging {
 }
 
 const WARP_DASH_FUEL_PER_1000: f32 = 1.0;
-const WARP_DASH_BASE_CHARGE: f32 = 2.0;
-const WARP_DASH_DISTANCE_PER_SECOND: f32 = 15_000.0;
+/// Spin-up before a local dash moves you at all.
+///
+/// Was 2.0, which was most of the cost of any short hop and made the drive
+/// feel like a worse pair of engines. The local dash is a reposition inside
+/// one system -- crossing to a planet, a belt, the next station -- and it
+/// should feel like using a tool, not committing to something.
+const WARP_DASH_BASE_CHARGE: f32 = 0.5;
+/// Distance covered per second of charge. Was 15,000, so the hop out to a
+/// planet at 29,000 cost about four seconds of standing still. At 80,000 the
+/// same hop is under a second, and crossing the whole system is a few.
+const WARP_DASH_DISTANCE_PER_SECOND: f32 = 80_000.0;
+/// Ceiling on a local dash, however far across the system it goes.
+///
+/// Without it the drives invert at the extremes: the longest in-system hop
+/// is to a station 420,000 out (`home_base::station_sites`), which on the
+/// distance term alone charges 5.75s -- longer than leaving for another star
+/// entirely, which starts at 4s. Crossing a room must not cost more than
+/// crossing the galaxy, so the local drive is bounded rather than linear
+/// forever.
+const WARP_DASH_MAX_CHARGE: f32 = 3.0;
 /// Stop short of the exact clicked point - avoids ever materializing inside
 /// whatever's sitting there (a station, a boss hull, etc).
 ///
@@ -560,7 +578,7 @@ fn warp_dash_fuel_cost(distance: f32) -> f32 {
 }
 
 fn warp_dash_charge_time(distance: f32) -> f32 {
-    WARP_DASH_BASE_CHARGE + distance / WARP_DASH_DISTANCE_PER_SECOND
+    (WARP_DASH_BASE_CHARGE + distance / WARP_DASH_DISTANCE_PER_SECOND).min(WARP_DASH_MAX_CHARGE)
 }
 
 /// Helper to spawn a HUD bar (background + fill)
@@ -4985,5 +5003,80 @@ fn update_hull_warning_overlay(
         for (entity, _, _) in overlay_query.iter() {
             commands.entity(entity).despawn();
         }
+    }
+}
+
+#[cfg(test)]
+mod warp_pacing_tests {
+    use super::*;
+    use crate::celestial::warp::interstellar_charge_time;
+
+    /// Representative in-system distances at the scale systems actually have
+    /// (see `celestial::galaxy`): a planet from the spawn, the star, and a
+    /// far station.
+    const TO_PLANET: f32 = 29_000.0;
+    const TO_STAR: f32 = 95_000.0;
+    const TO_FAR_STATION: f32 = 420_000.0;
+
+    /// The point of having two drives. A reposition inside one system must
+    /// stay cheaper than the cheapest jump between stars, or there is no
+    /// reason to feel differently about the two, and both have now been
+    /// retuned in opposite directions at least once.
+    #[test]
+    fn crossing_a_system_is_quicker_than_leaving_one() {
+        let shortest_jump = interstellar_charge_time(0.0);
+        for distance in [TO_PLANET, TO_STAR, TO_FAR_STATION] {
+            let local = warp_dash_charge_time(distance);
+            assert!(
+                local < shortest_jump,
+                "a {distance}-unit local dash charges for {local}s, no quicker than the \
+                 shortest interstellar jump at {shortest_jump}s"
+            );
+        }
+    }
+
+    /// Reaching the things the generator puts near the spawn should feel like
+    /// using a tool. At the old 2.0s base and 15,000/s this was about four
+    /// seconds of standing still to cross to a planet.
+    #[test]
+    fn reaching_a_nearby_planet_is_near_instant() {
+        let t = warp_dash_charge_time(TO_PLANET);
+        assert!(t < 1.0, "charging {t}s to cross to a planet is a pause, not a dash");
+    }
+
+    /// And leaving a system should cost something. At 1-4s it was no more
+    /// than crossing a room.
+    #[test]
+    fn leaving_the_system_is_a_decision() {
+        let near = interstellar_charge_time(0.0);
+        let far = interstellar_charge_time(1.0);
+        assert!(near >= 3.0, "the shortest jump between stars charges for only {near}s");
+        assert!(far >= 12.0, "a jump to the far edge of the galaxy charges for only {far}s");
+        assert!(far <= 30.0, "{far}s is a loading screen, which is what 6-60s was");
+    }
+
+    /// Both drives must cost more for more distance, or the cheapest route is
+    /// to pick the furthest target. Never LESS -- the local dash flattens at
+    /// `WARP_DASH_MAX_CHARGE` rather than continuing to climb, so the top end
+    /// is checked for non-decreasing rather than strictly increasing.
+    #[test]
+    fn further_never_costs_less() {
+        assert!(warp_dash_charge_time(TO_PLANET) < warp_dash_charge_time(TO_STAR));
+        assert!(warp_dash_charge_time(TO_STAR) <= warp_dash_charge_time(TO_FAR_STATION));
+        assert!(interstellar_charge_time(0.0) < interstellar_charge_time(0.5));
+        assert!(interstellar_charge_time(0.5) < interstellar_charge_time(1.0));
+    }
+
+    /// The cap is what keeps the two drives from inverting, so it has to stay
+    /// under the cheapest jump between stars.
+    #[test]
+    fn the_local_cap_stays_under_an_interstellar_jump() {
+        assert!(
+            WARP_DASH_MAX_CHARGE < interstellar_charge_time(0.0),
+            "local dashes cap at {WARP_DASH_MAX_CHARGE}s, at or above the {}s shortest jump",
+            interstellar_charge_time(0.0)
+        );
+        // Even an absurd distance stays bounded.
+        assert!(warp_dash_charge_time(50_000_000.0) <= WARP_DASH_MAX_CHARGE);
     }
 }
