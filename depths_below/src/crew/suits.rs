@@ -358,6 +358,85 @@ mod suit_tests {
         assert_eq!(health(&app, hand), 100.0, "hurt while standing in good air");
     }
 
+    /// The thing plan_repair_errands would not do: a crew member who belongs
+    /// to a station still goes to the hole once they have a suit on.
+    ///
+    /// Seventeen of the starter ship's twenty hands are posted, so leaving
+    /// breach work to the ordinary errand planner left three people to fix a
+    /// hull full of holes -- and none at all while anything was shooting.
+    #[test]
+    fn a_suited_hand_leaves_their_post_for_the_hole() {
+        use crate::crew::navigation::NavCell;
+
+        let mut app = App::new();
+        app.init_resource::<Time>();
+        app.add_systems(Update, suited_damage_control);
+
+        let mut cells = std::collections::HashMap::new();
+        for x in 0..4 {
+            cells.insert(IVec2::new(x, 0), NavCell::Hallway);
+        }
+        let ship = app.world_mut().spawn((Ship, NavGrid { cells, version: 1 })).id();
+
+        // A holed plate just past the end of the corridor.
+        app.world_mut().spawn((
+            HullSegment {
+                health: 0.0,
+                max_health: 100.0,
+                radiation_shielding: 0.0,
+                is_depressurized: true,
+                depressurization_level: 1.0,
+                hull_layer: HullLayer::Inner,
+                material: HullMaterial::Steel,
+                grid_position: IVec2::new(4, 0),
+            },
+            ChildOf(ship),
+        ));
+
+        // Suited, and manning a post at the far end.
+        let hand = app
+            .world_mut()
+            .spawn((
+                CrewMember {
+                    name: "Adeyemi".into(),
+                    health: 100.0,
+                    max_health: 100.0,
+                    oxygen: 100.0,
+                    morale: 100.0,
+                    state: CrewState::Working,
+                },
+                Transform::from_translation(
+                    crate::building::grid_to_local(IVec2::ZERO).extend(0.6),
+                ),
+                Suited,
+                ChildOf(ship),
+            ))
+            .id();
+
+        app.update();
+
+        let sent = app.world().get::<CrewDestination>(hand);
+        assert!(sent.is_some(), "a suited hand was not sent to the breach at all");
+        assert!(
+            app.world().get::<DamageControl>(hand).is_some(),
+            "sent, but not flagged -- their station will reclaim them next frame"
+        );
+        assert_eq!(
+            sent.unwrap().0,
+            IVec2::new(3, 0),
+            "should stand beside the hole, not try to occupy it"
+        );
+        // Walking there is half the job. crew_repair_system skips any state
+        // that is not Repairing or Idle, and seal_breach_system counts only
+        // Repairing -- so arriving still flagged Working means standing at the
+        // hole doing nothing, which is exactly how this first shipped.
+        assert_eq!(
+            app.world().get::<CrewMember>(hand).unwrap().state,
+            CrewState::Repairing,
+            "sent to the breach but not set to work on it"
+        );
+    }
+
     /// A cell the air model has no entry for is not vacuum. Ships have gaps the
     /// room fill never reaches, and treating those as hard vacuum would quietly
     /// suffocate anyone standing in one.
@@ -372,5 +451,80 @@ mod suit_tests {
             100.0,
             "suffocated on a cell the air field says nothing about"
         );
+    }
+}
+
+/// Sends suited crew to work the breaches, post or no post.
+///
+/// `plan_repair_errands` will not do this. It skips anyone a station has
+/// claimed, and the starter ship runs seventeen of its twenty hands on posts,
+/// so a hull full of holes had three people eligible to fix it. It also stands
+/// down entirely while hostiles are near -- reasonable for general repairs,
+/// wrong for a hole letting the air out during the fight that made it.
+///
+/// Putting a suit on is the signal. Nobody suits up to go back to a gun.
+pub fn suited_damage_control(
+    mut commands: Commands,
+    ships: Query<(Entity, &NavGrid), (With<Ship>, Without<OwnedByAiShip>)>,
+    hulls: Query<(&HullSegment, &ChildOf), Without<HullDestroyed>>,
+    mut crew: Query<
+        (Entity, &Transform, &mut CrewMember, &ChildOf, Has<DamageControl>),
+        (With<Suited>, Without<EvaSalvaging>, Without<OwnedByAiShip>),
+    >,
+) {
+    let Ok((ship, nav)) = ships.single() else { return };
+
+    // Open holes only. A merely dented plate is what the ordinary errand
+    // planner is for; this is the job worth pulling someone off a gun.
+    let breaches: Vec<IVec2> = hulls
+        .iter()
+        .filter(|(hull, parent)| {
+            parent.parent() == ship && hull.is_depressurized && hull.depressurization_level > 0.0
+        })
+        .map(|(hull, _)| hull.grid_position)
+        .collect();
+
+    if breaches.is_empty() {
+        for (entity, _, mut member, _, working) in crew.iter_mut() {
+            if working {
+                commands.entity(entity).try_remove::<DamageControl>();
+                member.state = CrewState::Idle;
+            }
+        }
+        return;
+    }
+
+    // One hole per hand, nearest first, so they spread out instead of all
+    // walking to the same one.
+    let mut claimed: std::collections::HashSet<IVec2> = std::collections::HashSet::new();
+    for (entity, transform, mut member, parent, _) in crew.iter_mut() {
+        if parent.parent() != ship {
+            continue;
+        }
+        let here = local_to_grid(transform.translation.truncate());
+        let best = breaches
+            .iter()
+            .filter(|cell| !claimed.contains(*cell))
+            .filter_map(|cell| {
+                // Stand beside the hole, not in it.
+                nav.nearest_passable(*cell).map(|stand| {
+                    let d = (here - stand).abs();
+                    (d.x + d.y, *cell, stand)
+                })
+            })
+            .min_by_key(|(dist, _, _)| *dist);
+
+        let Some((_, hole, stand)) = best else { continue };
+        claimed.insert(hole);
+        commands
+            .entity(entity)
+            .try_insert((DamageControl, CrewDestination(stand)));
+
+        // The state IS the work. crew_repair_system credits Repairing at 1.0
+        // and Idle at 0.5 and skips everything else outright, and
+        // seal_breach_system only counts Repairing -- so a hand pulled off a
+        // post arrived at the hole still flagged Working and stood there
+        // contributing precisely nothing.
+        member.state = CrewState::Repairing;
     }
 }

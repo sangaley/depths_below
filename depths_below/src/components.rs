@@ -2182,6 +2182,14 @@ pub struct Suited;
 #[derive(Component)]
 pub struct SuitingUp;
 
+/// This crew member is suited and has been sent to work a breach.
+///
+/// Outranks their station the way `SuitingUp` does. Someone who has just put
+/// a suit on did it because the hull is open -- sending them back to a gun is
+/// the one thing they should not do next.
+#[derive(Component)]
+pub struct DamageControl;
+
 /// Pressure suits racked in an airlock chamber.
 ///
 /// The lock is already where the dead go out (`crew::burial`), so it is also

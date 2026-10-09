@@ -184,6 +184,8 @@ fn toggle_debug_menu(
                     "5  spawn a boss ship",
                     "0  reveal + target nearest system",
                     "1  reveal entire galaxy map",
+                    "6  kill one crew member",
+                    "^6 breach your own hull (shift)",
                     "H  toggle hitboxes",
                     "J  repair + refuel + rearm",
                 ] {
@@ -676,9 +678,9 @@ fn draw_hitboxes(
 
 /// Debug menu, `Shift+6`: punch a hole in your own hull.
 ///
-/// Shares the key with `debug_kill_crew` because the digits were full, and the
-/// two belong together anyway: hole the ship, then watch whether the air takes
-/// somebody out through it.
+/// Shares the key with `debug_kill_crew`, which takes plain `6`. The two
+/// belong together: hole the ship, then watch whether the air takes somebody
+/// out through it.
 ///
 /// Breaching means what `ship::air::mark_breached_hull` means by it: the plate
 /// is holed and the air starts leaving. Setting health alone would not do it,
