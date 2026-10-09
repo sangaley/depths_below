@@ -36,6 +36,23 @@ fn next_orbit(frontier: f32, prev_radius: f32, radius: f32, gap: f32) -> f32 {
     frontier + prev_radius + radius + gap
 }
 
+/// Seconds for one full orbit at `distance` from the star.
+///
+/// Kepler's third law, `T ∝ a^1.5`, so inner worlds go round faster than
+/// outer ones the way they should. The old period was a flat 60-300s
+/// regardless of distance, which at today's orbits put a planet 300,000 out
+/// on a 60s orbit moving at about 31,000 u/s — twenty-six times faster than
+/// a missile. Bodies tens of thousands of units across were whipping past.
+///
+/// The constant is chosen for orbital SPEED rather than period: about 150
+/// u/s at 300,000 out. That is slower than the ship cruises, so you can
+/// catch a planet and circle it, while still visibly moving along its
+/// dotted path if you watch.
+fn orbital_period(distance: f32) -> f32 {
+    const KEPLER_K: f32 = 7.65e-5;
+    KEPLER_K * distance.max(1.0).powf(1.5)
+}
+
 /// Which temperature band the `i`th of `count` planets falls in.
 ///
 /// By position rather than by roll, so a system reads as a system: scorched
@@ -113,8 +130,14 @@ pub fn spawn_star_system(
             death_timer: 10.0, // 10 second countdown when dying starts
         },
         GravityWell {
-            strength: star_mass * 500.0,
-            influence_radius: star_radius * 4.0,
+            // Same derivation as planets: inverse-square lands on the chosen
+            // surface acceleration when strength is that acceleration times
+            // the radius squared.
+            strength: star_class.surface_gravity() * star_radius * star_radius,
+            // Six radii. Haven's spawn sits under two radii out, where this
+            // still pulls at roughly a quarter of surface strength -- the
+            // star should be felt from the moment you launch.
+            influence_radius: star_radius * 6.0,
             falloff: GravityFalloff::InverseSquare,
         },
         StarSystemMember { system_id },
@@ -155,7 +178,7 @@ pub fn spawn_star_system(
         );
         let orbit_distance = orbit_frontier;
         prev_radius = planet_radius;
-        let orbit_period = rng.gen_range(60.0..300.0); // 1-5 minutes per orbit
+        let orbit_period = orbital_period(orbit_distance) * rng.gen_range(0.88..1.12);
         let eccentricity = rng.gen_range(0.0..0.3);
         let phase = rng.gen_range(0.0..std::f32::consts::TAU);
         let clockwise = rng.gen_bool(0.5);
@@ -176,6 +199,13 @@ pub fn spawn_star_system(
                 mass: planet_mass,
                 radius: planet_radius,
                 name: format!("Planet-{}-{}", system_id, i + 1),
+            },
+            PlanetSpin {
+                // One turn every one to three minutes, either way round. Slow
+                // enough to read as a world rather than a top, quick enough
+                // that a feature visibly crosses the disc while you watch.
+                rate: std::f32::consts::TAU / rng.gen_range(60.0f32..180.0)
+                    * if rng.gen_bool(0.5) { 1.0 } else { -1.0 },
             },
             Planet {
                 planet_type,
@@ -845,5 +875,109 @@ mod planet_placement_tests {
             );
         }
         assert!(PlanetType::Shattered.surface_gravity() < PlanetType::Rocky.surface_gravity());
+    }
+}
+
+#[cfg(test)]
+mod motion_and_pull_tests {
+    use super::*;
+    use crate::celestial::components::StarSizeClass;
+
+    const CLASSES: [StarSizeClass; 4] = [
+        StarSizeClass::Dwarf,
+        StarSizeClass::Main,
+        StarSizeClass::Giant,
+        StarSizeClass::Supergiant,
+    ];
+    const ALL_PLANETS: [PlanetType; 12] = [
+        PlanetType::Lava, PlanetType::Volcanic, PlanetType::Desert,
+        PlanetType::Rocky, PlanetType::Barren, PlanetType::Ocean,
+        PlanetType::Terran, PlanetType::Toxic, PlanetType::Ice,
+        PlanetType::Gas, PlanetType::IceGiant, PlanetType::Shattered,
+    ];
+    /// The starter ship's acceleration, per `ship::movement::THRUST_SCALE`.
+    const STARTER_THRUST: f32 = 180.0;
+
+    /// Pull at `distance` from a body whose surface pull is `surface` at
+    /// `radius` -- what `gravity::accumulate_gravity` computes for an
+    /// inverse-square well built as `surface * radius²`.
+    fn pull(surface: f32, radius: f32, distance: f32) -> f32 {
+        surface * radius * radius / (distance * distance)
+    }
+
+    /// The report: flying right past the star, barely any pull. The old well
+    /// was `mass * 500`, about 0.0016 u/s² at a dwarf's surface.
+    #[test]
+    fn a_star_is_the_deepest_well_in_its_system() {
+        let strongest_planet = ALL_PLANETS
+            .iter()
+            .map(|p| p.surface_gravity())
+            .fold(0.0f32, f32::max);
+        for class in CLASSES {
+            assert!(
+                class.surface_gravity() > strongest_planet,
+                "{class:?} pulls at {}, no harder than a planet at {strongest_planet}",
+                class.surface_gravity()
+            );
+        }
+    }
+
+    /// A fight to climb out of, never a trap.
+    #[test]
+    fn every_star_can_be_escaped() {
+        for class in CLASSES {
+            assert!(
+                class.surface_gravity() < STARTER_THRUST,
+                "{class:?} pulls at {} at its surface, at or beyond the starter's \
+                 {STARTER_THRUST} -- a ship skimming it could never climb out",
+                class.surface_gravity()
+            );
+        }
+    }
+
+    /// Felt from the moment you launch. Haven's star is a dwarf of radius
+    /// 40,000 and the spawn is 75,000 from it (see galaxy::HAVEN_LOCAL_CENTER).
+    #[test]
+    fn havens_star_is_felt_at_the_spawn() {
+        let class = StarSizeClass::Dwarf;
+        let r = class.radius();
+        let at_spawn = pull(class.surface_gravity(), r, 75_000.0);
+        assert!(
+            at_spawn >= 20.0,
+            "Haven's star pulls at {at_spawn} u/s² at the spawn -- not something you notice"
+        );
+        assert!(
+            75_000.0 < r * 6.0,
+            "the spawn is outside the star's influence radius, so it pulls at nothing"
+        );
+    }
+
+    /// Kepler: inner worlds go round faster. A flat period range ignored
+    /// distance entirely, so the outermost planet circled as fast as the
+    /// innermost and covered several times the ground doing it.
+    #[test]
+    fn inner_planets_orbit_faster() {
+        assert!(orbital_period(150_000.0) < orbital_period(300_000.0));
+        assert!(orbital_period(300_000.0) < orbital_period(900_000.0));
+    }
+
+    /// The report: planets go way too fast. The old 60-300s period at today's
+    /// orbits put a planet 300,000 out on a 60s orbit at about 31,000 u/s --
+    /// twenty-six times faster than a missile. Orbital speed has to sit well
+    /// below the ship's, so a planet can be caught and circled.
+    #[test]
+    fn planets_drift_rather_than_whip_past() {
+        const MISSILE_TOP_SPEED: f32 = 1_200.0;
+        for distance in [150_000.0f32, 300_000.0, 600_000.0, 1_200_000.0] {
+            let speed = std::f32::consts::TAU * distance / orbital_period(distance);
+            assert!(
+                speed < MISSILE_TOP_SPEED * 0.25,
+                "a planet {distance} out orbits at {speed} u/s -- that is whipping past"
+            );
+            assert!(speed > 20.0, "a planet {distance} out orbits at only {speed} u/s -- frozen");
+        }
+        // And the figure the old code produced, so the comparison is honest.
+        let old = std::f32::consts::TAU * 300_000.0 / 60.0;
+        assert!(old > 30_000.0, "the old fastest orbit was {old}, not ~31,000");
     }
 }

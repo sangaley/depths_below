@@ -138,6 +138,27 @@ impl StarSizeClass {
             Self::Supergiant => 200_000.0,
         }
     }
+
+    /// Acceleration at the star's surface, in world units per second².
+    ///
+    /// The well used to be `mass * 500` with inverse-square falloff, which
+    /// put a dwarf's pull AT ITS OWN SURFACE at about 0.0016 u/s² — the same
+    /// fault planets had, never fixed here. You could skim a sun and not
+    /// notice it.
+    ///
+    /// Every class out-pulls the strongest planet (a gas giant, 95) because
+    /// a star should be the deepest well in its system. And every class stays
+    /// under the starter ship's ~180 u/s² of thrust, so a star is a fight to
+    /// climb out of and never a trap. A heavier ship accelerates less, so
+    /// near a supergiant that margin is genuinely thin.
+    pub fn surface_gravity(&self) -> f32 {
+        match self {
+            Self::Dwarf => 110.0,
+            Self::Main => 125.0,
+            Self::Giant => 135.0,
+            Self::Supergiant => 145.0,
+        }
+    }
 }
 
 // ============================================================================
@@ -182,6 +203,17 @@ pub enum OrbitBand {
     Hot,
     Temperate,
     Cold,
+}
+
+/// A planet turning on its own axis, in radians per second.
+///
+/// Only the body turns. Its ring stays level and its night side stays turned
+/// away from the star -- see `celestial_visuals::spin_and_light_planets` --
+/// because a spinning disc whose shadow spins with it reads as a rotating
+/// sticker, not a world.
+#[derive(Component)]
+pub struct PlanetSpin {
+    pub rate: f32,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
