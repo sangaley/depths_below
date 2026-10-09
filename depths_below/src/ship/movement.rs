@@ -215,7 +215,7 @@ pub fn ship_movement(
 
     // Coast damping: with no thrust input and no brake, bleed speed off
     // automatically (arcade handling — release W and the ship settles).
-    if !input_state.brake && input_state.movement.y.abs() < 0.05 && input_state.movement.x.abs() < 0.05 {
+    if settles(input_state.movement, input_state.brake, total_thrust) {
         let decay = (0.5_f32).powf(dt / COAST_HALF_LIFE);
         velocity.0 *= decay;
         if velocity.0.length_squared() < 4.0 {
@@ -229,6 +229,15 @@ pub fn ship_movement(
 
     // (The old left/right sprite mirror is gone — the root now truly rotates.)
     transform.scale.x = transform.scale.x.abs();
+}
+
+/// Whether the arcade coast damping applies this frame: no stick and no brake
+/// -- or no lit engine at all. Holding W with a dead drive does nothing, and
+/// it used to switch the damping off as well, so a ship that ran dry at speed
+/// kept every bit of it: one autoplay run coasted into Haven Station at
+/// ~1,000 u/s with no way to brake and lost nine crew to the breach.
+fn settles(movement: Vec2, brake: bool, total_thrust: f32) -> bool {
+    total_thrust <= 0.0 || (!brake && movement.y.abs() < 0.05 && movement.x.abs() < 0.05)
 }
 
 /// Tracks how far the ship is from Haven Station (the origin). Displayed in km
@@ -497,5 +506,24 @@ mod fuel_relight_tests {
         }
         assert!(lit(&app, engine), "never relit");
         assert!(app.world().resource::<FuelState>().current_fuel > 20.0);
+    }
+}
+
+#[cfg(test)]
+mod settle_tests {
+    use super::*;
+
+    #[test]
+    fn hands_off_the_stick_settles() {
+        assert!(settles(Vec2::ZERO, false, 500.0));
+        assert!(!settles(Vec2::Y, false, 500.0));
+        assert!(!settles(Vec2::ZERO, true, 500.0), "the brake does its own work");
+    }
+
+    /// Thrust held on a dead drive still lets the ship settle.
+    #[test]
+    fn a_dead_drive_settles_whatever_is_held() {
+        assert!(settles(Vec2::Y, false, 0.0));
+        assert!(settles(Vec2::Y, true, 0.0));
     }
 }
