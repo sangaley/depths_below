@@ -146,6 +146,7 @@ pub fn spawn_bounty_markers(
             TextColor(Color::srgb(1.0, 0.25, 0.25)),
             Transform::from_translation(transform.translation + Vec3::new(0.0, 140.0, 6.0)),
             BountyMarker { target: entity },
+            crate::camera::ZoomInvariantText,
         ));
     }
 }

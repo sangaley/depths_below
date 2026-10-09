@@ -295,6 +295,7 @@ fn spawn_station(commands: &mut Commands, site: &StationSite) {
             TextFont { font_size: FontSize::Px(if is_haven { 28.0 } else { 24.0 }), ..default() },
             TextColor(Color::srgba(0.7, 0.8, 1.0, 0.8)),
             Transform::from_xyz(0.0, 190.0 * scale, 0.03),
+            crate::camera::ZoomInvariantText,
         ))
         .id();
     commands.entity(root).add_child(label);
@@ -306,6 +307,7 @@ fn spawn_station(commands: &mut Commands, site: &StationSite) {
                 TextFont { font_size: FontSize::Px(16.0), ..default() },
                 TextColor(Color::srgba(0.6, 0.7, 0.9, 0.6)),
                 Transform::from_xyz(0.0, 165.0 * scale, 0.03),
+                crate::camera::ZoomInvariantText,
             ))
             .id();
         commands.entity(root).add_child(kind_label);

@@ -78,6 +78,35 @@ pub fn framing_zoom(ship_radius: f32, view_height: f32) -> f32 {
     (2.0 * ship_radius / (SHIP_FRAME_FRACTION * view_height)).max(DEFAULT_ZOOM)
 }
 
+/// World-space text that should stay the size it was designed at on screen.
+///
+/// Text2d is sized in world units, so it shrinks as the camera pulls back.
+/// Station names, damage numbers and bounty labels were all sized for the old
+/// fixed zoom of 1.8; once the camera started framing the ship (out to ~5.6
+/// for the starter pincer) they drew at a third of that -- a station's name
+/// plate became a smudge. These scale up with the zoom instead, and never
+/// below their designed size.
+#[derive(Component)]
+pub struct ZoomInvariantText;
+
+/// Scale a zoom-invariant label should carry at this camera zoom.
+pub fn label_scale(camera_zoom: f32) -> f32 {
+    (camera_zoom / DEFAULT_ZOOM).max(1.0)
+}
+
+fn keep_world_labels_readable(
+    camera: Query<&Projection, With<MainCamera>>,
+    mut labels: Query<&mut Transform, (With<ZoomInvariantText>, Without<MainCamera>)>,
+) {
+    let Ok(Projection::Orthographic(projection)) = camera.single() else { return };
+    let want = Vec3::splat(label_scale(projection.scale));
+    for mut transform in &mut labels {
+        if transform.scale != want {
+            transform.scale = want;
+        }
+    }
+}
+
 /// Camera can pan up to this far from the ship while free-looking.
 const FREE_LOOK_MAX_PAN: f32 = 4500.0;
 /// Lerp rate (per second) for easing the pan offset toward/away from target.
@@ -100,6 +129,7 @@ impl Plugin for CameraPlugin {
                     camera_shake_update,
                     free_look_input,
                     camera_follow_ship,
+                    keep_world_labels_readable,
                     update_background_color,
                     update_depth_vignette,
                 )
@@ -748,6 +778,15 @@ mod framing_tests {
         let radius = 1000.0 + CELL_HALF_DIAGONAL;
         let share = 2.0 * radius / (720.0 * zoom);
         assert!((share - SHIP_FRAME_FRACTION).abs() < 0.01, "ship takes {share:.2} of the view at zoom {zoom}");
+    }
+
+    /// Labels hold their designed size from the default zoom outward, and
+    /// are never shrunk when the player zooms in close.
+    #[test]
+    fn labels_scale_with_the_zoom_but_not_below_design_size() {
+        assert_eq!(label_scale(DEFAULT_ZOOM), 1.0);
+        assert!((label_scale(DEFAULT_ZOOM * 3.0) - 3.0).abs() < 1e-5);
+        assert_eq!(label_scale(0.8), 1.0);
     }
 
     #[test]

@@ -300,6 +300,7 @@ pub(crate) fn spawn_floating_label(commands: &mut Commands, position: Vec2, text
         TextFont { font_size: FontSize::Px(16.0), ..default() },
         TextColor(color),
         Transform::from_xyz(position.x, position.y + 20.0, 1.0),
+        crate::camera::ZoomInvariantText,
         FloatingDamage {
             timer: Timer::from_seconds(0.9, TimerMode::Once),
             velocity: 34.0,
@@ -314,6 +315,7 @@ pub(crate) fn spawn_floating_damage(commands: &mut Commands, position: Vec2, dam
         TextFont { font_size: FontSize::Px(18.0), ..default() },
         TextColor(color),
         Transform::from_xyz(position.x, position.y + 20.0, 1.0),
+        crate::camera::ZoomInvariantText,
         FloatingDamage {
             timer: Timer::from_seconds(0.8, TimerMode::Once),
             velocity: 40.0,
