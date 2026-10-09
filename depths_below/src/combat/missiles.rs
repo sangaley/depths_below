@@ -397,7 +397,13 @@ pub fn launch_missiles(commands: &mut Commands, l: &MissileLaunch) -> u32 {
                 thrust: BOOST_THRUST * l.thrust_mult / bulk,
                 max_lateral,
                 arm_distance: 80.0,
-                blast_radius: 30.0 + size_mult * 20.0,
+                // Was `30 + size_mult * 20`, i.e. 50-70 units against a
+                // 66-unit grid cell -- a "blast" that could not reach a
+                // neighbouring block. Now roughly one and a half to two
+                // cells, so a warhead damages a small cluster rather than
+                // needing to land dead on a single one. A tuning number:
+                // raise it for a heavier feel, lower it for precision.
+                blast_radius: 60.0 + size_mult * 40.0,
                 owner: l.weapon,
                 eject_time,
                 launch_dir: dir,
@@ -718,6 +724,36 @@ fn obstructs_tube(launch_cell: IVec2, axis: IVec2, cell: IVec2) -> bool {
     along > 0 && delta == axis * along
 }
 
+/// How much of a warhead one block `d` away takes.
+///
+/// Linear falloff across the blast: at the rim a warhead scorches, at the
+/// centre it guts. Armour gets a say through the same `resolve_impact` the
+/// guns use -- this used to apply the FULL warhead to every block in range
+/// regardless of plating or distance, which made a heavily belted Pressure
+/// King no harder to crack than a bare Rust Swarm.
+///
+/// Pass-through is high because a shaped charge is meant to defeat plate
+/// that stops a bullet. High, not total: plating you stand behind should
+/// still be worth having.
+///
+/// A detonation has no incoming angle to speak of -- it envelops the block
+/// rather than striking a face -- so it is always head-on and never skips.
+fn blast_damage(warhead: f32, d: f32, radius: f32, block: &crate::building::Block) -> f32 {
+    const WARHEAD_PASS_THROUGH: f32 = 0.65;
+    if d >= radius || radius <= 0.0 {
+        return 0.0;
+    }
+    let share = warhead * (1.0 - d / radius);
+    let impact = crate::combat::impact::resolve_impact(
+        share,
+        block,
+        1.0,
+        crate::combat::impact::Obliquity::HEAD_ON,
+        Some(WARHEAD_PASS_THROUGH),
+    );
+    (impact.to_block + impact.through).max(0.0)
+}
+
 pub fn check_missile_hits(
     mut commands: Commands,
     fx: Res<crate::vfx::effect_textures::EffectTextures>,
@@ -729,6 +765,10 @@ pub fn check_missile_hits(
         With<crate::ai_ship::components::AiShip>,
     >,
     mut ai_module_query: Query<(&mut Module, &GlobalTransform), Without<DestroyedModule>>,
+    // Hull is a separate component from Module, and the blast only ever
+    // looked at Modules — so a warhead striking an enemy's armour belt did
+    // nothing at all, and was not even consumed. See the walk below.
+    mut ai_hull_query: Query<(&mut HullSegment, &GlobalTransform), Without<HullDestroyed>>,
     block_query: Query<&crate::building::Block>,
     owner_parent_query: Query<&ChildOf>,
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
@@ -848,7 +888,19 @@ pub fn check_missile_hits(
                 continue 'missiles;
             }
 
-            if dist_to_ship < shield.radius + 60.0 {
+            // Contact: is the warhead inside a LIVE block of this ship?
+            // `update_ship_grids` maintains a ShipGrid for AI ships exactly
+            // as it does for the player, so the same cell lookup the
+            // own-hull cook-off uses above works here. Without this a
+            // missile only ever detonated if a Module happened to fall
+            // inside a blast radius smaller than one 66-unit cell -- so it
+            // flew through armour plate, and through whole ships, untouched.
+            let contact = parent_hulls.get(ai_entity).ok().is_some_and(|(gt, grid)| {
+                let here = crate::building::world_to_cell(gt, missile_pos);
+                grid.get(IVec2::new(here.x.round() as i32, here.y.round() as i32)).is_some()
+            });
+
+            if contact || dist_to_ship < shield.radius + 60.0 {
                 // Blast damage, but armour gets a say.
                 //
                 // This used to apply the FULL warhead to every module inside
@@ -862,30 +914,35 @@ pub fn check_missile_hits(
                 // Pass-through is high: a shaped charge is meant to defeat
                 // plate that stops a bullet. High, not total — plating you
                 // stand behind should still be worth having.
-                const WARHEAD_PASS_THROUGH: f32 = 0.65;
                 let radius = missile.blast_radius.max(50.0);
                 let mut total_damage = 0.0;
                 let mut hit_any = false;
                 for child in children.iter() {
+                    // Hull first, then modules. Both are solid, both are
+                    // children of the ship, and a warhead does not care
+                    // which component a block happens to carry.
+                    if let Ok((mut hull, gt)) = ai_hull_query.get_mut(child) {
+                        let block = block_query.get(child).copied()
+                            .unwrap_or_else(|_| crate::building::Block::module(IVec2::ZERO));
+                        let dealt = blast_damage(
+                            missile.damage,
+                            missile_pos.distance(gt.translation().truncate()),
+                            radius,
+                            &block,
+                        );
+                        if dealt > 0.0 {
+                            hull.health = (hull.health - dealt).max(0.0);
+                            total_damage += dealt;
+                            hit_any = true;
+                        }
+                        continue;
+                    }
                     if let Ok((mut module, gt)) = ai_module_query.get_mut(child) {
                         let d = missile_pos.distance(gt.translation().truncate());
                         if d >= radius { continue; }
-                        // Linear falloff: at the rim a warhead scorches, at
-                        // the centre it guts.
-                        let share = missile.damage * (1.0 - d / radius);
                         let block = block_query.get(child).copied()
                             .unwrap_or_else(|_| crate::building::Block::module(IVec2::ZERO));
-                        let impact = crate::combat::impact::resolve_impact(
-                            share,
-                            &block,
-                            1.0,
-                            // A detonation has no incoming angle to speak of —
-                            // it envelops the block rather than striking a
-                            // face, so it never skips off.
-                            crate::combat::impact::Obliquity::HEAD_ON,
-                            Some(WARHEAD_PASS_THROUGH),
-                        );
-                        let dealt = impact.to_block + impact.through;
+                        let dealt = blast_damage(missile.damage, d, radius, &block);
                         if dealt <= 0.0 { continue; }
                         module.health = (module.health - dealt).max(0.0);
                         total_damage += dealt;
@@ -995,5 +1052,82 @@ mod silo_tests {
     #[test]
     fn a_missing_axis_never_detonates() {
         assert!(!obstructs_tube(IVec2::ZERO, IVec2::ZERO, IVec2::new(0, 1)));
+    }
+}
+
+#[cfg(test)]
+mod warhead_tests {
+    use super::*;
+    use crate::building::Block;
+    use crate::components::HullMaterial;
+
+    fn steel_plate() -> Block {
+        Block::hull(IVec2::ZERO, HullMaterial::Steel)
+    }
+
+    /// The report that started this: missiles appeared to do nothing.
+    ///
+    /// Hull plating is a `HullSegment`, and the blast walk only ever matched
+    /// entities carrying a `Module` -- so a warhead that struck an enemy's
+    /// armour belt dealt no damage at all, and was not even consumed. It kept
+    /// flying until some module happened to fall inside a blast radius that
+    /// was itself smaller than one 66-unit grid cell.
+    ///
+    /// This covers the arithmetic half; the walk now checks hull before
+    /// modules and detonates on contact with any live cell of the target.
+    #[test]
+    fn a_warhead_hurts_armour_plate() {
+        let dealt = blast_damage(75.0, 0.0, 120.0, &steel_plate());
+        assert!(
+            dealt > 0.0,
+            "a 75-damage warhead detonating ON a steel plate dealt {dealt}"
+        );
+    }
+
+    /// Falloff is linear across the blast, so the centre guts and the rim
+    /// scorches. Both ends have to be real: zero at the centre would be the
+    /// original bug, and full damage at the rim would make blast radius the
+    /// only stat that matters.
+    #[test]
+    fn the_centre_guts_and_the_rim_scorches() {
+        let centre = blast_damage(100.0, 0.0, 120.0, &steel_plate());
+        let middle = blast_damage(100.0, 60.0, 120.0, &steel_plate());
+        let rim = blast_damage(100.0, 119.0, 120.0, &steel_plate());
+        assert!(centre > middle, "centre {centre} no worse than mid-blast {middle}");
+        assert!(middle > rim, "mid-blast {middle} no worse than the rim {rim}");
+        assert!(rim >= 0.0);
+    }
+
+    /// Nothing outside the blast. Without this the radius means nothing and
+    /// every warhead is a ship-wide strike.
+    #[test]
+    fn nothing_outside_the_blast_is_touched() {
+        assert_eq!(blast_damage(100.0, 120.0, 120.0, &steel_plate()), 0.0);
+        assert_eq!(blast_damage(100.0, 5_000.0, 120.0, &steel_plate()), 0.0);
+        assert_eq!(blast_damage(100.0, 0.0, 0.0, &steel_plate()), 0.0);
+    }
+
+    /// A blast has to reach past the block it lands on, or "radius" is
+    /// decoration.
+    ///
+    /// `size_mult` is `bays.max(1)`, so one bay is the smallest launcher
+    /// there is. Under the old `30 + size_mult * 20` that was a radius of
+    /// 50 against a 66-unit cell — a single-bay warhead could not touch the
+    /// block beside the one it hit, which is most of why missiles read as
+    /// doing nothing.
+    #[test]
+    fn even_the_smallest_blast_reaches_a_neighbouring_block() {
+        const CELL: f32 = 66.0;
+        for bays in 1..=4u32 {
+            let size_mult = bays as f32;
+            let radius = 60.0 + size_mult * 40.0;
+            assert!(
+                radius > CELL,
+                "{bays} bay(s): blast radius {radius} is under one {CELL}-unit cell, \
+                 so the warhead cannot reach a neighbouring block"
+            );
+        }
+        // And the old formula is what this replaced — one bay fell short.
+        assert!(30.0 + 20.0 < CELL, "the old single-bay radius was not actually under a cell");
     }
 }

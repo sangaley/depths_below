@@ -556,8 +556,26 @@ pub struct MapWarpCharging {
 }
 
 const WARP_DASH_FUEL_PER_1000: f32 = 1.0;
-const WARP_DASH_BASE_CHARGE: f32 = 2.0;
-const WARP_DASH_DISTANCE_PER_SECOND: f32 = 15_000.0;
+/// Spin-up before a local dash moves you at all.
+///
+/// Was 2.0, which was most of the cost of any short hop and made the drive
+/// feel like a worse pair of engines. The local dash is a reposition inside
+/// one system -- crossing to a planet, a belt, the next station -- and it
+/// should feel like using a tool, not committing to something.
+const WARP_DASH_BASE_CHARGE: f32 = 0.5;
+/// Distance covered per second of charge. Was 15,000, so the hop out to a
+/// planet at 29,000 cost about four seconds of standing still. At 80,000 the
+/// same hop is under a second, and crossing the whole system is a few.
+const WARP_DASH_DISTANCE_PER_SECOND: f32 = 80_000.0;
+/// Ceiling on a local dash, however far across the system it goes.
+///
+/// Without it the drives invert at the extremes: the longest in-system hop
+/// is to a station 420,000 out (`home_base::station_sites`), which on the
+/// distance term alone charges 5.75s -- longer than leaving for another star
+/// entirely, which starts at 4s. Crossing a room must not cost more than
+/// crossing the galaxy, so the local drive is bounded rather than linear
+/// forever.
+const WARP_DASH_MAX_CHARGE: f32 = 3.0;
 /// Stop short of the exact clicked point - avoids ever materializing inside
 /// whatever's sitting there (a station, a boss hull, etc).
 ///
@@ -583,7 +601,7 @@ fn warp_dash_fuel_cost(distance: f32) -> f32 {
 }
 
 fn warp_dash_charge_time(distance: f32) -> f32 {
-    WARP_DASH_BASE_CHARGE + distance / WARP_DASH_DISTANCE_PER_SECOND
+    (WARP_DASH_BASE_CHARGE + distance / WARP_DASH_DISTANCE_PER_SECOND).min(WARP_DASH_MAX_CHARGE)
 }
 
 /// Helper to spawn a HUD bar (background + fill)
@@ -2365,12 +2383,66 @@ const MAP_WORLD_RANGE: f32 = 600_000.0;
 /// world origin like only-Haven-ever-existing used to guarantee — hardcoding
 /// origin here left every non-Haven system's contents clamped to whichever
 /// panel edge was closest, reading as a "glitch."
-fn world_to_map_px(world_pos: Vec2, center: Vec2, panel_size: f32) -> (f32, f32) {
+fn world_to_map_px(world_pos: Vec2, center: Vec2, panel_size: f32, range: f32) -> (f32, f32) {
+    let (x, y) = world_to_map_px_raw(world_pos, center, panel_size, range);
+    (x.clamp(0.0, panel_size), y.clamp(0.0, panel_size))
+}
+
+/// Unclamped. For drawing a curve, where a point off the map must be left
+/// out — clamping it would stack every off-map point of an orbit along the
+/// panel's border as a solid line.
+fn world_to_map_px_raw(world_pos: Vec2, center: Vec2, panel_size: f32, range: f32) -> (f32, f32) {
     let rel = world_pos - center;
     let half = panel_size / 2.0;
-    let x = half + (rel.x / MAP_WORLD_RANGE) * half;
-    let y = half - (rel.y / MAP_WORLD_RANGE) * half;
-    (x.clamp(0.0, panel_size), y.clamp(0.0, panel_size))
+    (half + (rel.x / range) * half, half - (rel.y / range) * half)
+}
+
+/// The inverse of `world_to_map_px`, from a click's normalised panel position
+/// (-0.5..0.5 on each axis, as `ComputedNode::normalize_point` gives it).
+///
+/// One function for both directions' scale, so a click lands where it was
+/// drawn. If the drawing and the click handler ever disagreed on `range`,
+/// clicking a planet would warp you somewhere else on the map entirely.
+fn map_norm_to_world(norm: Vec2, center: Vec2, range: f32) -> Vec2 {
+    center + Vec2::new(norm.x * 2.0 * range, -norm.y * 2.0 * range)
+}
+
+/// Samples around one orbit on the map. Half are drawn, so this many over
+/// two dots per orbit -- enough to read as a curve at map scale without
+/// spawning hundreds of UI nodes per planet.
+const MAP_ORBIT_SAMPLES: usize = 120;
+
+/// The planet markers' own blue, faded. A path belongs to its planet, so it
+/// should read as the same family, and quieter than the thing on it.
+const MAP_ORBIT_COLOR: Color = Color::srgba(0.5, 0.6, 0.8, 0.45);
+
+/// Fraction of headroom beyond the outermost orbit, so the furthest planet's
+/// path doesn't graze the panel edge.
+const MAP_FIT_MARGIN: f32 = 1.08;
+
+/// Half-width of the local map in world units, fitted to the system.
+///
+/// `MAP_WORLD_RANGE` alone is 600,000, which planets have outgrown: with
+/// bodies twice their old size and 80,000-140,000 between them, the median
+/// system's outermost planet now sits near 700,000 and one in ten past
+/// 1,000,000. At a fixed range more than half of all systems would draw
+/// their outer orbits off the edge of the map.
+///
+/// Fitting each system rather than raising the constant keeps small systems
+/// as readable as before -- 600,000 is the floor, never zoomed further in --
+/// and only widens the ones that need it.
+///
+/// Measured from each orbit's APOAPSIS, `a(1+e)`, plus the body's radius:
+/// the farthest that orbit ever reaches. Using where planets currently are
+/// would make the scale drift as they move, and the map is drawn on open and
+/// clicked seconds later.
+fn current_map_range(world_data: &MapWorldData) -> f32 {
+    let furthest = world_data
+        .planet_orbits
+        .iter()
+        .map(|(orbit, body)| orbit.semi_major_axis * (1.0 + orbit.eccentricity) + body.radius)
+        .fold(0.0f32, f32::max);
+    (furthest * MAP_FIT_MARGIN).max(MAP_WORLD_RANGE)
 }
 
 /// Bundles the map's world-data queries into one SystemParam — Bevy caps how
@@ -2382,6 +2454,10 @@ struct MapWorldData<'w, 's> {
     sim: Res<'w, crate::ai_ship::components::WorldSimulation>,
     star_query: Query<'w, 's, &'static Transform, With<crate::celestial::components::Star>>,
     planet_query: Query<'w, 's, &'static Transform, With<crate::celestial::components::Planet>>,
+    // The orbit itself, not where the planet currently is on it. Both the
+    // drawn ellipse and the map's scale come from these, and they are fixed,
+    // so the map does not rescale between opening it and clicking on it.
+    planet_orbits: Query<'w, 's, (&'static crate::celestial::components::OrbitalPath, &'static crate::celestial::components::CelestialBody), With<crate::celestial::components::Planet>>,
     bounty_ship_query: Query<'w, 's, (&'static Transform, &'static crate::ai_ship::components::BountyTarget), With<crate::ai_ship::components::AiShip>>,
     contract_state: Res<'w, crate::contracts::ContractState>,
     streaming: Res<'w, crate::celestial::resources::SystemStreamingManager>,
@@ -2406,8 +2482,13 @@ struct MapSnapshot {
     /// the old fixed Haven-only list these are always the right ones for
     /// wherever the player actually is.
     stations: Vec<(Vec2, String, Color)>,
+    /// Half-width of the map in world units, fitted to this system. See
+    /// `current_map_range`.
+    map_range: f32,
     stars: Vec<Vec2>,
     planets: Vec<Vec2>,
+    /// Each planet's orbit as (star position, semi-major axis, eccentricity).
+    orbits: Vec<(Vec2, f32, f32)>,
     hostiles: Vec<Vec2>,
     bounties: Vec<Vec2>,
     wrecks_found: usize,
@@ -2510,7 +2591,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
         )).with_children(|map| {
             // Star(s)
             for star_pos in &snap.stars {
-                let (x, y) = world_to_map_px(*star_pos, snap.map_center, panel_size);
+                let (x, y) = world_to_map_px(*star_pos, snap.map_center, panel_size, snap.map_range);
                 map.spawn((
                     Node {
                         position_type: PositionType::Absolute,
@@ -2523,9 +2604,40 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
                     BackgroundColor(Color::srgb(1.0, 0.9, 0.4)),
                 ));
             }
+            // Orbits, drawn before the planets so each planet's marker sits
+            // on top of its own path. Sampled from the same
+            // `r = a(1-e²)/(1+e·cos θ)` that `celestial::orbits` moves the
+            // planet along, so the dots are where the planet will be.
+            for &(star, a, e) in &snap.orbits {
+                for i in 0..MAP_ORBIT_SAMPLES {
+                    // Every other sample: dotted, not solid.
+                    if i % 2 == 1 {
+                        continue;
+                    }
+                    let theta = i as f32 / MAP_ORBIT_SAMPLES as f32 * std::f32::consts::TAU;
+                    let r = a * (1.0 - e * e) / (1.0 + e * theta.cos());
+                    let point = star + Vec2::new(r * theta.cos(), r * theta.sin());
+                    let (x, y) = world_to_map_px_raw(point, snap.map_center, panel_size, snap.map_range);
+                    // Skip, never clamp -- see world_to_map_px_raw.
+                    if x < 0.0 || y < 0.0 || x > panel_size || y > panel_size {
+                        continue;
+                    }
+                    map.spawn((
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: Val::Px(x - 1.0),
+                            top: Val::Px(y - 1.0),
+                            width: Val::Px(2.0),
+                            height: Val::Px(2.0),
+                            ..default()
+                        },
+                        BackgroundColor(MAP_ORBIT_COLOR),
+                    ));
+                }
+            }
             // Planets
             for planet_pos in &snap.planets {
-                let (x, y) = world_to_map_px(*planet_pos, snap.map_center, panel_size);
+                let (x, y) = world_to_map_px(*planet_pos, snap.map_center, panel_size, snap.map_range);
                 map.spawn((
                     Node {
                         position_type: PositionType::Absolute,
@@ -2542,7 +2654,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
             // per system means each one is a distinct destination worth
             // recognising rather than an anonymous green dot.
             for (station_pos, name, accent) in &snap.stations {
-                let (x, y) = world_to_map_px(*station_pos, snap.map_center, panel_size);
+                let (x, y) = world_to_map_px(*station_pos, snap.map_center, panel_size, snap.map_range);
                 map.spawn((
                     Node {
                         position_type: PositionType::Absolute,
@@ -2570,7 +2682,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
             }
             // Hostiles: real (in render range) + still-off-screen simulated
             for hostile_pos in &snap.hostiles {
-                let (x, y) = world_to_map_px(*hostile_pos, snap.map_center, panel_size);
+                let (x, y) = world_to_map_px(*hostile_pos, snap.map_center, panel_size, snap.map_range);
                 map.spawn((
                     Node {
                         position_type: PositionType::Absolute,
@@ -2586,7 +2698,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
             // Active bounty targets, highlighted on top of the generic red
             // hostile dot at the same spot — this is specifically "your" hunt.
             for bounty_pos in &snap.bounties {
-                let (x, y) = world_to_map_px(*bounty_pos, snap.map_center, panel_size);
+                let (x, y) = world_to_map_px(*bounty_pos, snap.map_center, panel_size, snap.map_range);
                 map.spawn((
                     Node {
                         position_type: PositionType::Absolute,
@@ -2602,7 +2714,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
 
             // Pending warp destination, if one is selected — gold crosshair
             if let Some(target) = snap.pending_target {
-                let (x, y) = world_to_map_px(target, snap.map_center, panel_size);
+                let (x, y) = world_to_map_px(target, snap.map_center, panel_size, snap.map_range);
                 map.spawn((
                     Node {
                         position_type: PositionType::Absolute,
@@ -2630,7 +2742,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
             }
 
             // Player marker on top, slightly bigger so it's easy to find
-            let (px, py) = world_to_map_px(snap.player_pos, snap.map_center, panel_size);
+            let (px, py) = world_to_map_px(snap.player_pos, snap.map_center, panel_size, snap.map_range);
             map.spawn((
                 Node {
                     position_type: PositionType::Absolute,
@@ -2974,8 +3086,15 @@ fn build_map_snapshot(
         stations: world_data.stations.sites.iter()
             .map(|s| (s.pos, s.name.clone(), crate::world::home_base::station_accent(s.kind)))
             .collect(),
+        map_range: current_map_range(&world_data),
         stars: world_data.star_query.iter().map(|t| t.translation.truncate()).collect(),
         planets: world_data.planet_query.iter().map(|t| t.translation.truncate()).collect(),
+        orbits: world_data.planet_orbits.iter()
+            .filter_map(|(orbit, _)| {
+                let star = world_data.star_query.get(orbit.parent).ok()?.translation.truncate();
+                Some((star, orbit.semi_major_axis, orbit.eccentricity))
+            })
+            .collect(),
         hostiles,
         bounties,
         wrecks_found: discovered.wrecks.len(),
@@ -3356,7 +3475,7 @@ fn map_click_system(
 
     let player_pos = player_query.single().map(|t| t.translation.truncate()).unwrap_or(Vec2::ZERO);
     let map_center = current_map_center(&world_data, player_pos);
-    let target = map_center + Vec2::new(norm.x * 2.0 * MAP_WORLD_RANGE, -norm.y * 2.0 * MAP_WORLD_RANGE);
+    let target = map_norm_to_world(norm, map_center, current_map_range(&world_data));
     pending.0 = Some(target);
 
     let dist = player_pos.distance(target);
@@ -5180,5 +5299,158 @@ fn update_hull_warning_overlay(
         for (entity, _, _) in overlay_query.iter() {
             commands.entity(entity).despawn();
         }
+    }
+}
+
+#[cfg(test)]
+mod warp_pacing_tests {
+    use super::*;
+    use crate::celestial::warp::interstellar_charge_time;
+
+    /// Representative in-system distances at the scale systems actually have
+    /// (see `celestial::galaxy`): a planet from the spawn, the star, and a
+    /// far station.
+    const TO_PLANET: f32 = 29_000.0;
+    const TO_STAR: f32 = 95_000.0;
+    const TO_FAR_STATION: f32 = 420_000.0;
+
+    /// The point of having two drives. A reposition inside one system must
+    /// stay cheaper than the cheapest jump between stars, or there is no
+    /// reason to feel differently about the two, and both have now been
+    /// retuned in opposite directions at least once.
+    #[test]
+    fn crossing_a_system_is_quicker_than_leaving_one() {
+        let shortest_jump = interstellar_charge_time(0.0);
+        for distance in [TO_PLANET, TO_STAR, TO_FAR_STATION] {
+            let local = warp_dash_charge_time(distance);
+            assert!(
+                local < shortest_jump,
+                "a {distance}-unit local dash charges for {local}s, no quicker than the \
+                 shortest interstellar jump at {shortest_jump}s"
+            );
+        }
+    }
+
+    /// Reaching the things the generator puts near the spawn should feel like
+    /// using a tool. At the old 2.0s base and 15,000/s this was about four
+    /// seconds of standing still to cross to a planet.
+    #[test]
+    fn reaching_a_nearby_planet_is_near_instant() {
+        let t = warp_dash_charge_time(TO_PLANET);
+        assert!(t < 1.0, "charging {t}s to cross to a planet is a pause, not a dash");
+    }
+
+    /// And leaving a system should cost something. At 1-4s it was no more
+    /// than crossing a room.
+    #[test]
+    fn leaving_the_system_is_a_decision() {
+        let near = interstellar_charge_time(0.0);
+        let far = interstellar_charge_time(1.0);
+        assert!(near >= 3.0, "the shortest jump between stars charges for only {near}s");
+        assert!(far >= 12.0, "a jump to the far edge of the galaxy charges for only {far}s");
+        assert!(far <= 30.0, "{far}s is a loading screen, which is what 6-60s was");
+    }
+
+    /// Both drives must cost more for more distance, or the cheapest route is
+    /// to pick the furthest target. Never LESS -- the local dash flattens at
+    /// `WARP_DASH_MAX_CHARGE` rather than continuing to climb, so the top end
+    /// is checked for non-decreasing rather than strictly increasing.
+    #[test]
+    fn further_never_costs_less() {
+        assert!(warp_dash_charge_time(TO_PLANET) < warp_dash_charge_time(TO_STAR));
+        assert!(warp_dash_charge_time(TO_STAR) <= warp_dash_charge_time(TO_FAR_STATION));
+        assert!(interstellar_charge_time(0.0) < interstellar_charge_time(0.5));
+        assert!(interstellar_charge_time(0.5) < interstellar_charge_time(1.0));
+    }
+
+    /// The cap is what keeps the two drives from inverting, so it has to stay
+    /// under the cheapest jump between stars.
+    #[test]
+    fn the_local_cap_stays_under_an_interstellar_jump() {
+        assert!(
+            WARP_DASH_MAX_CHARGE < interstellar_charge_time(0.0),
+            "local dashes cap at {WARP_DASH_MAX_CHARGE}s, at or above the {}s shortest jump",
+            interstellar_charge_time(0.0)
+        );
+        // Even an absurd distance stays bounded.
+        assert!(warp_dash_charge_time(50_000_000.0) <= WARP_DASH_MAX_CHARGE);
+    }
+}
+
+#[cfg(test)]
+mod map_projection_tests {
+    use super::*;
+
+    const PANEL: f32 = 600.0;
+
+    /// Where on the panel a world point is drawn, as the normalised position
+    /// `ComputedNode::normalize_point` would report for a click there.
+    fn drawn_at(world: Vec2, center: Vec2, range: f32) -> Vec2 {
+        let (x, y) = world_to_map_px_raw(world, center, PANEL, range);
+        Vec2::new(x / PANEL - 0.5, y / PANEL - 0.5)
+    }
+
+    /// The property that matters most. Click the dot you see, and the warp
+    /// target must be the world point that dot was drawn for -- at every
+    /// scale the map can be fitted to. Draw and click each used to compute
+    /// the scale for themselves; if they ever disagree, clicking a planet
+    /// sends you somewhere else on the map entirely.
+    #[test]
+    fn a_click_lands_where_the_dot_was_drawn() {
+        let center = Vec2::new(31_000.0, -68_400.0);
+        for range in [MAP_WORLD_RANGE, 900_000.0, 1_150_000.0] {
+            for world in [
+                center,
+                center + Vec2::new(250_000.0, 0.0),
+                center + Vec2::new(-410_000.0, 330_000.0),
+                center + Vec2::new(0.0, -range * 0.9),
+            ] {
+                let back = map_norm_to_world(drawn_at(world, center, range), center, range);
+                assert!(
+                    back.distance(world) < 1.0,
+                    "range {range}: drew {world}, a click there resolves to {back}"
+                );
+            }
+        }
+    }
+
+    /// Up is up. Screen y grows downward and world y upward; flip one side and
+    /// not the other and the whole map is mirrored top to bottom.
+    #[test]
+    fn north_is_drawn_above_the_centre() {
+        let c = Vec2::ZERO;
+        let (_, y_north) = world_to_map_px_raw(Vec2::new(0.0, 100_000.0), c, PANEL, MAP_WORLD_RANGE);
+        let (_, y_centre) = world_to_map_px_raw(c, c, PANEL, MAP_WORLD_RANGE);
+        assert!(y_north < y_centre, "a point north of centre was drawn below it");
+    }
+
+    /// Orbit dots off the panel must be dropped, not clamped: clamping stacks
+    /// every off-map point of an orbit along the border as a solid line. The
+    /// raw projection has to actually report "off the map" for that to work.
+    #[test]
+    fn an_off_map_point_reads_as_off_the_map() {
+        let c = Vec2::ZERO;
+        let far = Vec2::new(MAP_WORLD_RANGE * 3.0, 0.0);
+        let (x, _) = world_to_map_px_raw(far, c, PANEL, MAP_WORLD_RANGE);
+        assert!(x > PANEL, "a point three map-widths out was placed at x={x}, on the panel");
+
+        // While the clamped version, used for single markers, pins it to the edge.
+        let (xc, _) = world_to_map_px(far, c, PANEL, MAP_WORLD_RANGE);
+        assert_eq!(xc, PANEL);
+    }
+
+    /// Widening the map for a large system must shrink things, never grow
+    /// them. Inverted, a fitted map would zoom IN on the systems that most
+    /// need zooming out.
+    #[test]
+    fn a_wider_map_draws_things_closer_to_centre() {
+        let c = Vec2::ZERO;
+        let p = Vec2::new(400_000.0, 0.0);
+        let (narrow, _) = world_to_map_px_raw(p, c, PANEL, MAP_WORLD_RANGE);
+        let (wide, _) = world_to_map_px_raw(p, c, PANEL, 1_150_000.0);
+        assert!(
+            (wide - PANEL / 2.0) < (narrow - PANEL / 2.0),
+            "the wider map drew a point further from centre than the narrow one"
+        );
     }
 }

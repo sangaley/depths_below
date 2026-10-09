@@ -97,3 +97,48 @@ pub fn update_free_flight(
         transform.translation.y += flight.velocity.y * dt;
     }
 }
+
+/// How many segments one full orbit is sampled into. The path is an ellipse
+/// (`r = a(1-e²)/(1+e·cos θ)`), not a circle, so it has to be sampled rather
+/// than drawn as a ring.
+const ORBIT_SAMPLES: usize = 360;
+/// Samples drawn, then samples skipped — this is what makes it dotted.
+const ORBIT_DASH: usize = 2;
+const ORBIT_GAP: usize = 4;
+
+/// Faint. A navigation aid behind the scene, not part of it: at any moment
+/// several of these cross the screen at once, and a bright one would draw the
+/// eye away from whatever is actually happening.
+const ORBIT_LINE_COLOR: Color = Color::srgba(0.45, 0.62, 0.85, 0.22);
+
+/// Draws each orbiting body's path as a dotted ellipse.
+///
+/// Sampled from the same `r = a(1-e²)/(1+e·cos θ)` that
+/// `update_orbital_positions` integrates, so the line is where the planet
+/// will actually be rather than an idealised circle through its current
+/// position — with eccentricity up to 0.3 those differ visibly.
+pub fn draw_orbit_paths(
+    mut gizmos: Gizmos,
+    parent_query: Query<&Transform, (With<CelestialBody>, Without<OrbitalPath>)>,
+    orbit_query: Query<&OrbitalPath>,
+) {
+    for orbit in orbit_query.iter() {
+        let Ok(parent_transform) = parent_query.get(orbit.parent) else { continue };
+        let center = parent_transform.translation.truncate();
+
+        let at = |theta: f32| -> Vec2 {
+            let r = orbit.semi_major_axis * (1.0 - orbit.eccentricity * orbit.eccentricity)
+                / (1.0 + orbit.eccentricity * theta.cos());
+            center + Vec2::new(r * theta.cos(), r * theta.sin())
+        };
+
+        let step = std::f32::consts::TAU / ORBIT_SAMPLES as f32;
+        for i in 0..ORBIT_SAMPLES {
+            // Draw ORBIT_DASH samples out of every DASH+GAP.
+            if i % (ORBIT_DASH + ORBIT_GAP) >= ORBIT_DASH {
+                continue;
+            }
+            gizmos.line_2d(at(i as f32 * step), at((i + 1) as f32 * step), ORBIT_LINE_COLOR);
+        }
+    }
+}

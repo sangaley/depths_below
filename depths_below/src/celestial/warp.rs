@@ -27,8 +27,21 @@ use super::galaxy;
 //   t=1.0  -> 1680 fuel      more than a tank: impossible in one jump
 // So reaching the far systems means staging through the middle ones, which
 // are exactly the ones that get progressively more dangerous.
-const INTERSTELLAR_BASE_CHARGE: f32 = 1.0; // seconds
-const INTERSTELLAR_MAX_EXTRA_CHARGE: f32 = 7.0;
+
+/// Spin-up for a jump between stars. Charge follows the same squared curve as
+/// fuel (see `interstellar_charge_time`), so a hop to a neighbour stays quick
+/// and the far edge is a real wait: 4s, about 7.5s mid-galaxy, 18s at the rim.
+///
+/// Tuned in opposite directions more than once, so the history is kept. It
+/// began at 6-60s, dead time at the keyboard; cut to 1-4s, the weight vanished
+/// and crossing the galaxy cost the same as crossing a room. Two branches then
+/// diverged -- cascade-story to 1-8s, galaxy-map-look to 4-18s -- and 4-18s
+/// is kept for a reason that is not taste. The local warp dash is capped at 3s
+/// (`ui::WARP_DASH_MAX_CHARGE`), so an interstellar jump starting at 1s would
+/// be QUICKER than crossing a system and the two drives would invert.
+/// `ui::warp_pacing_tests` pins that ordering.
+const INTERSTELLAR_BASE_CHARGE: f32 = 4.0; // seconds
+const INTERSTELLAR_MAX_EXTRA_CHARGE: f32 = 14.0;
 const INTERSTELLAR_BASE_FUEL: f32 = 80.0;
 const INTERSTELLAR_MAX_EXTRA_FUEL: f32 = 1600.0;
 
@@ -55,9 +68,9 @@ pub(crate) fn target_galaxy_pos(galaxy_map: &GalaxyMap, target: GalaxyWarpTarget
 /// the pending target (PendingGalaxyWarpTarget) — a known system, or a
 /// blind point in space with nothing confirmed there (the galaxy map is
 /// clickable anywhere, not just discovered pips — see ui/mod.rs). Press
-/// once and the charge runs on its own — no need to hold the key through
-/// what can be up to a 60s charge; press V again to cancel early. Charge
-/// time and fuel cost both scale with galaxy-map distance to the target.
+/// once and the charge runs on its own — no need to hold the key through an
+/// 18-second charge; press V again to cancel early. Charge time and fuel
+/// cost both scale with galaxy-map distance to the target.
 /// How far off a station a warp drops you.
 ///
 /// Must stay inside `home_base::DOCK_RANGE` or arriving "at a station" means
@@ -378,7 +391,20 @@ mod cost_tests {
     #[test]
     fn short_hops_are_affordable() {
         assert!(interstellar_fuel_cost(0.2) < 200.0);
-        assert!(interstellar_charge_time(0.2) < 2.0);
+        // Was an absolute `< 2.0`. That bound and the request to make the
+        // interstellar jump LONGER cannot both hold: the local warp dash caps
+        // at 3s (`ui::WARP_DASH_MAX_CHARGE`), and any interstellar jump under
+        // that would be quicker than crossing a system -- the two drives
+        // invert. So the absolute floor moved to 4s, and what this keeps is
+        // the part of the original intent that survives it: a hop to a
+        // neighbour is a small fraction of the wait to cross the galaxy.
+        let short = interstellar_charge_time(0.2);
+        let far = interstellar_charge_time(1.0);
+        assert!(
+            short < far * 0.35,
+            "a short hop charges {short}s against {far}s for the far edge -- \
+             neighbours are not meaningfully quicker to reach"
+        );
     }
 
     /// And the far edge must not be reachable in one jump from a full tank.

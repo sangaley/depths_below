@@ -43,6 +43,10 @@ impl Plugin for VfxPlugin {
                     celestial_visuals::attach_star_visuals,
                     celestial_visuals::attach_planet_visuals,
                     celestial_visuals::attach_black_hole_visuals,
+                    // After orbits move the planets, so the night side is
+                    // aimed from where the planet is this frame, not last.
+                    celestial_visuals::spin_and_light_planets
+                        .after(crate::celestial::orbits::update_orbital_positions),
                 ).run_if(in_state(GameState::Exploring)),
             )
             // Block visuals DISABLED: this bolted crude colored-rectangle

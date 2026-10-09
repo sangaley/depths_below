@@ -630,13 +630,22 @@ mod population_tests {
     /// roughly where it started however long you watched it.
     #[test]
     fn a_patrol_covers_ground() {
-        let mut rng = rand::thread_rng();
+        // Seeded. This used `rand::thread_rng()`, so waypoints differed every
+        // run and the test failed about two runs in five on identical code
+        // (measured: 6 of 15) -- a coin flip that reads as a regression.
+        use rand::SeedableRng;
+        let mut rng = rand::rngs::StdRng::seed_from_u64(11);
         let home = Vec2::ZERO;
         let mut ship = SimulatedShip::patrolling(1, AiShipType::GildedThrone, home, home, 12_000.0, 90.0);
         ship.destination = Vec2::new(6_000.0, 0.0);
-        let start = ship.position;
 
-        // Two minutes of 2-second ticks, steering the way the real tick does.
+        // Distance TRAVELLED, summed step by step. This measured straight-line
+        // distance from the start instead, which cannot tell a patrol from
+        // loitering: a ship that sweeps its territory properly and happens to
+        // curve back toward where it began reads as having gone nowhere. That
+        // was the other half of the flake -- the random part only decided how
+        // often the loop closed.
+        let mut travelled = 0.0;
         for _ in 0..60 {
             let to_dest = ship.destination - ship.position;
             let remaining = to_dest.length();
@@ -646,10 +655,11 @@ mod population_tests {
                 let want = to_dest / remaining * ship.cruise;
                 ship.velocity = (ship.velocity * 0.75 + want * 0.25).clamp_length_max(ship.cruise);
             }
-            ship.position += ship.velocity * 2.0;
+            let step = ship.velocity * 2.0;
+            travelled += step.length();
+            ship.position += step;
         }
 
-        let travelled = ship.position.distance(start);
         assert!(
             travelled > 3_000.0,
             "two minutes of patrol moved the ship {travelled:.0} units — it is loitering, not patrolling"
