@@ -443,6 +443,9 @@ fn update_depth_vignette(
     cam_query: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     mut sprite_query: Query<
         (&mut Sprite, &GlobalTransform, &mut Visibility, Option<&ChildOf>),
+        // Grouped into nested tuples because Bevy's filter tuple tops out at
+        // sixteen and this is past it. The grouping is also the honest
+        // structure: three different reasons not to touch a sprite's alpha.
         (
             Without<Ship>,
             Without<MainCamera>,
@@ -460,36 +463,50 @@ fn update_depth_vignette(
             // (whose bubbles aren't covered by the player-child exclusion
             // below) — the bubble never actually looked like it dropped.
             Without<crate::combat::shields::ShieldBubble>,
-            // Star/planet glow layers run their own per-frame pulse/shimmer
-            // alpha animation (celestial_visuals::animate_star_glow etc.) —
-            // touching their alpha here too would fight that animation and
-            // flicker between the pulse value and this system's target each
-            // frame. They read as ambient self-light, not something the
-            // flashlight needs to reveal.
-            Without<crate::vfx::celestial_visuals::StarGlow>,
-            Without<crate::vfx::celestial_visuals::StarFlareGlow>,
-            Without<crate::vfx::celestial_visuals::PlanetAtmosphere>,
             Without<LightConeVisual>,
-            // Combat effects, for the same reason as the glow layers above:
-            // each writes its own alpha every frame (Particle fades by
-            // base_alpha * life_ratio, Blast by (1-t)^2, Debris by lifetime),
-            // and nothing orders VfxPlugin's systems against this one — so
-            // whichever the scheduler happened to put last simply won, and a
-            // fade could be overwritten wholesale.
+            // --- Writes its own alpha every frame ---
+            //
+            // Glow layers pulse/shimmer (celestial_visuals::animate_star_glow
+            // etc.) and combat effects fade on their own curves (Particle by
+            // base_alpha * life_ratio, Blast by (1-t)^2, Debris by lifetime).
+            // Nothing orders VfxPlugin's systems against this one, so
+            // whichever the scheduler put last simply won and a fade could be
+            // overwritten wholesale.
             //
             // They also shouldn't be vignetted on principle. An explosion is a
             // LIGHT SOURCE; floored to ENV_FLOOR because the flashlight was
             // pointing elsewhere, a warhead going off 1000 units off-axis was
             // very nearly invisible. HitEffect doesn't animate its alpha (it
             // only ticks a timer) so it isn't in the fight, but it's a muzzle
-            // and impact flash and has the same readability claim.
-            Without<crate::vfx::particles::Particle>,
-            Without<crate::vfx::particles::Blast>,
-            Without<crate::vfx::debris::Debris>,
-            Without<crate::ship::damage::HitEffect>,
-            // Burning overlays flicker their own alpha every frame off the
-            // fire's intensity, same as the effects above.
-            Without<crate::ship::fire::FireOverlay>,
+            // and impact flash and has the same readability claim. Burning
+            // overlays flicker off the fire's intensity, same story.
+            (
+                Without<crate::vfx::celestial_visuals::StarGlow>,
+                Without<crate::vfx::celestial_visuals::StarFlareGlow>,
+                Without<crate::vfx::celestial_visuals::PlanetAtmosphere>,
+                Without<crate::vfx::particles::Particle>,
+                Without<crate::vfx::particles::Blast>,
+                Without<crate::vfx::debris::Debris>,
+                Without<crate::ship::damage::HitEffect>,
+                Without<crate::ship::fire::FireOverlay>,
+            ),
+            // --- Lit by a star, not by a torch on the nose of a ship ---
+            //
+            // Vignetting these floored a body tens of thousands of units
+            // across to ENV_FLOOR (0.02) everywhere the cone was not
+            // pointing, so all anyone ever saw of a planet was the
+            // cone-shaped sliver it happened to be crossing. That reads as a
+            // small, washed-out smudge — and left a real planet EIGHT TIMES
+            // dimmer than the decorative `BackgroundPlanet` beside it, which
+            // has its own 0.16 floor. The scenery outshone the place.
+            //
+            // Asteroids and POIs stay vignetted on purpose: those are small
+            // things you hunt for with the light, which is the point of
+            // "make everything black". A planet is not something you find.
+            (
+                Without<crate::celestial::components::Planet>,
+                Without<crate::celestial::components::Star>,
+            ),
         ),
     >,
     mut bg_planet_query: Query<

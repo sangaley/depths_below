@@ -233,20 +233,50 @@ impl PlanetType {
         }
     }
 
+    /// Doubled from the original ranges. A planet reads as scenery at the
+    /// old sizes -- against a star of 40,000-150,000 radius, a 10,000 rock
+    /// was a pebble -- and the orbits are derived from these now, so growing
+    /// them pushes the system apart rather than making planets collide.
     pub fn radius_range(&self) -> (f32, f32) {
         match self {
-            Self::Lava => (9_000.0, 13_000.0),
-            Self::Volcanic => (10_000.0, 14_000.0),
-            Self::Desert => (10_000.0, 15_000.0),
-            Self::Rocky => (10_000.0, 15_000.0),
-            Self::Barren => (6_000.0, 11_000.0),
-            Self::Ocean => (11_000.0, 16_000.0),
-            Self::Terran => (10_000.0, 14_000.0),
-            Self::Toxic => (10_000.0, 15_000.0),
-            Self::Ice => (8_000.0, 12_000.0),
-            Self::Gas => (20_000.0, 30_000.0),
-            Self::IceGiant => (16_000.0, 24_000.0),
-            Self::Shattered => (5_000.0, 10_000.0),
+            Self::Lava => (18_000.0, 26_000.0),
+            Self::Volcanic => (20_000.0, 28_000.0),
+            Self::Desert => (20_000.0, 30_000.0),
+            Self::Rocky => (20_000.0, 30_000.0),
+            Self::Barren => (12_000.0, 22_000.0),
+            Self::Ocean => (22_000.0, 32_000.0),
+            Self::Terran => (20_000.0, 28_000.0),
+            Self::Toxic => (20_000.0, 30_000.0),
+            Self::Ice => (16_000.0, 24_000.0),
+            Self::Gas => (40_000.0, 60_000.0),
+            Self::IceGiant => (32_000.0, 48_000.0),
+            Self::Shattered => (10_000.0, 20_000.0),
+        }
+    }
+
+    /// Acceleration at the surface, in world units per second squared.
+    ///
+    /// The ship's engines manage about 180 u/s² (`THRUST_SCALE` over the
+    /// starter's thrust-to-mass), so these are a real tug you can still climb
+    /// out of. The old model derived the well from mass alone --
+    /// `strength = mass * 100` with inverse-square falloff -- which put a
+    /// rocky world's pull at its OWN SURFACE at about 0.0009 u/s². Five
+    /// orders of magnitude under the thrusters: gravity existed in the data
+    /// and did nothing whatsoever.
+    pub fn surface_gravity(&self) -> f32 {
+        match self {
+            Self::Gas => 95.0,
+            Self::IceGiant => 70.0,
+            Self::Toxic => 34.0,
+            Self::Ocean => 32.0,
+            Self::Volcanic => 32.0,
+            Self::Lava => 30.0,
+            Self::Rocky => 30.0,
+            Self::Terran => 30.0,
+            Self::Desert => 28.0,
+            Self::Ice => 18.0,
+            Self::Barren => 12.0,
+            Self::Shattered => 8.0,
         }
     }
 

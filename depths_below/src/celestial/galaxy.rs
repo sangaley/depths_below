@@ -49,17 +49,22 @@ pub const SYSTEM_COUNT: usize = 30;
 /// station has to exist for that whole time.
 /// Where Haven's star sits, in the shared local frame.
 ///
-/// 95,000 units from `world::home_base::STATION_POS`, the fixed spot the ship
+/// 75,000 units from `world::home_base::STATION_POS`, the fixed spot the ship
 /// spawns beside. The old value was (200,000, -450,000) -- 492,000 from the
 /// station -- so the player began half a million units OUTSIDE their own
-/// solar system. Haven's star is a dwarf (radius 40,000, from seed 42) with
-/// its innermost planet near 124,000, so this drops the spawn into the gap
-/// between the star's surface and the first orbit: clear of the star by
-/// 55,000, and inside every planet orbit rather than far beyond all of them.
+/// solar system.
+///
+/// The window is narrow and both walls are solid. Haven's star is a dwarf of
+/// radius 40,000 (seed 42), and the nearest a planet's inner EDGE can come
+/// is `star_radius + ORBIT_GAP_MIN` = 120,000, whatever its size. So the
+/// spawn has to sit inside (40,000, 120,000); 75,000 is near the middle of
+/// it. An earlier pass had this at 95,000, which was fine until planets
+/// doubled in size -- then the nearest possible edge moved inward to 85,000
+/// and the station was sitting ON an orbit a solid body sweeps along.
 ///
 /// This is the one hand-placed system in the galaxy, which is appropriate --
 /// it is home, and the tutorial runs here.
-pub const HAVEN_LOCAL_CENTER: Vec2 = Vec2::new(39_500.0, -86_500.0);
+pub const HAVEN_LOCAL_CENTER: Vec2 = Vec2::new(31_000.0, -68_400.0);
 
 /// Abstract galaxy-map radius (NOT a real Transform coordinate — see
 /// StarSystemDef::galaxy_pos doc comment).
@@ -408,24 +413,34 @@ fn station_field_bearing(def: &StarSystemDef) -> f32 {
 /// widest gap between the star's surface and the planet orbits, at `angle`
 /// around the star, so it clears the star and both neighbouring orbits
 /// without being pinned to one side of every system in the galaxy.
-fn asteroid_field_offset(star_radius: f32, planet_orbits: &[f32], angle: f32) -> Vec2 {
-    let mut edges = vec![star_radius];
-    edges.extend_from_slice(planet_orbits);
+fn asteroid_field_offset(star_radius: f32, planet_bands: &[(f32, f32)], angle: f32) -> Vec2 {
+    // Free radial intervals: from the star's surface outward, the stretches
+    // no planet occupies. Measured between planet EDGES, not orbit centres —
+    // a planet 60,000 in radius swallows the midpoint of the gap its centre
+    // sits in, so centre-based placement can put the field inside a world.
+    let mut intervals: Vec<(f32, f32)> = Vec::new();
+    let mut cursor = star_radius;
+    for &(orbit, radius) in planet_bands {
+        let inner = orbit - radius;
+        if inner > cursor {
+            intervals.push((cursor, inner));
+        }
+        cursor = cursor.max(orbit + radius);
+    }
+    // Outside the outermost planet there is always room, but this is a
+    // FALLBACK, not a candidate. Offered alongside the real gaps it tends to
+    // win on width -- it is unbounded -- and drags the field out past every
+    // planet, which is exactly where nobody flies.
+    if intervals.is_empty() {
+        intervals.push((cursor, cursor + FIELD_SPREAD * 3.0));
+    }
 
-    // Widest gap wins -- it is the one with room for the field's full spread.
-    let gap = edges
-        .windows(2)
-        .map(|w| (w[0], w[1]))
-        .filter(|(lo, hi)| hi > lo)
-        .max_by(|a, b| (a.1 - a.0).partial_cmp(&(b.1 - b.0)).unwrap_or(std::cmp::Ordering::Equal));
+    let (lo, hi) = intervals
+        .into_iter()
+        .max_by(|a, b| (a.1 - a.0).partial_cmp(&(b.1 - b.0)).unwrap_or(std::cmp::Ordering::Equal))
+        .unwrap_or((star_radius, star_radius + FIELD_SPREAD * 3.0));
 
-    // No gap at all (no planets) means nothing constrains the outside, so sit
-    // clear of the star's surface by the field's own radius.
-    let distance = match gap {
-        Some((lo, hi)) => (lo + hi) * 0.5,
-        None => star_radius + FIELD_SPREAD * 1.5,
-    };
-
+    let distance = (lo + hi) * 0.5;
     Vec2::new(angle.cos(), angle.sin()) * distance
 }
 
@@ -457,7 +472,7 @@ pub fn spawn_system_contents(
     super::spawning::spawn_asteroid_field(
         commands, asset_server,
         def.local_center + asteroid_field_offset(
-            system_info.star_radius, &system_info.planet_orbits, field_angle,
+            system_info.star_radius, &system_info.planet_bands, field_angle,
         ),
         FIELD_ROCKS, FIELD_SPREAD,
         Some((station_pos(def), STATION_KEEP_CLEAR)),
@@ -515,6 +530,7 @@ pub fn load_system(
 mod asteroid_placement_tests {
     use super::*;
     use crate::celestial::components::StarSizeClass;
+    use crate::celestial::spawning::ORBIT_GAP_MIN;
 
     const CLASSES: [StarSizeClass; 4] = [
         StarSizeClass::Dwarf,
@@ -523,58 +539,65 @@ mod asteroid_placement_tests {
         StarSizeClass::Supergiant,
     ];
 
-    /// Orbits the way `spawn_star_system` builds them:
-    /// `star_radius * 2 + (i + 1) * step`, with `step` drawn from 25k..45k.
-    fn orbits(star_radius: f32, count: usize, step: f32) -> Vec<f32> {
-        (0..count)
-            .map(|i| star_radius * 2.0 + (i as f32 + 1.0) * step)
+    /// Planets the way `spawn_star_system` walks them outward: each orbit
+    /// clears the previous body's radius, its own, and a gap. Returned as
+    /// `(orbit, radius)` because the radius is what the field placer needs —
+    /// a 60,000-radius giant swallows the midpoint of the gap its centre is
+    /// in, so centres alone are not enough to place anything safely.
+    fn bands(star_radius: f32, radii: &[f32], gap: f32) -> Vec<(f32, f32)> {
+        let mut frontier = star_radius;
+        let mut prev = 0.0;
+        radii
+            .iter()
+            .map(|&r| {
+                frontier += prev + r + gap;
+                prev = r;
+                (frontier, r)
+            })
             .collect()
     }
 
-    /// The bug this change exists for, and the only thing these tests defend.
-    ///
-    /// The original generator hardcoded the field 50,000 from the star with a
-    /// 30,000 spread, putting every rock 20,000-80,000 out. A Main star is
-    /// 80,000 in radius and solid, so in about 60% of systems the whole field
-    /// spawned inside the star. Asteroids appeared never to spawn because in
-    /// most systems they were unreachable.
-    ///
-    /// The tightest real case is a dwarf with the minimum orbit step, which
-    /// clears the star's surface by only 2,500 units -- so this test is doing
-    /// real work, not asserting something comfortably true.
+    /// The original fault: the field's offset was hardcoded to (50,000, 0)
+    /// with a 30,000 spread, so every rock sat 20,000-80,000 from the star
+    /// while a Main-class star is 80,000 in radius and solid. In about 60% of
+    /// systems the whole field spawned inside the sun.
     #[test]
     fn the_field_never_spawns_inside_the_star() {
         for class in CLASSES {
-            let star_radius = class.radius();
-            for planet_count in 0..=6 {
-                for step in [25_000.0, 35_000.0, 45_000.0] {
-                    let planet_orbits = orbits(star_radius, planet_count, step);
-                    let offset = asteroid_field_offset(star_radius, &planet_orbits, 0.7);
-                    let inner_edge = offset.length() - FIELD_SPREAD;
+            let star = class.radius();
+            for radii in [vec![], vec![20_000.0], vec![60_000.0, 20_000.0, 40_000.0]] {
+                for gap in [ORBIT_GAP_MIN, 140_000.0] {
+                    let b = bands(star, &radii, gap);
+                    let inner = asteroid_field_offset(star, &b, 0.7).length() - FIELD_SPREAD;
                     assert!(
-                        inner_edge >= star_radius,
-                        "{class:?} (r={star_radius}, {planet_count} planets, step {step}): \
-                         field reaches {inner_edge}, inside the star's solid body"
+                        inner >= star,
+                        "{class:?} with {} planets: field reaches {inner}, inside the star",
+                        radii.len()
                     );
                 }
             }
         }
     }
 
-    /// Planets are solid too, so the field must not straddle an orbit.
+    /// Planets are solid too, and now large enough that this is the binding
+    /// constraint rather than a formality.
     #[test]
-    fn the_field_clears_the_planet_orbits() {
+    fn the_field_clears_every_planet() {
         for class in CLASSES {
-            let star_radius = class.radius();
-            for planet_count in 1..=6 {
-                let planet_orbits = orbits(star_radius, planet_count, 30_000.0);
-                let distance = asteroid_field_offset(star_radius, &planet_orbits, 2.1).length();
-                let (inner, outer) = (distance - FIELD_SPREAD, distance + FIELD_SPREAD);
-                for orbit in &planet_orbits {
-                    assert!(
-                        *orbit <= inner || *orbit >= outer,
-                        "{class:?}: field spans {inner}..{outer}, straddling the orbit at {orbit}"
-                    );
+            let star = class.radius();
+            for radii in [vec![20_000.0], vec![60_000.0, 20_000.0], vec![10_000.0, 60_000.0, 30_000.0]] {
+                for gap in [ORBIT_GAP_MIN, 140_000.0] {
+                    let b = bands(star, &radii, gap);
+                    let d = asteroid_field_offset(star, &b, 2.1).length();
+                    let (lo, hi) = (d - FIELD_SPREAD, d + FIELD_SPREAD);
+                    for (orbit, radius) in &b {
+                        let (p_lo, p_hi) = (orbit - radius, orbit + radius);
+                        assert!(
+                            hi <= p_lo || lo >= p_hi,
+                            "{class:?}: field spans {lo}..{hi}, overlapping a planet \
+                             occupying {p_lo}..{p_hi}"
+                        );
+                    }
                 }
             }
         }
@@ -584,16 +607,13 @@ mod asteroid_placement_tests {
     /// galaxy, which is what `(50_000, 0)` did for all 31 of them.
     #[test]
     fn the_field_is_not_always_in_the_same_direction() {
-        let star_radius = StarSizeClass::Main.radius();
-        let planet_orbits = orbits(star_radius, 3, 30_000.0);
-        let a = asteroid_field_offset(star_radius, &planet_orbits, 0.0);
-        let b = asteroid_field_offset(star_radius, &planet_orbits, 2.4);
+        let star = StarSizeClass::Main.radius();
+        let b = bands(star, &[30_000.0, 20_000.0], ORBIT_GAP_MIN);
+        let a = asteroid_field_offset(star, &b, 0.0);
+        let c = asteroid_field_offset(star, &b, 2.4);
+        assert!(a.distance(c) > FIELD_SPREAD, "two angles put the field in the same place");
         assert!(
-            a.distance(b) > FIELD_SPREAD,
-            "two different angles put the field in the same place: {a} vs {b}"
-        );
-        assert!(
-            (a.length() - b.length()).abs() < 1.0,
+            (a.length() - c.length()).abs() < 1.0,
             "angle changed the distance from the star, not just the direction"
         );
     }
@@ -736,6 +756,14 @@ mod haven_spawn_tests {
         STATION_POS.distance(HAVEN_LOCAL_CENTER)
     }
 
+    /// The closest a planet's inner edge can come to the star, whatever its
+    /// size. The orbit walk clears the previous body, this body's own radius
+    /// and a gap, so on the first planet the radius cancels and the floor is
+    /// exactly `star_radius + ORBIT_GAP_MIN`.
+    fn nearest_possible_planet_edge(star_radius: f32) -> f32 {
+        star_radius + crate::celestial::spawning::ORBIT_GAP_MIN
+    }
+
     /// The ship must not spawn inside its own sun. Stars are solid and
     /// infinitely massive, so this is not a cosmetic concern.
     #[test]
@@ -748,18 +776,18 @@ mod haven_spawn_tests {
         );
     }
 
-    /// ...and inside the planet orbits, which is the whole point of moving it.
-    /// The innermost orbit is `star_radius * 2 + step` with `step` drawn from
-    /// 25,000..45,000, so 2r + 25,000 is the floor regardless of the roll.
+    /// ...and inside the planet orbits, which is the point of moving it --
+    /// without ever sitting ON one, because planets are solid and sweep
+    /// their whole orbit every few minutes.
     #[test]
     fn the_spawn_is_inside_the_planet_orbits() {
         let radius = havens_star_radius();
-        let nearest_possible_orbit = radius * 2.0 + 25_000.0;
+        let nearest_edge = nearest_possible_planet_edge(radius);
         let distance = spawn_to_star();
         assert!(
-            distance < nearest_possible_orbit,
-            "spawn is {distance} out, beyond the closest an orbit can be \
-             ({nearest_possible_orbit}) -- the player starts outside their own system again"
+            distance < nearest_edge,
+            "spawn is {distance} out; a planet's inner edge can reach {nearest_edge}, \
+             so a solid world can sweep through the station"
         );
     }
 
@@ -777,8 +805,8 @@ mod haven_spawn_tests {
         );
     }
 
-    /// Asteroids land on the side of the star the player arrives on, within a
-    /// short flight rather than somewhere around the far limb.
+    /// Asteroids land on the side of the star the player arrives on, within
+    /// a short flight rather than somewhere around the far limb.
     #[test]
     fn havens_asteroids_are_near_the_spawn() {
         let radius = havens_star_radius();
@@ -795,17 +823,45 @@ mod haven_spawn_tests {
             resource_fraction_remaining: 1.0,
         };
 
-        // Across every orbit step the generator can roll.
-        for step in [25_000.0f32, 35_000.0, 45_000.0] {
-            let orbits: Vec<f32> = (0..3).map(|i| radius * 2.0 + (i as f32 + 1.0) * step).collect();
-            let field = HAVEN_LOCAL_CENTER
-                + asteroid_field_offset(radius, &orbits, station_field_bearing(&def));
-            let from_spawn = field.distance(STATION_POS);
-            assert!(
-                from_spawn < FIELD_SPREAD,
-                "step {step}: field centre is {from_spawn} from the spawn, further than the \
-                 field's own radius -- rocks would not be visible from where the player starts"
-            );
+        // Across the range of first-planet sizes and gaps the walk can roll.
+        for first_radius in [10_000.0f32, 30_000.0, 60_000.0] {
+            for gap in [crate::celestial::spawning::ORBIT_GAP_MIN, 140_000.0] {
+                let orbit = radius + first_radius + gap;
+                let bands = [(orbit, first_radius)];
+                let field = HAVEN_LOCAL_CENTER
+                    + asteroid_field_offset(radius, &bands, station_field_bearing(&def));
+                let from_spawn = field.distance(STATION_POS);
+                assert!(
+                    from_spawn < FIELD_SPREAD * 2.0,
+                    "first planet r={first_radius} gap={gap}: field centre is {from_spawn} \
+                     from the spawn, too far to see rocks from where the player starts"
+                );
+            }
+        }
+    }
+
+    /// The field must clear the bodies on both sides of it. This is why
+    /// ORBIT_GAP_MIN is tied to FIELD_SPREAD rather than chosen by feel.
+    #[test]
+    fn the_field_never_touches_a_planet_or_the_star() {
+        let star = havens_star_radius();
+        for first_radius in [10_000.0f32, 30_000.0, 60_000.0] {
+            for gap in [crate::celestial::spawning::ORBIT_GAP_MIN, 140_000.0] {
+                let orbit = star + first_radius + gap;
+                let bands = [(orbit, first_radius)];
+                let d = asteroid_field_offset(star, &bands, 0.0).length();
+                assert!(
+                    d - FIELD_SPREAD > star,
+                    "field reaches {} from the centre, inside a star of {star}",
+                    d - FIELD_SPREAD
+                );
+                let (lo, hi) = (d - FIELD_SPREAD, d + FIELD_SPREAD);
+                let (p_lo, p_hi) = (orbit - first_radius, orbit + first_radius);
+                assert!(
+                    hi <= p_lo || lo >= p_hi,
+                    "field spans {lo}..{hi}, overlapping the planet at {p_lo}..{p_hi}"
+                );
+            }
         }
     }
 }

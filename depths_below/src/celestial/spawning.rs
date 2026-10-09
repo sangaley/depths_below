@@ -16,6 +16,26 @@ fn planet_sprite_path(planet_type: PlanetType, rng: &mut impl Rng) -> String {
     format!("sprites/celestial/planets/planet{:02}.png", idx)
 }
 
+/// Clear space between one planet's surface and the next planet's.
+///
+/// The minimum is not a feel number: the asteroid field is a disc of radius
+/// `FIELD_SPREAD` (30,000) that has to sit in one of these gaps without
+/// reaching the bodies on either side, so the narrowest gap must exceed
+/// twice that. 80,000 leaves 20,000 of margin.
+pub(crate) const ORBIT_GAP_MIN: f32 = 80_000.0;
+const ORBIT_GAP_MAX: f32 = 140_000.0;
+
+/// Advances the orbit frontier past one more planet.
+///
+/// `frontier` is the outer edge of everything placed so far (starting at the
+/// star's own surface), `prev_radius` the last planet's radius, and the
+/// result is the new planet's orbit distance — which also becomes the next
+/// frontier. Clearing both neighbours' radii plus a gap is what keeps solid
+/// bodies from intersecting at any size.
+fn next_orbit(frontier: f32, prev_radius: f32, radius: f32, gap: f32) -> f32 {
+    frontier + prev_radius + radius + gap
+}
+
 /// Which temperature band the `i`th of `count` planets falls in.
 ///
 /// By position rather than by roll, so a system reads as a system: scorched
@@ -103,7 +123,12 @@ pub fn spawn_star_system(
     // Generate 2-6 planets
     let planet_count = rng.gen_range(2..=6);
     let mut planet_entities = Vec::new();
-    let mut planet_orbits: Vec<f32> = Vec::new();
+    let mut planet_bands: Vec<(f32, f32)> = Vec::new();
+
+    // Walking frontier for orbit placement: the outer edge of what has been
+    // placed so far, starting at the star's own surface.
+    let mut orbit_frontier = star_radius;
+    let mut prev_radius = 0.0f32;
 
     for i in 0..planet_count {
         let band = band_for_orbit(i, planet_count);
@@ -115,8 +140,21 @@ pub fn spawn_star_system(
         let planet_radius = rng.gen_range(r_min..r_max);
         let planet_mass = rng.gen_range(m_min..m_max);
 
-        // Orbit distance increases with planet index
-        let orbit_distance = star_radius * 2.0 + (i as f32 + 1.0) * rng.gen_range(25_000.0..45_000.0);
+        // Orbits are walked outward from the star with real clearance,
+        // rather than `star_radius * 2 + (i + 1) * step`. That formula knew
+        // nothing about how big the planets actually are, so with the sizes
+        // doubled -- a gas giant is now 60,000 in radius against orbit steps
+        // of 25,000-45,000 -- neighbouring worlds would simply overlap, and
+        // they are solid colliders. Each orbit now clears the previous
+        // planet's surface, this planet's own radius, and a gap.
+        orbit_frontier = next_orbit(
+            orbit_frontier,
+            prev_radius,
+            planet_radius,
+            rng.gen_range(ORBIT_GAP_MIN..ORBIT_GAP_MAX),
+        );
+        let orbit_distance = orbit_frontier;
+        prev_radius = planet_radius;
         let orbit_period = rng.gen_range(60.0..300.0); // 1-5 minutes per orbit
         let eccentricity = rng.gen_range(0.0..0.3);
         let phase = rng.gen_range(0.0..std::f32::consts::TAU);
@@ -154,15 +192,23 @@ pub fn spawn_star_system(
                 clockwise,
             },
             GravityWell {
-                strength: planet_mass * 100.0,
-                influence_radius: planet_radius * 3.0,
+                // Inverse-square gravity is `strength / distance²`, so to get
+                // a chosen acceleration AT THE SURFACE the strength has to be
+                // that acceleration times the radius squared. Deriving it
+                // from mass instead (the old `mass * 100`) ignored the body's
+                // size entirely and produced a surface pull of ~0.0009 u/s².
+                strength: planet_type.surface_gravity() * planet_radius * planet_radius,
+                // Out to five radii rather than three: at three the pull
+                // switches off while still an eighth of surface strength,
+                // which reads as a wall rather than a well.
+                influence_radius: planet_radius * 5.0,
                 falloff: GravityFalloff::InverseSquare,
             },
             StarSystemMember { system_id },
         )).id();
 
         planet_entities.push(planet_entity);
-        planet_orbits.push(orbit_distance);
+        planet_bands.push((orbit_distance, planet_radius));
     }
 
     StarSystemInfo {
@@ -172,7 +218,7 @@ pub fn spawn_star_system(
         center,
         is_alive: true,
         star_radius,
-        planet_orbits,
+        planet_bands,
     }
 }
 
@@ -692,5 +738,112 @@ mod planet_variety_tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod planet_placement_tests {
+    use super::*;
+    use crate::celestial::components::StarSizeClass;
+
+    const ALL: [PlanetType; 12] = [
+        PlanetType::Lava, PlanetType::Volcanic, PlanetType::Desert,
+        PlanetType::Rocky, PlanetType::Barren, PlanetType::Ocean,
+        PlanetType::Terran, PlanetType::Toxic, PlanetType::Ice,
+        PlanetType::Gas, PlanetType::IceGiant, PlanetType::Shattered,
+    ];
+
+    /// Runs the spawner's orbit walk over a worst case: the largest body of
+    /// every type, back to back, at the tightest legal gap.
+    fn walk(star_radius: f32, radii: &[f32], gap: f32) -> Vec<f32> {
+        let mut frontier = star_radius;
+        let mut prev = 0.0;
+        radii
+            .iter()
+            .map(|&r| {
+                frontier = next_orbit(frontier, prev, r, gap);
+                prev = r;
+                frontier
+            })
+            .collect()
+    }
+
+    /// Planets are solid colliders, so two of them sharing space is a wall
+    /// you can be crushed inside. The old placement was
+    /// `star_radius * 2 + (i + 1) * step` with step 25,000-45,000 and knew
+    /// nothing of planet size -- with radii doubled, a 60,000-radius gas
+    /// giant and its neighbour would overlap by tens of thousands of units.
+    #[test]
+    fn no_two_planets_ever_intersect() {
+        let radii: Vec<f32> = ALL.iter().map(|t| t.radius_range().1).collect();
+        for class in [StarSizeClass::Dwarf, StarSizeClass::Main, StarSizeClass::Giant, StarSizeClass::Supergiant] {
+            for gap in [ORBIT_GAP_MIN, ORBIT_GAP_MAX] {
+                let orbits = walk(class.radius(), &radii, gap);
+                for i in 1..orbits.len() {
+                    let inner_edge = orbits[i] - radii[i];
+                    let outer_edge = orbits[i - 1] + radii[i - 1];
+                    assert!(
+                        inner_edge > outer_edge,
+                        "{class:?}: planet {i} starts at {inner_edge}, inside planet {} \
+                         which ends at {outer_edge}",
+                        i - 1
+                    );
+                }
+            }
+        }
+    }
+
+    /// And none of them is inside the star.
+    #[test]
+    fn no_planet_is_inside_its_star() {
+        let radii: Vec<f32> = ALL.iter().map(|t| t.radius_range().1).collect();
+        for class in [StarSizeClass::Dwarf, StarSizeClass::Main, StarSizeClass::Giant, StarSizeClass::Supergiant] {
+            let star_radius = class.radius();
+            for (i, orbit) in walk(star_radius, &radii, ORBIT_GAP_MIN).iter().enumerate() {
+                assert!(
+                    orbit - radii[i] > star_radius,
+                    "{class:?}: planet {i} reaches {} from the centre, inside a star of {star_radius}",
+                    orbit - radii[i]
+                );
+            }
+        }
+    }
+
+    /// Gravity you can feel. Engines manage about 180 u/s² (see
+    /// `ship::movement::THRUST_SCALE`), so a surface pull in the tens is a
+    /// real tug you can still climb out of. Under the old
+    /// `strength = mass * 100` the same figure was about 0.0009 -- present in
+    /// the data model and completely imperceptible.
+    #[test]
+    fn planets_pull_hard_enough_to_notice() {
+        for kind in ALL {
+            let radius = kind.radius_range().0;
+            let strength = kind.surface_gravity() * radius * radius;
+            // What gravity::accumulate_gravity computes at the surface.
+            let surface_accel = strength / (radius * radius);
+            assert!(
+                surface_accel >= 8.0,
+                "{kind:?} pulls at {surface_accel} u/s² at its own surface -- not felt"
+            );
+            assert!(
+                surface_accel <= 120.0,
+                "{kind:?} pulls at {surface_accel} u/s², near the ~180 the engines make -- \
+                 that is a trap, not a planet"
+            );
+        }
+    }
+
+    /// Bigger worlds pull harder, or size carries no information.
+    #[test]
+    fn the_giants_pull_hardest() {
+        let giant = PlanetType::Gas.surface_gravity();
+        for kind in ALL {
+            if matches!(kind, PlanetType::Gas) { continue; }
+            assert!(
+                kind.surface_gravity() < giant,
+                "{kind:?} pulls as hard as a gas giant"
+            );
+        }
+        assert!(PlanetType::Shattered.surface_gravity() < PlanetType::Rocky.surface_gravity());
     }
 }

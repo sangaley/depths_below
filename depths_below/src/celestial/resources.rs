@@ -124,9 +124,12 @@ pub struct StarSystemInfo {
     /// enormous (40k-150k by class), so anything placed in the system has to
     /// be placed outside it -- see `galaxy::belt_radii`.
     pub star_radius: f32,
-    /// Orbit radius of each planet, in spawn order (innermost first). Belts
-    /// go in the gaps between them, the way a real system reads.
-    pub planet_orbits: Vec<f32>,
+    /// Each planet as `(orbit_distance, radius)`, innermost first.
+    ///
+    /// The radius matters as much as the orbit: planets are solid and now run
+    /// up to 60,000 across the radius, so anything placed "between two
+    /// orbits" using centres alone can land inside one of them.
+    pub planet_bands: Vec<(f32, f32)>,
 }
 
 /// Global galaxy state
