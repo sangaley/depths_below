@@ -69,8 +69,8 @@ const RETREAT_HULL: f32 = 0.35;
 /// Loot interact range (poi.rs loots derelicts/anomalies within 1400).
 const INTERACT_RANGE: f32 = 1200.0;
 /// Where to park to work a wreck. eva_salvage dispatches inside ORDER_RANGE
-/// (3000) but breaks the detail off past BREAK_RANGE (1800), so sit well
-/// inside the break distance and hold still — drifting is what loses a detail.
+/// (3000) and breaks the detail off past BREAK_RANGE (4500 from the rim).
+/// Sitting close still matters: every unit of standoff is a longer spacewalk.
 const SALVAGE_HOLD: f32 = 1300.0;
 /// Drift past this while a detail is out and we go back to closing the gap.
 const SALVAGE_LEASH: f32 = 1650.0;

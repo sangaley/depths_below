@@ -34,9 +34,19 @@ const SKELETON_GUNS: usize = 2;
 /// Ship drifting further than this from the worksite recalls the detail.
 /// Scales WITH ORDER_RANGE — if recall is tighter than dispatch, a detail sent
 /// out at the limit gets called straight back and salvage reads as broken.
-const BREAK_RANGE: f32 = 1800.0;
+///
+/// It did exactly that. ORDER_RANGE went to 3000, measured to the nearest
+/// block, while this stayed at 1800 measured to the wreck's centre -- so any
+/// order given from between those two was dispatched and recalled in the same
+/// frame ("Salvage detail EVA: 4 crew" and "breaking off - out of range" on
+/// one tick). It is what stalled the salvage step of flight training. Both are
+/// now measured to the wreck's rim (`worksite_distance`), and this sits a
+/// margin past the order range so a little drift after the order is free.
+const BREAK_RANGE: f32 = ORDER_RANGE + 1500.0;
 /// Crew stranded further than this from the ship emergency-board instantly.
-const TELEPORT_RANGE: f32 = 2600.0;
+/// Past the break range plus the span of a big hulk, so nobody working the
+/// far side of a wreck within range gets yanked home mid-trip.
+const TELEPORT_RANGE: f32 = BREAK_RANGE + 2000.0;
 const EVA_SPEED: f32 = 130.0;
 const GRAB_SECONDS: f32 = 1.2;
 const ARRIVE_WRECK: f32 = 16.0;
@@ -441,8 +451,8 @@ pub fn run_salvage_detail(
 
         // Ship drifted too far from the worksite — break off.
         if !eva.recalled {
-            if let Some((center, _)) = bounds {
-                if ship_pos.distance(center) > BREAK_RANGE {
+            if let Some((center, radius)) = bounds {
+                if worksite_distance(ship_pos, center, radius) > BREAK_RANGE {
                     eva.recalled = true;
                     if !announced_break_off {
                         announced_break_off = true;
@@ -600,14 +610,15 @@ pub fn run_salvage_detail(
                 // Another trip, or board? Worth going back while the wreck
                 // still has cargo OR blocks to break down into scrap.
                 let center = bounds.map(|(c, _)| c).unwrap_or(ship_pos);
+                let radius = bounds.map_or(0.0, |(_, r)| r);
                 let next_block =
                     pick_block(eva.wreck, center, &children_query, &block_query, &reserved);
                 let more_work = !eva.recalled
                     && wreck_query
                         .get_mut(eva.wreck)
-                        .map(|(gt, wreck, ..)| {
+                        .map(|(_, wreck, ..)| {
                             (wreck.loot_remaining > 0 || next_block.is_some())
-                                && ship_pos.distance(gt.translation().truncate()) < BREAK_RANGE
+                                && worksite_distance(ship_pos, center, radius) < BREAK_RANGE
                         })
                         .unwrap_or(false);
 
@@ -715,6 +726,14 @@ fn wreck_bounds(
     (center, radius)
 }
 
+/// How far the ship is from the worksite: its root to the wreck's rim, never
+/// below zero. The rim sits at or inside the nearest block the dispatch check
+/// measures to, so anything close enough to order a detail out is at least as
+/// close by this measure, and can't be recalled for the same distance.
+fn worksite_distance(ship_pos: Vec2, wreck_center: Vec2, wreck_radius: f32) -> f32 {
+    (ship_pos.distance(wreck_center) - wreck_radius).max(0.0)
+}
+
 /// Moves toward `target` at EVA speed, returns remaining distance.
 /// Basic pathfinding: if the straight line ahead would cut through the
 /// hulk's bounding circle, slide along the tangent instead — crew visibly
@@ -800,4 +819,43 @@ fn board_crew(
         .entity(entity)
         .try_insert(ChildOf(ship))
         .try_remove::<EvaSalvaging>();
+}
+
+#[cfg(test)]
+mod range_tests {
+    use super::*;
+
+    /// The tutorial stall: an order accepted at the dispatch limit must not
+    /// trip the break-off on the next tick. Wreck of radius 600 (bounds pad
+    /// its farthest block by 50), ship parked right at ORDER_RANGE from its
+    /// nearest block.
+    #[test]
+    fn a_detail_ordered_at_the_limit_is_not_called_straight_back() {
+        let center = Vec2::ZERO;
+        let radius = 600.0;
+        let nearest_block = radius - 50.0;
+        let ship = Vec2::new(nearest_block + ORDER_RANGE - 1.0, 0.0);
+        assert!(worksite_distance(ship, center, radius) < BREAK_RANGE);
+    }
+
+    /// A ship that genuinely leaves still recalls them.
+    #[test]
+    fn flying_off_breaks_the_detail_off() {
+        let ship = Vec2::new(600.0 + BREAK_RANGE + 10.0, 0.0);
+        assert!(worksite_distance(ship, Vec2::ZERO, 600.0) > BREAK_RANGE);
+    }
+
+    /// Parked inside the wreck's bounding circle reads as zero, not negative.
+    #[test]
+    fn alongside_the_hulk_is_zero() {
+        assert_eq!(worksite_distance(Vec2::new(100.0, 0.0), Vec2::ZERO, 600.0), 0.0);
+    }
+
+    /// Crew on the far side of a big hulk, with the ship at the break limit,
+    /// are still on a normal trip -- not stranded.
+    #[test]
+    fn far_side_of_a_big_wreck_is_not_stranded() {
+        let big_hulk_span = 2.0 * 900.0;
+        assert!(BREAK_RANGE + big_hulk_span < TELEPORT_RANGE);
+    }
 }
