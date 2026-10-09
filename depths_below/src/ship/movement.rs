@@ -254,6 +254,16 @@ pub fn update_depth(
     depth.0 = transform.translation.truncate().length();
 }
 
+/// An engine that went dark because the tank ran dry, as opposed to one that
+/// is damaged or switched off. Only these relight on their own.
+#[derive(Component)]
+pub struct FuelStarved;
+
+/// Fuel an empty tank trickles back up to inside a system with stations:
+/// enough for a short dash toward one, little enough that running dry still
+/// costs you the trip.
+const EMERGENCY_RESERVE: f32 = 30.0;
+
 /// Consumes fuel from engines and deactivates them when fuel runs out.
 /// PLAYER ENGINES ONLY: AI ships reuse the same Engine components, and an
 /// unscoped query made every spawned AI ship's engines drain the player's
@@ -261,13 +271,15 @@ pub fn update_depth(
 pub fn update_fuel_consumption(
     time: Res<Time>,
     mut fuel_state: ResMut<FuelState>,
-    mut engine_query: Query<(&Engine, &mut Module, &ChildOf)>,
+    mut engine_query: Query<(Entity, &Engine, &mut Module, &ChildOf, Has<FuelStarved>)>,
+    mut commands: Commands,
     ship_query: Query<Entity, With<Ship>>,
     physics_query: Query<&ShipPhysics, With<Ship>>,
     stations: Res<crate::world::home_base::SystemStations>,
     mut notifications: MessageWriter<ShowNotification>,
     mut warned_25: Local<bool>,
     mut warned_10: Local<bool>,
+    mut emergency: Local<bool>,
     debug_tuning: Res<crate::debug::DebugTuning>,
 ) {
     let Ok(player_ship) = ship_query.single() else { return };
@@ -288,7 +300,7 @@ pub fn update_fuel_consumption(
     const IDLE_FRACTION: f32 = 0.12;
     let drive = physics.throttle.abs().clamp(0.0, 1.0);
     let draw = IDLE_FRACTION + (1.0 - IDLE_FRACTION) * drive;
-    for (engine, module, parent) in engine_query.iter() {
+    for (_, engine, module, parent, _) in engine_query.iter() {
         if parent.parent() != player_ship { continue; }
         if module.is_active {
             total_consumption +=
@@ -299,6 +311,9 @@ pub fn update_fuel_consumption(
     if total_consumption > 0.0 && !debug_tuning.infinite_fuel {
         fuel_state.current_fuel = (fuel_state.current_fuel - total_consumption).max(0.0);
     }
+    // Taken before either trickle below tops the tank up, or the shutdown
+    // check at the end would never see it empty.
+    let ran_dry = fuel_state.current_fuel <= 0.0;
 
     // Stranding guard. A blind warp can land in genuinely empty space: no
     // system, so no station, so no refuel. With jump cost now rising as the
@@ -310,6 +325,19 @@ pub fn update_fuel_consumption(
     if stations.sites.is_empty() && fuel_state.current_fuel < STRANDED_RESERVE {
         fuel_state.current_fuel =
             (fuel_state.current_fuel + 6.0 * dt).min(STRANDED_RESERVE);
+    }
+    // And inside a system: a dry tank with stations out of reach was a hard
+    // lock too -- no thrust, no way to a berth. A slow emergency trickle,
+    // only once the tank is truly empty, gives back enough for a short dash.
+    if !stations.sites.is_empty() && ran_dry {
+        *emergency = true;
+    }
+    if *emergency {
+        if fuel_state.current_fuel < EMERGENCY_RESERVE {
+            fuel_state.current_fuel = (fuel_state.current_fuel + 1.0 * dt).min(EMERGENCY_RESERVE);
+        } else {
+            *emergency = false;
+        }
     }
 
     let fuel_pct = if fuel_state.max_fuel > 0.0 {
@@ -344,18 +372,130 @@ pub fn update_fuel_consumption(
         *warned_10 = false;
     }
 
-    // Deactivate the player's engines when fuel runs out
-    if fuel_state.current_fuel <= 0.0 {
-        for (_engine, mut module, parent) in engine_query.iter_mut() {
+    // Deactivate the player's engines when fuel runs out -- and light them
+    // again when there is fuel. The relight was missing: the only thing that
+    // ever set an engine active again was the station's Repair Modules, which
+    // does nothing on an undamaged ship, so a tank run dry once left the ship
+    // unable to thrust for good, refuelled or not.
+    if ran_dry {
+        let mut shut = false;
+        for (entity, _engine, mut module, parent, _) in engine_query.iter_mut() {
             if parent.parent() != player_ship { continue; }
             if module.is_active {
                 module.is_active = false;
-                notifications.write(ShowNotification {
-                    message: "Engine shut down! No fuel remaining!".into(),
-                    notification_type: NotificationType::Danger,
-                    duration: 4.0,
-                });
+                commands.entity(entity).try_insert(FuelStarved);
+                shut = true;
             }
         }
+        if shut {
+            notifications.write(ShowNotification {
+                message: "Engines shut down - no fuel remaining!".into(),
+                notification_type: NotificationType::Danger,
+                duration: 4.0,
+            });
+        }
+    } else if !*emergency {
+        // Not while the emergency reserve is still filling: lit engines idle
+        // at 12% draw and would burn the trickle straight back to empty,
+        // flickering between "shut down" and "relit". They relight once the
+        // reserve is in, or as soon as the ship is properly refuelled.
+        let mut relit = false;
+        for (entity, _engine, mut module, parent, starved) in engine_query.iter_mut() {
+            if !starved || parent.parent() != player_ship { continue; }
+            commands.entity(entity).remove::<FuelStarved>();
+            if module.health > 0.0 {
+                module.is_active = true;
+                relit = true;
+            }
+        }
+        if relit {
+            notifications.write(ShowNotification {
+                message: "Fuel in the lines - engines relit.".into(),
+                notification_type: NotificationType::Success,
+                duration: 3.0,
+            });
+        }
+    }
+}
+
+#[cfg(test)]
+mod fuel_relight_tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn app(with_station: bool) -> (App, Entity) {
+        let mut app = App::new();
+        app.init_resource::<Time>();
+        app.insert_resource(FuelState { current_fuel: 0.0, ..FuelState::default() });
+        let mut stations = crate::world::home_base::SystemStations::default();
+        if with_station {
+            stations.sites.push(crate::world::home_base::StationSite {
+                index: 0,
+                system_id: 0,
+                pos: Vec2::new(90_000.0, 0.0),
+                name: "Haven Station".into(),
+                kind: crate::world::station_types::station_type(0),
+            });
+        }
+        app.insert_resource(stations);
+        app.insert_resource(crate::debug::DebugTuning::default());
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, update_fuel_consumption);
+        let ship = app.world_mut().spawn((Ship, ShipPhysics::default())).id();
+        let engine = app.world_mut().spawn((
+            Engine { thrust: 100.0, fuel_consumption: 1.0, noise_level: 0.0 },
+            Module {
+                module_type: ModuleType::StandardEngine,
+                health: 100.0,
+                max_health: 100.0,
+                power_consumption: 0.0,
+                power_generation: 0.0,
+                is_active: true,
+                grid_position: IVec2::ZERO,
+                size: IVec2::ONE,
+                rotation: Rotation::default(),
+            },
+            ChildOf(ship),
+        )).id();
+        (app, engine)
+    }
+
+    fn step(app: &mut App, secs: f32) {
+        app.world_mut().resource_mut::<Time>().advance_by(Duration::from_secs_f32(secs));
+        app.update();
+    }
+
+    fn lit(app: &App, engine: Entity) -> bool {
+        app.world().get::<Module>(engine).unwrap().is_active
+    }
+
+    /// A tank run dry and then refilled must leave a ship that can thrust.
+    #[test]
+    fn engines_relight_when_fuel_comes_back() {
+        let (mut app, engine) = app(false);
+        step(&mut app, 0.1);
+        assert!(!lit(&app, engine), "engine still lit on an empty tank");
+        app.world_mut().resource_mut::<FuelState>().current_fuel = 260.0; // docking top-up
+        step(&mut app, 0.1);
+        step(&mut app, 0.1);
+        assert!(lit(&app, engine), "refuelled ship still can't thrust");
+    }
+
+    /// Dry inside a system: the reserve trickles in with the engines dark,
+    /// then they relight - no flickering in between.
+    #[test]
+    fn a_dry_tank_in_a_system_comes_back_to_a_short_hop() {
+        let (mut app, engine) = app(true);
+        step(&mut app, 0.1);
+        assert!(!lit(&app, engine));
+        for _ in 0..20 {
+            step(&mut app, 1.0);
+            assert!(!lit(&app, engine), "relit before the reserve was in");
+        }
+        for _ in 0..15 {
+            step(&mut app, 1.0);
+        }
+        assert!(lit(&app, engine), "never relit");
+        assert!(app.world().resource::<FuelState>().current_fuel > 20.0);
     }
 }
