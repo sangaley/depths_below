@@ -51,8 +51,8 @@ fn spawn_log_card(mut commands: Commands) {
                 justify_content: JustifyContent::Center,
                 ..default()
             },
-            // Above the tutorial card's 50: if training is still running when a
-            // log turns up, the log is the thing that just happened.
+            // Above the tutorial card's 50, though the two no longer meet: logs
+            // are held until training is over (see `drive_log_card`).
             ZIndex(55),
             Visibility::Hidden,
             LogCardRoot,
@@ -123,8 +123,27 @@ fn drive_log_card(
         Query<&mut Text, With<LogCardFooter>>,
     )>,
     mut showing: Local<Option<String>>,
+    tutorial: Option<Res<crate::tutorial::Tutorial>>,
 ) {
     let Ok(mut vis) = root.single_mut() else { return };
+
+    // Hold every log while flight training is running. Both cards claim the
+    // top-centre of the screen, and this one used to be drawn over the
+    // tutorial on purpose ("the log is the thing that just happened"). A
+    // playtest showed what that costs a new player: a recovered log sat on
+    // top of the training instructions for over a minute, because nobody in
+    // their first minute knows Space closes it. Both cards also read Space,
+    // so one press advanced training AND dismissed the log.
+    //
+    // Nothing is lost by waiting -- the queue keeps every entry, and they
+    // play out in order the moment training ends or is dismissed. Returning
+    // before the Space check matters too: otherwise pressing Space for the
+    // tutorial would silently clear a log the player never got to see.
+    if tutorial.is_some_and(|t| t.active) {
+        *vis = Visibility::Hidden;
+        *showing = None;
+        return;
+    }
 
     let Some((title, body)) = queue.pending.first().cloned() else {
         *vis = Visibility::Hidden;
@@ -179,5 +198,80 @@ impl Plugin for LogReaderPlugin {
             // on screen unattended once the state changes — it was still sitting
             // over the ending, offering "[Space] close".
             .add_systems(OnExit(GameState::Exploring), hide_log_card);
+    }
+}
+
+#[cfg(test)]
+mod log_card_tests {
+    use super::*;
+    use crate::tutorial::Tutorial;
+
+    fn app(training: bool) -> App {
+        let mut app = App::new();
+        app.init_resource::<LogQueue>();
+        app.init_resource::<ButtonInput<KeyCode>>();
+        let mut t = Tutorial::default();
+        if training {
+            t.begin();
+        }
+        app.insert_resource(t);
+        app.add_systems(Startup, spawn_log_card);
+        app.add_systems(Update, drive_log_card);
+        app.update(); // spawn the card
+        app
+    }
+
+    fn card_visible(app: &mut App) -> bool {
+        let mut q = app.world_mut().query_filtered::<&Visibility, With<LogCardRoot>>();
+        matches!(q.single(app.world()).unwrap(), Visibility::Visible)
+    }
+
+    fn found(app: &mut App) {
+        app.world_mut().resource_mut::<LogQueue>().push("Research Note: Acoustics".into(), "...".into());
+    }
+
+    /// The playtest: a recovered log covered the training instructions for
+    /// over a minute. During training it must not appear at all.
+    #[test]
+    fn a_log_found_during_training_stays_hidden() {
+        let mut app = app(true);
+        found(&mut app);
+        app.update();
+        assert!(!card_visible(&mut app), "log card drawn over the flight tutorial");
+    }
+
+    /// Both cards read Space. Pressing it to advance training must not quietly
+    /// throw away a log the player has not seen yet.
+    #[test]
+    fn space_during_training_does_not_eat_a_held_log() {
+        let mut app = app(true);
+        found(&mut app);
+        app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::Space);
+        app.update();
+        assert_eq!(
+            app.world().resource::<LogQueue>().pending.len(),
+            1,
+            "Space for the tutorial dismissed a log that was never shown"
+        );
+    }
+
+    /// Held, not lost: once training is over the log plays out.
+    #[test]
+    fn a_held_log_appears_once_training_ends() {
+        let mut app = app(true);
+        found(&mut app);
+        app.update();
+        app.world_mut().resource_mut::<Tutorial>().active = false;
+        app.update();
+        assert!(card_visible(&mut app), "the held log never appeared after training");
+    }
+
+    /// Outside training nothing changes: a log shows straight away.
+    #[test]
+    fn outside_training_a_log_shows_immediately() {
+        let mut app = app(false);
+        found(&mut app);
+        app.update();
+        assert!(card_visible(&mut app));
     }
 }
