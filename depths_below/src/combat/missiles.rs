@@ -397,13 +397,7 @@ pub fn launch_missiles(commands: &mut Commands, l: &MissileLaunch) -> u32 {
                 thrust: BOOST_THRUST * l.thrust_mult / bulk,
                 max_lateral,
                 arm_distance: 80.0,
-                // Was `30 + size_mult * 20`, i.e. 50-70 units against a
-                // 66-unit grid cell -- a "blast" that could not reach a
-                // neighbouring block. Now roughly one and a half to two
-                // cells, so a warhead damages a small cluster rather than
-                // needing to land dead on a single one. A tuning number:
-                // raise it for a heavier feel, lower it for precision.
-                blast_radius: 60.0 + size_mult * 40.0,
+                blast_radius: blast_radius_for(size_mult),
                 owner: l.weapon,
                 eject_time,
                 launch_dir: dir,
@@ -724,6 +718,33 @@ fn obstructs_tube(launch_cell: IVec2, axis: IVec2, cell: IVec2) -> bool {
     along > 0 && delta == axis * along
 }
 
+/// How much harder a warhead hits STRUCTURE than its listed damage.
+///
+/// Designed hulls carry 100 HP per block times the material (steel 100,
+/// titanium 150, composite 200, abyssal 300), and the launchers list 75 for
+/// a Heavy, 44 for a Guided and 19 per Cluster rocket. So at the listed
+/// figure no missile could destroy even ONE steel plate at the dead centre of
+/// its own blast -- a "devastating" heavy left a block at a quarter health
+/// and its neighbours barely scratched, which reads as doing nothing at all.
+///
+/// Tripled, a Heavy guts a three-by-three of steel and dents the ring around
+/// it; a Guided kills the steel block it lands on. Applied here and not in
+/// the registry on purpose: the registry figure also feeds the player's own
+/// damage pipeline when ENEMY missiles hit you, and raising it there would
+/// make every enemy launcher three times as deadly too.
+const WARHEAD_VS_STRUCTURE: f32 = 3.0;
+
+/// Blast radius for a launcher with `bays` bays (`size_mult`, never under 1).
+///
+/// One function, used by the launcher and by the tests, so the tests check
+/// the radius the game actually uses. Was `30 + bays * 20` -- 50 units for a
+/// single bay against a 66-unit cell, unable to reach the block beside the
+/// one it hit -- then `60 + bays * 40`. Now about three cells for a single
+/// bay. A feel number: raise it for a heavier warhead, lower it for precision.
+pub(crate) fn blast_radius_for(size_mult: f32) -> f32 {
+    140.0 + size_mult.max(1.0) * 60.0
+}
+
 /// How much of a warhead one block `d` away takes.
 ///
 /// Linear falloff across the blast: at the rim a warhead scorches, at the
@@ -743,7 +764,7 @@ fn blast_damage(warhead: f32, d: f32, radius: f32, block: &crate::building::Bloc
     if d >= radius || radius <= 0.0 {
         return 0.0;
     }
-    let share = warhead * (1.0 - d / radius);
+    let share = warhead * WARHEAD_VS_STRUCTURE * (1.0 - d / radius);
     let impact = crate::combat::impact::resolve_impact(
         share,
         block,
@@ -1119,8 +1140,7 @@ mod warhead_tests {
     fn even_the_smallest_blast_reaches_a_neighbouring_block() {
         const CELL: f32 = 66.0;
         for bays in 1..=4u32 {
-            let size_mult = bays as f32;
-            let radius = 60.0 + size_mult * 40.0;
+            let radius = blast_radius_for(bays as f32);
             assert!(
                 radius > CELL,
                 "{bays} bay(s): blast radius {radius} is under one {CELL}-unit cell, \
@@ -1129,5 +1149,179 @@ mod warhead_tests {
         }
         // And the old formula is what this replaced — one bay fell short.
         assert!(30.0 + 20.0 < CELL, "the old single-bay radius was not actually under a cell");
+    }
+}
+
+#[cfg(test)]
+mod missile_hits_blocks_tests {
+    use super::*;
+    use crate::ai_ship::components::AiShip;
+    use crate::building::ShipGrid;
+    use crate::combat::new_projectiles::MissileProjectile;
+    use crate::combat::shields::ShipShield;
+    use crate::components::{HullLayer, HullMaterial};
+    use std::collections::HashMap;
+
+    /// A shield that is down, so the warhead reaches the hull — a missile into
+    /// a live shield is absorbed by it, which is working as intended and not
+    /// what this is testing.
+    fn shield_down() -> ShipShield {
+        ShipShield {
+            current: 0.0,
+            max: 0.0,
+            base_max: 0.0,
+            recharge_rate: 0.0,
+            recharge_delay: 0.0,
+            since_hit: 999.0,
+            radius: 400.0,
+            center_offset: Vec2::ZERO,
+            flash: 0.0,
+            enabled: true,
+            surge: 0.0,
+            arc_facing: 0.0,
+            arc_half: std::f32::consts::PI,
+            arc_traverse: 0.0,
+            arc_active: false,
+        }
+    }
+
+    fn plate(material: HullMaterial, cell: IVec2) -> HullSegment {
+        let hp = 100.0 * material.health_multiplier();
+        HullSegment {
+            health: hp,
+            max_health: hp,
+            radiation_shielding: 0.0,
+            is_depressurized: false,
+            depressurization_level: 0.0,
+            hull_layer: HullLayer::Outer,
+            material,
+            grid_position: cell,
+        }
+    }
+
+    /// The world, the way the game builds it: an enemy ship at the origin with
+    /// a `ShipGrid`, hull blocks as its children, and one armed missile sitting
+    /// on cell (0, 0). Runs the real `check_missile_hits` — not the falloff
+    /// maths in isolation, which passed last time while missiles still did
+    /// nothing in the game.
+    fn fire_into(blocks: &[(IVec2, HullMaterial)]) -> (App, Vec<Entity>) {
+        let mut app = App::new();
+        app.insert_resource(crate::vfx::effect_textures::EffectTextures::empty());
+        app.init_resource::<crate::spatial::CreatureGrid>();
+        app.add_message::<crate::events::AiShipDamaged>();
+        app.add_message::<crate::events::ShipDamaged>();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, check_missile_hits);
+
+        let ship = app
+            .world_mut()
+            .spawn((AiShip, Transform::default(), GlobalTransform::default(), shield_down()))
+            .id();
+
+        let mut cells = HashMap::new();
+        let mut ids = Vec::new();
+        for &(cell, material) in blocks {
+            let local = crate::building::grid_to_local(cell).extend(0.0);
+            let id = app
+                .world_mut()
+                .spawn((
+                    plate(material, cell),
+                    Transform::from_translation(local),
+                    GlobalTransform::from_translation(local),
+                    ChildOf(ship),
+                ))
+                .id();
+            cells.insert(cell, id);
+            ids.push(id);
+        }
+        app.world_mut().entity_mut(ship).insert(ShipGrid { cells });
+
+        // Launched by someone else, so it is not its own ship's missile.
+        let shooter = app.world_mut().spawn_empty().id();
+        let at = crate::building::grid_to_local(IVec2::ZERO);
+        app.world_mut().spawn((
+            MissileProjectile {
+                damage: 75.0, // Heavy Missile Launcher, single bay
+                target: None,
+                burn_fuel: 0.0,
+                reserve_fuel: 0.0,
+                thrust: 0.0,
+                max_lateral: 0.0,
+                armed: true,
+                arm_distance: 0.0,
+                traveled: 1_000.0,
+                blast_radius: blast_radius_for(1.0),
+                owner: shooter,
+                eject_time: 0.0,
+                launch_dir: Vec2::Y,
+                age: 2.0,
+                life: 5.0,
+                terminal_range: 0.0,
+                prev_pos: at,
+                owner_ship: None,
+                launch_cell: IVec2::ZERO,
+                // cascade-story's field, read by `obstructs_tube`. ZERO is its
+                // documented "no axis recorded -- never cook off" value, and
+                // this missile is not leaving its own tube anyway.
+                launch_axis: IVec2::ZERO,
+            },
+            Transform::from_translation(at.extend(0.0)),
+        ));
+
+        app.update();
+        (app, ids)
+    }
+
+    fn health(app: &App, block: Entity) -> f32 {
+        app.world().get::<HullSegment>(block).unwrap().health
+    }
+
+    /// The report, twice now: missiles do not damage blocks. A Heavy Missile
+    /// landing on a steel plate must destroy it.
+    #[test]
+    fn a_heavy_missile_destroys_the_steel_plate_it_hits() {
+        let (app, ids) = fire_into(&[(IVec2::ZERO, HullMaterial::Steel)]);
+        let hp = health(&app, ids[0]);
+        assert!(
+            hp <= 0.0,
+            "a Heavy Missile detonated on a steel plate and left it at {hp} of 100"
+        );
+    }
+
+    /// The area of effect: the blocks beside the one it hit go too.
+    #[test]
+    fn the_blast_takes_out_the_neighbours() {
+        let (app, ids) = fire_into(&[
+            (IVec2::ZERO, HullMaterial::Steel),
+            (IVec2::new(1, 0), HullMaterial::Steel),
+            (IVec2::new(0, 1), HullMaterial::Steel),
+            (IVec2::new(1, 1), HullMaterial::Steel),
+        ]);
+        for (i, id) in ids.iter().enumerate() {
+            let hp = health(&app, *id);
+            assert!(hp <= 0.0, "block {i} of the 2x2 the missile landed in survived at {hp}");
+        }
+    }
+
+    /// And it stops somewhere. A block well outside the blast is untouched,
+    /// or every warhead is a ship-wide strike.
+    #[test]
+    fn a_block_outside_the_blast_is_untouched() {
+        let (app, ids) = fire_into(&[
+            (IVec2::ZERO, HullMaterial::Steel),
+            (IVec2::new(6, 0), HullMaterial::Steel),
+        ]);
+        assert_eq!(health(&app, ids[1]), 100.0, "a block six cells away took damage");
+    }
+
+    /// Armour still matters. The heaviest plating should survive a hit that
+    /// strips steel outright — otherwise material choice means nothing
+    /// against missiles.
+    #[test]
+    fn abyssal_plate_survives_what_steel_does_not() {
+        let (app, ids) = fire_into(&[(IVec2::ZERO, HullMaterial::AbyssalAlloy)]);
+        let hp = health(&app, ids[0]);
+        assert!(hp > 0.0, "abyssal plate (300 HP) was destroyed outright by one missile");
+        assert!(hp < 300.0, "abyssal plate took no damage at all");
     }
 }
