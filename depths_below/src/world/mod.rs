@@ -159,12 +159,26 @@ fn check_depth_zone_change(
         .ok()
         .and_then(|t| stations.local_range(t.translation.truncate()))
         .unwrap_or(ship_state.current_depth);
-    if let Some(zone) = settled_zone(depth_to_zone(local), time.delta_secs(), &mut settling, &mut announced) {
+    let candidate = zone_with_margin(local, *announced);
+    if let Some(zone) = settled_zone(candidate, time.delta_secs(), &mut settling, &mut announced) {
         notifications.write(ShowNotification {
             message: format!("Entering {}", zone_name(zone)),
             notification_type: NotificationType::Warning,
             duration: 3.0,
         });
+    }
+}
+
+/// The zone at `range`, unless the ship is within 12% of a boundary -- then
+/// whichever zone was last announced. Time alone wasn't enough: a ship holding
+/// station near a ring sat more than the settle time on each side of it in
+/// turn and still announced every crossing.
+fn zone_with_margin(range: f32, announced: Option<ZoneType>) -> ZoneType {
+    let (inner, outer) = (depth_to_zone(range * 0.88), depth_to_zone(range * 1.12));
+    if inner == outer {
+        inner
+    } else {
+        announced.unwrap_or_else(|| depth_to_zone(range))
     }
 }
 
@@ -730,6 +744,14 @@ mod zone_notice_tests {
             frames.push((z, 0.1));
         }
         assert!(run(&frames).is_empty());
+    }
+
+    /// Within 12% of the 3,000 ring the last announced zone stands.
+    #[test]
+    fn near_a_ring_the_announced_zone_stands() {
+        assert_eq!(zone_with_margin(3_100.0, Some(ZoneType::NearOrbit)), ZoneType::NearOrbit);
+        assert_eq!(zone_with_margin(2_900.0, Some(ZoneType::AsteroidBelt)), ZoneType::AsteroidBelt);
+        assert_eq!(zone_with_margin(3_600.0, Some(ZoneType::NearOrbit)), ZoneType::AsteroidBelt);
     }
 
     /// Crossing and staying is announced, once.

@@ -81,6 +81,10 @@ pub fn system_display_name(system_id: u32) -> String {
     crate::celestial::galaxy::system_name(system_id)
 }
 
+/// How far past the dock radius the ship must get before a station will
+/// prompt again.
+const PROMPT_REARM: f32 = 1.5;
+
 /// "Haven Station (Shipyard) in range". Most station names already end in
 /// their type ("Vesper Trade Hub"), and appending it again read
 /// "Vesper Trade Hub (Trade Hub)".
@@ -409,7 +413,20 @@ pub fn station_docking(
     let ship_pos = transform.translation.truncate();
 
     let Some(site) = stations.nearest_in_range(ship_pos) else {
-        *prompted_for = None;
+        // Re-arm the prompt only once the ship is properly clear of the
+        // station it named. Re-arming at the dock radius itself repeated
+        // "press F to dock" every time a ship hovering nearby dipped across
+        // it -- 23 times in ten minutes of one run.
+        let clear = prompted_for.is_none_or(|index| {
+            stations
+                .sites
+                .iter()
+                .find(|s| s.index == index)
+                .is_none_or(|s| ship_pos.distance(s.pos) > DOCK_RANGE * PROMPT_REARM)
+        });
+        if clear {
+            *prompted_for = None;
+        }
         return;
     };
 
