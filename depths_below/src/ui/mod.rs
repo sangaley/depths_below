@@ -3985,15 +3985,25 @@ fn spawn_pause_menu(
     power_state: Res<PowerState>,
     oxygen_state: Res<OxygenState>,
     hull_state: Res<HullState>,
-    module_query: Query<&Module>,
+    // The player's modules only -- an AI ship nearby was counted in too.
+    module_query: Query<&Module, Without<crate::ai_ship::components::OwnedByAiShip>>,
 ) {
-    // Count modules per category and active status
+    // Count modules per category that are doing their job. `is_active` is a
+    // power switch, and only machines start with it on; plating, storage and
+    // most control blocks never have one, so counting the flag put
+    // "Structural: 0/42" in red on every pause of a perfectly sound ship.
+    // A passive block is working while it's intact.
     let mut cat_total: HashMap<ModuleCategory, usize> = HashMap::new();
     let mut cat_active: HashMap<ModuleCategory, usize> = HashMap::new();
     for module in module_query.iter() {
         let cat = module.module_type.category();
         *cat_total.entry(cat).or_insert(0) += 1;
-        if module.is_active {
+        let working = if crate::ship::starts_active(module.module_type) {
+            module.is_active && module.health > 0.0
+        } else {
+            module.health > 0.0
+        };
+        if working {
             *cat_active.entry(cat).or_insert(0) += 1;
         }
     }
@@ -4020,7 +4030,8 @@ fn spawn_pause_menu(
         parent.spawn((Text::new(format!(
                 "Haven: {}  Hull: {}%  Power: {:.0}/{:.0}",
                 format_range_km(depth_state.current_depth), hull_pct,
-                power_state.total_power_generation, power_state.total_power_consumption,
+                // Used / available, like the HUD's PWR readout.
+                power_state.total_power_consumption, power_state.total_power_generation,
             )), TextFont { font_size: FontSize::Px(18.0), ..default() }, TextColor(Color::srgb(0.8, 0.8, 0.8))));
 
         // Module counts by category
@@ -4035,7 +4046,7 @@ fn spawn_pause_menu(
             } else {
                 Color::srgb(1.0, 0.0, 0.0)
             };
-            parent.spawn((Text::new(format!("  {}: {}/{} active", cat.name(), active, total)), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(color)));
+            parent.spawn((Text::new(format!("  {}: {}/{} working", cat.name(), active, total)), TextFont { font_size: FontSize::Px(16.0), ..default() }, TextColor(color)));
         }
 
         use menu_buttons::{spawn_chip_button, spawn_menu_button, MenuAction};

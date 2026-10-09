@@ -104,6 +104,8 @@ impl Plugin for ShipPlugin {
                     in_state(GameState::StationDocked).or_else(in_state(GameState::Docked)),
                 ),
             )
+            // The Power set is flight-only; this keeps PWR honest at the berth.
+            .add_systems(Update, berth_power_estimate.run_if(in_state(GameState::StationDocked)))
 
             // Startup - spawn ship, flush commands, then spawn crew (crew needs ship entity)
             .add_systems(OnEnter(GameState::StationDocked), (

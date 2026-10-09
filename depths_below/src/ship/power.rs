@@ -126,6 +126,33 @@ pub fn update_power_system(
     }
 }
 
+/// The flight power systems only run in flight, so at the berth the HUD read
+/// PWR 0/0 -- right where the shipyard tutorial says to balance reactors
+/// against what they feed. This fills in the ship's rated budget instead:
+/// every switched-on, intact module at full output and full draw. Flight
+/// figures then account for crew, damage and the power network on top.
+pub fn berth_power_estimate(
+    module_query: Query<(&Module, &ChildOf)>,
+    ship_query: Query<Entity, With<Ship>>,
+    mut power_state: ResMut<PowerState>,
+) {
+    let Ok(ship) = ship_query.single() else { return };
+    let (mut generation, mut consumption) = (0.0, 0.0);
+    for (module, parent) in &module_query {
+        if parent.parent() != ship || !module.is_active || module.health <= 0.0 {
+            continue;
+        }
+        if module.power_generation > 0.0 {
+            generation += module.power_generation;
+        } else {
+            consumption += module.power_consumption;
+        }
+    }
+    power_state.total_power_generation = generation;
+    power_state.total_power_consumption = consumption;
+    power_state.power_balance = generation - consumption;
+}
+
 // ============================================================================
 // POWER ROUTING — split the reactor's output across Weapons/Shields/Engines
 // ============================================================================
@@ -278,5 +305,49 @@ pub fn update_reactor_heat(
             module.is_active = false;
             reactor.heat = 0.0;
         }
+    }
+}
+
+#[cfg(test)]
+mod berth_power_tests {
+    use super::*;
+
+    fn module(kind: ModuleType, generation: f32, draw: f32, active: bool, health: f32) -> Module {
+        Module {
+            module_type: kind,
+            health,
+            max_health: 100.0,
+            power_consumption: draw,
+            power_generation: generation,
+            is_active: active,
+            grid_position: IVec2::ZERO,
+            size: IVec2::ONE,
+            rotation: Rotation::default(),
+        }
+    }
+
+    /// The berth shows the rated budget of what's aboard and working:
+    /// switched-off and wrecked modules don't count, and neither does
+    /// anything on another ship.
+    #[test]
+    fn the_berth_reads_the_ships_rated_budget() {
+        let mut app = App::new();
+        app.init_resource::<PowerState>();
+        app.add_systems(Update, berth_power_estimate);
+        let ship = app.world_mut().spawn(Ship).id();
+        let other = app.world_mut().spawn_empty().id();
+        for (m, owner) in [
+            (module(ModuleType::SmallReactor, 1000.0, 0.0, true, 100.0), ship),
+            (module(ModuleType::HelmStation, 0.0, 300.0, true, 100.0), ship),
+            (module(ModuleType::HelmStation, 0.0, 200.0, false, 100.0), ship),
+            (module(ModuleType::HelmStation, 0.0, 150.0, true, 0.0), ship),
+            (module(ModuleType::HelmStation, 0.0, 999.0, true, 100.0), other),
+        ] {
+            app.world_mut().spawn((m, ChildOf(owner)));
+        }
+        app.update();
+        let p = app.world().resource::<PowerState>();
+        assert_eq!((p.total_power_generation, p.total_power_consumption), (1000.0, 300.0));
+        assert_eq!(p.power_balance, 700.0);
     }
 }
