@@ -89,22 +89,24 @@ pub struct Contract {
 
 impl Contract {
     /// Returns a short progress string for HUD display.
+    /// Not-yet-done objectives read "..." -- they used to read "X", which on
+    /// a tracker next to "DONE" looks like a failed objective, not an open one.
     pub fn progress_text(&self) -> String {
         match &self.objective {
             ContractObjective::Kill { current_count, target_count, .. } => {
                 format!("{}/{}", current_count, target_count)
             }
             ContractObjective::ExplorePoi { discovered, .. } => {
-                if *discovered { "Done".into() } else { "X".into() }
+                if *discovered { "Done".into() } else { "...".into() }
             }
             ContractObjective::ReachDepth { reached, .. } => {
-                if *reached { "Done".into() } else { "X".into() }
+                if *reached { "Done".into() } else { "...".into() }
             }
             ContractObjective::RetrieveSalvage { current_count, target_count, .. } => {
                 format!("{}/{}", current_count, target_count)
             }
             ContractObjective::CaptureLive { captured, .. } => {
-                if *captured { "Done".into() } else { "X".into() }
+                if *captured { "Done".into() } else { "...".into() }
             }
             ContractObjective::SurveyZone { elapsed_seconds, required_seconds, .. } => {
                 format!("{:.0}/{:.0}s", elapsed_seconds, required_seconds)

@@ -378,6 +378,10 @@ pub fn spawn_contract_hud(
                 // notifications ran underneath it.
                 right: Val::Px(crate::ui::theme::ThemeSpacing::LG),
                 top: Val::Px(CONTRACT_HUD_TOP),
+                // Same width as the notification stack below it. Unbounded,
+                // a few bounty lines ("... vessel: Hunting - in Ashfall")
+                // ran left across the flight-training card; long lines wrap.
+                max_width: Val::Px(360.0),
                 flex_direction: FlexDirection::Column,
                 padding: UiRect::all(Val::Px(8.0)),
                 ..default()
