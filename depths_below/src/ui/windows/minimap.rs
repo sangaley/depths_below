@@ -51,14 +51,17 @@ const MINIMAP_RANGE: f32 = 200_000.0; // World units visible on minimap
 pub fn toggle_minimap(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
-    existing: Query<Entity, With<MinimapWindow>>,
+    windows: Query<(Entity, &FloatingWindow)>,
     stations: Res<SystemStations>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyN) {
         return;
     }
 
-    if let Ok(entity) = existing.single() {
+    // Close by the window root. MinimapWindow marks the content node inside
+    // it, and despawning that left the frame and title bar on screen -- N
+    // looked like it did nothing, and the next press stacked a second map.
+    if let Some((entity, _)) = windows.iter().find(|(_, w)| w.id == "minimap") {
         commands.entity(entity).despawn();
         return;
     }
@@ -243,5 +246,31 @@ pub fn update_minimap(
         if let Some((_, world_pos)) = active_targets.iter().find(|(id, _)| *id == dot.target_id) {
             place(&mut style, *world_pos);
         }
+    }
+}
+
+#[cfg(test)]
+mod toggle_tests {
+    use super::*;
+
+    #[test]
+    fn n_opens_the_map_and_n_closes_all_of_it() {
+        let mut app = App::new();
+        app.init_resource::<ButtonInput<KeyCode>>();
+        app.init_resource::<SystemStations>();
+        app.add_systems(Update, toggle_minimap);
+        let press = |app: &mut App| {
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release(KeyCode::KeyN);
+            keys.clear();
+            keys.press(KeyCode::KeyN);
+            app.update();
+        };
+        let nodes = |app: &mut App| app.world_mut().query::<&Node>().iter(app.world()).count();
+
+        press(&mut app);
+        assert!(nodes(&mut app) > 0, "N did not open the map");
+        press(&mut app);
+        assert_eq!(nodes(&mut app), 0, "the window frame outlived the close");
     }
 }

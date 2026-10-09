@@ -58,14 +58,16 @@ pub fn record_notifications(
 pub fn toggle_notification_log(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
-    existing: Query<Entity, With<NotificationLogWindow>>,
+    windows: Query<(Entity, &FloatingWindow)>,
     history: Res<NotificationHistory>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyL) {
         return;
     }
 
-    if let Ok(entity) = existing.single() {
+    // By the window root, as with the map: the marker sits on the content
+    // node, and despawning only that left an empty framed window behind.
+    if let Some((entity, _)) = windows.iter().find(|(_, w)| w.id == "notif_log") {
         commands.entity(entity).despawn();
         return;
     }
@@ -123,4 +125,30 @@ pub fn toggle_notification_log(
     }
 
     commands.entity(content).add_child(scroll_area);
+}
+
+#[cfg(test)]
+mod toggle_tests {
+    use super::*;
+
+    #[test]
+    fn l_opens_the_log_and_l_closes_all_of_it() {
+        let mut app = App::new();
+        app.init_resource::<ButtonInput<KeyCode>>();
+        app.init_resource::<NotificationHistory>();
+        app.add_systems(Update, toggle_notification_log);
+        let press = |app: &mut App| {
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release(KeyCode::KeyL);
+            keys.clear();
+            keys.press(KeyCode::KeyL);
+            app.update();
+        };
+        let nodes = |app: &mut App| app.world_mut().query::<&Node>().iter(app.world()).count();
+
+        press(&mut app);
+        assert!(nodes(&mut app) > 0, "L did not open the log");
+        press(&mut app);
+        assert_eq!(nodes(&mut app), 0, "the window frame outlived the close");
+    }
 }
