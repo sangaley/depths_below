@@ -4487,6 +4487,40 @@ const TRADE_GOODS: [ItemType; 7] = [
     ItemType::AmmoCrate,
 ];
 
+/// Credits per point of module damage at a station.
+const MODULE_REPAIR_RATE: f32 = 5.0;
+
+/// Repair order: what keeps the ship alive and moving before what fights.
+fn repair_priority(category: ModuleCategory) -> u8 {
+    match category {
+        ModuleCategory::Power => 0,
+        ModuleCategory::LifeSupport => 1,
+        ModuleCategory::Propulsion => 2,
+        ModuleCategory::Control => 3,
+        ModuleCategory::Weapons => 4,
+        _ => 5,
+    }
+}
+
+/// How many HP to restore on each module, given (priority, damage) per module
+/// in query order, the credits on hand and the price per HP. Spends no more
+/// than the credits cover, highest priority first.
+fn plan_module_repair(damage: &[(u8, f32)], credits: u32, rate: f32) -> Vec<f32> {
+    let mut budget = credits as f32 / rate;
+    let mut order: Vec<usize> = (0..damage.len()).collect();
+    order.sort_by_key(|&i| damage[i].0);
+    let mut plan = vec![0.0; damage.len()];
+    for i in order {
+        if budget <= 0.0 {
+            break;
+        }
+        let fix = damage[i].1.min(budget);
+        plan[i] = fix;
+        budget -= fix;
+    }
+    plan
+}
+
 /// Sell-cargo choices at a station: index 0 = everything, then one entry
 /// per item stack actually held (stable order). Lets the player dump
 /// scrap at a Trade Hub while holding artifacts back for the Research
@@ -4645,7 +4679,7 @@ fn get_docking_services(
         },
         DockingService {
             name: "Repair Modules",
-            description: "Restore all damaged modules to full health".to_string(),
+            description: "Restore damaged modules - vital systems first if credits run short".to_string(),
             cost: 0, // Calculated dynamically in the input handler
             available: true, // Checked dynamically
         },
@@ -5332,40 +5366,54 @@ fn docking_menu_input(
                 }
             }
             6 => {
-                // Repair Modules
-                let mut total_damage = 0.0f32;
-                for module in module_query.iter() {
-                    if module.health < module.max_health {
-                        total_damage += module.max_health - module.health;
-                    }
-                }
-                let cost = (total_damage * 5.0) as u32;
+                // Repair Modules. As much as the credits cover, most vital
+                // systems first -- it was all-or-nothing, so a captain a few
+                // hundred short of the full bill couldn't fix a single reactor.
+                let damage: Vec<(u8, f32)> = module_query
+                    .iter()
+                    .map(|m| (repair_priority(m.module_type.category()), (m.max_health - m.health).max(0.0)))
+                    .collect();
+                let total_damage: f32 = damage.iter().map(|(_, d)| d).sum();
+                let plan = plan_module_repair(&damage, currency.credits, MODULE_REPAIR_RATE);
+                let repaired: f32 = plan.iter().sum();
                 if total_damage < 0.1 {
                     notifications.write(ShowNotification {
                         message: "All modules at full health".into(),
                         notification_type: NotificationType::Info,
                         duration: 2.0,
                     });
-                } else if currency.credits >= cost {
-                    currency.credits -= cost;
-                    for mut module in module_query.iter_mut() {
-                        module.health = module.max_health;
-                        if !module.is_active && module.health > 0.0 {
-                            module.is_active = true;
-                        }
-                    }
+                } else if repaired < 1.0 {
                     notifications.write(ShowNotification {
-                        message: format!("All modules repaired! (-{}c)", cost),
-                        notification_type: NotificationType::Success,
-                        duration: 3.0,
-                    });
-                    changed = true;
-                } else {
-                    notifications.write(ShowNotification {
-                        message: format!("Not enough credits (need {}c, have {}c)", cost, currency.credits),
+                        message: format!("Not enough credits to start repairs ({}c per HP)", MODULE_REPAIR_RATE),
                         notification_type: NotificationType::Warning,
                         duration: 2.0,
                     });
+                } else {
+                    let cost = ((repaired * MODULE_REPAIR_RATE).ceil() as u32).min(currency.credits);
+                    currency.credits -= cost;
+                    for (mut module, amount) in module_query.iter_mut().zip(plan.iter()) {
+                        if *amount <= 0.0 {
+                            continue;
+                        }
+                        let was_wrecked = module.health <= 0.0;
+                        module.health = (module.health + amount).min(module.max_health);
+                        // Back on only if this repair is what revived it. A
+                        // module the captain switched off stays off.
+                        if was_wrecked && module.health > 0.0 {
+                            module.is_active = true;
+                        }
+                    }
+                    let left = total_damage - repaired;
+                    notifications.write(ShowNotification {
+                        message: if left < 0.5 {
+                            format!("All modules repaired! (-{}c)", cost)
+                        } else {
+                            format!("Repaired {:.0} HP, vital systems first (-{}c). {:.0} HP still damaged.", repaired, cost, left)
+                        },
+                        notification_type: NotificationType::Success,
+                        duration: 3.5,
+                    });
+                    changed = true;
                 }
             }
             7 => {
@@ -5460,7 +5508,7 @@ fn docking_menu_input(
                     total_module_damage += module.max_health - module.health;
                 }
             }
-            format!("Restore all modules ({:.0} HP to repair)", total_module_damage)
+            format!("{:.0} HP damaged - vital systems first if credits run short", total_module_damage)
         }, {
             let mut total_module_damage = 0.0f32;
             for module in module_query.iter() {
@@ -5468,7 +5516,7 @@ fn docking_menu_input(
                     total_module_damage += module.max_health - module.health;
                 }
             }
-            (total_module_damage * 5.0) as u32
+            (total_module_damage * MODULE_REPAIR_RATE) as u32
         }, module_query.iter().any(|m| m.health < m.max_health)),
         ("Buy Goods", buy_row(&inventory, station_idx, selection.1, &market).0, 0, true),
         ("Undock", "Return to exploring".to_string(), 0, true),
@@ -5950,5 +5998,29 @@ mod notification_stack_tests {
         app.update();
         let expected = crate::contracts::ui::CONTRACT_HUD_TOP + 60.0 + theme::ThemeSpacing::SM;
         assert_eq!(stack_top(&mut app), Val::Px(expected));
+    }
+}
+
+#[cfg(test)]
+mod module_repair_tests {
+    use super::*;
+
+    #[test]
+    fn enough_credits_fixes_everything() {
+        let plan = plan_module_repair(&[(4, 100.0), (0, 50.0)], 10_000, 5.0);
+        assert_eq!(plan, vec![100.0, 50.0]);
+    }
+
+    /// Short of the full bill: power first, then whatever is left.
+    #[test]
+    fn short_credits_fix_vital_systems_first() {
+        // 400c at 5c/HP buys 80 HP: the reactor's 50 first, then 30 of the gun's 100.
+        let plan = plan_module_repair(&[(4, 100.0), (0, 50.0)], 400, 5.0);
+        assert_eq!(plan, vec![30.0, 50.0]);
+    }
+
+    #[test]
+    fn no_credits_fixes_nothing() {
+        assert!(plan_module_repair(&[(0, 50.0)], 0, 5.0).iter().all(|a| *a == 0.0));
     }
 }
