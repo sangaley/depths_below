@@ -31,7 +31,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::ai_ship::components::{AiShip, AiShipWreck};
-use crate::celestial::poi::SpacePoi;
+use crate::celestial::poi::{SpacePoi, SpacePoiType};
 use crate::combat::targeting::selection::TargetSelection;
 use crate::components::{DockingMenuSelection, DockingOverlay, Ship, Velocity, Wreck};
 use crate::contracts::{ContractState, ContractStatus, MissionBoardOpen};
@@ -194,6 +194,16 @@ pub struct Director {
     eva_hold: f32,
     /// At a settlement berth: Up has been pressed onto Undock, Enter is next.
     undock_armed: bool,
+    /// Training's crew lesson opened the crew window; close it before going
+    /// on, as a player would, or it sat over a third of every later frame.
+    crew_window_open: bool,
+    /// How long the current recovered log has been up unread.
+    log_up_for: f32,
+    /// Seconds spent searching this system with nothing to fight. Kept across
+    /// Hunt/Strip hops: on phase_elapsed, every detour to a nearby POI reset
+    /// the sweep clock, so a system was never declared dry and the run
+    /// circled Haven for its whole deadline.
+    search_for: f32,
     /// Hunt swept the system and found nothing. Cleared once we've jumped.
     system_dry: bool,
     /// How long the interstellar drive has been charging.
@@ -338,6 +348,9 @@ impl Plugin for AutoplayPlugin {
             status_in: 0.0,
             eva_hold: 0.0,
             undock_armed: false,
+            crew_window_open: false,
+            log_up_for: 0.0,
+            search_for: 0.0,
         };
         director.log("start", &format!("target {}c", target));
 
@@ -428,6 +441,7 @@ struct World1<'w, 's> {
     pois: Query<'w, 's, (&'static Transform, &'static SpacePoi), Without<Ship>>,
     eva: Query<'w, 's, (), With<EvaSalvaging>>,
     dock_menu: Query<'w, 's, &'static DockingMenuSelection, With<DockingOverlay>>,
+    log_card: Query<'w, 's, &'static Visibility, With<crate::narrative::reader::LogCardRoot>>,
 }
 
 /// Both drives, bundled: the G-key local dash and the V-key interstellar
@@ -507,6 +521,17 @@ fn director_brain(
     // the moment it touched an outpost.
     let at_station = *state.get() == GameState::StationDocked;
     let flying = *state.get() == GameState::Exploring;
+
+    // A recovered log stays up until [Space]. Give it a reader's pause, then
+    // close it like a player would -- left alone it covered the middle of
+    // the screen for the rest of the run.
+    let log_up = w.log_card.iter().any(|v| *v != Visibility::Hidden);
+    d.log_up_for = if log_up { d.log_up_for + d.dt } else { 0.0 };
+    if d.log_up_for > 8.0 {
+        d.log_up_for = 0.0;
+        d.log("log", "read the recovered log - closing it");
+        d.tap(KeyCode::Space);
+    }
 
     // Crew outside pins the ship. A detail breaks off past BREAK_RANGE, so
     // flying anywhere with people on the hull strands them — which is exactly
@@ -638,6 +663,11 @@ fn director_brain(
             // The starter hull is already a working ship; the honest thing to
             // check here is that the shipyard opens and closes cleanly. Actual
             // module buying is mouse-driven placement (see module docs).
+            if d.crew_window_open {
+                d.crew_window_open = false;
+                d.tap(KeyCode::KeyC);
+                return;
+            }
             if d.step == 0 && d.phase_elapsed > 1.5 {
                 d.tap(KeyCode::KeyB);
                 d.step = 1;
@@ -795,6 +825,11 @@ fn director_brain(
                 }
             }
 
+            if best.is_some() {
+                d.search_for = 0.0;
+            } else {
+                d.search_for += d.dt;
+            }
             if let Some((dist, tp)) = best {
                 // Acquire a contact so `auto_engage` spreads the battery across
                 // its silhouette instead of every barrel drilling one tile.
@@ -844,7 +879,8 @@ fn director_brain(
                         }
                     }
                 }
-                if d.phase_elapsed > SWEEP_SECONDS {
+                if d.search_for > SWEEP_SECONDS {
+                    d.search_for = 0.0;
                     d.system_dry = true;
                     let msg = format!("nothing in {:.0}s - this system is stripped", SWEEP_SECONDS);
                     d.log("hunt", &msg);
@@ -1294,10 +1330,15 @@ fn salvageable(w: &World1, d: &Director, pos: Vec2) -> Option<(f32, Vec2, Entity
 }
 
 fn loot_nearby(w: &World1, pos: Vec2) -> Option<(f32, Vec2)> {
+    // Only what E can actually take. Asteroid nodes and waystations are
+    // SpacePois too and are never "looted", so chasing every unlooted one sent
+    // the ship off to stare at rocks for the rest of the run.
     nearest(
         w.pois
             .iter()
-            .filter(|(_, poi)| !poi.looted)
+            .filter(|(_, poi)| {
+                !poi.looted && matches!(poi.poi_type, SpacePoiType::DerelictShip | SpacePoiType::Anomaly)
+            })
             .map(|(t, _)| t.translation.truncate()),
         pos,
     )
@@ -1413,6 +1454,7 @@ fn drive_tutorial(
             if beat_ready {
                 d.beat = 0.0;
                 d.tap(KeyCode::KeyC);
+                d.crew_window_open = true;
             }
         }
     }

@@ -31,8 +31,9 @@ impl LogQueue {
     }
 }
 
+/// Crate-visible so the autoplay director can see when a card is up.
 #[derive(Component)]
-struct LogCardRoot;
+pub(crate) struct LogCardRoot;
 #[derive(Component)]
 struct LogCardTitle;
 #[derive(Component)]
