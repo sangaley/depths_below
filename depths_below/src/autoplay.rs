@@ -192,6 +192,8 @@ pub struct Director {
     status_in: f32,
     /// How long we've been holding station for an EVA detail.
     eva_hold: f32,
+    /// At a settlement berth: Up has been pressed onto Undock, Enter is next.
+    undock_armed: bool,
     /// Hunt swept the system and found nothing. Cleared once we've jumped.
     system_dry: bool,
     /// How long the interstellar drive has been charging.
@@ -335,6 +337,7 @@ impl Plugin for AutoplayPlugin {
             blanks_seen: 0,
             status_in: 0.0,
             eva_hold: 0.0,
+            undock_armed: false,
         };
         director.log("start", &format!("target {}c", target));
 
@@ -572,9 +575,18 @@ fn director_brain(
             return;
         }
         GameState::Docked => {
+            // A settlement berth. Its menu opens on Repair Hull and Undock is
+            // the last row, one Up away. Bare Enter bought hull repairs on a
+            // loop ("Hull already at full integrity" every second) and never
+            // left -- which wedged a whole run in flight training.
             if d.beat > 1.0 {
                 d.beat = 0.0;
-                d.tap(KeyCode::Enter);
+                if d.undock_armed {
+                    d.tap(KeyCode::Enter);
+                } else {
+                    d.tap(KeyCode::ArrowUp);
+                }
+                d.undock_armed = !d.undock_armed;
             }
             return;
         }

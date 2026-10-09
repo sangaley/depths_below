@@ -415,7 +415,11 @@ fn advance_tutorial(
         Advance::Kill => tutorial.enemy.is_some_and(|e| wreck_q.get(e).is_ok()),
         // A salvage detail is out (F dispatched idle crew — see eva_salvage).
         Advance::Salvage => !eva_q.is_empty(),
-        Advance::Dock => matches!(*state.get(), GameState::StationDocked | GameState::Docked),
+        // A station berth, not a settlement: the steps after this one open
+        // the shipyard, the bounty board and the crew roster, and only a
+        // station has those. Settling for an outpost colony left training on
+        // a lesson about a shipyard the player had no way to open.
+        Advance::Dock => *state.get() == GameState::StationDocked,
         // Station-side lessons: opened the shipyard / bounty board / crew menu.
         Advance::Build => *build_state.get() != BuildState::Inactive,
         Advance::Contracts => mission_board.0,
@@ -481,5 +485,45 @@ fn update_tutorial_card(
         if foot.0.as_str() != text {
             foot.0 = text.to_string();
         }
+    }
+}
+
+#[cfg(test)]
+mod dock_step_tests {
+    use super::*;
+    use bevy::state::app::StatesPlugin;
+
+    fn dock_step() -> usize {
+        STEPS.iter().position(|s| s.advance == Advance::Dock).unwrap()
+    }
+
+    fn app_berthed_in(state: GameState) -> App {
+        let mut app = App::new();
+        app.add_plugins(StatesPlugin);
+        app.insert_state(state);
+        app.init_state::<BuildState>();
+        app.init_resource::<MissionBoardOpen>();
+        app.init_resource::<ButtonInput<KeyCode>>();
+        app.add_message::<ShowNotification>();
+        app.insert_resource(Tutorial { active: true, step: dock_step(), ..default() });
+        app.add_systems(Update, advance_tutorial);
+        app
+    }
+
+    /// "Fly back to your home station" is answered by a station berth.
+    #[test]
+    fn docking_at_a_station_completes_the_step() {
+        let mut app = app_berthed_in(GameState::StationDocked);
+        app.update();
+        assert_eq!(app.world().resource::<Tutorial>().step, dock_step() + 1);
+    }
+
+    /// An outpost colony is not a station: the next lessons open its
+    /// shipyard, bounty board and crew roster, and a settlement has none.
+    #[test]
+    fn a_settlement_berth_does_not() {
+        let mut app = app_berthed_in(GameState::Docked);
+        app.update();
+        assert_eq!(app.world().resource::<Tutorial>().step, dock_step());
     }
 }

@@ -4792,7 +4792,9 @@ fn docking_menu_input(
                 // waste resources the player can't get back.
                 let hull_damage = 1.0 - hull_state.hull_integrity;
                 let full_cost = (hull_damage * 500.0 * discounts.hull_repair * far) as u32;
-                if hull_damage < 0.01 {
+                // Half a percent is where the HUD's rounding flips to 100%.
+                // At 0.01 a hull reading 99% was refused as already whole.
+                if hull_damage < 0.005 {
                     notifications.write(ShowNotification {
                         message: "Hull already at full integrity".into(),
                         notification_type: NotificationType::Info,
