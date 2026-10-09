@@ -44,18 +44,55 @@ pub const MAX_SYSTEMS: usize = 64;
 /// Size of the global station index space — see contracts::STATION_COUNT.
 pub const TOTAL_STATION_SLOTS: usize = MAX_SYSTEMS * STATIONS_PER_SYSTEM;
 
-/// Haven Station's fixed world position. The ship's build berth sits just
-/// up-right of it, which is also where the ship spawns at game start.
-pub const STATION_POS: Vec2 = Vec2::new(-700.0, -450.0);
+/// Radius of Haven's structure: centre to the tip of a docking arm. Every
+/// other station is built at OTHER_STATION_SCALE of it.
+///
+/// Was about 200. Next to the starter pincer (~1,800 long) a station read as
+/// a drone parked beside the ship rather than a place you dock at; at this
+/// size the station is about three times the length of the ship.
+pub const HAVEN_RADIUS: f32 = 2_600.0;
+const OTHER_STATION_SCALE: f32 = 0.8;
 
-/// Where a ship parks relative to the station it docks at.
-const BERTH_OFFSET: Vec2 = Vec2::new(700.0, 400.0);
+/// Structure radius of the station with this global index.
+pub fn station_radius(index: usize) -> f32 {
+    if index == 0 { HAVEN_RADIUS } else { HAVEN_RADIUS * OTHER_STATION_SCALE }
+}
 
-// Measured from the SHIP ROOT to the station center. Stations and hulls are
-// solid (see ship::collision), and the root of a big ship can sit ~800 units
-// behind its own nose — a tighter range is physically unreachable with a
-// large hull parked against the station.
-pub const DOCK_RANGE: f32 = 1800.0;
+/// How far past a station's structure the ship's ROOT can be and still dock.
+/// Stations and hulls are solid (see ship::collision), and the root of a big
+/// ship can sit ~800 units behind its own nose, so the range is measured from
+/// the station's edge, with room for the hull in between.
+pub const DOCK_MARGIN: f32 = 1_800.0;
+
+/// The largest docking range of any station (Haven's), from its centre. For
+/// code that needs one bound; per-station checks use StationSite::dock_range.
+pub const DOCK_RANGE: f32 = HAVEN_RADIUS + DOCK_MARGIN;
+
+/// Docked ships berth out past the tip of the east docking arm.
+const BERTH_DIR: Vec2 = Vec2::X;
+/// Clearance between a station's structure and a berthed ship's hull.
+const BERTH_GAP: f32 = 250.0;
+/// Radius of the starter hull, for the berth it spawns at before it has a
+/// collider of its own. A little over the pincer's own ~1,100.
+const STARTER_BERTH_RADIUS: f32 = 1_200.0;
+
+/// Where a ship of `ship_radius` (root to farthest hull) berths at a station.
+pub fn berth_position(station_pos: Vec2, station_radius: f32, ship_radius: f32) -> Vec2 {
+    station_pos + BERTH_DIR * (station_radius + ship_radius + BERTH_GAP)
+}
+
+/// The berth the game opens at. Kept at (0, -50) as it always has been --
+/// everything near Haven (the star's distance, the asteroid field, the chunk
+/// layer's keep-clear) is placed relative to it -- so Haven itself sits to
+/// the west of it.
+pub const SPAWN_BERTH: Vec2 = Vec2::new(0.0, -50.0);
+
+/// Haven Station's fixed world position: due west of the spawn berth by its
+/// own radius, the starter hull, and the gap.
+pub const STATION_POS: Vec2 = Vec2::new(
+    SPAWN_BERTH.x - (HAVEN_RADIUS + STARTER_BERTH_RADIUS + BERTH_GAP),
+    SPAWN_BERTH.y,
+);
 
 /// One station's identity and placement. Derived deterministically from the
 /// system it belongs to, so it's identical every time that system loads and
@@ -68,6 +105,18 @@ pub struct StationSite {
     pub pos: Vec2,
     pub name: String,
     pub kind: StationType,
+}
+
+impl StationSite {
+    /// Centre to the tip of a docking arm.
+    pub fn radius(&self) -> f32 {
+        station_radius(self.index)
+    }
+
+    /// Ship-root distance from the centre inside which this station docks.
+    pub fn dock_range(&self) -> f32 {
+        self.radius() + DOCK_MARGIN
+    }
 }
 
 /// Global station index for a (system, slot) pair. Haven is 0.
@@ -155,14 +204,20 @@ impl SystemStations {
     /// said it permanently and every arrival announced "Entering Black Hole
     /// Proximity". Measured from the local station they mean the same thing
     /// in every system.
+    ///
+    /// Measured from the structure's edge, not its centre, so a big station
+    /// doesn't put a ship berthed at it a few kilometres "out".
     pub fn local_range(&self, pos: Vec2) -> Option<f32> {
-        self.sites.iter().map(|s| pos.distance(s.pos)).reduce(f32::min)
+        self.sites
+            .iter()
+            .map(|s| (pos.distance(s.pos) - s.radius()).max(0.0))
+            .reduce(f32::min)
     }
 
     pub fn nearest_in_range(&self, pos: Vec2) -> Option<&StationSite> {
         self.sites
             .iter()
-            .filter(|s| pos.distance(s.pos) < DOCK_RANGE)
+            .filter(|s| pos.distance(s.pos) < s.dock_range())
             .min_by(|a, b| {
                 pos.distance_squared(a.pos)
                     .partial_cmp(&pos.distance_squared(b.pos))
@@ -247,12 +302,78 @@ pub fn sync_station_entities(
     }
 }
 
-/// Builds one station structure. Every station is a real installation now, so
-/// they all share Haven's silhouette; Haven itself is drawn larger, and the
-/// accent color codes the station type.
+/// A station's layout, in units of its radius (1.0 = tip of a docking arm).
+/// The drawing and the collision shape are both built from these, so they
+/// can't drift apart.
+mod shape {
+    /// Half-width of the central hub.
+    pub const CORE: f32 = 0.22;
+    /// Centreline radius and thickness of the habitat ring.
+    pub const RING_R: f32 = 0.52;
+    pub const RING_W: f32 = 0.09;
+    /// Docking arms: width, and where they start (inside the hub).
+    pub const ARM_W: f32 = 0.075;
+    pub const ARM_FROM: f32 = 0.18;
+    /// Docking heads at the arm tips: depth along the arm, and width across.
+    pub const HEAD_LEN: f32 = 0.10;
+    pub const HEAD_W: f32 = 0.20;
+    /// Where the arm stops and the head begins.
+    pub const ARM_TO: f32 = 1.0 - HEAD_LEN;
+    /// Ring segments. Enough that the ring reads round at any zoom.
+    pub const RING_SEGMENTS: usize = 32;
+}
+
+/// The four docking-arm directions.
+const ARMS: [Vec2; 4] = [Vec2::X, Vec2::Y, Vec2::NEG_X, Vec2::NEG_Y];
+
+/// Collision shape for a station of `radius`: one disc over the hub and ring,
+/// then each docking arm as a row of circles ending in its head. A single
+/// circle either walled off the empty space between the arms or let ships
+/// through the arms.
+pub fn station_collider_circles(radius: f32) -> Vec<(Vec2, f32)> {
+    use shape::*;
+    let mut circles = vec![(Vec2::ZERO, (RING_R + RING_W * 0.5) * radius)];
+    for dir in ARMS {
+        for along in [0.64, 0.74, 0.84] {
+            circles.push((dir * along * radius, ARM_W * 0.7 * radius));
+        }
+        circles.push((dir * (ARM_TO + HEAD_LEN * 0.5) * radius, HEAD_W * 0.5 * radius));
+    }
+    circles
+}
+
+/// Every sprite a station is drawn from. A station is a lit installation, so
+/// the flashlight vignette leaves it alone (camera::update_depth_vignette) --
+/// without this, everything outside the torch cone faded to black and a
+/// kilometres-wide station turned into a dim silhouette the moment you
+/// launched.
+#[derive(Component)]
+pub struct StationPart;
+
+/// Running lights on the docking heads and the ring: a slow fade in and out,
+/// each on its own beat so the station never blinks in unison.
+#[derive(Component)]
+pub struct StationBeacon {
+    phase: f32,
+    color: Color,
+}
+
+pub fn pulse_station_beacons(time: Res<Time>, mut beacons: Query<(&StationBeacon, &mut Sprite)>) {
+    let t = time.elapsed_secs();
+    for (beacon, mut sprite) in &mut beacons {
+        // Mostly dim with a soft swell, not an on/off strobe.
+        let swell = 0.5 + 0.5 * (t * 2.6 + beacon.phase).sin();
+        sprite.color = beacon.color.with_alpha(0.25 + 0.75 * swell * swell);
+    }
+}
+
+/// Builds one station structure: a hub, a habitat ring on four spokes, four
+/// docking arms with lit heads, solar wings, radiators and running lights.
+/// Haven is the largest; the accent colour codes the station type.
 fn spawn_station(commands: &mut Commands, site: &StationSite) {
+    use shape::*;
     let is_haven = site.index == 0;
-    let scale = if is_haven { 1.0 } else { 0.8 };
+    let r = site.radius();
     let accent = station_accent(site.kind);
 
     let root = commands
@@ -266,56 +387,141 @@ fn spawn_station(commands: &mut Commands, site: &StationSite) {
         commands.entity(root).insert(HomeStation);
     }
 
-    let mut add = |size: Vec2, color: Color, pos: Vec3| {
+    // Everything below is in station units (radius 1.0); `part` scales it.
+    let part = |commands: &mut Commands, size: Vec2, color: Color, at: Vec2, angle: f32, z: f32| {
         let child = commands
             .spawn((
-                Sprite { color, custom_size: Some(size * scale), ..default() },
-                Transform::from_translation(Vec3::new(pos.x * scale, pos.y * scale, pos.z)),
+                Sprite { color, custom_size: Some(size * r), ..default() },
+                Transform::from_translation((at * r).extend(z)).with_rotation(Quat::from_rotation_z(angle)),
+                StationPart,
+            ))
+            .id();
+        commands.entity(root).add_child(child);
+        child
+    };
+    let beacon = |commands: &mut Commands, at: Vec2, size: f32, phase: f32| {
+        let child = commands
+            .spawn((
+                Sprite { color: accent, custom_size: Some(Vec2::splat(size * r)), ..default() },
+                Transform::from_translation((at * r).extend(0.012)),
+                StationBeacon { phase, color: accent },
+                StationPart,
             ))
             .id();
         commands.entity(root).add_child(child);
     };
 
-    // Central hub
-    add(Vec2::new(220.0, 220.0), Color::srgb(0.16, 0.18, 0.26), Vec3::ZERO);
-    add(Vec2::new(180.0, 180.0), Color::srgb(0.22, 0.25, 0.35), Vec3::new(0.0, 0.0, 0.01));
-    // Four arms
-    add(Vec2::new(360.0, 46.0), Color::srgb(0.20, 0.22, 0.30), Vec3::new(0.0, 0.0, 0.005));
-    add(Vec2::new(46.0, 360.0), Color::srgb(0.20, 0.22, 0.30), Vec3::new(0.0, 0.0, 0.005));
-    // Docking pads at the arm tips, lit in the station type's accent
-    for (x, y) in [(190.0, 0.0), (-190.0, 0.0), (0.0, 190.0), (0.0, -190.0)] {
-        add(Vec2::new(56.0, 56.0), Color::srgb(0.28, 0.32, 0.44), Vec3::new(x, y, 0.01));
-        add(Vec2::new(30.0, 30.0), accent, Vec3::new(x, y, 0.02));
-    }
-    // Lit windows on the hub
-    for (x, y) in [(-50.0, 40.0), (0.0, 40.0), (50.0, 40.0), (-50.0, -40.0), (0.0, -40.0), (50.0, -40.0)] {
-        add(Vec2::new(14.0, 10.0), Color::srgb(0.95, 0.85, 0.45), Vec3::new(x, y, 0.02));
+    let hull_dark = Color::srgb(0.15, 0.17, 0.24);
+    let hull = Color::srgb(0.20, 0.22, 0.30);
+    let hull_light = Color::srgb(0.25, 0.28, 0.38);
+    let window = Color::srgb(0.95, 0.85, 0.45);
+    let tau = std::f32::consts::TAU;
+    let quarter = std::f32::consts::FRAC_PI_2;
+
+    // Habitat ring: segments laid tangentially, a lighter panel every fourth.
+    let seg_len = tau * RING_R / RING_SEGMENTS as f32 * 1.08;
+    for i in 0..RING_SEGMENTS {
+        let a = i as f32 / RING_SEGMENTS as f32 * tau;
+        let at = Vec2::from_angle(a) * RING_R;
+        let color = if i % 4 == 0 { hull_light } else { hull };
+        part(commands, Vec2::new(seg_len, RING_W), color, at, a + quarter, 0.0);
+        // Inner edge trim, and a pair of lit windows on alternate segments.
+        part(commands, Vec2::new(seg_len, RING_W * 0.18), hull_dark, Vec2::from_angle(a) * (RING_R - RING_W * 0.38), a + quarter, 0.001);
+        if i % 2 == 1 {
+            for off in [-0.3, 0.3] {
+                let w = at + Vec2::from_angle(a + quarter) * seg_len * off;
+                part(commands, Vec2::new(0.012, 0.018), window, w, a + quarter, 0.002);
+            }
+        }
     }
 
-    // Name plate: station name over its type
+    // Spokes on the diagonals, clear of the docking arms.
+    for k in 0..4 {
+        let a = std::f32::consts::FRAC_PI_4 + k as f32 * quarter;
+        let mid = (CORE + RING_R - RING_W * 0.5) * 0.5;
+        part(commands, Vec2::new(RING_R - RING_W * 0.5 - CORE, 0.035), hull_dark, Vec2::from_angle(a) * mid, a, 0.003);
+    }
+
+    // Hub: two squares at 45deg to each other read as an octagon, with a
+    // lighter deck on top and a grid of lit windows.
+    part(commands, Vec2::splat(CORE * 2.0), hull_dark, Vec2::ZERO, 0.0, 0.004);
+    part(commands, Vec2::splat(CORE * 2.0), hull_dark, Vec2::ZERO, std::f32::consts::FRAC_PI_4, 0.004);
+    part(commands, Vec2::splat(CORE * 1.55), hull_light, Vec2::ZERO, std::f32::consts::FRAC_PI_4, 0.005);
+    part(commands, Vec2::splat(CORE * 1.1), hull, Vec2::ZERO, 0.0, 0.006);
+    for gx in -2..=2 {
+        for gy in [-1, 1] {
+            part(commands, Vec2::new(0.016, 0.012), window, Vec2::new(gx as f32 * 0.04, gy as f32 * 0.05), 0.0, 0.007);
+        }
+    }
+
+    // Docking arms and their heads.
+    for (k, dir) in ARMS.into_iter().enumerate() {
+        let angle = dir.to_angle();
+        let len = ARM_TO - ARM_FROM;
+        let mid = dir * (ARM_FROM + len * 0.5);
+        part(commands, Vec2::new(len, ARM_W), hull, mid, angle, 0.008);
+        part(commands, Vec2::new(len, ARM_W * 0.3), hull_dark, mid, angle, 0.009);
+        // Head: a T across the arm's end, pads lit in the station's colour.
+        let head = dir * (ARM_TO + HEAD_LEN * 0.5);
+        part(commands, Vec2::new(HEAD_LEN, HEAD_W), hull_light, head, angle, 0.010);
+        part(commands, Vec2::new(HEAD_LEN * 0.4, HEAD_W * 0.8), hull_dark, head + dir * HEAD_LEN * 0.2, angle, 0.011);
+        let across = Vec2::new(-dir.y, dir.x);
+        for side in [-1.0, 1.0] {
+            beacon(commands, head + across * HEAD_W * 0.38 * side + dir * HEAD_LEN * 0.4, 0.022, k as f32 * 1.7 + side);
+        }
+    }
+
+    // Solar wings on the north and south arms.
+    let panel = Color::srgb(0.10, 0.16, 0.30);
+    let panel_frame = Color::srgb(0.30, 0.36, 0.50);
+    for dir in [Vec2::Y, Vec2::NEG_Y] {
+        for along in [0.68, 0.80] {
+            for side in [-1.0, 1.0] {
+                let at = dir * along + Vec2::X * side * (ARM_W * 0.5 + 0.11);
+                part(commands, Vec2::new(0.22, 0.10), panel_frame, at, 0.0, 0.007);
+                part(commands, Vec2::new(0.20, 0.085), panel, at, 0.0, 0.0075);
+            }
+        }
+    }
+
+    // Radiator fins along the west arm.
+    let radiator = Color::srgb(0.42, 0.47, 0.56);
+    for along in [0.66, 0.74, 0.82] {
+        for side in [-1.0, 1.0] {
+            let at = Vec2::NEG_X * along + Vec2::Y * side * (ARM_W * 0.5 + 0.06);
+            part(commands, Vec2::new(0.022, 0.12), radiator, at, 0.0, 0.007);
+        }
+    }
+
+    // A few running lights around the ring.
+    for k in 0..8 {
+        let a = k as f32 / 8.0 * tau + 0.2;
+        beacon(commands, Vec2::from_angle(a) * (RING_R + RING_W * 0.5), 0.016, k as f32 * 0.9);
+    }
+
+    // Name plate above the station. Most names already end in their type
+    // ("Vesper Trade Hub"); Haven's doesn't, so its type rides underneath.
+    let kind = station_type_name(site.kind);
     let label = commands
         .spawn((
             Text2d::new(site.name.to_uppercase()),
             TextFont { font_size: FontSize::Px(if is_haven { 28.0 } else { 24.0 }), ..default() },
             TextColor(Color::srgba(0.7, 0.8, 1.0, 0.8)),
-            Transform::from_xyz(0.0, 190.0 * scale, 0.03),
+            Transform::from_xyz(0.0, r * 1.12, 0.03),
             crate::camera::ZoomInvariantText,
         ))
         .id();
-    commands.entity(root).add_child(label);
-
-    if !is_haven {
-        let kind_label = commands
+    if !site.name.ends_with(kind) {
+        let span = commands
             .spawn((
-                Text2d::new(station_type_name(site.kind).to_uppercase()),
+                TextSpan::new(format!("\n{}", kind.to_uppercase())),
                 TextFont { font_size: FontSize::Px(16.0), ..default() },
                 TextColor(Color::srgba(0.6, 0.7, 0.9, 0.6)),
-                Transform::from_xyz(0.0, 165.0 * scale, 0.03),
-                crate::camera::ZoomInvariantText,
             ))
             .id();
-        commands.entity(root).add_child(kind_label);
+        commands.entity(label).add_child(span);
     }
+    commands.entity(root).add_child(label);
 }
 
 /// Accent color per station type — the same coding the map legend uses.
@@ -401,7 +607,7 @@ pub fn update_base_arrow(
 pub fn station_docking(
     mut press: ResMut<crate::resources::InteractPress>,
     stations: Res<SystemStations>,
-    mut ship_query: Query<(Entity, &mut Transform, &mut Velocity, &mut ShipPhysics), With<Ship>>,
+    mut ship_query: Query<(Entity, &mut Transform, &mut Velocity, &mut ShipPhysics, Option<&crate::ship::collision::Collider>), With<Ship>>,
     mut weapon_query: Query<(&mut Weapon, &ChildOf)>,
     mut oxygen_state: ResMut<OxygenState>,
     mut fuel_state: ResMut<FuelState>,
@@ -409,7 +615,7 @@ pub fn station_docking(
     mut next_state: ResMut<NextState<GameState>>,
     mut prompted_for: Local<Option<usize>>,
 ) {
-    let Ok((ship_entity, mut transform, mut velocity, mut physics)) = ship_query.single_mut() else { return };
+    let Ok((ship_entity, mut transform, mut velocity, mut physics, collider)) = ship_query.single_mut() else { return };
     let ship_pos = transform.translation.truncate();
 
     let Some(site) = stations.nearest_in_range(ship_pos) else {
@@ -443,7 +649,12 @@ pub fn station_docking(
     // salvage detail out on the hull, or a wreck closer than this station,
     // takes it first - docking would otherwise strand them.
     if press.claim() {
-        let berth = site.pos + BERTH_OFFSET;
+        // Clear of the structure whatever the ship's size: the collider's
+        // far edge from the root, or the starter's if it has none yet.
+        let ship_radius = collider
+            .map(|c| c.bound_center.length() + c.bound_radius)
+            .unwrap_or(STARTER_BERTH_RADIUS);
+        let berth = berth_position(site.pos, site.radius(), ship_radius);
         transform.translation.x = berth.x;
         transform.translation.y = berth.y;
         // Square the ship up with the build grid — modules are placed in
@@ -497,5 +708,73 @@ mod dock_prompt_tests {
     fn the_type_is_said_once() {
         assert_eq!(dock_prompt("Vesper Trade Hub", "Trade Hub"), "Vesper Trade Hub in range - press F to dock");
         assert_eq!(dock_prompt("Haven Station", "Shipyard"), "Haven Station (Shipyard) in range - press F to dock");
+    }
+}
+
+#[cfg(test)]
+mod station_size_tests {
+    use super::*;
+
+    /// Gap between a ship disc and the nearest part of a station's collision.
+    fn clearance(station_pos: Vec2, radius: f32, ship_pos: Vec2, ship_radius: f32) -> f32 {
+        station_collider_circles(radius)
+            .into_iter()
+            .map(|(c, r)| (station_pos + c).distance(ship_pos) - r - ship_radius)
+            .fold(f32::INFINITY, f32::min)
+    }
+
+    /// A docked ship sits clear of the structure, for small hulls and big
+    /// ones, at Haven and at the smaller stations.
+    #[test]
+    fn a_berthed_ship_clears_the_structure() {
+        for index in [0usize, 5] {
+            let radius = station_radius(index);
+            for ship_radius in [400.0, 1_100.0, 2_500.0] {
+                let berth = berth_position(Vec2::ZERO, radius, ship_radius);
+                let gap = clearance(Vec2::ZERO, radius, berth, ship_radius);
+                assert!(gap > 0.0, "station {index}, ship r={ship_radius}: overlaps by {}", -gap);
+            }
+        }
+    }
+
+    /// The game opens docked at the spawn berth: outside Haven, and close
+    /// enough that F docks again without flying anywhere.
+    #[test]
+    fn the_spawn_berth_is_outside_haven_and_in_reach() {
+        assert!(clearance(STATION_POS, HAVEN_RADIUS, SPAWN_BERTH, 1_100.0) > 0.0);
+        let haven = StationSite {
+            index: 0,
+            system_id: 0,
+            pos: STATION_POS,
+            name: "Haven Station".into(),
+            kind: station_type(0),
+        };
+        assert!(SPAWN_BERTH.distance(STATION_POS) < haven.dock_range());
+    }
+
+    /// The point of the change: a station is several times the starter's
+    /// length (~1,800) rather than a fraction of it.
+    #[test]
+    fn stations_dwarf_the_starter() {
+        assert!(station_radius(0) * 2.0 > 1_800.0 * 2.5);
+        assert!(station_radius(7) * 2.0 > 1_800.0 * 2.0);
+    }
+
+    /// Zones and contract ranges measure from the edge, so berthing at a big
+    /// station isn't kilometres "out".
+    #[test]
+    fn local_range_is_from_the_edge() {
+        let stations = SystemStations {
+            system_id: Some(0),
+            sites: vec![StationSite {
+                index: 0,
+                system_id: 0,
+                pos: Vec2::ZERO,
+                name: "Haven Station".into(),
+                kind: station_type(0),
+            }],
+        };
+        assert_eq!(stations.local_range(Vec2::new(HAVEN_RADIUS + 500.0, 0.0)), Some(500.0));
+        assert_eq!(stations.local_range(Vec2::new(100.0, 0.0)), Some(0.0));
     }
 }

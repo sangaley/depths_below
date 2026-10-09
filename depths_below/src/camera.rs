@@ -588,6 +588,9 @@ fn update_depth_vignette(
             (
                 Without<crate::celestial::components::Planet>,
                 Without<crate::celestial::components::Star>,
+                // Stations are lit installations, not things you find
+                // with the torch -- and the beacons set their own alpha.
+                Without<crate::world::home_base::StationPart>,
             ),
         ),
     >,

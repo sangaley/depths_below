@@ -49,7 +49,12 @@ pub fn generate_chunk(
     // pickup radius. The player was handed their first log before they had
     // touched a control, which is the opposite of the opening the story wants.
     let chunk_center = Vec2::new(chunk_world_x + 256.0, chunk_world_y + 256.0);
-    if chunk_center.length() < SPAWN_KEEP_CLEAR {
+    if chunk_center.distance(crate::world::home_base::SPAWN_BERTH) < SPAWN_KEEP_CLEAR {
+        return chunk;
+    }
+    // Nor inside or against Haven itself, now that it's kilometres across.
+    let haven = crate::world::home_base::STATION_POS;
+    if chunk_center.distance(haven) < crate::world::home_base::HAVEN_RADIUS + SPAWN_KEEP_CLEAR {
         return chunk;
     }
 

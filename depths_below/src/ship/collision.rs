@@ -10,7 +10,7 @@ use crate::combat::severance::DetachedSection;
 use crate::components::{HullSegment, Module, Projectile as LegacyProjectile, Ship, ShipPhysics, Velocity};
 use crate::events::{AiShipDamaged, DamageSource, ShipDamaged};
 use crate::spatial::SpatialGrid;
-use crate::world::home_base::{HomeStation, Station};
+use crate::world::home_base::Station;
 
 /// "Terrain" for weapons fire and AI steering: solid scenery, not ships and
 /// not battle debris (shots pass through drifting chunks; only real obstacles
@@ -82,6 +82,15 @@ impl Collider {
             mass,
             awake: false,
         }
+    }
+
+    /// A collider made of several circles, with its bounds worked out.
+    pub(crate) fn circles(circles: Vec<(Vec2, f32)>, mass: f32) -> Self {
+        let bound_radius = circles
+            .iter()
+            .map(|(center, radius)| center.length() + radius)
+            .fold(0.0, f32::max);
+        Self { circles, bound_center: Vec2::ZERO, bound_radius, mass, awake: false }
     }
 
     fn inv_mass(&self) -> f32 {
@@ -255,7 +264,7 @@ pub fn shots_hit_terrain(
 pub fn attach_static_colliders(
     mut commands: Commands,
     celestial: Query<(Entity, &CelestialBody), Added<CelestialBody>>,
-    stations: Query<(Entity, Option<&HomeStation>), Added<Station>>,
+    stations: Query<(Entity, &Station), Added<Station>>,
     pois: Query<(Entity, &SpacePoi), (Added<SpacePoi>, Without<CelestialBody>)>,
 ) {
     for (entity, body) in celestial.iter() {
@@ -280,12 +289,12 @@ pub fn attach_static_colliders(
             CelestialBodyType::BlackHole | CelestialBodyType::Debris => {}
         }
     }
-    // Stations: circle hugging the hub — the four arm tips poke out rather
-    // than walling off the empty diagonals of the full cross shape. Haven is
-    // drawn at full size, every other station at 0.8.
-    for (entity, is_haven) in stations.iter() {
-        let radius = if is_haven.is_some() { 140.0 } else { 112.0 };
-        commands.entity(entity).try_insert(Collider::circle(radius, f32::INFINITY));
+    // Stations: the hub-and-ring disc plus each docking arm, built from the
+    // same layout the station is drawn from (home_base::station_collider_circles).
+    for (entity, station) in stations.iter() {
+        let radius = crate::world::home_base::station_radius(station.index);
+        let circles = crate::world::home_base::station_collider_circles(radius);
+        commands.entity(entity).try_insert(Collider::circles(circles, f32::INFINITY));
     }
     for (entity, poi) in pois.iter() {
         let radius = match poi.poi_type {

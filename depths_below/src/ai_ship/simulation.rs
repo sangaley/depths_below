@@ -220,11 +220,11 @@ const ARRIVE_RADIUS: f32 = 450.0;
 /// legs inside the territory. The mix is the point: traffic that only ever
 /// visited stations would read as a conveyor belt, and traffic that never did
 /// is the random walk this replaced.
-fn next_waypoint(rng: &mut impl Rng, ship: &SimulatedShip, anchors: &[Vec2]) -> Vec2 {
+fn next_waypoint(rng: &mut impl Rng, ship: &SimulatedShip, anchors: &[(Vec2, f32)]) -> Vec2 {
     if !anchors.is_empty() && rng.gen::<f32>() < 0.4 {
-        let anchor = anchors[rng.gen_range(0..anchors.len())];
+        let (anchor, structure) = anchors[rng.gen_range(0..anchors.len())];
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-        let standoff = rng.gen_range(600.0..2200.0);
+        let standoff = structure + rng.gen_range(600.0..2200.0);
         let want = anchor + Vec2::new(angle.cos(), angle.sin()) * standoff;
         // Only if it is somewhere this ship is allowed to be.
         if want.distance(ship.home_zone) <= ship.patrol_radius {
@@ -270,7 +270,9 @@ pub fn tick_world_simulation(
     // Patrols and raiders both gravitate to the same places a player does,
     // which is what makes the traffic read as purposeful rather than as
     // Brownian motion over an empty map.
-    let anchors: Vec<Vec2> = stations.sites.iter().map(|s| s.pos).collect();
+    // (centre, structure radius): waypoints are taken from the edge, so
+    // traffic loiters around a station rather than inside its hull.
+    let anchors: Vec<(Vec2, f32)> = stations.sites.iter().map(|s| (s.pos, s.radius())).collect();
 
     let is_active_system = |system_id: u32| {
         streaming.loaded_system == Some(system_id) || streaming.warm_systems.contains(&system_id)

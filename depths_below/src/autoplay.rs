@@ -1206,14 +1206,16 @@ fn head_for_dock(
     };
 
     let dist = pos.distance(site.pos);
-    fly_to(d, pos, site.pos, dist, 400.0);
+    // Stop off the structure, not at its centre: stations are kilometres
+    // across now, and 400 from the middle is deep inside the hull.
+    fly_to(d, pos, site.pos, dist, site.radius() + crate::celestial::warp::STATION_ARRIVAL_STANDOFF);
 
     // Only inside the real docking radius, and on a slow beat so we aren't
     // mashing a key that means something else the moment we drift out.
     // F is overloaded: at a station it docks, and within eva_salvage's
     // ORDER_RANGE of a wreck it ALSO throws a detail out. One press did both
     // in an earlier run, docking the ship with nineteen crew on the hull.
-    if dist < DOCK_RANGE * 0.9 && d.beat > 1.0 && !crew_out {
+    if dist < site.dock_range() * 0.95 && d.beat > 1.0 && !crew_out {
         d.beat = 0.0;
         d.tap(KeyCode::KeyF);
     }

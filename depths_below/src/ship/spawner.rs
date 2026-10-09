@@ -35,7 +35,7 @@ pub fn spawn_starter_ship(
 
     // Spawn the main ship entity (invisible anchor for movement)
     let ship = commands.spawn((
-        Transform::from_xyz(0.0, -50.0, 0.0),
+        Transform::from_translation(crate::world::home_base::SPAWN_BERTH.extend(0.0)),
         // The ship carries no sprite of its own, but its ~120 hull/module
         // children do. Bevy propagates visibility down the hierarchy, so
         // without Visibility here every child logs B0004 on spawn (120 warnings

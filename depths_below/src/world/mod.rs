@@ -37,6 +37,7 @@ impl Plugin for WorldPlugin {
                 (
                     home_base::refresh_system_stations,
                     home_base::sync_station_entities,
+                    home_base::pulse_station_beacons,
                 )
                     .chain()
                     .run_if(in_state(GameState::Exploring).or_else(in_state(GameState::StationDocked))),
@@ -104,7 +105,7 @@ pub fn distance_from_safety(ship_pos: Vec2, stations: &home_base::SystemStations
     let nearest = stations
         .sites
         .iter()
-        .map(|s| s.pos.distance(ship_pos))
+        .map(|s| (s.pos.distance(ship_pos) - s.radius()).max(0.0))
         .fold(f32::INFINITY, f32::min);
     if nearest.is_finite() {
         nearest

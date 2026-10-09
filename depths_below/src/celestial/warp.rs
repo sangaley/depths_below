@@ -71,12 +71,13 @@ pub(crate) fn target_galaxy_pos(galaxy_map: &GalaxyMap, target: GalaxyWarpTarget
 /// once and the charge runs on its own — no need to hold the key through an
 /// 18-second charge; press V again to cancel early. Charge time and fuel
 /// cost both scale with galaxy-map distance to the target.
-/// How far off a station a warp drops you.
+/// How far past a station's structure a warp drops your ship's root.
 ///
-/// Must stay inside `home_base::DOCK_RANGE` or arriving "at a station" means
+/// Must stay inside `home_base::DOCK_MARGIN` or arriving "at a station" means
 /// arriving next to one you still have to fly to — which is the whole point
-/// of landing here. Enough standoff not to materialise inside the structure.
-pub const STATION_ARRIVAL_STANDOFF: f32 = 900.0;
+/// of landing here. Enough standoff that the hull doesn't materialise inside
+/// the structure: the starter's hull reaches ~1,100 from its root.
+pub const STATION_ARRIVAL_STANDOFF: f32 = 1_400.0;
 
 pub fn warp_input_system(
     mut commands: Commands,
@@ -315,7 +316,7 @@ pub fn execute_warp_jump(
             if let Some(site) = crate::world::home_base::station_sites(new_id, local_center).first() {
                 // Off to one side rather than on top of the structure.
                 let a = rand::random::<f32>() * std::f32::consts::TAU;
-                let arrival = site.pos + Vec2::new(a.cos(), a.sin()) * STATION_ARRIVAL_STANDOFF;
+                let arrival = site.pos + Vec2::new(a.cos(), a.sin()) * (site.radius() + STATION_ARRIVAL_STANDOFF);
                 ship_transform.translation.x = arrival.x;
                 ship_transform.translation.y = arrival.y;
             }
@@ -369,9 +370,9 @@ mod arrival_tests {
     #[test]
     fn arrival_standoff_is_inside_docking_range() {
         assert!(
-            STATION_ARRIVAL_STANDOFF < crate::world::home_base::DOCK_RANGE,
-            "arriving {STATION_ARRIVAL_STANDOFF} out of a {} dock range means you land next to a station you still have to fly to",
-            crate::world::home_base::DOCK_RANGE
+            STATION_ARRIVAL_STANDOFF < crate::world::home_base::DOCK_MARGIN,
+            "arriving {STATION_ARRIVAL_STANDOFF} past a {} docking margin means you land next to a station you still have to fly to",
+            crate::world::home_base::DOCK_MARGIN
         );
     }
 

@@ -195,7 +195,10 @@ pub fn order_salvage_detail(
     // the wreck here and was then out of range to dock, and F did nothing at
     // all.
     if let Some(site) = stations.nearest_in_range(ship_pos) {
-        if ship_pos.distance(site.pos) < wreck_dist {
+        // To the station's edge, not its centre: stations are kilometres
+        // across, and their centre is "farther" than a wreck the ship is
+        // nowhere near.
+        if (ship_pos.distance(site.pos) - site.radius()).max(0.0) < wreck_dist {
             return;
         }
     }
