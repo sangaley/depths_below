@@ -155,11 +155,14 @@ pub fn warp_input_system(
 
     // Tick charge timer
     if let Ok((entity, mut charging)) = charging_query.single_mut() {
+        let before = charging.charge_timer.fraction();
         charging.charge_timer.tick(time.delta());
 
-        // Progress notifications
+        // Progress notification, once: on the frame the charge crosses half.
+        // It was a 50-55% window, which every frame inside it re-announced --
+        // a dozen "Warp drive at 50%..." per jump stacked up the notices.
         let pct = charging.charge_timer.fraction();
-        if pct > 0.5 && pct < 0.55 {
+        if crossed_halfway(before, pct) {
             notifications.write(ShowNotification {
                 message: "Warp drive at 50%...".into(),
                 notification_type: NotificationType::Warning,
@@ -430,5 +433,24 @@ mod cost_tests {
         let half = interstellar_fuel_cost(0.5) - INTERSTELLAR_BASE_FUEL;
         let full = interstellar_fuel_cost(1.0) - INTERSTELLAR_BASE_FUEL;
         assert!(full > half * 2.0, "half={half} full={full}");
+    }
+}
+
+/// True only on the tick that carries a charge from below half to half or more.
+fn crossed_halfway(before: f32, after: f32) -> bool {
+    before < 0.5 && after >= 0.5
+}
+
+#[cfg(test)]
+mod halfway_tests {
+    use super::*;
+
+    /// A four-second charge at 60fps passes through 50-55% over a dozen
+    /// frames; it is announced on exactly one of them.
+    #[test]
+    fn halfway_is_announced_once() {
+        let frames: Vec<f32> = (0..=240).map(|i| i as f32 / 240.0).collect();
+        let hits = frames.windows(2).filter(|w| crossed_halfway(w[0], w[1])).count();
+        assert_eq!(hits, 1);
     }
 }

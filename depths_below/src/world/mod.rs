@@ -423,12 +423,12 @@ fn tick_market_events(
     let sell_mult = rng.gen_range(1.6..2.0_f32);
     let remaining = rng.gen_range(300.0..480.0_f32);
 
-    let type_name = station_types::station_type_name(station_types::station_type(station_idx));
+    // By name -- this printed "Outpost 8 (Refuel Depot)", the station's raw
+    // index. station_display_name already includes the station type.
     notifications.write(ShowNotification {
         message: format!(
-            "MARKET: Outpost {} ({}) short on {} - paying {:.0}% for ~{:.0} min!",
-            station_idx,
-            type_name,
+            "MARKET: {} short on {} - paying {:.0}% for ~{:.0} min!",
+            home_base::station_display_name(station_idx),
             item.name(),
             sell_mult * 100.0,
             remaining / 60.0

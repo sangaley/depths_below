@@ -4597,11 +4597,15 @@ fn spawn_docking_menu(
         DockingMenuSelection(0, 0),
     )).with_children(|parent| {
         let s_type = crate::world::station_types::station_type(station_idx);
-        let title = format!(
-            "{} - {}",
-            crate::world::home_base::station_display_name(station_idx).to_uppercase(),
-            crate::world::station_types::station_type_name(s_type).to_uppercase()
-        );
+        // "HAVEN STATION - SHIPYARD", but "VESPER TRADE HUB" rather than
+        // "VESPER TRADE HUB - TRADE HUB": most names already end in the type.
+        let name = crate::world::home_base::station_display_name(station_idx);
+        let kind = crate::world::station_types::station_type_name(s_type);
+        let title = if name.ends_with(kind) {
+            name.to_uppercase()
+        } else {
+            format!("{} - {}", name.to_uppercase(), kind.to_uppercase())
+        };
         parent.spawn((Text::new(title), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H1), ..default() }, TextColor(theme::ThemeColors::ACCENT_CYAN)));
 
         // Station identity subtitle — discounts were already silently baked

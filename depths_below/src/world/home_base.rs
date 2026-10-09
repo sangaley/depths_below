@@ -81,6 +81,17 @@ pub fn system_display_name(system_id: u32) -> String {
     crate::celestial::galaxy::system_name(system_id)
 }
 
+/// "Haven Station (Shipyard) in range". Most station names already end in
+/// their type ("Vesper Trade Hub"), and appending it again read
+/// "Vesper Trade Hub (Trade Hub)".
+fn dock_prompt(name: &str, kind: &str) -> String {
+    if name.ends_with(kind) {
+        format!("{name} in range - press F to dock")
+    } else {
+        format!("{name} ({kind}) in range - press F to dock")
+    }
+}
+
 /// Display name for a global station index.
 pub fn station_display_name(index: usize) -> String {
     if index == 0 {
@@ -391,11 +402,7 @@ pub fn station_docking(
     if *prompted_for != Some(site.index) {
         *prompted_for = Some(site.index);
         notifications.write(ShowNotification {
-            message: format!(
-                "{} ({}) in range - press F to dock",
-                site.name,
-                station_type_name(site.kind)
-            ),
+            message: dock_prompt(&site.name, station_type_name(site.kind)),
             notification_type: NotificationType::Info,
             duration: 4.0,
         });
@@ -448,5 +455,16 @@ pub fn station_docking(
             duration: 5.0,
         });
         next_state.set(GameState::StationDocked);
+    }
+}
+
+#[cfg(test)]
+mod dock_prompt_tests {
+    use super::*;
+
+    #[test]
+    fn the_type_is_said_once() {
+        assert_eq!(dock_prompt("Vesper Trade Hub", "Trade Hub"), "Vesper Trade Hub in range - press F to dock");
+        assert_eq!(dock_prompt("Haven Station", "Shipyard"), "Haven Station (Shipyard) in range - press F to dock");
     }
 }
