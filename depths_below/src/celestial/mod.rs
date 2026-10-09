@@ -54,6 +54,9 @@ impl Plugin for CelestialPlugin {
             .add_systems(Update, (
                 orbits::update_orbital_positions,
                 orbits::update_free_flight,
+                // After the positions move, so the dotted path and the planet
+                // on it are drawn from the same frame's state.
+                orbits::draw_orbit_paths.after(orbits::update_orbital_positions),
             ).in_set(CelestialSet::Orbits))
             // Gravity accumulation
             .add_systems(Update,

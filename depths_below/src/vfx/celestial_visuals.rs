@@ -30,6 +30,14 @@ pub struct StarCorona;
 #[derive(Component)]
 pub struct StarFlareGlow;
 
+/// How flat a ring lies. Near enough to edge-on to read as a disc seen at an
+/// angle rather than as a halo around the planet.
+const RING_TILT: f32 = 0.28;
+
+/// Marker for a planet's ring layer.
+#[derive(Component)]
+pub struct PlanetRing;
+
 /// Planet atmosphere layer
 #[derive(Component)]
 pub struct PlanetAtmosphere {
@@ -117,12 +125,41 @@ pub fn attach_planet_visuals(
     for (entity, body, planet) in planet_query.iter() {
         let radius = body.radius;
 
-        // Atmosphere glow for gas/rocky planets with atmosphere
+        // Rings sit BEHIND the body, as a wide flat ellipse. One sprite
+        // squashed on Y rather than two halves composited around the planet:
+        // the far side of a real ring passes behind the globe, but at the
+        // sizes these are drawn the seam costs more than the occlusion buys.
+        if planet.has_rings {
+            let ring = commands.spawn((
+                (Sprite {
+                        image: textures.ring.clone(),
+                        color: match planet.planet_type {
+                            PlanetType::IceGiant => Color::srgba(0.80, 0.90, 1.0, 0.40),
+                            PlanetType::Shattered => Color::srgba(0.70, 0.66, 0.66, 0.45),
+                            _ => Color::srgba(0.90, 0.85, 0.72, 0.38),
+                        },
+                        custom_size: Some(Vec2::new(radius * 4.4, radius * 4.4 * RING_TILT)),
+                        ..default()
+                    }, Transform::from_xyz(0.0, 0.0, -0.08)),
+                PlanetRing,
+            )).id();
+            commands.entity(entity).add_child(ring);
+        }
+
+        // Atmosphere glow, where the world has one worth drawing
         if planet.has_atmosphere {
             let atmo_color = match planet.planet_type {
-                PlanetType::Gas => Color::srgba(0.4, 0.5, 0.7, 0.15),
-                PlanetType::Rocky => Color::srgba(0.5, 0.6, 0.8, 0.10),
-                _ => Color::srgba(0.4, 0.4, 0.5, 0.08),
+                PlanetType::Gas => Color::srgba(0.40, 0.50, 0.70, 0.15),
+                PlanetType::IceGiant => Color::srgba(0.45, 0.65, 0.80, 0.16),
+                PlanetType::Toxic => Color::srgba(0.55, 0.70, 0.30, 0.17),
+                PlanetType::Ocean => Color::srgba(0.40, 0.60, 0.85, 0.13),
+                PlanetType::Terran => Color::srgba(0.50, 0.70, 0.80, 0.12),
+                PlanetType::Volcanic => Color::srgba(0.70, 0.40, 0.25, 0.12),
+                PlanetType::Lava => Color::srgba(0.85, 0.45, 0.25, 0.14),
+                PlanetType::Desert => Color::srgba(0.75, 0.65, 0.45, 0.10),
+                PlanetType::Rocky => Color::srgba(0.50, 0.60, 0.80, 0.10),
+                PlanetType::Ice => Color::srgba(0.65, 0.80, 0.90, 0.10),
+                PlanetType::Barren | PlanetType::Shattered => Color::srgba(0.40, 0.40, 0.50, 0.06),
             };
 
             let atmosphere = commands.spawn((
@@ -140,7 +177,9 @@ pub fn attach_planet_visuals(
             commands.entity(entity).add_child(atmosphere);
         }
 
-        // Shadow overlay — simulates dark side (offset from center)
+        // Night side. Positioned every frame by `spin_and_light_planets` so
+        // it faces away from the star; this spawn offset is only where it
+        // sits for the one frame before that runs.
         let shadow = commands.spawn((
             (Sprite {
                     image: textures.solid.clone(),
@@ -289,5 +328,186 @@ fn star_corona_color(class: StarSizeClass, alpha: f32) -> Color {
         StarSizeClass::Main => Color::srgba(1.0, 0.85, 0.6, alpha),
         StarSizeClass::Giant => Color::srgba(1.0, 0.5, 0.15, alpha),
         StarSizeClass::Supergiant => Color::srgba(0.5, 0.6, 1.0, alpha),
+    }
+}
+
+
+/// How far the night-side disc is pushed away from the star, as a fraction of
+/// the planet's radius.
+///
+/// The shadow is a dark disc the same size as the planet, so its offset
+/// decides how much of the world is in darkness. It used to sit at a fixed
+/// (0.15, -0.1) of the radius, which left the disc covering nearly the whole
+/// planet at half opacity -- most of the surface was dimmed, in the same
+/// direction for every planet, regardless of where its star was. At 0.55 the
+/// overlap is roughly the far half: lit toward the star, dark away from it.
+const TERMINATOR_OFFSET: f32 = 0.55;
+
+/// Turns each planet on its axis while its ring stays level and its night
+/// side stays facing away from the star.
+///
+/// Children inherit their parent's rotation, so spinning the planet entity
+/// alone would carry the ring and the shadow round with it. Each frame they
+/// are given the inverse rotation, and the shadow's offset is set in world
+/// space and converted back into the planet's turning frame (local =
+/// R⁻¹ · world). The surface features rotate; the light does not.
+pub fn spin_and_light_planets(
+    time: Res<Time>,
+    mut planets: Query<(&PlanetSpin, &mut Transform, &CelestialBody, &OrbitalPath, &Children)>,
+    stars: Query<&GlobalTransform>,
+    mut layers: Query<
+        (&mut Transform, Has<PlanetShadow>),
+        (Or<(With<PlanetRing>, With<PlanetShadow>)>, Without<PlanetSpin>),
+    >,
+) {
+    let dt = time.delta_secs();
+    for (spin, mut transform, body, orbit, children) in planets.iter_mut() {
+        transform.rotate_z(spin.rate * dt);
+        let unspin = transform.rotation.inverse();
+
+        // Direction from the star out through the planet, in world space.
+        let away = stars
+            .get(orbit.parent)
+            .map(|star| (transform.translation.truncate() - star.translation().truncate()).normalize_or_zero())
+            .unwrap_or(Vec2::X);
+
+        for child in children.iter() {
+            let Ok((mut layer, is_shadow)) = layers.get_mut(child) else { continue };
+            layer.rotation = unspin;
+            if is_shadow {
+                let world = (away * body.radius * TERMINATOR_OFFSET).extend(0.0);
+                let local = unspin * world;
+                layer.translation = Vec3::new(local.x, local.y, layer.translation.z);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod spin_tests {
+    use super::*;
+
+    /// No `MinimalPlugins`: its TimePlugin rewrites `Time` from the wall
+    /// clock every update and would discard the delta these tests advance by.
+    ///
+    /// Running the system at all is the first thing under test. Bevy checks
+    /// query conflicts when a system is INITIALISED, not when it compiles, so
+    /// two queries overlapping on `&mut Transform` would sail through
+    /// `cargo check` and panic with B0001 on the first frame of a real game.
+    fn app() -> (App, Entity, Entity, Entity, Entity) {
+        let mut app = App::new();
+        app.init_resource::<Time>();
+        app.add_systems(Update, spin_and_light_planets);
+
+        // Star at the origin. GlobalTransform is set by hand because without
+        // TransformPlugin nothing propagates it.
+        let star = app
+            .world_mut()
+            .spawn((Transform::default(), GlobalTransform::default()))
+            .id();
+
+        // Planet due east of the star, so "away from the star" is +X.
+        let planet = app
+            .world_mut()
+            .spawn((
+                Transform::from_xyz(100_000.0, 0.0, -0.9),
+                CelestialBody {
+                    body_type: CelestialBodyType::Planet,
+                    mass: 1_000.0,
+                    radius: 20_000.0,
+                    name: "Test".into(),
+                },
+                OrbitalPath {
+                    parent: star,
+                    semi_major_axis: 100_000.0,
+                    eccentricity: 0.0,
+                    phase: 0.0,
+                    period: 1_000.0,
+                    clockwise: false,
+                },
+                PlanetSpin { rate: 1.0 },
+            ))
+            .id();
+
+        let shadow = app
+            .world_mut()
+            .spawn((Transform::from_xyz(0.0, 0.0, 0.01), PlanetShadow, ChildOf(planet)))
+            .id();
+        let ring = app
+            .world_mut()
+            .spawn((Transform::from_xyz(0.0, 0.0, -0.08), PlanetRing, ChildOf(planet)))
+            .id();
+
+        (app, star, planet, shadow, ring)
+    }
+
+    fn step(app: &mut App, seconds: f32) {
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(std::time::Duration::from_secs_f32(seconds));
+        app.update();
+    }
+
+    #[test]
+    fn the_planet_actually_turns() {
+        let (mut app, _, planet, _, _) = app();
+        step(&mut app, 0.5);
+        let turned = app.world().get::<Transform>(planet).unwrap().rotation;
+        let (_, angle) = turned.to_axis_angle();
+        assert!(angle > 0.4, "planet turned only {angle} rad in half a second at 1 rad/s");
+    }
+
+    /// Inheriting the planet's rotation would spin the ring round with it.
+    /// Its world orientation must stay level however far the planet turns.
+    #[test]
+    fn the_ring_stays_level() {
+        let (mut app, _, planet, _, ring) = app();
+        for _ in 0..20 {
+            step(&mut app, 0.25);
+        }
+        let parent = app.world().get::<Transform>(planet).unwrap().rotation;
+        let local = app.world().get::<Transform>(ring).unwrap().rotation;
+        let world = parent * local;
+        assert!(
+            world.angle_between(Quat::IDENTITY) < 1e-3,
+            "ring has tilted {} rad in world space -- it is spinning with the planet",
+            world.angle_between(Quat::IDENTITY)
+        );
+    }
+
+    /// The night side points away from the star in WORLD space, no matter
+    /// how far the body has turned beneath it.
+    #[test]
+    fn the_night_side_faces_away_from_the_star() {
+        let (mut app, _, planet, shadow, _) = app();
+        for _ in 0..13 {
+            step(&mut app, 0.37);
+        }
+        let parent = *app.world().get::<Transform>(planet).unwrap();
+        let local = app.world().get::<Transform>(shadow).unwrap().translation;
+        let world_offset = (parent.rotation * Vec3::new(local.x, local.y, 0.0)).truncate();
+
+        // Star at origin, planet at +X, so away from the star is +X.
+        let dir = world_offset.normalize_or_zero();
+        assert!(
+            dir.dot(Vec2::X) > 0.999,
+            "night side points {dir}, not away from the star (+X)"
+        );
+        let expected = 20_000.0 * TERMINATOR_OFFSET;
+        assert!(
+            (world_offset.length() - expected).abs() < 1.0,
+            "night side is {} out, expected {expected}",
+            world_offset.length()
+        );
+    }
+
+    /// The shadow keeps its own depth: it must stay drawn above the planet
+    /// body, or the night side vanishes behind the surface.
+    #[test]
+    fn the_shadow_keeps_its_layer() {
+        let (mut app, _, _, shadow, _) = app();
+        step(&mut app, 1.0);
+        let z = app.world().get::<Transform>(shadow).unwrap().translation.z;
+        assert_eq!(z, 0.01, "repositioning the shadow moved it to z={z}");
     }
 }

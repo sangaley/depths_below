@@ -12,8 +12,15 @@ use super::galaxy;
 // dash (ui/mod.rs's WARP_DASH_* constants): that's a same-system reposition
 // bounded by a ~600k-unit local map, this is a jump across the whole
 // galaxy, orders of magnitude larger. Strawman numbers, tune by feel.
-const INTERSTELLAR_BASE_CHARGE: f32 = 1.0; // seconds
-const INTERSTELLAR_MAX_EXTRA_CHARGE: f32 = 3.0; // up to 4s at the far edge — was 6-60s, way too slow
+/// Spin-up for a jump between stars, before distance is counted.
+///
+/// This has been tuned twice in opposite directions and the history is worth
+/// keeping: it began at 6-60s, which was dead time at the keyboard, and was
+/// cut to 1-4s, which removed the weight entirely -- leaving the galaxy at
+/// the same cost as crossing a room. 4-18s is the middle: long enough that
+/// leaving a system is a decision, short enough to not be a loading screen.
+const INTERSTELLAR_BASE_CHARGE: f32 = 4.0; // seconds
+const INTERSTELLAR_MAX_EXTRA_CHARGE: f32 = 14.0; // up to 18s at the far edge
 const INTERSTELLAR_BASE_FUEL: f32 = 80.0;
 const INTERSTELLAR_MAX_EXTRA_FUEL: f32 = 420.0; // up to 500 at the far edge
 
@@ -38,9 +45,9 @@ pub(crate) fn target_galaxy_pos(galaxy_map: &GalaxyMap, target: GalaxyWarpTarget
 /// the pending target (PendingGalaxyWarpTarget) — a known system, or a
 /// blind point in space with nothing confirmed there (the galaxy map is
 /// clickable anywhere, not just discovered pips — see ui/mod.rs). Press
-/// once and the charge runs on its own — no need to hold the key through
-/// what can be up to a 60s charge; press V again to cancel early. Charge
-/// time and fuel cost both scale with galaxy-map distance to the target.
+/// once and the charge runs on its own — no need to hold the key through an
+/// 18-second charge; press V again to cancel early. Charge time and fuel
+/// cost both scale with galaxy-map distance to the target.
 /// How far off a station a warp drops you.
 ///
 /// Must stay inside `home_base::DOCK_RANGE` or arriving "at a station" means
