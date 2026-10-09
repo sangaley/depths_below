@@ -664,6 +664,14 @@ fn director_brain(
             const ROUTINE: [usize; 5] = [5, 0, 2, 3, 6];
 
             if d.step as usize >= ROUTINE.len() {
+                // Close the services first: the board opens behind them.
+                if w.dock_menu.single().is_ok() {
+                    if d.beat > 0.5 {
+                        d.beat = 0.0;
+                        d.tap(KeyCode::KeyU);
+                    }
+                    return;
+                }
                 d.go(Phase::Board);
                 return;
             }
@@ -677,7 +685,12 @@ fn director_brain(
                 return;
             }
             let Ok(sel) = w.dock_menu.single() else {
-                // Overlay hasn't spawned yet - wait a frame.
+                // At a station the services open on U (the Shop button); a
+                // settlement opens them on arrival. Ask on a beat, then wait.
+                if d.beat > 1.0 {
+                    d.beat = 0.0;
+                    d.tap(KeyCode::KeyU);
+                }
                 return;
             };
             if d.beat <= 0.35 {

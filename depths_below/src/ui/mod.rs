@@ -132,9 +132,23 @@ impl Plugin for UiPlugin {
             // Docked state
             .add_systems(OnEnter(GameState::Docked), spawn_docking_menu)
             .add_systems(OnExit(GameState::Docked), despawn_docking_menu)
+            // The same services at a station berth, on U (the toolbar's Shop).
+            .init_resource::<StationServicesRequested>()
             .add_systems(
                 Update,
-                docking_menu_input.run_if(in_state(GameState::Docked)),
+                (
+                    station_services_key,
+                    spawn_docking_menu.run_if(|asked: Res<StationServicesRequested>| asked.0),
+                    clear_station_services_request,
+                )
+                    .chain()
+                    .run_if(in_state(GameState::StationDocked)),
+            )
+            .add_systems(OnExit(GameState::StationDocked), despawn_docking_menu)
+            .add_systems(
+                Update,
+                docking_menu_input
+                    .run_if(in_state(GameState::Docked).or_else(in_state(GameState::StationDocked))),
             )
             // Game event notifications (while exploring)
             .add_systems(
@@ -1845,7 +1859,9 @@ fn handle_menu_input(
     current_state: Res<State<GameState>>,
     build_state: Res<State<BuildState>>,
     customization_state: Res<CustomizationState>,
-    mission_board_open: Res<crate::contracts::MissionBoardOpen>,
+    // Grouped to stay under Bevy's 16-param cap: every board whose own Enter
+    // must not also launch the ship.
+    boards: (Res<crate::contracts::MissionBoardOpen>, Res<crate::crew::hiring::HiringBoardOpen>),
     mut next_state: ResMut<NextState<GameState>>,
     mut pre_pause: ResMut<PrePauseState>,
     mut load_events: MessageWriter<LoadGameRequest>,
@@ -1853,9 +1869,11 @@ fn handle_menu_input(
     mut new_expedition: MessageWriter<NewExpeditionRequest>,
     mut settings_menu: ResMut<menu_buttons::SettingsMenu>,
     mut commands: Commands,
-    module_panel: Query<Entity, With<ModulePanelOverlay>>,
+    overlays: (Query<Entity, With<ModulePanelOverlay>>, Query<Entity, With<DockingOverlay>>),
     floating_windows: Query<(Entity, &windows::framework::FloatingWindow)>,
 ) {
+    let (mission_board_open, hiring_board_open) = boards;
+    let (module_panel, services) = overlays;
     // Settings overlay is modal: while it's open, Escape closes it (and nothing
     // else) so it never falls through to resume/close the underlying menu.
     if settings_menu.open {
@@ -1879,6 +1897,18 @@ fn handle_menu_input(
         if closed_any {
             return;
         }
+    }
+
+    // Station services close on Escape like any menu, rather than the press
+    // falling through and pausing the game behind them.
+    if keyboard.just_pressed(KeyCode::Escape)
+        && *current_state.get() == GameState::StationDocked
+        && !services.is_empty()
+    {
+        for entity in &services {
+            commands.entity(entity).despawn();
+        }
+        return;
     }
 
     if keyboard.just_pressed(KeyCode::Escape) {
@@ -1925,11 +1955,15 @@ fn handle_menu_input(
     let is_building = *build_state.get() != BuildState::Inactive;
     let is_customizing = customization_state.active;
 
+    // The hiring board and station services bind Enter too (hire / buy), and
+    // neither was in this list: hiring a hand at a station launched the ship.
     if keyboard.just_pressed(KeyCode::Enter)
         && module_panel.is_empty()
         && !is_building
         && !is_customizing
         && !mission_board_open.0
+        && !hiring_board_open.0
+        && services.is_empty()
     {
         match current_state.get() {
             GameState::MainMenu => {
@@ -4526,8 +4560,12 @@ fn spawn_docking_menu(
     market: Res<MarketEvents>,
     stations: Res<crate::world::home_base::SystemStations>,
     galaxy: Res<crate::celestial::resources::GalaxyMap>,
+    state: Res<State<GameState>>,
 ) {
     let crew_count = crew_query.iter().count();
+    // Escape leaves a settlement berth, but at a station it only closes this
+    // menu (handle_menu_input) -- the hint has to say which.
+    let escape_hint = if *state.get() == GameState::StationDocked { "ESC: Close" } else { "ESC: Undock" };
     let station_idx = ship_query.single().ok()
         .and_then(|t| stations.nearest_index(t.translation.truncate()))
         .unwrap_or(0);
@@ -4672,8 +4710,43 @@ fn spawn_docking_menu(
 
         parent.spawn((Text::new(""), TextFont { font_size: FontSize::Px(8.0), ..default() }, TextColor(Color::WHITE)));
 
-        parent.spawn((Text::new("Up/Down: Select | Left/Right: cargo choice | Enter: Purchase | ESC: Undock"), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::srgb(0.25, 0.25, 0.25))));
+        // Was srgb(0.25) on the near-black backdrop -- about 1.5:1, the
+        // controls line was effectively invisible.
+        parent.spawn((Text::new(format!("Up/Down: Select | Left/Right: cargo choice | Enter: Purchase | {escape_hint}")), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(theme::ThemeColors::TEXT_SECONDARY)));
     });
+}
+
+/// Selling cargo, refuelling, rearming and repairs all live in the services
+/// menu, and only a settlement berth ever opened it. A station -- where the
+/// tutorial sends you to sell your haul, and whose cargo panel says "Sell in
+/// station services" -- had a Shop button on its toolbar wired to U, and U
+/// had opened nothing there since the old upgrade shop was removed. Set by
+/// `station_services_key`, read by `spawn_docking_menu`'s run condition.
+#[derive(Resource, Default)]
+struct StationServicesRequested(bool);
+
+/// U at a station berth opens the services menu, or closes it if it's up.
+fn station_services_key(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    build_state: Res<State<BuildState>>,
+    mut commands: Commands,
+    open: Query<Entity, With<DockingOverlay>>,
+    mut requested: ResMut<StationServicesRequested>,
+) {
+    if !keyboard.just_pressed(KeyCode::KeyU) || *build_state.get() != BuildState::Inactive {
+        return;
+    }
+    if open.is_empty() {
+        requested.0 = true;
+    } else {
+        for entity in &open {
+            commands.entity(entity).despawn();
+        }
+    }
+}
+
+fn clear_station_services_request(mut requested: ResMut<StationServicesRequested>) {
+    requested.0 = false;
 }
 
 fn despawn_docking_menu(
@@ -5523,3 +5596,110 @@ mod crew_hurt_notice_tests {
     }
 }
 
+#[cfg(test)]
+mod station_services_tests {
+    use super::*;
+    use bevy::state::app::StatesPlugin;
+
+    fn press(app: &mut App, key: KeyCode) {
+        let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+        keys.release_all();
+        keys.clear();
+        keys.press(key);
+        app.update();
+    }
+
+    fn key_app(build: BuildState) -> App {
+        let mut app = App::new();
+        app.add_plugins(StatesPlugin);
+        app.insert_state(build);
+        app.init_resource::<ButtonInput<KeyCode>>();
+        app.init_resource::<StationServicesRequested>();
+        app.add_systems(Update, station_services_key);
+        app
+    }
+
+    #[test]
+    fn u_asks_for_the_services_when_none_are_up() {
+        let mut app = key_app(BuildState::Inactive);
+        press(&mut app, KeyCode::KeyU);
+        assert!(app.world().resource::<StationServicesRequested>().0);
+    }
+
+    #[test]
+    fn u_closes_the_services_when_they_are_up() {
+        let mut app = key_app(BuildState::Inactive);
+        let overlay = app.world_mut().spawn(DockingOverlay).id();
+        press(&mut app, KeyCode::KeyU);
+        assert!(!app.world().resource::<StationServicesRequested>().0);
+        assert!(app.world().get_entity(overlay).is_err(), "still open");
+    }
+
+    /// Build mode owns the keyboard; U there is not a trip to the shop.
+    #[test]
+    fn u_in_build_mode_does_nothing() {
+        let mut app = key_app(BuildState::Placing);
+        press(&mut app, KeyCode::KeyU);
+        assert!(!app.world().resource::<StationServicesRequested>().0);
+    }
+
+    fn berth_app() -> App {
+        let mut app = App::new();
+        app.add_plugins(StatesPlugin);
+        app.insert_state(GameState::StationDocked);
+        app.init_state::<BuildState>();
+        app.init_resource::<ButtonInput<KeyCode>>();
+        app.init_resource::<CustomizationState>();
+        app.init_resource::<crate::contracts::MissionBoardOpen>();
+        app.init_resource::<crate::crew::hiring::HiringBoardOpen>();
+        app.init_resource::<PrePauseState>();
+        app.init_resource::<crate::tutorial::Tutorial>();
+        app.init_resource::<menu_buttons::SettingsMenu>();
+        app.add_message::<LoadGameRequest>();
+        app.add_message::<NewExpeditionRequest>();
+        app.add_systems(Update, handle_menu_input);
+        app
+    }
+
+    fn pending(app: &App) -> Option<GameState> {
+        match app.world().resource::<NextState<GameState>>() {
+            NextState::Pending(s) => Some(*s),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn enter_at_a_bare_berth_launches() {
+        let mut app = berth_app();
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(pending(&app), Some(GameState::Exploring));
+    }
+
+    /// Hiring binds Enter to "hire". It must not also launch the ship.
+    #[test]
+    fn hiring_with_enter_does_not_launch() {
+        let mut app = berth_app();
+        app.world_mut().resource_mut::<crate::crew::hiring::HiringBoardOpen>().0 = true;
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(pending(&app), None);
+    }
+
+    /// Nor does buying in the station services.
+    #[test]
+    fn buying_with_enter_does_not_launch() {
+        let mut app = berth_app();
+        app.world_mut().spawn(DockingOverlay);
+        press(&mut app, KeyCode::Enter);
+        assert_eq!(pending(&app), None);
+    }
+
+    /// Escape takes the services down instead of pausing behind them.
+    #[test]
+    fn escape_closes_the_services_without_pausing() {
+        let mut app = berth_app();
+        let overlay = app.world_mut().spawn(DockingOverlay).id();
+        press(&mut app, KeyCode::Escape);
+        assert_eq!(pending(&app), None);
+        assert!(app.world().get_entity(overlay).is_err());
+    }
+}
