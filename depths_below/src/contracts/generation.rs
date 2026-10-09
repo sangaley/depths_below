@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use rand::prelude::*;
 
-use crate::ai_ship::components::{faction_power, AiShipType, WorldSimulation};
+use crate::ai_ship::components::{faction_display_name, faction_power, AiShipType, WorldSimulation};
 use crate::components::{CreatureType, PoiType, ZoneType};
 use crate::resources::ItemType;
 use super::{
@@ -13,28 +13,32 @@ use super::{
 // FACTION → CONTRACT TYPE WEIGHTS
 // ============================================================================
 
+/// No Kill and no CaptureLive: both target creatures, and creatures no longer
+/// exist in this build. The board was issuing jobs that could never be
+/// completed -- a playthrough accepted "Kill 4 VoidDrifters" and then flew
+/// around for seven minutes with nothing to kill. Their weight went to the
+/// objectives that actually resolve.
+///
+/// The ContractType variants themselves are left in place. Kill is the obvious
+/// home for a future hunt-a-ship objective and costs nothing sitting unused;
+/// generating it is what was broken, not having it.
 fn weighted_contract_types(faction: &Faction) -> Vec<(ContractType, u32)> {
     match faction {
         Faction::ResearchInstitute => vec![
-            (ContractType::CaptureLive, 30),
-            (ContractType::ExplorePoi, 25),
-            (ContractType::SurveyZone, 25),
-            (ContractType::Kill, 20),
-            (ContractType::DestroyShip, 10),
+            (ContractType::SurveyZone, 40),
+            (ContractType::ExplorePoi, 30),
+            (ContractType::DestroyShip, 30),
         ],
         Faction::Navy => vec![
-            (ContractType::Kill, 30),
-            (ContractType::DestroyShip, 30),
-            (ContractType::ReachDepth, 20),
-            (ContractType::SurveyZone, 15),
-            (ContractType::ExplorePoi, 10),
+            (ContractType::DestroyShip, 50),
+            (ContractType::ReachDepth, 25),
+            (ContractType::SurveyZone, 25),
         ],
         Faction::SalvageGuild => vec![
-            (ContractType::RetrieveSalvage, 35),
-            (ContractType::ExplorePoi, 25),
+            (ContractType::RetrieveSalvage, 45),
+            (ContractType::ExplorePoi, 20),
             (ContractType::ReachDepth, 15),
-            (ContractType::Kill, 10),
-            (ContractType::DestroyShip, 15),
+            (ContractType::DestroyShip, 20),
         ],
     }
 }
@@ -75,13 +79,21 @@ fn zone_for_star(star: u8) -> ZoneType {
     }
 }
 
+/// How far out a reach contract sends you, by star rating.
+///
+/// These are ranges from the nearest berth, and they used to be 50-3500 --
+/// the same submarine numbers `world::depth_to_zone` abandoned. One kilometre
+/// is a thousand units and Station Orbit alone reaches 600, so a one-star job
+/// was satisfied by undocking and the top tier by a few minutes of ordinary
+/// flying. Each tier now lands inside the zone its star rating names, so the
+/// contract asks for the trip its description promises.
 fn depth_range_for_star(star: u8) -> (f32, f32) {
     match star {
-        1 => (50.0, 200.0),
-        2 => (200.0, 500.0),
-        3 => (500.0, 1000.0),
-        4 => (1000.0, 2000.0),
-        _ => (2000.0, 3500.0),
+        1 => (1_200.0, 2_500.0),    // out of Station Orbit, still Near Space
+        2 => (3_500.0, 7_000.0),    // Asteroid Belt
+        3 => (9_000.0, 15_000.0),   // Deep Space
+        4 => (17_000.0, 28_000.0),  // Nebula
+        _ => (32_000.0, 45_000.0),  // past the Nebula edge
     }
 }
 
@@ -125,8 +137,15 @@ fn survey_seconds_for_star(star: u8) -> f32 {
     }
 }
 
+/// Only kinds that exist somewhere other than Haven.
+///
+/// Cave and ThermalVent are chunk-layer only, and the chunk layer generates in
+/// a narrow band around the world origin -- so a contract asking for either was
+/// uncompletable the moment the player warped anywhere. Wreck, Ruins and
+/// Settlement all have celestial equivalents in every system (see
+/// SpacePoiType::as_poi_type).
 fn poi_types() -> &'static [PoiType] {
-    &[PoiType::Wreck, PoiType::Cave, PoiType::Ruins, PoiType::ThermalVent, PoiType::Settlement]
+    &[PoiType::Wreck, PoiType::Ruins, PoiType::Settlement]
 }
 
 // ============================================================================
@@ -140,13 +159,13 @@ fn poi_types() -> &'static [PoiType] {
 /// need more faction rep to unlock) point at farther, tougher targets.
 fn ship_factions_for_star(star: u8) -> &'static [AiShipType] {
     match star {
-        1 => &[AiShipType::RustSwarm],
-        2 => &[AiShipType::RustSwarm, AiShipType::Leviathan, AiShipType::Drowned],
-        3 => &[AiShipType::AbyssalCult, AiShipType::GlassEye, AiShipType::Blackwater],
-        4 => &[AiShipType::Blackwater, AiShipType::IronTide],
+        1 => &[AiShipType::RecursiveKingdom],
+        2 => &[AiShipType::RecursiveKingdom, AiShipType::StellarPreserve, AiShipType::BrokenChoir],
+        3 => &[AiShipType::SynthesisCollective, AiShipType::TheSilence, AiShipType::GildedThrone],
+        4 => &[AiShipType::GildedThrone, AiShipType::TerranHegemony],
         // Bosses only show up at the top star tier (max faction rep) — rare,
         // legendary jackpot bounties, not a routine offering.
-        _ => &[AiShipType::IronTide, AiShipType::PressureKing, AiShipType::Dreadnought, AiShipType::VoidTitan],
+        _ => &[AiShipType::TerranHegemony, AiShipType::CorpseStars, AiShipType::EternalHegemony, AiShipType::Shepherd],
     }
 }
 
@@ -165,7 +184,7 @@ fn destroy_ship_reward(star: u8, ship_type: AiShipType, distance: f32, rng: &mut
     // up to 5x at ~800,000+ out (boss territory).
     let distance_mult = 1.0 + (distance / 175_000.0).min(4.0);
 
-    // 0.6x for the weakest faction (GlassEye) up to 3.8x for Void Titan.
+    // 0.6x for the weakest faction (The Silence) up to 3.8x for The Shepherd.
     let power_mult = 0.6 + faction_power(ship_type) * 0.4;
 
     (base * distance_mult * power_mult).round() as u32
@@ -183,21 +202,6 @@ fn tag_destroy_ship_target(star: u8, sim: &mut WorldSimulation, active_systems: 
         }
     }
     None
-}
-
-fn ship_display_name(ship_type: AiShipType) -> &'static str {
-    match ship_type {
-        AiShipType::VoidTitan => "Void Titan",
-        AiShipType::Dreadnought => "Dreadnought",
-        AiShipType::Leviathan => "Leviathan Rider",
-        AiShipType::AbyssalCult => "Abyssal Cult",
-        AiShipType::Drowned => "Drowned",
-        AiShipType::PressureKing => "Pressure King",
-        AiShipType::GlassEye => "Glass Eye",
-        AiShipType::IronTide => "Iron Tide",
-        AiShipType::Blackwater => "Blackwater",
-        AiShipType::RustSwarm => "Rust Swarm",
-    }
 }
 
 // ============================================================================
@@ -281,8 +285,8 @@ fn generate_single_contract(
                 return None;
             };
             reward = destroy_ship_reward(star, ship_type, distance, rng);
-            let name = ship_display_name(ship_type);
-            let is_boss = matches!(ship_type, AiShipType::Dreadnought | AiShipType::VoidTitan);
+            let name = faction_display_name(ship_type);
+            let is_boss = matches!(ship_type, AiShipType::EternalHegemony | AiShipType::Shepherd);
             let (title, desc) = if is_boss {
                 (
                     format!("JACKPOT BOUNTY: {}", name),
@@ -361,4 +365,100 @@ pub fn ensure_station_board(
     }
     let contracts = generate_station_board(rep, &mut state.next_id, sim, active_systems);
     *state.board_mut(station) = contracts;
+}
+
+#[cfg(test)]
+mod poi_target_tests {
+    use super::*;
+    use crate::celestial::poi::SpacePoiType;
+
+    /// Every kind an Explore contract can ask for must exist somewhere other
+    /// than Haven.
+    ///
+    /// The two point-of-interest systems grew up apart: contracts speak
+    /// PoiType, which only ever existed on the chunk layer near the world
+    /// origin, while SpacePoi is what actually populates all thirty-one
+    /// systems. Asking for a Cave was uncompletable the moment the player
+    /// warped anywhere -- and the expedition trail sends them exactly there.
+    #[test]
+    fn every_explore_target_exists_outside_haven() {
+        let reachable: Vec<PoiType> = [
+            SpacePoiType::DerelictShip,
+            SpacePoiType::DebrisField,
+            SpacePoiType::Anomaly,
+            SpacePoiType::SignalSource,
+            SpacePoiType::SpaceStation,
+            SpacePoiType::AsteroidNode,
+        ]
+        .iter()
+        .filter_map(|s| s.as_poi_type())
+        .collect();
+
+        for wanted in poi_types() {
+            assert!(
+                reachable.contains(wanted),
+                "Explore contracts can ask for {wanted:?}, which has no celestial \
+                 equivalent and so cannot be found outside Haven"
+            );
+        }
+    }
+
+    /// And the list must not be empty, or Explore silently stops generating.
+    #[test]
+    fn there_are_targets_to_ask_for() {
+        assert!(!poi_types().is_empty());
+    }
+
+    /// A reach contract must send you to the zone its star rating names.
+    ///
+    /// The two tables are written by hand in different places -- one says
+    /// which zone a star rating means, the other how far that is -- and they
+    /// were calibrated against different scales entirely. A five-star job
+    /// promising Black Hole Proximity asked for 3,500 units, which is Near
+    /// Space, and the player was paid five-star money for a two-minute flight.
+    #[test]
+    fn reach_targets_land_in_the_zone_their_stars_name() {
+        for star in 1..=5u8 {
+            let (lo, hi) = depth_range_for_star(star);
+            let want = zone_for_star(star);
+            assert!(lo < hi, "star {star}: empty range {lo}..{hi}");
+            for edge in [lo, hi] {
+                assert_eq!(
+                    crate::world::depth_to_zone(edge),
+                    want,
+                    "star {star} names {want:?} but {edge} is \
+                     {:?}",
+                    crate::world::depth_to_zone(edge)
+                );
+            }
+        }
+    }
+
+    /// And it must be a trip, not a formality.
+    ///
+    /// Station Orbit reaches 600 units. Anything at or inside that is
+    /// satisfied by undocking and drifting.
+    #[test]
+    fn no_reach_contract_completes_on_undocking() {
+        for star in 1..=5u8 {
+            let (lo, _) = depth_range_for_star(star);
+            assert!(
+                lo > 600.0,
+                "star {star} asks for {lo} units, which is still Station Orbit"
+            );
+        }
+    }
+
+    /// Survey contracts ask for a zone the player can actually stand in, and
+    /// the tracker must agree with the world about which one that is.
+    #[test]
+    fn every_survey_zone_is_reachable() {
+        for star in 1..=5u8 {
+            let want = zone_for_star(star);
+            let found = (0..60_000)
+                .step_by(250)
+                .any(|d| crate::world::depth_to_zone(d as f32) == want);
+            assert!(found, "star {star} asks for {want:?}, which no range produces");
+        }
+    }
 }

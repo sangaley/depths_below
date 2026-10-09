@@ -192,6 +192,97 @@ fn write_blueprint_to_disk(bp: &Blueprint) -> Result<PathBuf, String> {
 
 /// Ctrl+S: save current ship's hull & modules as a named blueprint.
 /// Only saves entities that are children of the Ship entity.
+
+/// Queries needed to read a live ship back out as a Blueprint.
+///
+/// Bundled so the capture can be done from more than one place without
+/// restating eight query types, and so there is exactly one definition of what
+/// "this ship, as a design" means.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct DesignCapture<'w, 's> {
+    pub hull_query: Query<'w, 's, &'static HullSegment>,
+    pub module_query: Query<'w, 's, (Entity, &'static Module)>,
+    pub tuning_query: Query<'w, 's, &'static WeaponTuning>,
+    pub fire_group_query: Query<'w, 's, &'static FireGroup>,
+    pub ammo_query: Query<'w, 's, &'static SelectedAmmo>,
+    pub custom_query: Query<'w, 's, (&'static CustomModule, &'static Children)>,
+    pub subcomp_query: Query<'w, 's, &'static SubComponent>,
+}
+
+impl DesignCapture<'_, '_> {
+    /// Read the given ship's children back out as a design. Returns None when
+    /// there is nothing to record.
+    pub fn capture(&self, children: &Children, name: impl Into<String>) -> Option<Blueprint> {
+        let hull_cells: Vec<BlueprintHullCell> = children
+            .iter()
+            .filter_map(|child| self.hull_query.get(child).ok())
+            .map(|h| BlueprintHullCell {
+                grid_pos: h.grid_position,
+                layer: h.hull_layer,
+                material: h.material,
+            })
+            .collect();
+
+        let modules: Vec<BlueprintModule> = children
+            .iter()
+            .filter_map(|child| self.module_query.get(child).ok())
+            .map(|(entity, m)| {
+                let tuning = self.tuning_query.get(entity).ok().copied().filter(|t| {
+                    t.velocity != 1.0 || t.fire_rate != 1.0 || t.damage != 1.0
+                });
+                let fire_group = self
+                    .fire_group_query
+                    .get(entity)
+                    .ok()
+                    .map(|g| g.group)
+                    .filter(|&g| g != 0);
+                let ammo = self
+                    .ammo_query
+                    .get(entity)
+                    .ok()
+                    .copied()
+                    .filter(|a| a.0 != crate::combat::ammo_types::KineticAmmoType::AP);
+                let extras = ModuleExtras { tuning, fire_group, ammo };
+
+                let (custom_name, subcomponents) = match self.custom_query.get(entity) {
+                    Ok((custom, module_children)) => (
+                        Some(custom.custom_name.clone()),
+                        Some(
+                            module_children
+                                .iter()
+                                .filter_map(|c| self.subcomp_query.get(c).ok())
+                                .map(|sc| sc.subcomponent_type.clone())
+                                .collect(),
+                        ),
+                    ),
+                    Err(_) => (None, None),
+                };
+
+                BlueprintModule {
+                    module_type: m.module_type,
+                    grid_pos: m.grid_position,
+                    rotation: m.rotation,
+                    custom_name,
+                    subcomponents,
+                    extras: if extras.is_empty() { None } else { Some(extras) },
+                }
+            })
+            .collect();
+
+        if hull_cells.is_empty() && modules.is_empty() {
+            return None;
+        }
+
+        Some(Blueprint {
+            name: name.into(),
+            hull_cells,
+            modules,
+            created_at: chrono_lite_timestamp(),
+            version: BLUEPRINT_VERSION,
+        })
+    }
+}
+
 pub fn save_blueprint_system(
     keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,

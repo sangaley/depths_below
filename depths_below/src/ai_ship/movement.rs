@@ -79,16 +79,16 @@ pub fn ai_ship_movement_system(
 
         // Faction-specific speed characteristics
         let faction_mult = match ship_type {
-            AiShipType::GlassEye => 1.6,      // fastest ship in the game
-            AiShipType::RustSwarm => 1.3,      // fast but erratic
-            AiShipType::Blackwater => 1.2,     // quick tactical ship
-            AiShipType::Leviathan => 0.9,      // creature-towed, moderate
-            AiShipType::AbyssalCult => 1.0,    // average
-            AiShipType::Drowned => 0.7,        // sluggish, damaged engines
-            AiShipType::PressureKing => 0.8,   // heavy but powerful engines
-            AiShipType::IronTide => 0.6,       // slow battleship
-            AiShipType::Dreadnought => 0.4,    // colossal, lumbering
-            AiShipType::VoidTitan => 0.35,     // barely moves, but it doesn't need to
+            AiShipType::TheSilence => 1.6,      // fastest ship in the game
+            AiShipType::RecursiveKingdom => 1.3,      // fast but erratic
+            AiShipType::GildedThrone => 1.2,     // quick tactical ship
+            AiShipType::StellarPreserve => 0.9,      // creature-towed, moderate
+            AiShipType::SynthesisCollective => 1.0,    // average
+            AiShipType::BrokenChoir => 0.7,        // sluggish, damaged engines
+            AiShipType::CorpseStars => 0.8,   // heavy but powerful engines
+            AiShipType::TerranHegemony => 0.6,       // slow battleship
+            AiShipType::EternalHegemony => 0.4,    // colossal, lumbering
+            AiShipType::Shepherd => 0.35,     // barely moves, but it doesn't need to
         };
 
         // Global AI pace.
@@ -115,7 +115,7 @@ pub fn ai_ship_movement_system(
             // Combat standoff: while engaging, hold a firing distance from the
             // target instead of flying into (and through) it. Below the band:
             // back off. Inside the band: orbit sideways. Beyond it: approach.
-            // RustSwarm keeps its point-blank ramming — that IS their faction,
+            // Recursive Kingdom keeps its point-blank ramming — that IS their faction,
             // regardless of what it's carrying. Everyone else holds at their
             // own longest-range active weapon (85% of its range, so they
             // fight solidly inside their own reach instead of right at the
@@ -137,14 +137,14 @@ pub fn ai_ship_movement_system(
             // Fights now happen at ~half weapon range, hard-capped at 3000 so
             // even a railgun ship closes to a distance where its rounds
             // actually connect and you can plainly see you're being shot at.
-            // RustSwarm still rams point-blank (that IS their identity).
+            // Recursive Kingdom still rams point-blank (that IS their identity).
             let standoff = if *behavior == AiShipBehavior::Engaging {
                 match ship_type {
-                    AiShipType::RustSwarm => 0.0,
+                    AiShipType::RecursiveKingdom => 0.0,
                     _ if max_weapon_range > 0.0 => (max_weapon_range * 0.55).clamp(900.0, 3000.0),
-                    AiShipType::VoidTitan | AiShipType::Dreadnought => 3000.0,
-                    AiShipType::IronTide | AiShipType::PressureKing => 2600.0,
-                    AiShipType::Blackwater => 2200.0,
+                    AiShipType::Shepherd | AiShipType::EternalHegemony => 3000.0,
+                    AiShipType::TerranHegemony | AiShipType::CorpseStars => 2600.0,
+                    AiShipType::GildedThrone => 2200.0,
                     _ => 1800.0,
                 }
             } else {

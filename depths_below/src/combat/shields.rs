@@ -396,16 +396,16 @@ pub fn attach_ai_shields(
         // carving up the hull block by block.
         let max = if no_shield_hp { 0.0 } else {
             let base = match ship_type {
-                AiShipType::VoidTitan => 140.0,    // the hardest kill in the game
-                AiShipType::Dreadnought => 100.0,  // mega-battleship
-                AiShipType::IronTide => 40.0,      // tanky battleship
-                AiShipType::PressureKing => 30.0,
-                AiShipType::Blackwater => 24.0,
-                AiShipType::Leviathan => 22.0,
-                AiShipType::AbyssalCult => 20.0,
-                AiShipType::GlassEye => 12.0,
-                AiShipType::Drowned => 6.0,        // half-dead ghost ships
-                AiShipType::RustSwarm => 4.0,      // junk ships, paper shields
+                AiShipType::Shepherd => 140.0,    // the hardest kill in the game
+                AiShipType::EternalHegemony => 100.0,  // mega-battleship
+                AiShipType::TerranHegemony => 40.0,      // tanky battleship
+                AiShipType::CorpseStars => 30.0,
+                AiShipType::GildedThrone => 24.0,
+                AiShipType::StellarPreserve => 22.0,
+                AiShipType::SynthesisCollective => 20.0,
+                AiShipType::TheSilence => 12.0,
+                AiShipType::BrokenChoir => 6.0,        // half-dead ghost ships
+                AiShipType::RecursiveKingdom => 4.0,      // junk ships, paper shields
             };
             base * AI_SHIELD_HP_MULT
         };

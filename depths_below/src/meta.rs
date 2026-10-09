@@ -28,6 +28,9 @@ impl Plugin for MetaPlugin {
             // Ungated (like handle_load_request): it only acts when a
             // SaveGameRequest event is present, and quick-save (F5) fires that
             // during Exploring — a Paused-only gate here silently dropped those.
+            // Must run before the state change lands, so the wipe is in place
+            // by the time StationDocked spawns the starter ship and crew.
+            .add_systems(Update, reset_for_new_game)
             .add_systems(Update, handle_save_request)
             .add_systems(Update, handle_load_request)
             .add_systems(Update, apply_pending_load)
@@ -108,14 +111,19 @@ fn collect_save_data(
     discovered_locations: &DiscoveredLocations,
     world_state: &WorldState,
     ship_query: &Query<&Transform, With<Ship>>,
+    // Every one of these MUST exclude AI ships. Enemy hull, modules and crew
+    // carry the same components as the player's, and hull cells are recorded
+    // from LOCAL transforms — so an enemy plate at its own (2,3) was being
+    // written into the save as the player's (2,3). Autosave runs every two
+    // minutes while exploring, which is exactly when enemies are around.
     module_query: &Query<(
         &Module,
         Option<&CustomModule>,
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&crate::building::customization::tuning::SelectedAmmo>,
-    )>,
-    hull_query: &Query<(&HullSegment, &Transform)>,
-    crew_query: &Query<(Entity, &CrewMember, Option<&CrewDuty>)>,
+    ), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    hull_query: &Query<(&HullSegment, &Transform), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    crew_query: &Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
     current_state: &State<GameState>,
     galaxy_map: &GalaxyMap,
     streaming: &SystemStreamingManager,
@@ -272,9 +280,9 @@ fn handle_save_request(
         Option<&CustomModule>,
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&crate::building::customization::tuning::SelectedAmmo>,
-    )>,
-    hull_query: Query<(&HullSegment, &Transform)>,
-    crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>)>,
+    ), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    hull_query: Query<(&HullSegment, &Transform), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
 ) {
     let (world_state, galaxy_map, streaming, drifting_dead) = &world_galaxy;
     for event in save_events.read() {
@@ -422,9 +430,11 @@ fn rebuild_entities_from_save(
     asset_server: Res<AssetServer>,
     registry: Res<crate::building::registry::ModuleRegistry>,
     ship_query: Query<Entity, With<Ship>>,
-    module_entities: Query<Entity, With<Module>>,
-    hull_entities: Query<Entity, With<HullSegment>>,
-    crew_entities: Query<Entity, With<CrewMember>>,
+    // Mirror of the save-side defect: unscoped, these despawned every live AI
+    // ship's blocks and crew, gutting them into empty root entities on load.
+    module_entities: Query<Entity, (With<Module>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
+    hull_entities: Query<Entity, (With<HullSegment>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
+    crew_entities: Query<Entity, (With<CrewMember>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
     mut galaxy_map: ResMut<GalaxyMap>,
     mut streaming: ResMut<SystemStreamingManager>,
     mut drifting_dead: ResMut<crate::crew::burial::DriftingDead>,
@@ -653,4 +663,57 @@ fn auto_save_system(
         info!("Auto-save triggered");
         save_events.write(SaveGameRequest { slot: AUTO_SAVE_SLOT });
     }
+}
+
+/// Wipe the previous run when a new expedition starts.
+///
+/// ROADMAP called this out as open: "New Expedition doesn't start a new
+/// expedition. It sets the state and nothing else." Everything below was
+/// inherited from the last run, which made a fresh start quietly not fresh.
+///
+/// It became load-bearing once the story landed. `Statistics.logs_found`
+/// survived into the new run, and the ending keys on the finale entry, so a
+/// player who finished once would start their next expedition and have the
+/// ending fire immediately.
+///
+/// `Unlocks` is deliberately NOT reset: that is meta-progression across runs,
+/// which is the one thing that is supposed to carry.
+pub fn reset_for_new_game(
+    mut requests: MessageReader<NewExpeditionRequest>,
+    mut currency: ResMut<Currency>,
+    mut inventory: ResMut<Inventory>,
+    mut statistics: ResMut<Statistics>,
+    mut contracts: ResMut<crate::contracts::ContractState>,
+    mut reputation: ResMut<crate::contracts::FactionReputation>,
+    mut victory: ResMut<VictoryState>,
+    mut death_cause: ResMut<DeathCause>,
+    mut dead: ResMut<crate::crew::burial::DriftingDead>,
+    mut finale: ResMut<crate::narrative::FinaleFound>,
+    mut galaxy: ResMut<crate::celestial::resources::GalaxyMap>,
+    mut streaming: ResMut<crate::celestial::resources::SystemStreamingManager>,
+) {
+    if requests.read().next().is_none() {
+        return;
+    }
+    requests.clear();
+
+    *currency = Currency::default();
+    *inventory = Inventory::default();
+    *statistics = Statistics::default();
+    *contracts = crate::contracts::ContractState::default();
+    *reputation = crate::contracts::FactionReputation::default();
+    *victory = VictoryState::default();
+    *death_cause = DeathCause::default();
+    // The dead are permanent within a run, on purpose. They are not permanent
+    // across runs: those were a different expedition's crew.
+    *dead = crate::crew::burial::DriftingDead::default();
+    finale.0 = false;
+
+    // Emptying the systems list is the trigger: generate_galaxy_on_enter
+    // early-returns when the galaxy is already populated, so clearing it is
+    // what makes the next launch roll a fresh one.
+    galaxy.systems.clear();
+    *streaming = crate::celestial::resources::SystemStreamingManager::default();
+
+    info!("new expedition: previous run cleared");
 }

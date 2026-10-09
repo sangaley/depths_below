@@ -100,9 +100,18 @@ pub fn setup_custom_cursor(
 pub fn update_custom_cursor(
     windows_query: Query<&Window>,
     mut cursor_query: Query<&mut Node, With<CustomCursorIcon>>,
+    state: Res<State<crate::states::GameState>>,
 ) {
     let Ok(window) = windows_query.single() else { return };
     let Ok(mut node) = cursor_query.single_mut() else { return };
+
+    // The ending takes no input, so an aiming reticle floating over it is
+    // just an object the player cannot use, sitting on top of the one screen
+    // that has to be clean.
+    if *state.get() == crate::states::GameState::Truth {
+        node.display = Display::None;
+        return;
+    }
 
     match window.cursor_position() {
         Some(pos) => {

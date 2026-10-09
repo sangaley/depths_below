@@ -296,6 +296,16 @@ pub struct DockingCompleted {
 // ============================================================================
 
 /// Notification to display
+/// Start a brand-new expedition, wiping the previous run.
+///
+/// Raised by both paths out of the main menu. Before this existed a fresh
+/// expedition silently inherited the last one's credits, cargo, contracts,
+/// standing, statistics, drifting dead and galaxy — and once the story landed,
+/// its read logs too, which meant a new run could fire the ending in its first
+/// second because `logs_found` still held the finale.
+#[derive(Message)]
+pub struct NewExpeditionRequest;
+
 #[derive(Message)]
 pub struct ShowNotification {
     pub message: String,
@@ -556,6 +566,7 @@ impl Plugin for EventsPlugin {
             .add_message::<DockingCompleted>()
             // UI events
             .add_message::<ShowNotification>()
+            .add_message::<NewExpeditionRequest>()
             .add_message::<OpenMenu>()
             .add_message::<CloseMenu>()
             // Chain reaction / fire / cascade events

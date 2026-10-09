@@ -379,7 +379,13 @@ impl ModuleCategory {
                 ModuleType::SolarCell,
                 ModuleType::Transformer,
                 ModuleType::ThermalVentGenerator,
-            ],
+                            ModuleType::ReactorFuelRod,
+                ModuleType::ReactorCooling,
+                ModuleType::FuelEnrichmentUnit,
+                ModuleType::ContainmentField,
+                ModuleType::EmergencyShutdown,
+                ModuleType::PowerRegulator,
+],
             ModuleCategory::Propulsion => &[
                 ModuleType::SmallEngine,
                 ModuleType::StandardEngine,
@@ -391,7 +397,12 @@ impl ModuleCategory {
                 ModuleType::RudderAssembly,
                 ModuleType::VectorThruster,
                 ModuleType::AttitudeThruster,
-            ],
+                            ModuleType::EngineNozzle,
+                ModuleType::Afterburner,
+                ModuleType::ThrustVectoring,
+                ModuleType::FuelInjector,
+                ModuleType::InertialDampener,
+],
             ModuleCategory::LifeSupport => &[
                 ModuleType::OxygenScrubber,
                 ModuleType::CO2Scrubber,
@@ -409,7 +420,8 @@ impl ModuleCategory {
                 ModuleType::AutopilotCore,
                 ModuleType::AICombatCore,
                 ModuleType::BridgeWing,
-            ],
+                            ModuleType::MemoryCore,
+],
             ModuleCategory::Weapons => &[
                 ModuleType::Cannon,
                 ModuleType::Railgun,
@@ -487,7 +499,18 @@ impl ModuleCategory {
                 ModuleType::MineralExtractor,
                 ModuleType::ResearchLab,
                 ModuleType::DockingHub,
-            ],
+                            ModuleType::ShieldEmitter,
+                ModuleType::DecoyLauncher,
+                ModuleType::ChaffDispenser,
+                ModuleType::AblativeArmor,
+                ModuleType::PointDefenseDrone,
+                ModuleType::HullReinforcePlate,
+                ModuleType::SignalJammer,
+                ModuleType::GravityCompensator,
+                ModuleType::RadiationHardening,
+                ModuleType::EmergencyO2Cache,
+                ModuleType::BlackBox,
+],
             ModuleCategory::Structural => &[
                 // Plating first: it's what you come to this category for, and
                 // the two wedges belong beside each other. AngledArmorPlate
@@ -507,9 +530,20 @@ impl ModuleCategory {
                 ModuleType::ViewPort,
                 ModuleType::EmergencyBulkhead,
                 ModuleType::FirebreakWall,
+                // Adjacency enhancers. All three are live systems in
+                // building::multiblock::enhancers -- brace adds 25% HP to
+                // neighbouring hull, damper adds 10% damage to neighbouring
+                // weapons, joint cuts neighbouring cascade risk by 40%. They
+                // had never appeared in any palette, so the only way to own
+                // one was to start with it.
+                ModuleType::StructuralBrace,
+                ModuleType::VibrationDamper,
+                ModuleType::ReinforcedJoint,
                 // Corridor/LadderShaft/MaintenanceTunnel are deliberately
                 // absent: passages are HullLayer::Hallway now. The variants
-                // stay so old blueprints still deserialize.
+                // stay so old blueprints still deserialize. ThermalInsulator
+                // is absent too -- it has a sprite and a description and no
+                // behaviour anywhere, so offering it would sell nothing.
             ],
         }
     }
@@ -659,6 +693,7 @@ pub enum ModuleType {
 
     // Phase B: Navigation & Control
     TargetingComputer,
+    MemoryCore,
     AutopilotCore,
     AICombatCore,
 
@@ -806,6 +841,7 @@ impl ModuleType {
 
             ModuleType::NavigationConsole |
             ModuleType::HelmStation |
+            ModuleType::MemoryCore |
             ModuleType::TargetingComputer |
             ModuleType::AutopilotCore |
             ModuleType::BridgeWing |
@@ -1015,6 +1051,7 @@ impl ModuleType {
             ModuleType::EmergencyBulkhead => "Emergency Bulkhead",
             ModuleType::FirebreakWall => "Firebreak Wall",
             ModuleType::PressureSensor => "Radiation Sensor",
+            ModuleType::MemoryCore => "Memory Core",
             ModuleType::TargetingComputer => "Targeting Computer",
             ModuleType::AutopilotCore => "Autopilot Core",
             ModuleType::AICombatCore => "AI Combat Core",
@@ -1176,7 +1213,7 @@ pub struct Projectile {
     ///
     /// AI weapons have carried a SelectedAmmo from their faction loadouts all
     /// along (apply_module_extras), but nothing read it when they fired — so
-    /// every incoming shot resolved as unspecialised, and an Iron Tide firing
+    /// every incoming shot resolved as unspecialised, and a Terran Hegemony ship firing
     /// APFSDS deflected off your plating exactly like a scrap raider's junk.
     pub kinetic: Option<crate::combat::ammo_types::KineticAmmoType>,
 }
@@ -1483,6 +1520,17 @@ pub struct ForceFieldEmitter {
     /// announced. Until the field has any art, this is the only way to tell
     /// from the cockpit that it is doing something.
     pub holding: u32,
+}
+
+/// A block that holds part of the ship's mind.
+///
+/// Mechanically it is what lets the ship keep working a station nobody is
+/// standing at. More cores, more of the ship runs itself — and the last one
+/// is not a component you can afford to lose.
+#[derive(Component)]
+pub struct MemoryCoreComp {
+    /// This core's own contribution to autonomy, before diminishing returns.
+    pub autonomy: f32,
 }
 
 /// Targeting computer — boosts weapon accuracy
@@ -2299,6 +2347,14 @@ pub struct NotificationContainer;
 #[derive(Component)]
 pub struct DockingOverlay;
 
+/// The credits readout inside the docking menu.
+///
+/// Tagged so it can be kept live. Spawned once and never refreshed, it froze
+/// at whatever the balance was when the menu opened — a real run showed
+/// "Credits: 750" in the menu while the HUD read 21.
+#[derive(Component)]
+pub struct DockingCreditsText;
+
 /// Currently selected service in the docking menu
 #[derive(Component)]
 /// (selected service row, sell-cargo choice index — 0 = ALL, then one
@@ -2418,3 +2474,4 @@ mod tests {
     }
 
 }
+

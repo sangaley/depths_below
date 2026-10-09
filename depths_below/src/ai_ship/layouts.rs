@@ -93,33 +93,40 @@ impl AiShipLayout {
 }
 
 /// Stable file name per faction (designs/factions/<slug>.json).
+/// Filename stem for this faction's design under `designs/factions/`.
+///
+/// These MUST match the files on disk. `faction_design()` in spawner.rs
+/// silently falls back to the built-in layout and re-exports it when a file is
+/// missing, so a slug that no longer matches quietly replaces a hand-armoured
+/// hull with the old one and reports nothing.
 pub fn design_slug(ship_type: AiShipType) -> &'static str {
     match ship_type {
-        AiShipType::Leviathan => "leviathan",
-        AiShipType::AbyssalCult => "abyssal_cult",
-        AiShipType::Drowned => "drowned",
-        AiShipType::PressureKing => "pressure_king",
-        AiShipType::GlassEye => "glass_eye",
-        AiShipType::IronTide => "iron_tide",
-        AiShipType::Blackwater => "blackwater",
-        AiShipType::RustSwarm => "rust_swarm",
-        AiShipType::Dreadnought => "dreadnought",
-        AiShipType::VoidTitan => "void_titan",
+        AiShipType::StellarPreserve => "stellar_preserve",
+        AiShipType::SynthesisCollective => "synthesis_collective",
+        AiShipType::BrokenChoir => "broken_choir",
+        AiShipType::CorpseStars => "corpse_stars",
+        AiShipType::TheSilence => "the_silence",
+        AiShipType::TerranHegemony => "terran_hegemony",
+        AiShipType::GildedThrone => "gilded_throne",
+        AiShipType::RecursiveKingdom => "recursive_kingdom",
+        AiShipType::EternalHegemony => "eternal_hegemony",
+        AiShipType::Shepherd => "shepherd",
     }
 }
 
+
 pub fn get_layout(ship_type: AiShipType) -> AiShipLayout {
     match ship_type {
-        AiShipType::Leviathan => leviathan_layout(),
-        AiShipType::AbyssalCult => abyssal_cult_layout(),
-        AiShipType::Drowned => drowned_layout(),
-        AiShipType::PressureKing => pressure_king_layout(),
-        AiShipType::GlassEye => glass_eye_layout(),
-        AiShipType::IronTide => iron_tide_layout(),
-        AiShipType::Blackwater => blackwater_layout(),
-        AiShipType::RustSwarm => rust_swarm_layout(),
-        AiShipType::Dreadnought => dreadnought_layout(),
-        AiShipType::VoidTitan => void_titan_layout(),
+        AiShipType::StellarPreserve => stellar_preserve_layout(),
+        AiShipType::SynthesisCollective => synthesis_collective_layout(),
+        AiShipType::BrokenChoir => broken_choir_layout(),
+        AiShipType::CorpseStars => corpse_stars_layout(),
+        AiShipType::TheSilence => the_silence_layout(),
+        AiShipType::TerranHegemony => terran_hegemony_layout(),
+        AiShipType::GildedThrone => gilded_throne_layout(),
+        AiShipType::RecursiveKingdom => recursive_kingdom_layout(),
+        AiShipType::EternalHegemony => eternal_hegemony_layout(),
+        AiShipType::Shepherd => shepherd_layout(),
     }
 }
 
@@ -155,10 +162,10 @@ fn hull_size(rows: &[(i32, i32, i32)]) -> Vec2 {
 }
 
 // ============================================================================
-// LEVIATHAN RIDERS - Creature-towed ship with harness/capture gear
+// STELLAR PRESERVE - Creature-towed ship with harness/capture gear
 // Organic-looking, wide for creature containment, net launchers on sides
 // ============================================================================
-fn leviathan_layout() -> AiShipLayout {
+fn stellar_preserve_layout() -> AiShipLayout {
     let material = HullMaterial::Steel;
     let rows: &[(i32, i32, i32)] = &[
         ( 3,   4,  9),
@@ -201,10 +208,10 @@ fn leviathan_layout() -> AiShipLayout {
 }
 
 // ============================================================================
-// ABYSSAL CULT - Bio-organic hybrid, eerie bioluminescent, self-healing hull
+// SYNTHESIS COLLECTIVE - Bio-organic hybrid, eerie bioluminescent, self-healing hull
 // Composite material (organic), acid/electric bio-weapons
 // ============================================================================
-fn abyssal_cult_layout() -> AiShipLayout {
+fn synthesis_collective_layout() -> AiShipLayout {
     let material = HullMaterial::Composite;
     // Organic, bulbous shape
     let rows: &[(i32, i32, i32)] = &[
@@ -258,10 +265,10 @@ fn abyssal_cult_layout() -> AiShipLayout {
 }
 
 // ============================================================================
-// THE DROWNED - Ghost ships, partially destroyed, holes in hull
+// THE BROKEN CHOIR - Ghost ships, partially destroyed, holes in hull
 // Steel (rusted), modules randomly missing, eerie design
 // ============================================================================
-fn drowned_layout() -> AiShipLayout {
+fn broken_choir_layout() -> AiShipLayout {
     let material = HullMaterial::Steel;
     // Damaged, asymmetric shape (holes represented by missing cells)
     let rows: &[(i32, i32, i32)] = &[
@@ -310,10 +317,10 @@ fn drowned_layout() -> AiShipLayout {
 }
 
 // ============================================================================
-// PRESSURE KINGS - Deep-zone heavy tanks, abyssal alloy, pressure weapons
+// CORPSE STARS - Deep-zone heavy tanks, abyssal alloy, pressure weapons
 // Compact, dense, extremely armored
 // ============================================================================
-fn pressure_king_layout() -> AiShipLayout {
+fn corpse_stars_layout() -> AiShipLayout {
     let material = HullMaterial::AbyssalAlloy;
     // Dense, compact diamond shape
     let rows: &[(i32, i32, i32)] = &[
@@ -371,10 +378,10 @@ fn pressure_king_layout() -> AiShipLayout {
 }
 
 // ============================================================================
-// GLASS EYE - Stealth surveillance, narrow, sensor-heavy, no weapons
+// THE SILENCE - Stealth surveillance, narrow, sensor-heavy, no weapons
 // Composite, silent drive, fastest flee speed
 // ============================================================================
-fn glass_eye_layout() -> AiShipLayout {
+fn the_silence_layout() -> AiShipLayout {
     let material = HullMaterial::Composite;
     // Long, thin needle shape
     let rows: &[(i32, i32, i32)] = &[
@@ -417,11 +424,11 @@ fn glass_eye_layout() -> AiShipLayout {
 }
 
 // ============================================================================
-// IRON TIDE - Heavy battleship, massive hull, multiple weapon systems.
+// TERRAN HEGEMONY - Heavy battleship, massive hull, multiple weapon systems.
 // Titanium, slow but devastating firepower — the strongest "normal" faction,
-// though the true bosses (Dreadnought, Void Titan) now dwarf even this.
+// though the true bosses (Eternal Hegemony, The Shepherd) now dwarf even this.
 // ============================================================================
-fn iron_tide_layout() -> AiShipLayout {
+fn terran_hegemony_layout() -> AiShipLayout {
     let material = HullMaterial::Titanium;
     // Massive wide battleship
     let rows: &[(i32, i32, i32)] = &[
@@ -495,10 +502,10 @@ fn iron_tide_layout() -> AiShipLayout {
 }
 
 // ============================================================================
-// BLACKWATER PMC - Elite tactical ship, balanced, flanking design
+// GILDED THRONE - Elite tactical ship, balanced, flanking design
 // Titanium, well-armed but not overkill, designed for coordination
 // ============================================================================
-fn blackwater_layout() -> AiShipLayout {
+fn gilded_throne_layout() -> AiShipLayout {
     let material = HullMaterial::Titanium;
     let rows: &[(i32, i32, i32)] = &[
         ( 3,   1, 11),
@@ -550,10 +557,10 @@ fn blackwater_layout() -> AiShipLayout {
 }
 
 // ============================================================================
-// RUST SWARM - Tiny junk ships, minimal systems, expendable
+// RECURSIVE KINGDOM - Tiny junk ships, minimal systems, expendable
 // Steel (rusted), asymmetric, few modules, kamikaze tendencies
 // ============================================================================
-fn rust_swarm_layout() -> AiShipLayout {
+fn recursive_kingdom_layout() -> AiShipLayout {
     let material = HullMaterial::Steel;
     // Tiny asymmetric junk ship — a bit bigger than before, but still the
     // smallest thing flying. "Tiny and expendable" is the whole point.
@@ -592,12 +599,12 @@ fn rust_swarm_layout() -> AiShipLayout {
 }
 
 // ============================================================================
-// DREADNOUGHT - Iron Tide's design taken to its limit: a true mega-battleship.
-// Titanium, roughly 1.5x Iron Tide's footprint in every dimension, with
+// ETERNAL HEGEMONY - Terran Hegemony's design taken to its limit: a true mega-battleship.
+// Titanium, roughly 1.5x Terran Hegemony's footprint in every dimension, with
 // weapon coverage to match. Spawns only far past the star system — finding
 // one at all is most of the fight.
 // ============================================================================
-fn dreadnought_layout() -> AiShipLayout {
+fn eternal_hegemony_layout() -> AiShipLayout {
     let material = HullMaterial::Titanium;
     let rows: &[(i32, i32, i32)] = &[
         ( 7,   8, 12),
@@ -641,7 +648,7 @@ fn dreadnought_layout() -> AiShipLayout {
         ModulePlacement { module_type: ModuleType::AdvancedRepairBay, grid_pos: IVec2::new(4, 1), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::AdvancedRepairBay, grid_pos: IVec2::new(4, -1), rotation: Rotation::North },
         ModulePlacement { module_type: ModuleType::RepairBay, grid_pos: IVec2::new(4, 0), rotation: Rotation::North },
-        // Weapons array — nearly double Iron Tide's coverage
+        // Weapons array — nearly double Terran Hegemony's coverage
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(16, 0), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(16, 3), rotation: Rotation::East },
         ModulePlacement { module_type: ModuleType::Railgun, grid_pos: IVec2::new(16, -4), rotation: Rotation::East },
@@ -696,12 +703,12 @@ fn dreadnought_layout() -> AiShipLayout {
 }
 
 // ============================================================================
-// VOID TITAN - The largest, hardest kill in the game. Abyssal Cult's organic
-// hull language taken to a monstrous scale, armed like a Dreadnought and
+// THE SHEPHERD - The largest, hardest kill in the game. Synthesis Collective's organic
+// hull language taken to a monstrous scale, armed like a Eternal Hegemony and
 // self-healing like the Cult it's descended from. Spawns beyond everything
 // else in explored space.
 // ============================================================================
-fn void_titan_layout() -> AiShipLayout {
+fn shepherd_layout() -> AiShipLayout {
     let material = HullMaterial::AbyssalAlloy;
     let rows: &[(i32, i32, i32)] = &[
         ( 8,  14, 20),
@@ -838,11 +845,69 @@ mod layout_tests {
     use std::collections::HashSet;
 
     const ALL: [AiShipType; 10] = [
-        AiShipType::Leviathan, AiShipType::AbyssalCult, AiShipType::Drowned,
-        AiShipType::PressureKing, AiShipType::GlassEye, AiShipType::IronTide,
-        AiShipType::Blackwater, AiShipType::RustSwarm, AiShipType::Dreadnought,
-        AiShipType::VoidTitan,
+        AiShipType::StellarPreserve, AiShipType::SynthesisCollective, AiShipType::BrokenChoir,
+        AiShipType::CorpseStars, AiShipType::TheSilence, AiShipType::TerranHegemony,
+        AiShipType::GildedThrone, AiShipType::RecursiveKingdom, AiShipType::EternalHegemony,
+        AiShipType::Shepherd,
     ];
+
+    /// A slug must name a file that is actually there, and no design file may
+    /// be left unclaimed.
+    ///
+    /// `faction_design()` in spawner.rs loads `designs/factions/<slug>.json`
+    /// and, when the file is missing, silently rebuilds from the fallback in
+    /// this file and writes that out instead. Nothing is logged. So renaming a
+    /// faction without moving its JSON swaps a hand-armoured hull for the old
+    /// one and the only symptom is that the ship looks subtly wrong in a fight
+    /// nobody is watching closely.
+    ///
+    /// The orphan half of the check is the half that catches a half-done
+    /// rename: the stale file stays on disk claimed by nobody.
+    #[test]
+    fn design_slugs_and_files_agree() {
+        use std::collections::HashSet;
+        use std::path::Path;
+
+        let dir = Path::new("designs/factions");
+        assert!(dir.is_dir(), "designs/factions missing — run from the crate root");
+
+        let claimed: HashSet<String> = ALL.iter().map(|&f| design_slug(f).to_string()).collect();
+        assert_eq!(claimed.len(), ALL.len(), "two factions share a design slug");
+
+        let on_disk: HashSet<String> = std::fs::read_dir(dir)
+            .expect("read designs/factions")
+            .filter_map(|e| e.ok())
+            .filter_map(|e| e.file_name().to_str()?.strip_suffix(".json").map(str::to_string))
+            .collect();
+
+        let orphans: Vec<_> = on_disk.difference(&claimed).cloned().collect();
+        assert!(
+            orphans.is_empty(),
+            "design files claimed by no faction slug (half-finished rename?): {:?}",
+            orphans
+        );
+
+        let absent: Vec<_> = claimed.difference(&on_disk).cloned().collect();
+        assert!(
+            absent.is_empty(),
+            "faction slugs with no design file — these would be rebuilt from the \
+             fallback and written out at runtime, untracked: {:?}",
+            absent
+        );
+
+        // Each file must also agree with its own filename internally, since
+        // the name field is what a design round-trips under.
+        for slug in &claimed {
+            let path = dir.join(format!("{}.json", slug));
+            let bp = crate::building::blueprint::load_design_file(&path)
+                .unwrap_or_else(|| panic!("{} exists but will not parse", path.display()));
+            assert_eq!(
+                &bp.name, slug,
+                "{} carries name {:?} — the loader would re-export it under the wrong stem",
+                path.display(), bp.name
+            );
+        }
+    }
 
     fn hull_cells(layout: &AiShipLayout) -> HashSet<IVec2> {
         layout.hull_cells.iter().map(|c| c.grid_pos).collect()
@@ -992,3 +1057,4 @@ mod layout_tests {
         }
     }
 }
+

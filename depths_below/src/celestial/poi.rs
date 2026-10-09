@@ -22,11 +22,37 @@ pub enum SpacePoiType {
     SignalSource,       // Distress signal or trap
 }
 
+impl SpacePoiType {
+    /// The chunk-layer equivalent, for anything that speaks in `PoiType`.
+    ///
+    /// The two point-of-interest systems grew up separately and never met:
+    /// contracts, discovery and the map all speak `PoiType`, which only ever
+    /// existed on the chunk layer near the world origin, while `SpacePoi` is
+    /// what actually exists in all thirty-one systems. So Explore contracts
+    /// could only be completed within a few thousand units of Haven, and the
+    /// expedition trail sends people the other way.
+    pub fn as_poi_type(self) -> Option<PoiType> {
+        match self {
+            SpacePoiType::DerelictShip | SpacePoiType::DebrisField => Some(PoiType::Wreck),
+            SpacePoiType::Anomaly | SpacePoiType::SignalSource => Some(PoiType::Ruins),
+            SpacePoiType::SpaceStation => Some(PoiType::Settlement),
+            // A rock is not a place.
+            SpacePoiType::AsteroidNode => None,
+        }
+    }
+}
+
 /// Component marking a space POI
 #[derive(Component)]
 pub struct SpacePoi {
     pub poi_type: SpacePoiType,
     pub looted: bool,
+    /// Whether the ship has been close enough to log it.
+    ///
+    /// Separate from `looted` on purpose: that one gates whether there is
+    /// anything left to take, and reusing it to mean "seen" would have made
+    /// every derelict in the galaxy unlootable the moment you flew past it.
+    pub discovered: bool,
     pub name: String,
     pub loot_value: u32,
 }
@@ -54,7 +80,12 @@ pub fn spawn_system_pois(
     system_id: u32,
     planet_positions: &[Vec2],
     rng: &mut impl Rng,
+    danger_tier: f32,
 ) {
+    // Which band of the log corpus this system is allowed to hold. Derelicts
+    // and anomalies are the carriers: they exist in every system, unlike the
+    // chunk-layer points of interest that logs used to hang on.
+    let log_tier = crate::narrative::logs::tier_for_danger(danger_tier);
     // Derelict ships (1-3 per system)
     let derelict_count = rng.gen_range(1..=3);
     for i in 0..derelict_count {
@@ -62,7 +93,7 @@ pub fn spawn_system_pois(
         let dist = rng.gen_range(30_000.0..80_000.0);
         let pos = system_center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
 
-        commands.spawn((
+        let poi = commands.spawn((
             (Sprite {
                     color: Color::srgb(0.35, 0.30, 0.28),
                     custom_size: Some(Vec2::new(200.0, 80.0)),
@@ -71,11 +102,24 @@ pub fn spawn_system_pois(
             SpacePoi {
                 poi_type: SpacePoiType::DerelictShip,
                 looted: false,
+                discovered: false,
                 name: format!("Derelict-{}-{}", system_id, i),
                 loot_value: rng.gen_range(50..200),
             },
             StarSystemMember { system_id },
-        ));
+        )).id();
+        // Not every hulk has something to read. Keyed by system and index so
+        // the same derelict always carries the same entry across reloads.
+        if rng.gen::<f32>() < 0.55 {
+            let key = (system_id as u64) << 8 | i as u64;
+            if let Some(entry) = crate::narrative::logs::pick_log(log_tier, key) {
+                commands.entity(poi).insert(LogEntry {
+                    title: entry.title.to_string(),
+                    text: entry.text.to_string(),
+                    depth_hint: 0.0,
+                });
+            }
+        }
     }
 
     // Asteroid resource nodes used to be spawned separately here, clustered
@@ -90,7 +134,7 @@ pub fn spawn_system_pois(
         let dist = rng.gen_range(50_000.0..100_000.0);
         let pos = system_center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
 
-        commands.spawn((
+        let poi = commands.spawn((
             (Sprite {
                     color: Color::srgba(0.5, 0.3, 0.8, 0.6),
                     custom_size: Some(Vec2::splat(300.0)),
@@ -99,11 +143,23 @@ pub fn spawn_system_pois(
             SpacePoi {
                 poi_type: SpacePoiType::Anomaly,
                 looted: false,
+                discovered: false,
                 name: format!("Anomaly-{}", system_id),
                 loot_value: rng.gen_range(100..500),
             },
             StarSystemMember { system_id },
-        ));
+        )).id();
+        // The type comment has said "story trigger" since it was written and
+        // nothing ever read it. An anomaly always carries a log, and always
+        // the deepest band its system is allowed.
+        let key = (system_id as u64) << 8 | 0xA1;
+        if let Some(entry) = crate::narrative::logs::pick_log(log_tier, key) {
+            commands.entity(poi).insert(LogEntry {
+                title: entry.title.to_string(),
+                text: entry.text.to_string(),
+                depth_hint: 0.0,
+            });
+        }
     }
 
     // Space station (1 per system, near a planet)
@@ -123,6 +179,7 @@ pub fn spawn_system_pois(
             SpacePoi {
                 poi_type: SpacePoiType::SpaceStation,
                 looted: false,
+                discovered: false,
                 name: format!("Station-{}", system_id),
                 loot_value: 0,
             },

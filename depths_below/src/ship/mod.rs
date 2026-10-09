@@ -2,6 +2,7 @@ use bevy::prelude::*;
 
 mod movement;
 mod systems;
+pub mod towing;
 mod power;
 mod oxygen;
 mod radiation;

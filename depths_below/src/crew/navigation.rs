@@ -458,7 +458,17 @@ mod nav_tests {
                 ShipGrid::cells_for(module.grid_pos, def.size, module.rotation, footprint);
             let is_post = def.crew_station
                 || matches!(def.companion, crate::building::registry::CompanionData::Quarters { .. });
-            if is_post {
+            if module.module_type.is_containment_door() {
+                // A doorway, not machinery — the same branch `rebuild_nav_grids`
+                // takes. This helper had drifted: it took a door's cells OFF the
+                // map like any other module, so the first hull to put an
+                // emergency bulkhead in a one-cell corridor — which is the only
+                // sensible place for one — read as a ship cut into six pieces
+                // with 34 crew posts stranded, none of which was true in play.
+                for cell in occupied {
+                    cells.insert(cell, NavCell::Door { sealed: false });
+                }
+            } else if is_post {
                 posts.extend(occupied);
             } else {
                 for cell in occupied {
@@ -531,6 +541,231 @@ mod nav_tests {
             stranded.len(),
             stranded
         );
+    }
+
+    #[test]
+    #[ignore]
+    fn dump_module_table() {
+        let reg = crate::building::registry::build_registry();
+        let mut rows: Vec<String> = reg
+            .defs
+            .iter()
+            .map(|(mt, d)| {
+                let post = d.crew_station
+                    || matches!(d.companion, crate::building::registry::CompanionData::Quarters { .. });
+                format!(
+                    "MOD\t{mt:?}\t{}\t{}\t{}\t{:?}\t{}",
+                    d.size.x, d.size.y, post, d.category, d.cost
+                )
+            })
+            .collect();
+        rows.sort();
+        for r in rows {
+            println!("{r}");
+        }
+    }
+
+    /// Regenerates designs/starter.json from the builtin. Run deliberately:
+    ///   cargo test export_starter -- --ignored
+    #[test]
+    #[ignore]
+    fn export_starter() {
+        let design = crate::ship::builtin_starter_design();
+        crate::building::blueprint::write_design_file("designs/starter.json", &design)
+            .expect("write failed");
+        println!(
+            "EXPORTED {} hull cells, {} modules",
+            design.hull_cells.len(),
+            design.modules.len()
+        );
+    }
+
+    /// Prints the starter's deck as ASCII and names anything cut off from it.
+    ///
+    /// Layout work needs to see the deck, and the deck is derived (hallways
+    /// are every enclosed cell no module stands on), so it cannot be read off
+    /// the design file. Run deliberately:
+    ///   cargo test dump_starter_deck -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn dump_starter_deck() {
+        let design = crate::ship::builtin_starter_design();
+        let nav = nav_from_design(&design);
+        let xs: Vec<i32> = nav.cells.keys().map(|c| c.x).collect();
+        let ys: Vec<i32> = nav.cells.keys().map(|c| c.y).collect();
+        let (x0, x1) = (*xs.iter().min().unwrap(), *xs.iter().max().unwrap());
+        let (y0, y1) = (*ys.iter().min().unwrap(), *ys.iter().max().unwrap());
+        for y in (y0..=y1).rev() {
+            let mut row = String::new();
+            for x in x0..=x1 {
+                row.push(match nav.cells.get(&IVec2::new(x, y)) {
+                    Some(NavCell::Hallway) => '.',
+                    Some(NavCell::Post) => 'P',
+                    Some(NavCell::Door { .. }) => 'D',
+                    None => '#',
+                });
+            }
+            println!("{y:3} |{row}|");
+        }
+        let start = *nav
+            .cells
+            .iter()
+            .find(|(_, c)| **c == NavCell::Hallway)
+            .unwrap()
+            .0;
+        let r = reachable_from(&nav, start);
+        let mut bad: Vec<IVec2> = nav.cells.keys().filter(|c| !r.contains(c)).copied().collect();
+        bad.sort_by_key(|c| (c.x, c.y));
+        println!("cells={} reachable={} x0={} y0={}", nav.cells.len(), r.len(), x0, y0);
+        for c in bad {
+            println!("  STRANDED {:?} {:?}", c, nav.cells.get(&c).unwrap());
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn dump_candidate_components() {
+        for name in ["pincer", "crab", "trident"] {
+            let design = crate::building::blueprint::load_design_file(&format!("designs/{name}.json")).unwrap();
+            let nav = nav_from_design(&design);
+            let mut unseen: HashSet<IVec2> = nav.cells.keys().copied().collect();
+            let mut comps: Vec<(usize, usize, IVec2)> = Vec::new();
+            while let Some(&seed) = unseen.iter().next() {
+                let reach = reachable_from(&nav, seed);
+                let here: Vec<IVec2> = reach.iter().copied().filter(|c| unseen.contains(c)).collect();
+                let posts = here.iter().filter(|c| nav.cells.get(c) == Some(&NavCell::Post)).count();
+                comps.push((here.len(), posts, seed));
+                for c in here { unseen.remove(&c); }
+            }
+            comps.sort_by(|a, b| b.0.cmp(&a.0));
+            println!("COMP {name}: {} cells in {} regions", nav.cells.len(), comps.len());
+            for (n, p, seed) in comps.iter().take(6) {
+                println!("   region {n:4} cells, {p:3} posts, seeded {seed:?}");
+            }
+        }
+    }
+
+    /// Every candidate hull in designs/ has to be as walkable as the one we
+    /// ship, or it is not a candidate.
+    ///
+    /// These are generated by tools/hulls, and a generator is exactly the kind
+    /// of thing that produces a beautiful ship with a gun nobody can reach.
+    /// Checked by the game's own rules rather than by the script that drew
+    /// them, because a generator that grades its own homework is worth
+    /// nothing.
+    #[test]
+    fn the_candidate_hulls_are_walkable() {
+        for name in ["pincer", "crab", "trident"] {
+            let path = format!("designs/{name}.json");
+            let Some(design) = crate::building::blueprint::load_design_file(&path) else {
+                panic!("{path} is missing or will not parse");
+            };
+            let nav = nav_from_design(&design);
+            assert!(!nav.cells.is_empty(), "{name}: no walkable cells at all");
+
+            let start = *nav
+                .cells
+                .iter()
+                .find(|(_, c)| **c == NavCell::Hallway)
+                .unwrap_or_else(|| panic!("{name}: no corridor anywhere"))
+                .0;
+            let reachable = reachable_from(&nav, start);
+            let stranded: Vec<_> = nav
+                .cells
+                .iter()
+                .filter(|(cell, kind)| **kind == NavCell::Post && !reachable.contains(cell))
+                .map(|(cell, _)| *cell)
+                .collect();
+            assert!(
+                stranded.is_empty(),
+                "{name}: {} crew posts have no route to them: {:?}",
+                stranded.len(),
+                stranded
+            );
+
+            let cores: Vec<IVec2> = design
+                .modules
+                .iter()
+                .filter(|m| m.module_type == ModuleType::MemoryCore)
+                .map(|m| m.grid_pos)
+                .collect();
+            assert!(cores.len() >= 3, "{name}: only {} memory cores", cores.len());
+            let spread = cores
+                .iter()
+                .flat_map(|a| cores.iter().map(move |b| (*a - *b).abs().max_element()))
+                .max()
+                .unwrap_or(0);
+            assert!(spread >= 3, "{name}: cores clustered, {spread} apart at most");
+
+            let mut seen = HashSet::new();
+            for m in &design.modules {
+                assert!(seen.insert(m.grid_pos), "{name}: two modules at {:?}", m.grid_pos);
+            }
+        }
+    }
+
+    /// Losing an arm must be a wound, not a death.
+    ///
+    /// This used to ban any Power, LifeSupport or Crew block from sitting past
+    /// the split, which is not the same thing and is stricter than the point.
+    /// A ship with six scrubbers can put two on the claws and still breathe
+    /// with both claws gone; the pincer does exactly that (120 air against 90
+    /// needed) and failed a rule whose own comment said it was there to stop
+    /// deaths. Position is the designer's business. The consequence is not.
+    ///
+    /// So: cut both arms off and ask whether what is left still runs.
+    #[test]
+    fn candidate_hulls_survive_losing_their_arms() {
+        let registry = crate::building::registry::build_registry();
+        for name in ["pincer", "crab", "trident"] {
+            let design = crate::building::blueprint::load_design_file(&format!("designs/{name}.json"))
+                .unwrap();
+
+            // Where the hull splits into arms: the first column, walking
+            // forward, that holds more than one run of cells.
+            let mut columns: std::collections::BTreeMap<i32, Vec<i32>> = Default::default();
+            for c in &design.hull_cells {
+                columns.entry(c.grid_pos.x).or_default().push(c.grid_pos.y);
+            }
+            let mut split = i32::MAX;
+            for (x, ys) in columns.iter_mut() {
+                ys.sort_unstable();
+                let runs = 1 + ys.windows(2).filter(|w| w[1] - w[0] > 1).count();
+                if runs > 1 {
+                    split = *x;
+                    break;
+                }
+            }
+
+            // What the body alone still provides, and still has to power.
+            let (mut air, mut berths, mut generation, mut draw) = (0.0f32, 0u32, 0.0f32, 0.0f32);
+            for m in design.modules.iter().filter(|m| m.grid_pos.x < split) {
+                let def = registry.get(m.module_type);
+                generation += def.power_generation;
+                if crate::ship::starts_active(m.module_type) {
+                    draw += def.power_consumption;
+                }
+                match def.companion {
+                    crate::building::registry::CompanionData::OxygenScrubber { output } => {
+                        air += output
+                    }
+                    crate::building::registry::CompanionData::Quarters { berths: b } => berths += b,
+                    _ => {}
+                }
+            }
+
+            let needed = berths as f32 * crate::resources::OXYGEN_PER_CREW;
+            assert!(
+                air >= needed,
+                "{name}: with both arms gone the body makes {air} oxygen for {berths} crew, \
+                 who need {needed} — the survivors suffocate"
+            );
+            assert!(
+                generation >= draw,
+                "{name}: with both arms gone the body generates {generation} against a \
+                 {draw} launch draw — the survivors sit in the dark"
+            );
+        }
     }
 
     /// The starter has to carry an airlock, and a pallbearer has to be able to

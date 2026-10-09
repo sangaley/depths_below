@@ -16,6 +16,46 @@ use super::layouts;
 /// so every faction ship exists as editable JSON after the first encounter.
 static DESIGN_CACHE: OnceLock<Mutex<HashMap<AiShipType, Blueprint>>> = OnceLock::new();
 
+/// A copy of the player's own ship, held aside for the one enemy that is meant
+/// to be built from it.
+///
+/// Set at launch (see narrative::doppelganger). Consulted only for the ship
+/// type the story uses as its host, and only when armed; every other spawn
+/// goes through the ordinary faction design and is unaffected.
+static MIRROR_DESIGN: OnceLock<Mutex<Option<Blueprint>>> = OnceLock::new();
+
+fn mirror_slot() -> &'static Mutex<Option<Blueprint>> {
+    MIRROR_DESIGN.get_or_init(|| Mutex::new(None))
+}
+
+/// Hand the spawner the player's current design.
+pub fn set_mirror_design(design: Option<Blueprint>) {
+    if let Ok(mut slot) = mirror_slot().lock() {
+        *slot = design;
+    }
+}
+
+/// Is there a captured design waiting to be worn?
+pub fn has_mirror_design() -> bool {
+    mirror_slot().lock().map(|s| s.is_some()).unwrap_or(false)
+}
+
+/// Spawn one ship that is built from the player's own design.
+///
+/// Takes the design rather than cloning it into the faction cache, so the
+/// next ordinary ship of that faction is still an ordinary ship. The point is
+/// that one of them is wrong, not that the faction changes.
+pub fn spawn_mirror_ship(
+    ship_type: AiShipType,
+    position: Vec2,
+    commands: &mut Commands,
+    registry: &ModuleRegistry,
+    asset_server: &AssetServer,
+) -> Option<Entity> {
+    let design = mirror_slot().lock().ok()?.clone()?;
+    Some(spawn_ai_ship_with_design(ship_type, position, commands, registry, asset_server, Some(design)))
+}
+
 fn faction_design(ship_type: AiShipType) -> Blueprint {
     let cache = DESIGN_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     let mut cache = cache.lock().unwrap();
@@ -70,16 +110,16 @@ fn faction_difficulty(ship_type: AiShipType) -> (f32, f32) {
 /// Color tint per AI ship type
 fn ship_tint(ship_type: AiShipType) -> Color {
     match ship_type {
-        AiShipType::VoidTitan => Color::srgb(0.75, 0.6, 0.1),     // molten gold — apex boss
-        AiShipType::Dreadnought => Color::srgb(0.5, 0.08, 0.08),  // deep crimson — mega-battleship
-        AiShipType::Leviathan => Color::srgb(0.2, 0.6, 0.5),    // teal - creature riders
-        AiShipType::AbyssalCult => Color::srgb(0.4, 0.15, 0.5),  // purple - bio-organic cult
-        AiShipType::Drowned => Color::srgb(0.35, 0.4, 0.35),     // ghostly gray-green
-        AiShipType::PressureKing => Color::srgb(0.15, 0.1, 0.25),// dark violet - deep lords
-        AiShipType::GlassEye => Color::srgb(0.85, 0.88, 0.9),    // white/translucent
-        AiShipType::IronTide => Color::srgb(0.45, 0.45, 0.5),    // steel gray - battleship
-        AiShipType::Blackwater => Color::srgb(0.2, 0.2, 0.25),   // dark tactical
-        AiShipType::RustSwarm => Color::srgb(0.7, 0.4, 0.15),    // rusty orange
+        AiShipType::Shepherd => Color::srgb(0.75, 0.6, 0.1),     // molten gold — apex boss
+        AiShipType::EternalHegemony => Color::srgb(0.5, 0.08, 0.08),  // deep crimson — mega-battleship
+        AiShipType::StellarPreserve => Color::srgb(0.2, 0.6, 0.5),    // teal - creature riders
+        AiShipType::SynthesisCollective => Color::srgb(0.4, 0.15, 0.5),  // purple - bio-organic cult
+        AiShipType::BrokenChoir => Color::srgb(0.35, 0.4, 0.35),     // ghostly gray-green
+        AiShipType::CorpseStars => Color::srgb(0.15, 0.1, 0.25),// dark violet - deep lords
+        AiShipType::TheSilence => Color::srgb(0.85, 0.88, 0.9),    // white/translucent
+        AiShipType::TerranHegemony => Color::srgb(0.45, 0.45, 0.5),    // steel gray - battleship
+        AiShipType::GildedThrone => Color::srgb(0.2, 0.2, 0.25),   // dark tactical
+        AiShipType::RecursiveKingdom => Color::srgb(0.7, 0.4, 0.15),    // rusty orange
     }
 }
 
@@ -92,7 +132,20 @@ pub fn spawn_ai_ship(
     registry: &ModuleRegistry,
     asset_server: &AssetServer,
 ) -> Entity {
-    let design = faction_design(ship_type);
+    spawn_ai_ship_with_design(ship_type, position, commands, registry, asset_server, None)
+}
+
+/// As `spawn_ai_ship`, but optionally wearing a design that is not this
+/// faction's own.
+pub fn spawn_ai_ship_with_design(
+    ship_type: AiShipType,
+    position: Vec2,
+    commands: &mut Commands,
+    registry: &ModuleRegistry,
+    asset_server: &AssetServer,
+    override_design: Option<Blueprint>,
+) -> Entity {
+    let design = override_design.unwrap_or_else(|| faction_design(ship_type));
     let body_size = design_body_size(&design);
 
     let mut rng = rand::thread_rng();
@@ -109,29 +162,29 @@ pub fn spawn_ai_ship(
         .collect();
 
     let initial_behavior = match ship_type {
-        AiShipType::VoidTitan => AiShipBehavior::Patrolling,
-        AiShipType::Dreadnought => AiShipBehavior::Patrolling,
-        AiShipType::Leviathan => AiShipBehavior::Patrolling,
-        AiShipType::AbyssalCult => AiShipBehavior::Patrolling,
-        AiShipType::Drowned => AiShipBehavior::Patrolling,
-        AiShipType::PressureKing => AiShipBehavior::Patrolling,
-        AiShipType::GlassEye => AiShipBehavior::FollowingTradeRoute,
-        AiShipType::IronTide => AiShipBehavior::Patrolling,
-        AiShipType::Blackwater => AiShipBehavior::Patrolling,
-        AiShipType::RustSwarm => AiShipBehavior::Patrolling,
+        AiShipType::Shepherd => AiShipBehavior::Patrolling,
+        AiShipType::EternalHegemony => AiShipBehavior::Patrolling,
+        AiShipType::StellarPreserve => AiShipBehavior::Patrolling,
+        AiShipType::SynthesisCollective => AiShipBehavior::Patrolling,
+        AiShipType::BrokenChoir => AiShipBehavior::Patrolling,
+        AiShipType::CorpseStars => AiShipBehavior::Patrolling,
+        AiShipType::TheSilence => AiShipBehavior::FollowingTradeRoute,
+        AiShipType::TerranHegemony => AiShipBehavior::Patrolling,
+        AiShipType::GildedThrone => AiShipBehavior::Patrolling,
+        AiShipType::RecursiveKingdom => AiShipBehavior::Patrolling,
     };
 
     let fuel = match ship_type {
-        AiShipType::VoidTitan => 3000.0,
-        AiShipType::Dreadnought => 2000.0,
-        AiShipType::Leviathan => 400.0,
-        AiShipType::AbyssalCult => 600.0,
-        AiShipType::Drowned => 200.0,
-        AiShipType::PressureKing => 800.0,
-        AiShipType::GlassEye => 500.0,
-        AiShipType::IronTide => 1000.0,
-        AiShipType::Blackwater => 700.0,
-        AiShipType::RustSwarm => 150.0,
+        AiShipType::Shepherd => 3000.0,
+        AiShipType::EternalHegemony => 2000.0,
+        AiShipType::StellarPreserve => 400.0,
+        AiShipType::SynthesisCollective => 600.0,
+        AiShipType::BrokenChoir => 200.0,
+        AiShipType::CorpseStars => 800.0,
+        AiShipType::TheSilence => 500.0,
+        AiShipType::TerranHegemony => 1000.0,
+        AiShipType::GildedThrone => 700.0,
+        AiShipType::RecursiveKingdom => 150.0,
     };
 
     // Compute initial rotation: face toward first waypoint (or default to 0 = facing right)
@@ -180,8 +233,22 @@ pub fn spawn_ai_ship(
 
     let (health_mult, damage_mult) = faction_difficulty(ship_type);
 
+    // Enemy ships get a deck, the same way the player's does.
+    //
+    // Every faction hull shipped as solid Inner fill with zero hallway cells,
+    // which had two consequences. Visually, an enemy was a flat slab of
+    // plating with no inside to see. Mechanically, `rebuild_nav_grids` builds
+    // a grid for every AI ship and only hallways are walkable, so every one of
+    // those grids came out empty -- work producing nothing.
+    //
+    // Derived at spawn rather than baked into designs/factions/*.json, so it
+    // applies to every source of a hull: the authored layouts, the exported
+    // files, and a mirror design wearing the player's own ship.
+    let mut hull_cells = design.hull_cells.clone();
+    crate::ship::lay_hallways(&mut hull_cells, &design.modules);
+
     // Spawn hull segments as children
-    spawn_ai_hull(commands, asset_server, root, &design.hull_cells, health_mult);
+    spawn_ai_hull(commands, asset_server, root, &hull_cells, health_mult);
 
     // Spawn modules as children, reusing existing spawn_module
     for mp in &design.modules {
@@ -224,17 +291,17 @@ pub fn spawn_ai_ship(
     // by priority: Power(10) > Propulsion(9) > LifeSupport(8) > Weapons(6).
     //
     // Floor: a small ship's non-weapon stations alone can eat its entire
-    // complement before priority ever reaches a gun — RustSwarm (2 crew for
+    // complement before priority ever reaches a gun — Recursive Kingdom (2 crew for
     // Reactor+Engine+2 Gatlings) staffed Reactor+Engine and left BOTH guns
     // permanently dark, not "half dark" as crew_fill_fraction intended.
     // Guarantee at least one weapon slot for any faction that has weapons,
     // so "understaffed" always means fewer guns firing, never zero.
     //
     // The floor scales with weapon-station count, not a flat +1: a flat
-    // floor barely dents a weapon-heavy design (Drowned's 5 weapon stations
-    // vs RustSwarm's 2) — same fraction, wildly different dark-gun ratio
-    // (Drowned ended up at 1-of-5 firing, effectively silent, while
-    // RustSwarm's 1-of-2 matched its 0.6 fraction reasonably well).
+    // floor barely dents a weapon-heavy design (Broken Choir's 5 weapon stations
+    // vs Recursive Kingdom's 2) — same fraction, wildly different dark-gun ratio
+    // (Broken Choir ended up at 1-of-5 firing, effectively silent, while
+    // Recursive Kingdom's 1-of-2 matched its 0.6 fraction reasonably well).
     let non_weapon_stations = design.modules.iter()
         .filter(|m| {
             let def = registry.get(m.module_type);
@@ -254,7 +321,7 @@ pub fn spawn_ai_ship(
         1
     };
     // crew_fill_fraction is a per-faction TARGET, not a fixed headcount —
-    // every RustSwarm ship landing on exactly the same crew size read as
+    // every Recursive Kingdom ship landing on exactly the same crew size read as
     // robotic. Roll each spawn's actual complement from a triangular
     // distribution: `typical` (the old deterministic value) is the peak, so
     // most ships land near it, but `min_floor` (skeleton crew) and

@@ -7,7 +7,7 @@ use crate::resources::ItemType;
 use super::components::*;
 
 /// LOOT IDENTITY — what a wreck yields depends on who you killed and how.
-/// Each faction has signature cargo (a Glass Eye carries intel, a Rust Swarm
+/// Each faction has signature cargo (a The Silence carries intel, a Recursive Kingdom
 /// carries junk); scrap metal is the filler that survives any kill. The
 /// forensic record then biases composition: a shattered hulk's delicate
 /// cargo is slag (non-scrap weights crushed), a pristine kill preserves and
@@ -16,16 +16,16 @@ use super::components::*;
 pub fn roll_wreck_loot(ship_type: AiShipType, intact_frac: f32, rng: &mut impl Rng) -> ItemType {
     use ItemType::*;
     let table: &[(ItemType, f32)] = match ship_type {
-        AiShipType::RustSwarm => &[(ScrapMetal, 8.0), (FuelCell, 1.0), (AmmoCrate, 1.0)],
-        AiShipType::IronTide => &[(ScrapMetal, 4.0), (RareAlloy, 3.0), (AmmoCrate, 3.0)],
-        AiShipType::Blackwater => &[(AmmoCrate, 4.0), (FuelCell, 3.0), (ScrapMetal, 2.0), (RareAlloy, 1.0)],
-        AiShipType::PressureKing => &[(RareAlloy, 4.0), (Crystal, 3.0), (ScrapMetal, 2.0), (FuelCell, 1.0)],
-        AiShipType::GlassEye => &[(Crystal, 4.0), (AncientArtifact, 3.0), (FuelCell, 2.0), (ScrapMetal, 1.0)],
-        AiShipType::Drowned => &[(AncientArtifact, 4.0), (ScrapMetal, 3.0), (Crystal, 2.0), (BioSample, 1.0)],
-        AiShipType::AbyssalCult => &[(BioSample, 4.0), (AncientArtifact, 2.0), (Crystal, 2.0), (ScrapMetal, 2.0)],
-        AiShipType::Leviathan => &[(BioSample, 5.0), (Crystal, 2.0), (ScrapMetal, 2.0), (RareAlloy, 1.0)],
-        AiShipType::Dreadnought => &[(AmmoCrate, 4.0), (RareAlloy, 3.0), (ScrapMetal, 2.0), (FuelCell, 1.0)],
-        AiShipType::VoidTitan => &[(AncientArtifact, 3.0), (RareAlloy, 3.0), (Crystal, 2.0), (AmmoCrate, 1.0), (FuelCell, 1.0)],
+        AiShipType::RecursiveKingdom => &[(ScrapMetal, 8.0), (FuelCell, 1.0), (AmmoCrate, 1.0)],
+        AiShipType::TerranHegemony => &[(ScrapMetal, 4.0), (RareAlloy, 3.0), (AmmoCrate, 3.0)],
+        AiShipType::GildedThrone => &[(AmmoCrate, 4.0), (FuelCell, 3.0), (ScrapMetal, 2.0), (RareAlloy, 1.0)],
+        AiShipType::CorpseStars => &[(RareAlloy, 4.0), (Crystal, 3.0), (ScrapMetal, 2.0), (FuelCell, 1.0)],
+        AiShipType::TheSilence => &[(Crystal, 4.0), (AncientArtifact, 3.0), (FuelCell, 2.0), (ScrapMetal, 1.0)],
+        AiShipType::BrokenChoir => &[(AncientArtifact, 4.0), (ScrapMetal, 3.0), (Crystal, 2.0), (BioSample, 1.0)],
+        AiShipType::SynthesisCollective => &[(BioSample, 4.0), (AncientArtifact, 2.0), (Crystal, 2.0), (ScrapMetal, 2.0)],
+        AiShipType::StellarPreserve => &[(BioSample, 5.0), (Crystal, 2.0), (ScrapMetal, 2.0), (RareAlloy, 1.0)],
+        AiShipType::EternalHegemony => &[(AmmoCrate, 4.0), (RareAlloy, 3.0), (ScrapMetal, 2.0), (FuelCell, 1.0)],
+        AiShipType::Shepherd => &[(AncientArtifact, 3.0), (RareAlloy, 3.0), (Crystal, 2.0), (AmmoCrate, 1.0), (FuelCell, 1.0)],
     };
 
     let good_mult = if intact_frac >= 0.7 {
@@ -137,16 +137,16 @@ pub fn ai_ship_death_system(
             shield.current = 0.0;
         }
         let base_loot = match event.ship_type {
-            AiShipType::VoidTitan => 30,    // legendary hoard
-            AiShipType::Dreadnought => 20,  // colossal wreck
-            AiShipType::Leviathan => 6,
-            AiShipType::AbyssalCult => 4,
-            AiShipType::Drowned => 8,     // rare old loot
-            AiShipType::PressureKing => 5,
-            AiShipType::GlassEye => 7,    // intel data
-            AiShipType::IronTide => 10,    // massive wreck
-            AiShipType::Blackwater => 6,
-            AiShipType::RustSwarm => 2,    // junk
+            AiShipType::Shepherd => 30,    // legendary hoard
+            AiShipType::EternalHegemony => 20,  // colossal wreck
+            AiShipType::StellarPreserve => 6,
+            AiShipType::SynthesisCollective => 4,
+            AiShipType::BrokenChoir => 8,     // rare old loot
+            AiShipType::CorpseStars => 5,
+            AiShipType::TheSilence => 7,    // intel data
+            AiShipType::TerranHegemony => 10,    // massive wreck
+            AiShipType::GildedThrone => 6,
+            AiShipType::RecursiveKingdom => 2,    // junk
         };
 
         // A meltdown takes the ship apart on the way out: the blast guts a
@@ -245,18 +245,7 @@ pub fn ai_ship_death_system(
             remaining: (block_count / 5).clamp(3, 10) + extra_pops,
         });
 
-        let type_name = match event.ship_type {
-            AiShipType::VoidTitan => "Void Titan",
-            AiShipType::Dreadnought => "Dreadnought",
-            AiShipType::Leviathan => "Leviathan Rider",
-            AiShipType::AbyssalCult => "Abyssal Cult",
-            AiShipType::Drowned => "Drowned",
-            AiShipType::PressureKing => "Pressure King",
-            AiShipType::GlassEye => "Glass Eye",
-            AiShipType::IronTide => "Iron Tide",
-            AiShipType::Blackwater => "Blackwater",
-            AiShipType::RustSwarm => "Rust Swarm",
-        };
+        let type_name = faction_display_name(event.ship_type);
 
         let headline = match event.cause {
             ShipDeathCause::Struck => format!("{} vessel struck colors - crew abandoned it", type_name),

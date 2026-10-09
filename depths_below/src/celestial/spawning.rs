@@ -286,6 +286,7 @@ pub fn spawn_asteroid_field(
             SpacePoi {
                 poi_type: SpacePoiType::AsteroidNode,
                 looted: false,
+                discovered: false,
                 name: format!("Asteroid-{}-{}", system_id, i),
                 loot_value: 0,
             },

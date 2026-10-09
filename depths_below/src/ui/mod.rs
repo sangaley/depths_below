@@ -92,7 +92,9 @@ impl Plugin for UiPlugin {
                 ),
             )
             // Main menu
-            .add_systems(OnEnter(GameState::MainMenu), spawn_main_menu)
+            .add_systems(OnEnter(GameState::MainMenu), (spawn_main_menu, hide_hud))
+            .add_systems(OnEnter(GameState::Exploring), show_hud)
+            .add_systems(OnEnter(GameState::StationDocked), show_hud)
             .add_systems(OnExit(GameState::MainMenu), despawn_main_menu)
             // Game Over screen
             .add_systems(OnEnter(GameState::GameOver), spawn_game_over_screen)
@@ -226,7 +228,10 @@ impl Plugin for UiPlugin {
                     crew_duty_option_click,
                     sync_crew_duty_dropdowns,
                     refresh_crew_duty_labels,
-                ).run_if(in_state(GameState::Exploring)),
+                ).run_if(
+                    in_state(GameState::Exploring)
+                        .or_else(in_state(GameState::StationDocked)),
+                ),
             )
             // Map-click warp destination + G-hold warp dash (while exploring)
             .add_systems(
@@ -256,7 +261,15 @@ impl Plugin for UiPlugin {
                 build_ui::despawn_build_grid_lines,
                 build_ui::despawn_module_outlines,
                 build_ui::despawn_power_indicators,
+                crate::building::build_info::despawn_build_overlays,
             ))
+            // Launching leaves build mode. Nothing used to say so: BuildState
+            // stayed Placing when the player flew off, so none of the teardown
+            // above ever ran and the grid, the outlines, the power indicators
+            // and the balance marker were all still sitting beside the station
+            // afterwards.
+            .add_systems(OnExit(GameState::StationDocked), (leave_build_mode, close_station_panels))
+            .add_systems(Update, hide_hud_while_building)
             // Build UI: update systems
             .add_systems(
                 Update,
@@ -314,7 +327,10 @@ impl Plugin for UiPlugin {
 }
 
 #[derive(Component)]
-struct HudRoot;
+/// The flight HUD's root. Public so the ending can take the whole instrument
+/// panel off screen: it is telling the player the run is over, and a live fuel
+/// gauge behind that argues with it.
+pub struct HudRoot;
 
 /// A clickable HUD toolbar button that stands in for a keyboard shortcut.
 /// While pressed, hud_action_button_press synthesizes `key` onto the shared
@@ -352,7 +368,7 @@ const fn act_mod(label: &'static str, key_disp: &'static str, key: KeyCode,
 /// stay keyboard-only, because a button cannot express "hold".
 fn toolbar_actions(game: &GameState, build: &BuildState) -> &'static [ToolbarAction] {
     use KeyCode as K;
-    const FLYING: [ToolbarAction; 8] = [
+    const FLYING: [ToolbarAction; 9] = [
         act("Map", "M", K::KeyM),
         act("Systems", "N", K::KeyN),
         act("Radar", "Tab", K::Tab),
@@ -361,11 +377,17 @@ fn toolbar_actions(game: &GameState, build: &BuildState) -> &'static [ToolbarAct
         act("Log", "L", K::KeyL),
         act("Ping", "Z", K::KeyZ),
         act("Dock", "F", K::KeyF),
+        act("Tow", "Y", K::KeyY),
     ];
-    const DOCKED: [ToolbarAction; 5] = [
+    // Crew belongs here as much as Hire does: the tutorial's second-to-last
+    // step tells the player to manage crew while docked, and until this button
+    // existed there was nothing on screen to press and the C key did nothing
+    // in this state either — a dead end one step before the payoff line.
+    const DOCKED: [ToolbarAction; 6] = [
         act("Build", "B", K::KeyB),
         act("Shop", "U", K::KeyU),
         act("Jobs", "J", K::KeyJ),
+        act("Crew", "C", K::KeyC),
         act("Hire", "H", K::KeyH),
         act("Launch", "Enter", K::Enter),
     ];
@@ -702,6 +724,70 @@ fn spawn_stack(
     });
 }
 
+/// Clear the HUD out of the way while the player is building.
+///
+/// Build mode is the one screen where the ship itself is the content, and the
+/// flight HUD was competing with it: the cargo readout and the expedition line
+/// stacked on each other in the top-left corner, and the action toolbar
+/// repeated, as buttons across the bottom, the same keys the build panel now
+/// lists down the right-hand side.
+fn hide_hud_while_building(
+    build: Res<State<BuildState>>,
+    mut cargo: Query<&mut Visibility, (With<StationCargoPanel>, Without<FlightToolbar>)>,
+    mut toolbar: Query<&mut Visibility, (With<FlightToolbar>, Without<StationCargoPanel>)>,
+) {
+    let want = if *build.get() == BuildState::Inactive {
+        Visibility::Inherited
+    } else {
+        Visibility::Hidden
+    };
+    for mut v in cargo.iter_mut() {
+        if *v != want {
+            *v = want;
+        }
+    }
+    for mut v in toolbar.iter_mut() {
+        if *v != want {
+            *v = want;
+        }
+    }
+}
+
+/// Shut the station's own windows when the ship leaves.
+///
+/// The hiring board and the mission board were both left standing on launch:
+/// nothing closed them, and both keep running while Exploring so that a ship
+/// flying within DOCK_RANGE of a berth can still use them. Open one, press
+/// Enter, and it came along, fully interactive, while the station shrank
+/// behind you.
+///
+/// This closes the windows. It does NOT change the reach rule -- pressing H or
+/// J near a station is deliberate, and `SystemStations::nearest_index` already
+/// limits that to DOCK_RANGE.
+fn close_station_panels(
+    mut commands: Commands,
+    mut hiring_open: ResMut<crate::crew::hiring::HiringBoardOpen>,
+    mut board_open: ResMut<crate::contracts::MissionBoardOpen>,
+    hiring: Query<Entity, With<crate::crew::hiring::HiringPanel>>,
+    board: Query<Entity, With<crate::contracts::ui::MissionBoardPanel>>,
+) {
+    hiring_open.0 = false;
+    board_open.0 = false;
+    for entity in hiring.iter().chain(board.iter()) {
+        commands.entity(entity).despawn();
+    }
+}
+
+/// Drop out of build mode, so every OnEnter(Inactive) teardown fires.
+fn leave_build_mode(
+    current: Res<State<BuildState>>,
+    mut next: ResMut<NextState<BuildState>>,
+) {
+    if *current.get() != BuildState::Inactive {
+        next.set(BuildState::Inactive);
+    }
+}
+
 /// Sets up the UI — themed, clean layout
 fn setup_ui(mut commands: Commands) {
     use theme::*;
@@ -714,6 +800,14 @@ fn setup_ui(mut commands: Commands) {
                 justify_content: JustifyContent::SpaceBetween,
                 ..default()
             }),
+        // Starts hidden. `setup_ui` runs in Startup and the game opens on the
+        // MainMenu, so the HUD existed and was visible behind the menu from
+        // the first frame -- hull, power, fuel, credits and the flight control
+        // hints, all over a title screen. Nobody saw it because the menu's
+        // backdrop was 98% opaque; the moment it was thinned to let the
+        // starfield through, a whole instrument panel came with it.
+        // `show_hud` reveals it on entering flight or a berth.
+        Visibility::Hidden,
         HudRoot,
     )).with_children(|parent| {
         // ===== TOP BAR — Ship Vitals =====
@@ -726,7 +820,7 @@ fn setup_ui(mut commands: Commands) {
                 column_gap: Val::Px(ThemeSpacing::XS),
                 align_items: AlignItems::Center,
                 ..default()
-            }, BackgroundColor(ThemeColors::HUD_BG))).with_children(|top_bar| {
+            }, BackgroundColor(ThemeColors::HUD_BG_SOLID))).with_children(|top_bar| {
             // Three scannable clusters: ship vitals (severity meters) · nav
             // (system / depth / noise) · resources (credits / crew / cargo).
             // The nav cluster grows to push resources to the right edge.
@@ -819,7 +913,7 @@ fn setup_ui(mut commands: Commands) {
                 padding: UiRect::new(Val::Px(ThemeSpacing::XL), Val::Px(ThemeSpacing::XL), Val::Px(ThemeSpacing::SM), Val::Px(ThemeSpacing::SM)),
                 align_items: AlignItems::Center,
                 ..default()
-            }, BackgroundColor(ThemeColors::HUD_BG))).with_children(|bar| {
+            }, BackgroundColor(ThemeColors::HUD_BG_SOLID))).with_children(|bar| {
             bar.spawn((
                 // Immediately overwritten every frame by build_ui::update_controls_help
                 // once GameState resolves — this is just the pre-first-frame fallback.
@@ -841,8 +935,13 @@ fn setup_ui(mut commands: Commands) {
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
                 column_gap: Val::Px(4.0),
+                padding: UiRect::all(Val::Px(4.0)),
                 ..default()
             },
+            // The strip had no background at all: only the buttons did, so the
+            // gaps between them were holes onto the play area and the station
+            // showed through the row.
+            BackgroundColor(ThemeColors::HUD_BG_SOLID),
             FlightToolbar,
         ));
 
@@ -857,7 +956,7 @@ fn setup_ui(mut commands: Commands) {
                 border: UiRect::all(Val::Px(1.0)),
                 ..default()
             },
-            BackgroundColor(ThemeColors::HUD_BG),
+            BackgroundColor(ThemeColors::HUD_BG_SOLID),
             BorderColor::all(ThemeColors::BORDER_DEFAULT),
             WeaponRackPanel,
         )).with_children(|rack| {
@@ -1722,6 +1821,7 @@ fn handle_menu_input(
     mut pre_pause: ResMut<PrePauseState>,
     mut load_events: MessageWriter<LoadGameRequest>,
     mut tutorial: ResMut<crate::tutorial::Tutorial>,
+    mut new_expedition: MessageWriter<NewExpeditionRequest>,
     mut settings_menu: ResMut<menu_buttons::SettingsMenu>,
     mut commands: Commands,
     module_panel: Query<Entity, With<ModulePanelOverlay>>,
@@ -1804,8 +1904,11 @@ fn handle_menu_input(
     {
         match current_state.get() {
             GameState::MainMenu => {
-                // New expedition (not a load) — arm the guided tutorial.
+                // New expedition (not a load) — arm the guided tutorial and
+                // wipe the previous run. Both of those must also happen on the
+                // button path; see menu_buttons::menu_button_dispatch.
                 tutorial.begin();
+                new_expedition.write(NewExpeditionRequest);
                 next_state.set(GameState::StationDocked);
             }
             GameState::StationDocked => next_state.set(GameState::Exploring),
@@ -3108,21 +3211,25 @@ fn spawn_galaxy_map_overlay(
                 width: Val::Px(panel_size),
                 ..default()
             }).with_children(|legend| {
-                use crate::ai_ship::components::{faction_map_color, AiShipType};
-                let entries: &[(Color, &str)] = &[
-                    (Color::srgb(0.3, 0.9, 1.0), "Haven"),
-                    (faction_map_color(AiShipType::RustSwarm), "Rust Swarm"),
-                    (faction_map_color(AiShipType::Drowned), "Drowned"),
-                    (faction_map_color(AiShipType::Leviathan), "Leviathan"),
-                    (faction_map_color(AiShipType::AbyssalCult), "Abyssal Cult"),
-                    (faction_map_color(AiShipType::GlassEye), "Glass Eye"),
-                    (faction_map_color(AiShipType::Blackwater), "Blackwater"),
-                    (faction_map_color(AiShipType::PressureKing), "Pressure King"),
-                    (faction_map_color(AiShipType::IronTide), "Iron Tide"),
-                    (faction_map_color(AiShipType::Dreadnought), "Dreadnought"),
-                    (faction_map_color(AiShipType::VoidTitan), "Void Titan"),
-                    (theme::ThemeColors::TEXT_MUTED, "Located (unknown)"),
+                use crate::ai_ship::components::{faction_display_name, faction_map_color, AiShipType};
+                // Labels come from faction_display_name so the legend can never
+                // drift out of step with the roster.
+                let factions = [
+                    AiShipType::RecursiveKingdom,
+                    AiShipType::BrokenChoir,
+                    AiShipType::StellarPreserve,
+                    AiShipType::SynthesisCollective,
+                    AiShipType::TheSilence,
+                    AiShipType::GildedThrone,
+                    AiShipType::CorpseStars,
+                    AiShipType::TerranHegemony,
+                    AiShipType::EternalHegemony,
+                    AiShipType::Shepherd,
                 ];
+                let mut entries: Vec<(Color, &str)> = vec![(Color::srgb(0.3, 0.9, 1.0), "Haven")];
+                entries.extend(factions.iter().map(|f| (faction_map_color(*f), faction_display_name(*f))));
+                entries.push((theme::ThemeColors::TEXT_MUTED, "Located (unknown)"));
+                let entries: &[(Color, &str)] = &entries;
                 for (color, label) in entries {
                     legend.spawn(Node {
                         flex_direction: FlexDirection::Row,
@@ -3488,7 +3595,7 @@ fn spawn_main_menu(mut commands: Commands) {
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(ThemeSpacing::SECTION),
                 ..default()
-            }, BackgroundColor(ThemeColors::BG_VOID), ZIndex(100)),
+            }, BackgroundColor(ThemeColors::BG_MENU), ZIndex(100)),
         MainMenuOverlay,
     )).with_children(|parent| {
         // Title container
@@ -3540,11 +3647,40 @@ fn spawn_main_menu(mut commands: Commands) {
         });
 
         // Tagline
-        parent.spawn((Text::new("Build your ship. Explore the void. Survive."), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::TEXT_MUTED)));
+        parent.spawn((Text::new("An expedition went out before you. Find out how far it got."), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::TEXT_MUTED)));
 
         // Version / flavor
-        parent.spawn((Text::new("The void remembers those who dare to venture deeper."), TextFont { font_size: FontSize::Px(ThemeFonts::BODY_SMALL), ..default() }, TextColor(Color::srgba(0.25, 0.28, 0.35, 0.6))));
+        parent.spawn((Text::new("They left records the whole way. Follow them."), TextFont { font_size: FontSize::Px(ThemeFonts::BODY_SMALL), ..default() }, TextColor(Color::srgba(0.25, 0.28, 0.35, 0.6))));
+
+        // Required attribution. assets/audio/CREDITS.md puts most of the sound
+        // under CC-BY 3.0, which obliges a visible credit, and the game had
+        // none anywhere — an outstanding licence breach rather than an
+        // oversight. On the title screen rather than buried behind a button,
+        // because that is the page everyone actually sees.
+        parent.spawn((
+            Text::new("Sound effects by Little Robot Sound Factory (littlerobotsoundfactory.com), CC-BY 3.0"),
+            TextFont { font_size: FontSize::Px(ThemeFonts::TINY), ..default() },
+            TextColor(Color::srgba(0.22, 0.25, 0.31, 0.55)),
+            Node { margin: UiRect::top(Val::Px(ThemeSpacing::MD)), ..default() },
+        ));
     });
+}
+
+/// The flight HUD has no business on the title screen.
+///
+/// It was faintly visible behind the menu -- a hull bar and an ammo count for
+/// a ship that does not exist yet -- because the menu's background sits at 98%
+/// opacity and nothing ever hid the instruments.
+fn hide_hud(mut hud: Query<&mut Visibility, With<HudRoot>>) {
+    for mut v in hud.iter_mut() {
+        *v = Visibility::Hidden;
+    }
+}
+
+fn show_hud(mut hud: Query<&mut Visibility, With<HudRoot>>) {
+    for mut v in hud.iter_mut() {
+        *v = Visibility::Inherited;
+    }
 }
 
 fn despawn_main_menu(
@@ -4107,6 +4243,23 @@ fn sell_row(inventory: &Inventory, station_idx: usize, choice: Option<ItemType>,
     }
 }
 
+/// Price multiplier for a station, from how far its system sits from Haven.
+///
+/// station_idx is system_id * STATIONS_PER_SYSTEM + slot, so the system is
+/// recoverable from the index alone.
+fn distance_price_multiplier_for(
+    station_idx: usize,
+    galaxy: &crate::celestial::resources::GalaxyMap,
+) -> f32 {
+    let system_id = (station_idx / crate::world::home_base::STATIONS_PER_SYSTEM) as u32;
+    galaxy
+        .systems
+        .iter()
+        .find(|s| s.id == system_id)
+        .map(|s| crate::world::station_types::distance_price_multiplier(s.galaxy_pos))
+        .unwrap_or(1.0)
+}
+
 fn get_docking_services(
     hull_state: &HullState,
     oxygen_state: &OxygenState,
@@ -4117,6 +4270,7 @@ fn get_docking_services(
     inventory: &Inventory,
     station_idx: usize,
     market: &MarketEvents,
+    far: f32,
 ) -> Vec<DockingService> {
     // Station identity: repairs/fuel/ammo are cheaper at the right outpost
     // type (Mining/Refuel/Military — see world::station_types). These same
@@ -4126,7 +4280,7 @@ fn get_docking_services(
     );
 
     let hull_damage = 1.0 - hull_state.hull_integrity;
-    let hull_repair_full_cost = (hull_damage * 500.0 * discounts.hull_repair) as u32;
+    let hull_repair_full_cost = (hull_damage * 500.0 * discounts.hull_repair * far) as u32;
     let scrap_have = inventory.items.get(&ItemType::ScrapMetal).copied().unwrap_or(0);
     let scrap_usable = (hull_repair_full_cost / 50).min(scrap_have);
     let hull_repair_cost = hull_repair_full_cost.saturating_sub(scrap_usable * 50);
@@ -4148,7 +4302,7 @@ fn get_docking_services(
     }
     let ammo_cost = ammo_cost_raw as u32;
 
-    let hire_full_cost = 200 + (crew_count as u32) * 50;
+    let hire_full_cost = ((200 + (crew_count as u32) * 50) as f32 * far) as u32;
     let bio_have = inventory.items.get(&ItemType::BioSample).copied().unwrap_or(0);
     let bio_usable = (hire_full_cost / 60).min(bio_have);
     let hire_cost = hire_full_cost.saturating_sub(bio_usable * 60);
@@ -4160,7 +4314,7 @@ fn get_docking_services(
     }
 
     let fuel_missing = fuel_state.max_fuel - fuel_state.current_fuel;
-    let fuel_cost = (fuel_missing * 0.5 * discounts.fuel) as u32;
+    let fuel_cost = (fuel_missing * 0.5 * discounts.fuel * far) as u32;
 
     vec![
         DockingService {
@@ -4226,19 +4380,21 @@ fn spawn_docking_menu(
     oxygen_state: Res<OxygenState>,
     fuel_state: Res<FuelState>,
     weapon_query: Query<(&Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), Without<Creature>>,
-    crew_query: Query<&CrewMember>,
+    crew_query: Query<&CrewMember, Without<crate::ai_ship::components::OwnedByAiShip>>,
     inventory: Res<Inventory>,
     currency: Res<Currency>,
     staffing_state: Res<StaffingState>,
     ship_query: Query<&Transform, With<Ship>>,
     market: Res<MarketEvents>,
     stations: Res<crate::world::home_base::SystemStations>,
+    galaxy: Res<crate::celestial::resources::GalaxyMap>,
 ) {
     let crew_count = crew_query.iter().count();
     let station_idx = ship_query.single().ok()
         .and_then(|t| stations.nearest_index(t.translation.truncate()))
         .unwrap_or(0);
-    let services = get_docking_services(&hull_state, &oxygen_state, &fuel_state, &weapon_query, crew_count, staffing_state.total_berths, &inventory, station_idx, &market);
+    let far = distance_price_multiplier_for(station_idx, &galaxy);
+    let services = get_docking_services(&hull_state, &oxygen_state, &fuel_state, &weapon_query, crew_count, staffing_state.total_berths, &inventory, station_idx, &market, far);
 
     commands.spawn((
         (Node {
@@ -4280,7 +4436,16 @@ fn spawn_docking_menu(
             ));
         }
 
-        parent.spawn((Text::new(format!("Credits: {}", currency.credits)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() }, TextColor(theme::ThemeColors::ACCENT_YELLOW)));
+        // Tagged so it can be refreshed. Spawned once and never updated, this
+        // froze at whatever the balance was when the menu opened — a live run
+        // showed "Credits: 750" in the menu while the HUD read 21, which is
+        // the worst possible place to lie about money.
+        parent.spawn((
+            Text::new(format!("Credits: {}", currency.credits)),
+            TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() },
+            TextColor(theme::ThemeColors::ACCENT_YELLOW),
+            DockingCreditsText,
+        ));
 
         // Cargo hold — was invisible inside this menu entirely (only
         // visible via the Map overlay, which doesn't even open while
@@ -4389,29 +4554,58 @@ fn docking_menu_input(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
     mut menu_query: Query<&mut DockingMenuSelection, With<DockingOverlay>>,
-    mut item_query: Query<(&DockingServiceItem, &mut Text, &mut TextColor, &Children)>,
+    // Grouped: this system is at Bevy's 16-param cap (see the note above), so
+    // the credits readout rides along with the service rows it sits beside.
+    mut menu_text: (
+        Query<(&DockingServiceItem, &mut Text, &mut TextColor, &Children)>,
+        Query<&mut Text, (With<DockingCreditsText>, Without<DockingServiceItem>)>,
+    ),
     mut span_query: Query<&mut TextSpan>,
     econ_state: (ResMut<HullState>, ResMut<OxygenState>, ResMut<FuelState>, ResMut<Currency>, ResMut<Inventory>),
     mut weapon_query: Query<(&mut Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), Without<Creature>>,
-    crew_query: Query<&CrewMember>,
+    // All three MUST exclude AI ships. Unscoped, the docking menu counted
+    // enemy crew into the hire price and the berth check (a live run showed
+    // "Recruit crew (25/20 berths)" at 1450c with twenty crew aboard),
+    // full-healed every AI ship in the system on the player's credits when
+    // they bought Repair Hull, and charged them for enemy battle damage under
+    // Repair Modules.
+    crew_query: Query<&CrewMember, Without<crate::ai_ship::components::OwnedByAiShip>>,
     mut notifications: MessageWriter<ShowNotification>,
     mut next_state: ResMut<NextState<GameState>>,
-    mut hull_query: Query<&mut HullSegment>,
+    mut hull_query: Query<&mut HullSegment, Without<crate::ai_ship::components::OwnedByAiShip>>,
     staffing_state: Res<StaffingState>,
-    mut module_query: Query<&mut Module>,
+    mut module_query: Query<&mut Module, Without<crate::ai_ship::components::OwnedByAiShip>>,
     ship_query: Query<&Transform, With<Ship>>,
-    world_ctx: (Res<MarketEvents>, Res<crate::world::home_base::SystemStations>),
+    world_ctx: (
+        Res<MarketEvents>,
+        Res<crate::world::home_base::SystemStations>,
+        Res<crate::celestial::resources::GalaxyMap>,
+    ),
 ) {
     let (assets, crew_atlases) = crew_art;
-    let (market, stations) = world_ctx;
+    let (market, stations, galaxy) = world_ctx;
     let (mut hull_state, mut oxygen_state, mut fuel_state, mut currency, mut inventory) = econ_state;
+
+    // Keep the menu's own credit readout honest. It is spawned once and
+    // everything below can spend, so without this it reports the balance from
+    // whenever the menu happened to open.
+    if let Ok(mut text) = menu_text.1.single_mut() {
+        let want = format!("Credits: {}", currency.credits);
+        if **text != want {
+            **text = want;
+        }
+    }
+
     let Ok(mut selection) = menu_query.single_mut() else { return };
 
     let station_idx = ship_query.single().ok()
         .and_then(|t| stations.nearest_index(t.translation.truncate()))
         .unwrap_or(0);
     // Must match the multipliers used for the displayed costs in
-    // get_docking_services / the refresh block below.
+    // get_docking_services / the refresh block below. That now includes the
+    // distance multiplier: quote one price and charge another and the menu is
+    // lying, which is worse than it being cheap.
+    let far = distance_price_multiplier_for(station_idx, &galaxy);
     let discounts = crate::world::station_types::service_discounts(
         crate::world::station_types::station_type(station_idx),
     );
@@ -4467,7 +4661,7 @@ fn docking_menu_input(
                 // fuel/ammo's partial fill, so a failed attempt must not
                 // waste resources the player can't get back.
                 let hull_damage = 1.0 - hull_state.hull_integrity;
-                let full_cost = (hull_damage * 500.0 * discounts.hull_repair) as u32;
+                let full_cost = (hull_damage * 500.0 * discounts.hull_repair * far) as u32;
                 if hull_damage < 0.01 {
                     notifications.write(ShowNotification {
                         message: "Hull already at full integrity".into(),
@@ -4669,7 +4863,7 @@ fn docking_menu_input(
                     // medical/ration supplies for the new hire) — same
                     // atomic check-then-spend pattern as Repair Hull's
                     // ScrapMetal offset, since hiring is all-or-nothing too.
-                    let full_cost = 200 + (crew_count as u32) * 50;
+                    let full_cost = ((200 + (crew_count as u32) * 50) as f32 * far) as u32;
                     const BIOSAMPLE_VALUE: u32 = 60;
                     let bio_have = inventory.items.get(&ItemType::BioSample).copied().unwrap_or(0);
                     let bio_used = (full_cost / BIOSAMPLE_VALUE).min(bio_have);
@@ -4862,7 +5056,7 @@ fn docking_menu_input(
         .collect();
 
     let hull_damage = 1.0 - hull_state.hull_integrity;
-    let hull_repair_full_cost = (hull_damage * 500.0 * discounts.hull_repair) as u32;
+    let hull_repair_full_cost = (hull_damage * 500.0 * discounts.hull_repair * far) as u32;
     let scrap_have = inventory.items.get(&ItemType::ScrapMetal).copied().unwrap_or(0);
     let scrap_usable = (hull_repair_full_cost / 50).min(scrap_have);
     let hull_repair_cost = hull_repair_full_cost.saturating_sub(scrap_usable * 50);
@@ -4878,7 +5072,7 @@ fn docking_menu_input(
         }
     }
     let ammo_cost = (ammo_cost_raw * discounts.ammo) as u32;
-    let hire_full_cost = 200 + (crew_count as u32) * 50;
+    let hire_full_cost = ((200 + (crew_count as u32) * 50) as f32 * far) as u32;
     let bio_have = inventory.items.get(&ItemType::BioSample).copied().unwrap_or(0);
     let bio_usable = (hire_full_cost / 60).min(bio_have);
     let hire_cost = hire_full_cost.saturating_sub(bio_usable * 60);
@@ -4889,7 +5083,7 @@ fn docking_menu_input(
     };
 
     let fuel_missing = fuel_state.max_fuel - fuel_state.current_fuel;
-    let fuel_cost = (fuel_missing * 0.5 * discounts.fuel) as u32;
+    let fuel_cost = (fuel_missing * 0.5 * discounts.fuel * far) as u32;
 
     let new_idx = selection.0;
     let service_info: Vec<(&str, String, u32, bool)> = vec![
@@ -4920,7 +5114,7 @@ fn docking_menu_input(
         ("Undock", "Return to exploring".to_string(), 0, true),
     ];
 
-    for (item, mut text, mut text_color, children) in item_query.iter_mut() {
+    for (item, mut text, mut text_color, children) in menu_text.0.iter_mut() {
         let idx = item.0;
         if idx >= service_info.len() { continue; }
         let (name, desc, cost, available) = &service_info[idx];

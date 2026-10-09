@@ -1,6 +1,10 @@
 use crate::resources::BiomeType;
 
 /// Returns creature spawn weights for a biome
+/// Parked with `world::update_biome`: its only caller lives in
+/// `src/parked/creatures`, which is not compiled. Kept because the weights are
+/// authored data worth more than the few lines of code around them.
+#[allow(dead_code)]
 pub fn biome_creature_weights(biome: BiomeType) -> Vec<(&'static str, f32)> {
     match biome {
         BiomeType::OpenVoid => vec![

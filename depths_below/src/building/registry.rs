@@ -98,6 +98,7 @@ pub enum CompanionData {
     TargetingComputer { accuracy_bonus: f32 },
     /// AI combat core: auto-targets highest threat
     AICombatCore { priority_bonus: f32 },
+    MemoryCore { autonomy: f32 },
     /// Research lab: generates research points from specimens
     ResearchLab { research_speed: f32 },
 }
@@ -1680,7 +1681,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Angled Hull Plate",
         description: "Structural framing cut to a taper instead of a square face. Light - it deflects far better than it stops, so it belongs on a corner you want shots to skip off, not in front of anything important. Rotate to pick which corner the face looks out from.",
         category: ModuleCategory::Structural, size: IVec2::new(1, 1), health: 90.0,
-        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.56, 0.54, 0.48),
+        power_generation: 0.0, power_consumption: 0.0, color: crate::sprite_map::HULL_TONE,
         companion: CompanionData::None, customizable: false, cost: 19,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
@@ -1689,7 +1690,7 @@ pub fn build_registry() -> ModuleRegistry {
         name: "Angled Armor Plate",
         description: "Armor cut to a taper instead of a flat face. Less steel than a flat plate and it stops less head-on, but a round arriving off-axis skips away instead of biting. Angle the hull as well and the two stack. Rotate to pick which corner the face looks out from.",
         category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 190.0,
-        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.52, 0.52, 0.56),
+        power_generation: 0.0, power_consumption: 0.0, color: crate::sprite_map::HULL_TONE,
         companion: CompanionData::None, customizable: false, cost: 64,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
@@ -2415,6 +2416,22 @@ pub fn build_registry() -> ModuleRegistry {
         crew_station: false,
     });
 
+    defs.insert(ModuleType::MemoryCore, ModuleDef {
+        name: "Memory Core",
+        description: "Redundant cognition lattice. Holds enough of the ship's own judgement to keep a station running with nobody standing at it. Crews call them the quiet crew.",
+        category: ModuleCategory::Control,
+        size: IVec2::new(1, 1),
+        health: 60.0,
+        power_generation: 0.0,
+        power_consumption: 12.0,
+        color: Color::srgb(0.35, 0.42, 0.55),
+        companion: CompanionData::MemoryCore { autonomy: 0.16 },
+        customizable: false,
+        cost: 140,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
     // --- Environmental Interaction ---
     defs.insert(ModuleType::ThermalVentGenerator, ModuleDef {
         name: "Thermal Vent Generator",
@@ -2535,6 +2552,109 @@ pub fn build_registry() -> ModuleRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Modules the build palette deliberately does not offer, and why.
+    ///
+    /// Weapon pieces are fitted through the customisation panel, not placed on
+    /// the grid. The rest are superseded or inert. Anything not on this list
+    /// and not in a palette is a mistake, and
+    /// `every_registered_module_is_reachable` will say so.
+    const NOT_IN_PALETTE: &[ModuleType] = &[
+        // Weapon subcomponents: assembled in the customisation panel.
+        ModuleType::BarrelExtension,
+        ModuleType::AmmoFeedUnit,
+        ModuleType::CoolingJacket,
+        ModuleType::MuzzleBrake,
+        ModuleType::RecoilAbsorber,
+        ModuleType::OverchargeCapacitor,
+        ModuleType::BoreEvacuator,
+        ModuleType::MagneticAccelerator,
+        ModuleType::FocusingArray,
+        ModuleType::WarheadBay,
+        // Superseded: passages are HullLayer::Hallway now. The variants stay
+        // so blueprints written before that change still deserialize.
+        ModuleType::Corridor,
+        ModuleType::LadderShaft,
+        ModuleType::MaintenanceTunnel,
+        // Inert: a sprite, a colour and a description promising it "blocks
+        // heat transfer between sections". Nothing reads it. Offering it
+        // would be selling the player a rock.
+        ModuleType::ThermalInsulator,
+    ];
+
+    /// Every module that can be spawned must be obtainable, or knowingly not.
+    ///
+    /// `category()` says what a module IS and the palette lists say what the
+    /// build menu OFFERS. They are maintained by hand, in different files, and
+    /// they had drifted apart by forty entries.
+    ///
+    /// Three casualties mattered. `ShieldEmitter` was absent from Utility's
+    /// list, yet shield strength is base plus a count of live emitters and the
+    /// shield code's own comment says "building an emitter at the dock grows
+    /// the bubble" -- so shields were frozen for the whole game at whatever the
+    /// starter hull shipped with. `MemoryCore` was absent from Control's, which
+    /// is worse, because losing every core ends the run. And the entire
+    /// Structural category was unreachable, because `BuildCategory` had no
+    /// Structural variant at all -- taking flat armour plate with it, the
+    /// plainest piece of defence in the game.
+    ///
+    /// This test walks the registry rather than a hand-written list of
+    /// variants, so a module added tomorrow is covered without anyone
+    /// remembering to come back here.
+    #[test]
+    fn every_registered_module_is_reachable() {
+        let registry = build_registry();
+
+        let mut orphans: Vec<(ModuleType, ModuleCategory)> = registry
+            .defs
+            .keys()
+            .copied()
+            .filter(|m| !NOT_IN_PALETTE.contains(m))
+            .filter(|m| !m.category().module_types().contains(m))
+            .map(|m| (m, m.category()))
+            .collect();
+        orphans.sort_by_key(|(m, _)| format!("{m:?}"));
+
+        assert!(
+            orphans.is_empty(),
+            "these modules exist in the registry but appear in no build \
+             palette, so no player can ever obtain one -- add each to its \
+             ModuleCategory::module_types() list, or to NOT_IN_PALETTE with \
+             a reason: {orphans:?}"
+        );
+    }
+
+    /// A module may not be both offered and listed as deliberately withheld.
+    #[test]
+    fn not_in_palette_entries_are_actually_absent() {
+        for m in NOT_IN_PALETTE {
+            assert!(
+                !m.category().module_types().contains(m),
+                "{m:?} is on NOT_IN_PALETTE but its category offers it; \
+                 delete it from one of the two"
+            );
+        }
+    }
+
+    /// A palette list may not claim a module that belongs to another category.
+    ///
+    /// `to_module_category` routes a tab to exactly one `ModuleCategory`, so a
+    /// module listed under the wrong one shows up on a tab that then disagrees
+    /// with everything else reading `category()`.
+    #[test]
+    fn palette_lists_agree_with_category() {
+        for category in ModuleCategory::ALL {
+            for m in category.module_types() {
+                assert_eq!(
+                    m.category(),
+                    *category,
+                    "{m:?} is listed in {category:?}'s palette but category() \
+                     puts it in {:?}",
+                    m.category()
+                );
+            }
+        }
+    }
 
     #[test]
     fn all_module_types_registered() {

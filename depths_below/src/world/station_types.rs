@@ -102,3 +102,66 @@ pub fn service_discounts(t: StationType) -> ServiceDiscounts {
         _ => ServiceDiscounts { fuel: 1.0, ammo: 1.0, hull_repair: 1.0 },
     }
 }
+
+/// How much dearer everything is this far from Haven.
+///
+/// Going outward used to cost nothing worth noticing: refuel was free on
+/// docking and there are two stations in every system, so a player could fly
+/// to the edge of the galaxy and top up along the way. Distance was the
+/// game's whole progression axis and it was free to traverse.
+///
+/// Prices scale with the system's distance from Haven in galaxy space, so the
+/// further out you push the more every berth costs to use — and the further
+/// back your last affordable one is.
+pub fn distance_price_multiplier(system_galaxy_pos: bevy::prelude::Vec2) -> f32 {
+    let t = (system_galaxy_pos.length() / crate::celestial::galaxy::GALAXY_RADIUS)
+        .clamp(0.0, 1.0);
+    // Haven is at the origin and stays at face value; the far edge is triple.
+    1.0 + t * 2.0
+}
+
+#[cfg(test)]
+mod distance_price_tests {
+    use super::*;
+    use bevy::prelude::Vec2;
+
+    /// Haven is the baseline. If the home berth were ever dearer than face
+    /// value the opening would start by punishing the player for docking.
+    #[test]
+    fn haven_is_face_value() {
+        assert_eq!(distance_price_multiplier(Vec2::ZERO), 1.0);
+    }
+
+    /// And the edge has to cost enough to be a budget rather than a rounding
+    /// error, because distance being free is the thing this exists to fix.
+    #[test]
+    fn the_edge_is_meaningfully_dearer() {
+        let edge = distance_price_multiplier(Vec2::new(crate::celestial::galaxy::GALAXY_RADIUS, 0.0));
+        assert!(edge >= 2.5, "the far edge is only {edge}x — not a real cost");
+    }
+
+    /// It must rise smoothly, or there is a cliff where one more jump suddenly
+    /// doubles the bill.
+    #[test]
+    fn it_rises_smoothly() {
+        let r = crate::celestial::galaxy::GALAXY_RADIUS;
+        let steps: Vec<f32> = [0.0, 0.25, 0.5, 0.75, 1.0]
+            .iter()
+            .map(|t| distance_price_multiplier(Vec2::new(r * t, 0.0)))
+            .collect();
+        for w in steps.windows(2) {
+            assert!(w[1] > w[0], "prices did not rise: {steps:?}");
+            assert!(w[1] - w[0] < 1.0, "a single step more than doubles: {steps:?}");
+        }
+    }
+
+    /// Beyond the edge must not keep climbing, or a blind warp into deep void
+    /// produces an absurd bill.
+    #[test]
+    fn it_is_capped() {
+        let r = crate::celestial::galaxy::GALAXY_RADIUS;
+        let edge = distance_price_multiplier(Vec2::new(r, 0.0));
+        let past = distance_price_multiplier(Vec2::new(r * 10.0, 0.0));
+        assert_eq!(edge, past);
+    }
+}

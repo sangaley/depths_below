@@ -13,6 +13,10 @@ pub mod station_types;
 #[allow(unused_imports)]
 pub use generation::*;
 pub use chunks::*;
+// Biome selection is parked for the demo — see `update_biome` below. The
+// table stays compiled (and tested) so turning it back on is a one-line
+// change rather than an archaeology exercise.
+#[allow(unused_imports)]
 pub use biomes::*;
 
 pub struct WorldPlugin;
@@ -42,8 +46,7 @@ impl Plugin for WorldPlugin {
                 (
                     update_chunks,
                     check_depth_zone_change,
-                    update_biome,
-                    check_poi_discovery,
+                    // update_biome is OFF for the demo — see the function.
                     tick_market_events,
                     // Both claim the shared F press (resources::InteractPress),
                     // so they must sit behind the salvage handler: crew on the
@@ -55,11 +58,60 @@ impl Plugin for WorldPlugin {
                     home_base::station_docking
                         .after(crate::crew::eva_salvage::order_salvage_detail),
                     home_base::update_base_arrow,
-                    discover_log_entries,
                     apply_hazard_damage,
                 )
                     .run_if(in_state(GameState::Exploring)),
+            )
+            // Must run AFTER transform propagation. In Update, a point of
+            // interest spawned this frame still has the default GlobalTransform
+            // — the world origin — so every log-bearing wreck in the galaxy
+            // read as sitting 50 units from the ship and was "discovered" on
+            // the frame it spawned. That is why the player was handed a log
+            // before touching a control, and it had nothing to do with where
+            // the wreck actually was.
+            .add_systems(
+                PostUpdate,
+                // Both of these compare GlobalTransform, so both must run
+                // after propagation. check_poi_discovery was left behind in
+                // Update when discover_log_entries was moved, and had exactly
+                // the same bug: a point of interest spawned this frame still
+                // carries the default GlobalTransform — the world origin —
+                // and the ship starts 50 units from it, so every streamed POI
+                // read as adjacent and was instantly "discovered". That meant
+                // toast spam and contract objectives completing on their own.
+                (discover_log_entries, check_poi_discovery)
+                    .after(bevy::transform::TransformSystems::Propagate)
+                    .run_if(in_state(GameState::Exploring)),
             );
+    }
+}
+
+
+/// How far the ship is from the nearest berth in the system it is standing in.
+///
+/// The honest answer to "how far out am I", and deliberately separate from
+/// `DepthState.current_depth`, which measures distance from the world origin
+/// and is what the depth vignette, the HUD readout and the camera are all
+/// calibrated against. Redefining that field broke rendering outright.
+///
+/// The origin measure stopped meaning anything when the galaxy arrived: every
+/// system except Haven centres hundreds of thousands of units away in a shared
+/// local space, so anything keyed on it saturates the moment the player warps
+/// anywhere. That is what auto-completed ReachDepth contracts, pinned zone
+/// selection, and put creature density and spawn rate at maximum everywhere
+/// outside Haven.
+pub fn distance_from_safety(ship_pos: Vec2, stations: &home_base::SystemStations) -> f32 {
+    let nearest = stations
+        .sites
+        .iter()
+        .map(|s| s.pos.distance(ship_pos))
+        .fold(f32::INFINITY, f32::min);
+    if nearest.is_finite() {
+        nearest
+    } else {
+        // Blind-warped into empty space: nowhere to dock, so treat it as a
+        // long way from anywhere rather than as zero.
+        f32::MAX
     }
 }
 
@@ -98,7 +150,14 @@ fn check_depth_zone_change(
     }
 }
 
-fn depth_to_zone(depth: f32) -> crate::components::ZoneType {
+/// The zone a given range corresponds to. One function, on purpose.
+///
+/// `contracts::tracking` carried a private copy of this that still used the
+/// old 200/500/1000/2000 thresholds, so the contract board and the HUD
+/// disagreed about where the player was standing: at 2,100 units the HUD said
+/// Near Space and a Survey contract said Black Hole Proximity, and a five-star
+/// survey completed a few seconds after undocking.
+pub fn depth_to_zone(depth: f32) -> crate::components::ZoneType {
     use crate::components::ZoneType;
     // Radial distance from Haven Station (origin). Thresholds sized for the
     // current cruise speeds — the old 200/500/1000/2000 were submarine depths
@@ -112,10 +171,29 @@ fn depth_to_zone(depth: f32) -> crate::components::ZoneType {
     }
 }
 
-/// Updates current biome based on ship position
+/// Updates current biome based on ship position. PARKED for the demo.
+///
+/// Two things were wrong with it and the second is the fatal one.
+///
+/// The bands are 200, 500, 1000 and 2000 units from the nearest berth, and a
+/// ship crosses all five in a few seconds of ordinary flight — so it fired
+/// "Entered DeadZone biome" toasts continuously while you were still in sight
+/// of the station.
+///
+/// And nothing reads the result. `WorldState.current_biome` is written here
+/// and the only other mention of it in the whole tree is its default. The one
+/// consumer, `biome_creature_weights`, is called from `src/parked/creatures`,
+/// which is not compiled — there is no `mod parked` anywhere. So the system
+/// cost a notification every few seconds and changed nothing about the game.
+///
+/// To bring it back: give the bands a scale that matches how far a ship
+/// actually travels (the system's own `danger_tier` is the authored
+/// near-weak/far-strong curve and is the natural input), and wire a consumer
+/// that does something with the biome before the toast is worth showing.
+#[allow(dead_code)]
 fn update_biome(
-    ship_state: Res<DepthState>,
     ship_query: Query<&Transform, With<Ship>>,
+    stations: Res<home_base::SystemStations>,
     mut world_state: ResMut<WorldState>,
     mut notifications: MessageWriter<ShowNotification>,
     mut last_biome: Local<Option<BiomeType>>,
@@ -123,7 +201,10 @@ fn update_biome(
     let Ok(ship_transform) = ship_query.single() else { return };
 
     let x = ship_transform.translation.x;
-    let depth = ship_state.current_depth;
+    // Distance from the nearest berth, not from the world origin — otherwise
+    // this reads >180,000 in every system but Haven and pins the biome to the
+    // most hostile band everywhere.
+    let depth = distance_from_safety(ship_transform.translation.truncate(), &stations);
 
     // Determine biome from position and depth
     let biome = match depth {
@@ -158,12 +239,37 @@ fn update_biome(
 fn check_poi_discovery(
     ship_query: Query<&GlobalTransform, With<Ship>>,
     mut poi_query: Query<(&GlobalTransform, &mut PointOfInterest)>,
+    // The celestial layer, which is what exists outside Haven. Deliberately
+    // fires the same PoiDiscovered event rather than being given a
+    // PointOfInterest component: that component is also what radar draws, and
+    // making every derelict in the galaxy show up on the sweep is a separate
+    // decision that has not been taken.
+    mut space_query: Query<(&GlobalTransform, &mut crate::celestial::poi::SpacePoi)>,
     mut discovered: ResMut<DiscoveredLocations>,
     mut poi_events: MessageWriter<PoiDiscovered>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     let Ok(ship_gt) = ship_query.single() else { return };
     let ship_pos = ship_gt.translation().truncate();
+
+    for (gt, mut sp) in space_query.iter_mut() {
+        if sp.discovered {
+            continue;
+        }
+        let Some(kind) = sp.poi_type.as_poi_type() else { continue };
+        let pos = gt.translation().truncate();
+        if ship_pos.distance(pos) >= 700.0 {
+            continue;
+        }
+        sp.discovered = true;
+        discovered.special.push((pos, sp.name.clone()));
+        poi_events.write(PoiDiscovered { poi_type: kind, position: pos });
+        notifications.write(ShowNotification {
+            message: format!("Contact logged: {}", sp.name),
+            notification_type: NotificationType::Info,
+            duration: 4.0,
+        });
+    }
 
     for (poi_gt, mut poi) in poi_query.iter_mut() {
         if poi.discovered {
@@ -305,32 +411,44 @@ fn tick_market_events(
 /// Discover log entries when near POIs that have them
 fn discover_log_entries(
     ship_query: Query<&GlobalTransform, With<Ship>>,
-    log_query: Query<(&GlobalTransform, &LogEntry, &PointOfInterest), Without<Ship>>,
+    // Deliberately does NOT require PointOfInterest. That component only
+    // exists on the chunk layer, which generates in a narrow band of world Y
+    // around the origin — so requiring it meant a log could only ever be read
+    // near Haven, and celestial derelicts out in the galaxy were invisible to
+    // this system no matter what they carried.
+    log_query: Query<(&GlobalTransform, &LogEntry), Without<Ship>>,
     mut statistics: ResMut<Statistics>,
-    mut notifications: MessageWriter<ShowNotification>,
-    mut discovered_logs: Local<Vec<String>>,
+    mut log_queue: ResMut<crate::narrative::reader::LogQueue>,
+    mut finale: ResMut<crate::narrative::FinaleFound>,
 ) {
     let Ok(ship_gt) = ship_query.single() else { return };
     let ship_pos = ship_gt.translation().truncate();
 
-    for (poi_gt, log, _poi) in log_query.iter() {
+    for (poi_gt, log) in log_query.iter() {
         let poi_pos = poi_gt.translation().truncate();
         let dist = ship_pos.distance(poi_pos);
 
-        if dist < 500.0 && !discovered_logs.contains(&log.title) {
-            discovered_logs.push(log.title.clone());
+        // Statistics.logs_found is the only record of what has been read.
+        //
+        // This used to dedupe against a system `Local` as well, which was a
+        // quiet disaster: a Local outlives the run, and reset_for_new_game has
+        // no way to clear one. So after a single New Expedition every log read
+        // in the previous run was permanently unreadable — the finale
+        // included, which made the ending unreachable on any second run until
+        // the process was restarted. logs_found IS reset, so it is the right
+        // and only source of truth.
+        if dist < 500.0 && !statistics.logs_found.contains(&log.title) {
+            statistics.logs_found.push(log.title.clone());
 
-            // Record in statistics
-            if !statistics.logs_found.contains(&log.title) {
-                statistics.logs_found.push(log.title.clone());
+            // The ending keys on *finding* the finale, not on holding it, so
+            // that loading a save from after the ending does not replay it.
+            if log.title == crate::narrative::logs::FINALE_TITLE {
+                finale.0 = true;
             }
-
-            // Show the log entry as a long notification
-            notifications.write(ShowNotification {
-                message: format!("[LOG: {}] {}", log.title, log.text),
-                notification_type: NotificationType::Info,
-                duration: 8.0,
-            });
+            // Goes to the reader, not a toast. Several entries run past two
+            // hundred characters and the toast is 340px wide with an eight
+            // second life — they were unreadable by construction.
+            log_queue.push(log.title.clone(), log.text.clone());
         }
     }
 }

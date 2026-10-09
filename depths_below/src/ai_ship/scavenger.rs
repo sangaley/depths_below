@@ -8,9 +8,9 @@ use super::components::*;
 // ============================================================================
 // SCAVENGER COMPETITION — wrecks are contested, not patient.
 // A fresh kill rings the dinner bell: some time after a ship dies, a
-// Rust Swarm wing spawns at the edge of the area and burns straight for
+// Recursive Kingdom wing spawns at the edge of the area and burns straight for
 // the hulk (their brain already prioritizes wrecks — see ai_brain's
-// RustSwarm tree). Every swarm ship parked on a wreck EATS its loot,
+// Recursive Kingdom tree). Every swarm ship parked on a wreck EATS its loot,
 // unit by unit. The player's choice: strip the wreck fast, drive the
 // vultures off (they're brittle kamikaze junk), or cede the carcass.
 // ============================================================================
@@ -49,7 +49,7 @@ pub fn schedule_scavenger_waves(
     let mut rng = rand::thread_rng();
     for event in destroyed_events.read() {
         // The scavengers don't mourn their own.
-        if event.ship_type == AiShipType::RustSwarm {
+        if event.ship_type == AiShipType::RecursiveKingdom {
             continue;
         }
         if rng.gen::<f32>() > WAVE_CHANCE {
@@ -57,8 +57,8 @@ pub fn schedule_scavenger_waves(
         }
         // Bigger carcasses draw bigger flocks.
         let ships = match event.ship_type {
-            AiShipType::Dreadnought | AiShipType::VoidTitan => 3,
-            AiShipType::IronTide | AiShipType::PressureKing => 2,
+            AiShipType::EternalHegemony | AiShipType::Shepherd => 3,
+            AiShipType::TerranHegemony | AiShipType::CorpseStars => 2,
             _ => rng.gen_range(1..=2),
         };
         waves.pending.push(PendingWave {
@@ -99,7 +99,7 @@ pub fn spawn_scavenger_waves(
             // Spawned "at" the wreck position so their patrol waypoints
             // ring the carcass; the wreck-chasing brain does the rest.
             super::spawner::spawn_ai_ship(
-                AiShipType::RustSwarm,
+                AiShipType::RecursiveKingdom,
                 base + jitter + Vec2::Y * (i as f32 * 40.0),
                 &mut commands,
                 &registry,
@@ -142,7 +142,7 @@ pub fn scavengers_feed(
         let feeders = swarm_query
             .iter()
             .filter(|(t, ship_type, state)| {
-                **ship_type == AiShipType::RustSwarm
+                **ship_type == AiShipType::RecursiveKingdom
                     && !state.is_destroyed
                     && t.translation.truncate().distance(wreck_pos) < FEED_RANGE
             })

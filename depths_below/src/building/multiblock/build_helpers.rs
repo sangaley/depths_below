@@ -9,9 +9,6 @@ use super::components::*;
 // quick-build templates, rotation-aware chain direction.
 // ============================================================================
 
-/// Visual connection line between two grid positions
-#[derive(Component)]
-pub struct ConnectionLine;
 
 /// Stat preview floating text shown during build mode
 #[derive(Component)]
@@ -30,63 +27,13 @@ pub struct WeaponTemplate {
 // CONNECTION LINE VISUALIZATION
 // ============================================================================
 
-/// Draw colored lines between connected blocks. Green=connected, red=disconnected.
-pub fn draw_connection_lines(
-    mut commands: Commands,
-    block_query: Query<(&Module, &MachineBlock, &GlobalTransform)>,
-    existing_lines: Query<Entity, With<ConnectionLine>>,
-) {
-    // Despawn old lines
-    for entity in existing_lines.iter() {
-        commands.entity(entity).despawn();
-    }
+// Connection-line visualisation removed at the user's request. It drew a
+// green line between wired weapon sub-components and a red square on any
+// orphaned one, rebuilding every mark from scratch each frame -- which is
+// what made it blink -- and it was noise on a ship whose owner was laying
+// hull. Whether a piece is wired is still answerable from the
+// customisation panel itself.
 
-    // Draw new lines for each connection
-    for (_module, block, global_transform) in block_query.iter() {
-        if let Some(next_entity) = block.next_in_chain {
-            if let Ok((_, _, next_gt)) = block_query.get(next_entity) {
-                let from = global_transform.translation().truncate();
-                let to = next_gt.translation().truncate();
-                let midpoint = (from + to) / 2.0;
-                let diff = to - from;
-                let length = diff.length();
-                let angle = diff.y.atan2(diff.x);
-
-                let color = if block.connected_core.is_some() {
-                    Color::srgba(0.2, 0.8, 0.3, 0.5) // Green = connected
-                } else {
-                    Color::srgba(0.8, 0.2, 0.2, 0.5) // Red = disconnected
-                };
-
-                commands.spawn((
-                    (Sprite {
-                            color,
-                            custom_size: Some(Vec2::new(length, 3.0)),
-                            ..default()
-                        }, Transform {
-                            translation: Vec3::new(midpoint.x, midpoint.y, 0.15),
-                            rotation: Quat::from_rotation_z(angle),
-                            ..default()
-                        }),
-                    ConnectionLine,
-                ));
-            }
-        }
-
-        // Disconnected blocks pulse red
-        if block.connected_core.is_none() && block.role != BlockRole::Core {
-            let pos = global_transform.translation().truncate();
-            commands.spawn((
-                (Sprite {
-                        color: Color::srgba(0.8, 0.1, 0.1, 0.3),
-                        custom_size: Some(Vec2::splat(64.0)),
-                        ..default()
-                    }, Transform::from_xyz(pos.x, pos.y, 0.16)),
-                ConnectionLine,
-            ));
-        }
-    }
-}
 
 // ============================================================================
 // DIRECTIONAL PLACEMENT VALIDATION

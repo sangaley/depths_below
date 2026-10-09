@@ -15,10 +15,6 @@ use crate::ui::theme::*;
 #[derive(Component)]
 pub struct CostSummaryWindow;
 
-/// Marker for the center of mass crosshair
-#[derive(Component)]
-pub struct CenterOfMassIndicator;
-
 /// Marker for power overlay sprites
 #[derive(Component)]
 pub struct PowerOverlayTile;
@@ -126,83 +122,23 @@ pub fn toggle_cost_summary(
 // CENTER OF MASS INDICATOR
 // ============================================================================
 
-/// Show/update center of mass crosshair during build mode
-pub fn update_center_of_mass(
+/// Take every build-mode overlay down.
+///
+/// The power view, the heat view and the cost window are all toggles whose
+/// only teardown is pressing the key a second time, and they spawn in world
+/// space. Leave one on and launch, and it stayed on, floating at the berth,
+/// with the key that would have cleared it now doing something else.
+pub fn despawn_build_overlays(
     mut commands: Commands,
-    module_query: Query<(&Module, &GlobalTransform), Without<DestroyedModule>>,
-    hull_query: Query<(&HullSegment, &GlobalTransform)>,
-    existing: Query<Entity, With<CenterOfMassIndicator>>,
-    current_state: Res<State<crate::states::BuildState>>,
+    power: Query<Entity, With<PowerOverlayTile>>,
+    heat: Query<Entity, With<HeatOverlayTile>>,
+    cost: Query<Entity, With<CostSummaryWindow>>,
 ) {
-    // Only show during build mode
-    if *current_state.get() == crate::states::BuildState::Inactive {
-        for entity in existing.iter() {
-            commands.entity(entity).despawn();
-        }
-        return;
-    }
-
-    // Calculate center of mass
-    let mut total_mass = 0.0_f32;
-    let mut weighted_pos = Vec2::ZERO;
-
-    for (module, gt) in module_query.iter() {
-        let mass = match module.module_type.category() {
-            ModuleCategory::Power => 3.0,      // Reactors are heavy
-            ModuleCategory::Weapons => 2.0,
-            ModuleCategory::Storage => 2.5,
-            _ => 1.0,
-        };
-        let pos = gt.translation().truncate();
-        weighted_pos += pos * mass;
-        total_mass += mass;
-    }
-
-    for (hull, gt) in hull_query.iter() {
-        let mass = hull.material.health_multiplier(); // Heavier materials = more mass
-        let pos = gt.translation().truncate();
-        weighted_pos += pos * mass;
-        total_mass += mass;
-    }
-
-    if total_mass < 0.01 { return; }
-
-    let com = weighted_pos / total_mass;
-
-    // Despawn old indicator
-    for entity in existing.iter() {
+    for entity in power.iter().chain(heat.iter()).chain(cost.iter()) {
         commands.entity(entity).despawn();
     }
-
-    // Spawn crosshair at center of mass
-    let off_center = com.length();
-    let color = if off_center < 30.0 {
-        Color::srgba(0.3, 0.8, 0.4, 0.5) // Green — well balanced
-    } else if off_center < 80.0 {
-        Color::srgba(0.8, 0.7, 0.2, 0.5) // Yellow — slightly off
-    } else {
-        Color::srgba(0.8, 0.2, 0.2, 0.5) // Red — unbalanced
-    };
-
-    // Horizontal line
-    commands.spawn((
-        (Sprite {
-                color,
-                custom_size: Some(Vec2::new(20.0, 2.0)),
-                ..default()
-            }, Transform::from_xyz(com.x, com.y, 0.8)),
-        CenterOfMassIndicator,
-    ));
-    // Vertical line
-    commands.spawn((
-        (Sprite {
-                color,
-                custom_size: Some(Vec2::new(2.0, 20.0)),
-                ..default()
-            }, Transform::from_xyz(com.x, com.y, 0.8)),
-        CenterOfMassIndicator,
-    ));
 }
+
 
 // ============================================================================
 // POWER OVERLAY

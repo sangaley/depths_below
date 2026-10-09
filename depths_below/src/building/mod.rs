@@ -154,11 +154,9 @@ impl Plugin for BuildingPlugin {
             .add_systems(
                 Update,
                 (
-                    multiblock::build_helpers::draw_connection_lines,
                     build_history::undo_input,
                     symmetry::toggle_symmetry,
                     build_info::toggle_cost_summary,
-                    build_info::update_center_of_mass,
                     build_info::toggle_power_overlay,
                     build_info::toggle_heat_overlay,
                     clipboard::clipboard_input,
@@ -902,7 +900,15 @@ fn update_ghost_preview(
     let Ok((camera, camera_transform)) = camera_query.single() else { return };
     let Ok(ship_gt) = ship_query.single() else { return };
 
-    if let Some(grid_pos) = cursor_to_ship_grid(window, camera, camera_transform, ship_gt) {
+    let Some(grid_pos) = cursor_to_ship_grid(window, camera, camera_transform, ship_gt) else {
+        // Pointing at nothing. Say so, rather than leaving the ghost sitting
+        // wherever it was last -- which on the first frame of build mode is
+        // the ship's origin, dead centre of the screen.
+        build_state.cursor_on_grid = false;
+        return;
+    };
+    {
+        build_state.cursor_on_grid = true;
         let ghost_moved = build_state.ghost_position != grid_pos;
         build_state.ghost_position = grid_pos;
 

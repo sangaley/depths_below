@@ -42,7 +42,15 @@ pub fn update_ship_state(
 /// Checks game over conditions
 pub fn check_game_over(
     hull_state: Res<HullState>,
-    crew_query: Query<&CrewMember>,
+    // Scoped, like core_query below it. Unscoped, a single living AI crewman
+    // anywhere in the system kept "all crew dead" permanently false — the
+    // player's whole crew could die and the run continued as a ghost ship.
+    crew_query: Query<&CrewMember, Without<crate::ai_ship::components::OwnedByAiShip>>,
+    // Includes destroyed cores on purpose — see below.
+    core_query: Query<
+        Option<&DestroyedModule>,
+        (With<MemoryCoreComp>, Without<crate::ai_ship::components::OwnedByAiShip>),
+    >,
     mut death_cause: ResMut<DeathCause>,
     mut next_state: ResMut<NextState<GameState>>,
     mut notifications: MessageWriter<ShowNotification>,
@@ -54,6 +62,25 @@ pub fn check_game_over(
     if session_timer.elapsed < 3.0 {
         return;
     }
+
+    // Cores are the player's own continuity, not just equipment. Losing every
+    // one is a different death from losing the hull: the ship can still be
+    // structurally fine and full of living people.
+    //
+    // Two things this must NOT do, both of which it did on the first attempt.
+    //
+    // It must not count `is_active`. That tracks whether a module is powered,
+    // and a browned-out core is still a core — the first version ended the run
+    // three seconds after launch, at full hull with nobody hurt, because the
+    // cores had not been energised yet.
+    //
+    // And the query must include destroyed cores, or the condition erases
+    // itself: filtering them out means that once the last one dies the query
+    // is empty, "did this ship ever have cores" reads false, and the death
+    // never fires at all.
+    let cores_total = core_query.iter().count();
+    let cores_alive = core_query.iter().filter(|destroyed| destroyed.is_none()).count();
+    let had_cores = cores_total > 0;
 
     let crew_count = crew_query.iter().count();
     let all_crew_dead = crew_count == 0 || crew_query.iter().all(|c| c.health <= 0.0);
@@ -68,7 +95,15 @@ pub fn check_game_over(
         .map(|d| format!(" Cause: {}.", d))
         .unwrap_or_default();
 
-    if all_crew_dead {
+    if had_cores && cores_alive == 0 {
+        death_cause.cause = Some(format!("Every memory core destroyed.{}", attribution));
+        notifications.write(ShowNotification {
+            message: "Last core gone. Whatever was running this ship is not running it now.".into(),
+            notification_type: NotificationType::Danger,
+            duration: 5.0,
+        });
+        next_state.set(GameState::GameOver);
+    } else if all_crew_dead {
         death_cause.cause = Some(format!("All crew died.{}", attribution));
         notifications.write(ShowNotification {
             message: "All crew lost. The ship drifts silently into the void...".into(),
@@ -104,30 +139,36 @@ pub fn update_inventory_capacity(
     inventory.max_capacity = base_capacity + cargo_bonus;
 }
 
-/// Checks if the player has achieved victory (reached 2500m depth + found final log)
+/// Fires the ending once the player holds the finale log.
+///
+/// The distance clause this used to carry is gone. It asked for 2,200 units
+/// from the origin, a submarine-era measure that survived the conversion to
+/// space and amounted to a few seconds of flight; it only ever looked like a
+/// real condition because the log it was paired with could not spawn at all.
+///
+/// The finale entry only exists at the deepest log tier, which only exists in
+/// the most dangerous systems, which sit at the far edge of the galaxy. So
+/// "you have read the last thing out there" already means "you went all the
+/// way out". One condition, and it is the one that means something.
 pub fn check_victory(
-    depth_state: Res<DepthState>,
-    statistics: Res<Statistics>,
+    mut finale: ResMut<crate::narrative::FinaleFound>,
     mut victory_state: ResMut<VictoryState>,
     mut next_state: ResMut<NextState<GameState>>,
-    mut notifications: MessageWriter<ShowNotification>,
 ) {
     if victory_state.achieved {
         return;
     }
 
-    // Victory requires reaching 2200m+ depth AND finding the final log.
-    // The [UNTITLED] log spawns at depth_level 20-23 (2000-2300m range).
-    if depth_state.current_depth >= 2200.0
-        && statistics.logs_found.iter().any(|l| l == "[UNTITLED]")
-    {
+    // Keyed by name through narrative::logs::FINALE_TITLE rather than a
+    // literal, because the last time this check owned its own copy of the
+    // string, the entry it named could not spawn and nobody noticed.
+    if finale.0 {
+        finale.0 = false;
         victory_state.achieved = true;
-        notifications.write(ShowNotification {
-            message: "You have reached the deepest point and uncovered the final truth. VICTORY!".into(),
-            notification_type: NotificationType::Success,
-            duration: 8.0,
-        });
-        next_state.set(GameState::GameOver);
+        // Straight into the sequence. No toast: the ending opens with its own
+        // victory screen, and a congratulatory popup in front of it would step
+        // on the one beat that has to land cleanly.
+        next_state.set(GameState::Truth);
     }
 }
 

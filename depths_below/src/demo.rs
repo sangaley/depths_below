@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 use bevy::render::view::window::screenshot::{save_to_disk, Screenshot};
 use crate::components::{Ship, ShipPhysics};
-use crate::resources::InputState;
-use crate::states::GameState;
+use crate::resources::{BuildCategory, BuildingState, InputState};
+use crate::states::{BuildState, GameState};
 use crate::ai_ship::components::{AiShip, WorldSimulation, SimBehavior};
 use crate::combat::targeting::selection::{TargetSelection, TargetType};
 use crate::combat::targeting::fire_groups::FireGroupState;
@@ -17,6 +17,28 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //                          straight into Exploring with the starter ship,
 //                          the normal 37-ship world simulation, and full
 //                          manual control (no autopilot).
+//   DEPTHS_SHOTS=<n>    — engine-side screenshot every n seconds during
+//                          NORMAL play: no autopilot, no menu skip, nothing
+//                          else changed. F7 takes one on demand. Captures the
+//                          render target, not the display, so it works while
+//                          the game is behind other windows and never
+//                          photographs whatever app happens to be in front.
+//                          Dir: DEPTHS_SHOTS_DIR (default /tmp/depths_shots).
+//   DEPTHS_CASCADE=0.85 — pin the story's progress level, so a late beat can
+//                          be looked at without an hour of flying first.
+//   DEPTHS_CASCADE_TRACE=1 — print the arc's state once a second.
+//   DEPTHS_BUILD_TAB=<name> — stop at the station, open build mode and select
+//                          that build tab, so the palette can be looked at
+//                          without clicking through to it. Name matches
+//                          BuildCategory::name() case-insensitively
+//                          ("structural", "life support", "hull").
+//   DEPTHS_BUILD_SLOT=<n> — with the above, park on slot n instead of the
+//                          first, to check the far end of a scrolling strip.
+//   DEPTHS_BUILD_LAUNCH=<s> — with the above, launch after s seconds with the
+//                          build menu still open. Build overlays are drawn in
+//                          world space and torn down by systems that only run
+//                          at the berth, so leaving that way is exactly how
+//                          they get stranded there.
 //   DEPTHS_MOVETEST=1   — bare movement sandbox: instant skip (no menu/
 //                          station flash), starter ship, manual control,
 //                          and NO AI ships spawned — just open space and
@@ -36,6 +58,159 @@ struct DemoAdvanceDelays {
     station: f32,
 }
 
+/// The build tab `DEPTHS_BUILD_TAB` asks for, if it names a real one.
+///
+/// Build mode is only reachable while docked and only by keypress, which made
+/// the palette the one screen that could not be photographed unattended. Two
+/// of the demo's blockers lived there -- a tab whose slots placed blocks other
+/// than their labels, and a whole category with no tab at all -- and neither
+/// was visible from a log line.
+fn requested_build_tab() -> Option<BuildCategory> {
+    let want = std::env::var("DEPTHS_BUILD_TAB").ok()?;
+    let want = want.trim().to_ascii_lowercase();
+    BuildCategory::ALL
+        .iter()
+        .copied()
+        .find(|c| c.name().to_ascii_lowercase() == want)
+        .or_else(|| {
+            warn!(
+                "DEPTHS_BUILD_TAB={want:?} matches no build category; expected one of {:?}",
+                BuildCategory::ALL.iter().map(|c| c.name()).collect::<Vec<_>>()
+            );
+            None
+        })
+}
+
+/// Hold at the station with the palette open on the requested tab.
+fn open_build_tab(
+    category: BuildCategory,
+    state: Res<State<GameState>>,
+    build_state: Res<State<BuildState>>,
+    mut next_build: ResMut<NextState<BuildState>>,
+    mut building: ResMut<BuildingState>,
+    mut done: Local<bool>,
+) {
+    if *done || *state.get() != GameState::StationDocked {
+        return;
+    }
+    let index = BuildCategory::ALL.iter().position(|c| *c == category);
+    let Some(index) = index else { return };
+    building.category_index = index;
+    // DEPTHS_BUILD_SLOT parks on one slot rather than the first, so a strip
+    // long enough to scroll can be checked at its far end.
+    building.selected_index = std::env::var("DEPTHS_BUILD_SLOT")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .unwrap_or(0);
+    if *build_state.get() == BuildState::Inactive {
+        next_build.set(BuildState::Placing);
+    }
+    *done = true;
+    info!(
+        "BUILD TAB MODE: docked, palette open on {} ({} items), slot {} = {}",
+        category.name(),
+        category.item_count(),
+        building.selected_index,
+        building.selection_name()
+    );
+}
+
+/// Counts what is actually resident, once a second, under DEPTHS_CENSUS=1.
+///
+/// The world holds dozens of ships but only simulates most of them as numbers;
+/// a hull becomes real entities inside RENDER_DISTANCE and is despawned again
+/// past DESPAWN_DISTANCE. Any argument about what enemy ships cost has to be
+/// about the resident count, not the fleet count, and the two are very
+/// different numbers.
+fn census(
+    time: Res<Time>,
+    mut next: Local<f32>,
+    ai: Query<(), With<AiShip>>,
+    owned: Query<(), With<crate::ai_ship::components::OwnedByAiShip>>,
+    hull: Query<&ChildOf, With<crate::components::HullSegment>>,
+    ai_roots: Query<Entity, With<AiShip>>,
+    navs: Query<&crate::crew::navigation::NavGrid>,
+    dead: Res<crate::crew::burial::DriftingDead>,
+    concealed: Query<(), With<crate::ai_ship::interior::Concealed>>,
+) {
+    *next -= time.delta_secs();
+    if *next > 0.0 {
+        return;
+    }
+    *next = 1.0;
+    let roots: std::collections::HashSet<Entity> = ai_roots.iter().collect();
+    let ai_hull = hull.iter().filter(|c| roots.contains(&c.parent())).count();
+    let nav_cells: usize = navs.iter().map(|n| n.cells.len()).sum();
+    let empty_navs = navs.iter().filter(|n| n.cells.is_empty()).count();
+    info!(
+        "CENSUS ships={} ai_modules={} ai_hull={} nav_grids={} nav_cells={} empty_grids={} concealed={} bodies={}",
+        ai.iter().count(),
+        owned.iter().count(),
+        ai_hull,
+        navs.iter().count(),
+        nav_cells,
+        empty_navs,
+        concealed.iter().count(),
+        dead.bodies.len()
+    );
+}
+
+/// Name every sprite sitting near the ship's origin, under DEPTHS_WHATSTHERE=1.
+///
+/// Built because three separate guesses at "what is that green thing in the
+/// middle of the screen" were all wrong, and counting green pixels in a
+/// screenshot was worse than useless -- it matched the main menu's own text
+/// and the red power numbers scattered over the hull.
+///
+/// An exclusive system so it can ask the world what components an entity
+/// actually carries. Component names need Bevy's `debug` feature to print;
+/// without it the colour, size and distance are still enough to identify a
+/// sprite in a codebase you can grep. `ViewVisibility` here is last frame's
+/// value, since it is computed in PostUpdate -- treat a hit as "exists and is
+/// probably drawn", then crop the frame and look before concluding anything.
+fn whats_there(world: &mut World) {
+    use bevy::ecs::system::SystemState;
+    let mut once: SystemState<(
+        Query<&GlobalTransform, With<Ship>>,
+        Query<(Entity, &Sprite, &GlobalTransform, &ViewVisibility)>,
+    )> = SystemState::new(world);
+    let Ok((ships, sprites)) = once.get(world) else { return };
+    let Ok(ship_gt) = ships.single() else { return };
+    let origin = ship_gt.translation().truncate();
+
+    let mut hits: Vec<(Entity, String, f32)> = Vec::new();
+    for (entity, sprite, gt, view) in sprites.iter() {
+        // Only what is actually drawn. Listing every sprite regardless caught
+        // four hidden footprint tiles parked at the origin and sent me after
+        // the wrong thing entirely.
+        if !view.get() {
+            continue;
+        }
+        let p = gt.translation().truncate();
+        let d = p.distance(origin);
+        if d > 60.0 {
+            continue;
+        }
+        let c = sprite.color.to_srgba();
+        hits.push((
+            entity,
+            format!(
+                "rgba({:.2},{:.2},{:.2},{:.2}) size={:?}",
+                c.red, c.green, c.blue, c.alpha, sprite.custom_size
+            ),
+            d,
+        ));
+    }
+
+    for (entity, desc, d) in hits {
+        let names: Vec<String> = world
+            .inspect_entity(entity)
+            .map(|infos| infos.map(|i| i.name().to_string()).collect())
+            .unwrap_or_default();
+        info!("WHATSTHERE {entity:?} d={d:.0} {desc}\n    components: {}", names.join(", "));
+    }
+}
+
 pub fn skip_ai_ship_spawn() -> bool {
     std::env::var("DEPTHS_MOVETEST").ok().as_deref() == Some("1")
 }
@@ -45,7 +220,52 @@ impl Plugin for DemoPlugin {
         let full_demo = std::env::var("DEPTHS_DEMO").ok().as_deref() == Some("1");
         let skip_menu = std::env::var("DEPTHS_SKIP_MENU").ok().as_deref() == Some("1");
         let move_test = skip_ai_ship_spawn();
-        if !full_demo && !skip_menu && !move_test {
+        let build_tab = requested_build_tab();
+        if std::env::var("DEPTHS_WHATSTHERE").ok().as_deref() == Some("1") {
+            app.add_systems(Update, whats_there.run_if(bevy::time::common_conditions::on_timer(
+                std::time::Duration::from_millis(900),
+            )));
+        }
+        if std::env::var("DEPTHS_CENSUS").ok().as_deref() == Some("1") {
+            app.add_systems(Update, census);
+        }
+        if !full_demo && !skip_menu && !move_test && build_tab.is_none() {
+            return;
+        }
+
+        // Stop at the station rather than launching: the palette only exists
+        // while docked, so advancing to Exploring would close the thing we
+        // came to look at.
+        if let Some(category) = build_tab {
+            if let Some(secs) = std::env::var("DEPTHS_BUILD_LAUNCH")
+                .ok()
+                .and_then(|v| v.trim().parse::<f32>().ok())
+            {
+                app.add_systems(Update, move |
+                    time: Res<Time>,
+                    state: Res<State<GameState>>,
+                    mut next: ResMut<NextState<GameState>>,
+                    mut waited: Local<f32>,
+                | {
+                    if *state.get() != GameState::StationDocked {
+                        return;
+                    }
+                    *waited += time.delta_secs();
+                    if *waited > secs {
+                        info!("BUILD TAB MODE: launching with the build menu open");
+                        next.set(GameState::Exploring);
+                    }
+                });
+            }
+            app.insert_resource(DemoAdvanceDelays { menu: 1.0, station: f32::INFINITY })
+                .add_systems(Update, demo_advance_states)
+                .add_systems(Update, move |
+                    state: Res<State<GameState>>,
+                    build_state: Res<State<BuildState>>,
+                    next_build: ResMut<NextState<BuildState>>,
+                    building: ResMut<BuildingState>,
+                    done: Local<bool>,
+                | open_build_tab(category, state, build_state, next_build, building, done));
             return;
         }
 
@@ -191,5 +411,84 @@ fn demo_screenshots(
     let path = format!("{}/frame_{:03}.png", dir, *index);
     *index += 1;
 
+    commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path));
+}
+
+// ============================================================================
+// ENGINE-SIDE CAPTURE — usable during ordinary play.
+//
+// The existing DEPTHS_DEMO capture is welded to the autopilot, which is no use
+// for photographing a session somebody is actually playing. This is the same
+// mechanism with nothing else attached.
+//
+// It matters that this is an engine capture rather than an OS screen grab.
+// `Screenshot::primary_window()` reads the render target, so the game can be
+// buried behind other windows and the frame still comes out clean and at the
+// render resolution. An OS grab photographs the display, which means it
+// catches whatever is actually in front — verified the hard way.
+// ============================================================================
+
+/// Marker so the capture plugin can be added unconditionally and cost nothing
+/// when neither the env var nor the key is used.
+pub struct CapturePlugin;
+
+#[derive(Resource)]
+struct CaptureState {
+    every: Option<f32>,
+    since: f32,
+    index: u32,
+    dir: String,
+}
+
+impl Plugin for CapturePlugin {
+    fn build(&self, app: &mut App) {
+        let every = std::env::var("DEPTHS_SHOTS")
+            .ok()
+            .and_then(|v| v.parse::<f32>().ok())
+            .filter(|v| *v > 0.0);
+        let dir = std::env::var("DEPTHS_SHOTS_DIR")
+            .unwrap_or_else(|_| "/tmp/depths_shots".to_string());
+        if every.is_some() {
+            info!("capture: every {}s into {}  (F7 for one now)", every.unwrap(), dir);
+        }
+        app.insert_resource(CaptureState { every, since: 0.0, index: 0, dir })
+            .add_systems(Update, capture_frames);
+    }
+}
+
+fn capture_frames(
+    mut commands: Commands,
+    time: Res<Time>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut st: ResMut<CaptureState>,
+) {
+    let on_demand = keys.just_pressed(KeyCode::F7);
+
+    let periodic = match st.every {
+        Some(every) => {
+            st.since += time.delta_secs();
+            if st.since >= every {
+                st.since = 0.0;
+                true
+            } else {
+                false
+            }
+        }
+        None => false,
+    };
+
+    if !on_demand && !periodic {
+        return;
+    }
+
+    if std::fs::create_dir_all(&st.dir).is_err() {
+        warn!("capture: cannot create {}", st.dir);
+        return;
+    }
+    let path = format!("{}/shot_{:04}.png", st.dir, st.index);
+    st.index += 1;
+    if on_demand {
+        info!("capture: {}", path);
+    }
     commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path));
 }

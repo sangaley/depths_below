@@ -821,6 +821,7 @@ pub enum BuildCategory {
     Storage,
     Crew,
     Utility,
+    Structural,
     Custom,
 }
 
@@ -836,6 +837,7 @@ impl BuildCategory {
         BuildCategory::Storage,
         BuildCategory::Crew,
         BuildCategory::Utility,
+        BuildCategory::Structural,
         BuildCategory::Custom,
     ];
 
@@ -851,6 +853,7 @@ impl BuildCategory {
             BuildCategory::Storage => "Storage",
             BuildCategory::Crew => "Crew",
             BuildCategory::Utility => "Utility",
+            BuildCategory::Structural => "Structural",
             BuildCategory::Custom => "Custom",
         }
     }
@@ -868,6 +871,28 @@ impl BuildCategory {
             BuildCategory::Storage => Some(ModuleCategory::Storage),
             BuildCategory::Crew => Some(ModuleCategory::Crew),
             BuildCategory::Utility => Some(ModuleCategory::Utility),
+            BuildCategory::Structural => Some(ModuleCategory::Structural),
+        }
+    }
+
+    /// What this tab actually offers, in slot order.
+    ///
+    /// Not simply `to_module_category().module_types()`: the Structural tab
+    /// hands its two angled plates to the Hull tab, which cycles them right
+    /// after the hull layers so you can wall a ship in without changing tabs.
+    /// Listing them in both places would put the same item under two labels.
+    ///
+    /// Hull and Custom own no modules, so they answer with nothing -- the Hull
+    /// tab's own items are HULL_LAYERS plus HULL_PLATING, resolved in
+    /// `current_selection`.
+    pub fn items(&self) -> &'static [ModuleType] {
+        match self {
+            BuildCategory::Hull | BuildCategory::Custom => &[],
+            BuildCategory::Structural => STRUCTURAL_PALETTE,
+            other => other
+                .to_module_category()
+                .map(|c| c.module_types())
+                .unwrap_or(&[]),
         }
     }
 
@@ -876,9 +901,7 @@ impl BuildCategory {
             // Outer, Inner, Hallway, Void, BulkheadDoor, then the angled plating.
             BuildCategory::Hull => HULL_LAYERS.len() + HULL_PLATING.len(),
             BuildCategory::Custom => 0, // No saved blueprints yet (will be expanded later)
-            other => other.to_module_category()
-                .map(|c| c.module_types().len())
-                .unwrap_or(0),
+            other => other.items().len(),
         }
     }
 }
@@ -900,6 +923,14 @@ pub struct BuildingState {
     pub is_valid_placement: bool,
     pub placement_reason: Option<String>,
     pub ghost_position: IVec2,
+    /// Is the cursor actually over a cell of the ship right now?
+    ///
+    /// `ghost_position` keeps its last value when the cursor leaves the hull,
+    /// and its initial value is (0, 0) -- the ship's own origin, which the
+    /// camera centres on. So the placement ghost sat pulsing in the exact
+    /// middle of the screen from the moment build mode opened, before the
+    /// player had pointed at anything.
+    pub cursor_on_grid: bool,
     /// When true, rotation was set by auto-rotate (will be overridden on ghost move).
     /// When false, user manually set rotation with R key.
     pub auto_rotated: bool,
@@ -922,6 +953,33 @@ const HULL_PLATING: [ModuleType; 2] = [
     ModuleType::AngledHullPlate,
 ];
 
+/// The Structural tab, in slot order: `ModuleCategory::Structural` minus the
+/// two angled plates that ride with the hull layers on the Hull tab.
+///
+/// This whole category had no tab. `BuildCategory` simply had no Structural
+/// variant, so the fifteen modules below -- flat armour plate among them, the
+/// plainest piece of defence in the game, worth 40 armour in
+/// `building::placement_armor_value` -- could not be built by any means.
+/// `structural_palette_matches_module_category` keeps this list and that one
+/// from drifting apart again.
+const STRUCTURAL_PALETTE: &[ModuleType] = &[
+    ModuleType::ArmorPlate,
+    ModuleType::CornerArmorPlate,
+    ModuleType::StaggeredArmorPlate,
+    ModuleType::HullBeam,
+    ModuleType::HullCorner,
+    ModuleType::Bulkhead,
+    ModuleType::PressureFrame,
+    ModuleType::AirlockValve,
+    ModuleType::AccessHatch,
+    ModuleType::ViewPort,
+    ModuleType::EmergencyBulkhead,
+    ModuleType::FirebreakWall,
+    ModuleType::StructuralBrace,
+    ModuleType::VibrationDamper,
+    ModuleType::ReinforcedJoint,
+];
+
 impl Default for BuildingState {
     fn default() -> Self {
         Self {
@@ -932,6 +990,7 @@ impl Default for BuildingState {
             is_valid_placement: false,
             placement_reason: None,
             ghost_position: IVec2::ZERO,
+            cursor_on_grid: false,
             auto_rotated: true,
         }
     }
@@ -958,16 +1017,12 @@ impl BuildingState {
                 BuildSelection::Module(ModuleType::HeavyMissile)
             }
             _ => {
-                if let Some(module_cat) = cat.to_module_category() {
-                    let types = module_cat.module_types();
-                    if types.is_empty() {
-                        BuildSelection::Module(ModuleType::StandardReactor)
-                    } else {
-                        let idx = self.selected_index % types.len();
-                        BuildSelection::Module(types[idx])
-                    }
-                } else {
+                let types = cat.items();
+                if types.is_empty() {
                     BuildSelection::Module(ModuleType::StandardReactor)
+                } else {
+                    let idx = self.selected_index % types.len();
+                    BuildSelection::Module(types[idx])
                 }
             }
         }
@@ -1719,5 +1774,80 @@ mod tests {
 
         // Back to the start after a full lap.
         assert!(matches!(state.current_selection(), BuildSelection::Hull(HullLayer::Outer)));
+    }
+
+    /// The Structural tab and the Structural module category must stay in
+    /// step, differing only by the two plates the Hull tab borrows.
+    ///
+    /// Two hand-written lists in two files is exactly the arrangement that
+    /// hid an entire category from the build menu in the first place.
+    #[test]
+    fn structural_palette_matches_module_category() {
+        let mut from_tab: Vec<&str> = STRUCTURAL_PALETTE
+            .iter()
+            .chain(HULL_PLATING.iter())
+            .map(|m| m.name())
+            .collect();
+        let mut from_category: Vec<&str> = ModuleCategory::Structural
+            .module_types()
+            .iter()
+            .map(|m| m.name())
+            .collect();
+        from_tab.sort_unstable();
+        from_category.sort_unstable();
+        assert_eq!(
+            from_tab, from_category,
+            "STRUCTURAL_PALETTE plus HULL_PLATING must cover the Structural \
+             category exactly -- anything only on the right is buildable \
+             nowhere, anything only on the left is offered twice"
+        );
+    }
+
+    /// Every tab must offer something, or players hit a dead panel.
+    #[test]
+    fn every_build_tab_has_items() {
+        for cat in BuildCategory::ALL {
+            if matches!(cat, BuildCategory::Custom) {
+                continue; // no saved blueprints yet, by design
+            }
+            assert!(
+                cat.item_count() > 0,
+                "{} tab is empty",
+                cat.name()
+            );
+        }
+    }
+
+    /// Slot widgets are spawned from `items()` and clicks resolve through
+    /// `current_selection`, so the two must index the same list.
+    #[test]
+    fn selection_walks_every_slot_of_every_tab() {
+        for (ci, cat) in BuildCategory::ALL.iter().enumerate() {
+            if matches!(cat, BuildCategory::Custom) {
+                continue;
+            }
+            let mut seen = Vec::new();
+            for i in 0..cat.item_count() {
+                let state = BuildingState {
+                    category_index: ci,
+                    selected_index: i,
+                    ..Default::default()
+                };
+                seen.push(state.selection_name());
+            }
+            let count = seen.len();
+            seen.sort_unstable();
+            seen.dedup();
+            assert_eq!(
+                seen.len(),
+                count,
+                "{} tab has {} slots but they resolve to {} distinct items -- \
+                 some slot places the same thing as another, or a label and \
+                 its block have drifted apart",
+                cat.name(),
+                count,
+                seen.len()
+            );
+        }
     }
 }

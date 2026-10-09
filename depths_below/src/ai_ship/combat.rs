@@ -25,6 +25,22 @@ use super::components::*;
 /// AiShipTarget.subsystem and re-picked when it's destroyed. Damage is
 /// resolved by impact geometry, so aiming a shot at your engine genuinely
 /// knocks out your engine. Empty-doctrine factions keep aiming centre-of-mass.
+/// Whether a ship should be shooting at all this tick.
+///
+/// Behaviour alone used to be the whole gate, and `ai_brain_system` skips
+/// destroyed ships entirely -- so a dead ship's behaviour froze at whatever it
+/// held when it died. Anything that went down fighting stayed `Engaging` and
+/// kept firing out of a hull the player had just been told was "derelict
+/// adrift, ripe for salvage". Salvage is the loop the demo is built around;
+/// being shot by the thing you came to board is not a difficulty curve.
+///
+/// A reactor meltdown is deliberately still armed: `tick_reactor_meltdown`
+/// only sets `is_destroyed` at detonation, so the eight seconds of berserk
+/// fire between breach and blast survive this check.
+fn ship_may_fire(behavior: &AiShipBehavior, state: &AiShipState) -> bool {
+    !state.is_destroyed && *behavior == AiShipBehavior::Engaging
+}
+
 pub fn ai_weapon_fire_system(
     time: Res<Time>,
     mut commands: Commands,
@@ -37,6 +53,7 @@ pub fn ai_weapon_fire_system(
         &mut AiShipTarget,
         &Children,
         Option<&super::power::AiPowerState>,
+        &AiShipState,
     ), With<AiShip>>,
     mut weapon_query: Query<(
         &mut Weapon,
@@ -83,8 +100,8 @@ pub fn ai_weapon_fire_system(
 
     let player_pos = player_query.single().ok().map(|t| t.translation.truncate());
 
-    for (ai_entity, ai_transform, ship_type, behavior, mut ai_target, children, ai_power) in ai_ships.iter_mut() {
-        if *behavior != AiShipBehavior::Engaging {
+    for (ai_entity, ai_transform, ship_type, behavior, mut ai_target, children, ai_power, state) in ai_ships.iter_mut() {
+        if !ship_may_fire(behavior, state) {
             continue;
         }
 
@@ -283,6 +300,7 @@ pub fn ai_weapon_fire_system(
                     weapon: child,
                     ship: ai_entity,
                     launch_cell: module.grid_position,
+                    launch_axis: module.rotation.facing_offset(),
                     muzzle,
                     launch_dir: Vec2::from_angle(
                         ai_transform.rotation.to_euler(EulerRot::ZYX).0 + module.rotation.facing_angle(),
@@ -323,16 +341,16 @@ fn aim_priority(faction: AiShipType) -> &'static [crate::components::ModuleCateg
     use AiShipType::*;
     match faction {
         // Elite mercs: disable your guns, then your drive — a clean takedown.
-        Blackwater => &[Weapons, Propulsion],
+        GildedThrone => &[Weapons, Propulsion],
         // Battleship doctrine: silence the guns, then crack the reactor.
-        IronTide => &[Weapons, Power],
+        TerranHegemony => &[Weapons, Power],
         // Deep-zone gatekeepers: kill your engines, strand you in the dark.
-        PressureKing => &[Propulsion, Weapons],
+        CorpseStars => &[Propulsion, Weapons],
         // Bosses: methodical — guns first, then the reactor for the kill.
-        Dreadnought => &[Weapons, Power],
-        VoidTitan => &[Power, Weapons],
+        EternalHegemony => &[Weapons, Power],
+        Shepherd => &[Power, Weapons],
         // Zealots: fixate on the reactor, a holy execution.
-        AbyssalCult => &[Power],
+        SynthesisCollective => &[Power],
         // Mindless ghosts / dumb swarm / everything else: centre of mass.
         _ => &[],
     }
@@ -613,7 +631,7 @@ fn is_engine_module(module: &Module) -> bool {
 /// tile is ground off. Shoot out the guns and the engines and the crew
 /// strikes colors: the ship stops fighting and drifts as an intact derelict.
 ///
-/// This is the anti-grind valve. An Iron Tide is 160 tiles x 500 HP — eighty
+/// This is the anti-grind valve. An Terran Hegemony is 160 tiles x 500 HP — eighty
 /// thousand hull HP, minutes of held fire — so before this the only kill
 /// anyone ever went for was sniping the reactor, and everything in between
 /// was a slog. Now a fight ends when you've taken the ship apart in the
@@ -634,7 +652,7 @@ pub fn check_ai_cripple(
         let (guns_alive, guns_total) = subsystem_tally(entity, children, &module_query, is_weapon_module);
         let (engines_alive, engines_total) = subsystem_tally(entity, children, &module_query, is_engine_module);
 
-        // An unarmed hull (GlassEye) is toothless by construction; an
+        // An unarmed hull (The Silence) is toothless by construction; an
         // engineless one is already adrift. Either way the ratio for a class
         // it never had must not read as "still fine".
         let toothless = guns_total == 0
@@ -646,7 +664,7 @@ pub fn check_ai_cripple(
         state.is_destroyed = true;
         let pos = transform.translation.truncate();
         notifications.write(ShowNotification {
-            message: format!("{:?} strikes colors - derelict adrift, ripe for salvage.", ship_type),
+            message: format!("{} strikes colors - derelict adrift, ripe for salvage.", faction_display_name(*ship_type)),
             notification_type: NotificationType::Success,
             duration: 4.0,
         });
@@ -664,7 +682,7 @@ pub fn check_ai_cripple(
 /// used to be an instant win, which made every fight a race to dig one hole
 /// — now it starts a countdown, and the dying ship spends it berserk (see
 /// tick_reactor_meltdown). Ships with a second live reactor just lose that
-/// one: redundancy is why a Dreadnought takes longer than a raider, instead
+/// one: redundancy is why a Eternal Hegemony takes longer than a raider, instead
 /// of raw hit points.
 pub fn check_ai_reactor_destruction(
     mut commands: Commands,
@@ -918,29 +936,60 @@ fn angle_proof_round(faction: AiShipType) -> KineticAmmoType {
     match faction {
         // Nothing exotic aboard — but a squash head doesn't need to get
         // through, and that's the whole trick.
-        RustSwarm | Drowned | Leviathan => KineticAmmoType::HESH,
+        RecursiveKingdom | BrokenChoir | StellarPreserve => KineticAmmoType::HESH,
         // Disciplined gunnery: a dart barely deflects at any angle.
-        Blackwater | IronTide => KineticAmmoType::APFSDS,
+        GildedThrone | TerranHegemony => KineticAmmoType::APFSDS,
         // Bio-organic and deep-zone: they have stranger things loaded.
-        AbyssalCult | PressureKing | GlassEye => KineticAmmoType::HESH,
+        SynthesisCollective | CorpseStars | TheSilence => KineticAmmoType::HESH,
         // Gravity does not care what angle you hit at.
-        Dreadnought | VoidTitan => KineticAmmoType::Singularity,
+        EternalHegemony | Shepherd => KineticAmmoType::Singularity,
     }
 }
 
 #[cfg(test)]
 mod gunnery_tests {
     use super::*;
+
+    fn state(destroyed: bool) -> AiShipState {
+        AiShipState { is_destroyed: destroyed, ..default() }
+    }
+
+    /// A ship that has struck its colors does not shoot.
+    ///
+    /// `check_ai_cripple` announces "derelict adrift, ripe for salvage" and
+    /// the game then invites the player to board it with F. It was still
+    /// firing the whole time, because the only gate was a behaviour field
+    /// that nothing updates after death.
+    #[test]
+    fn a_derelict_does_not_shoot() {
+        assert!(
+            !ship_may_fire(&AiShipBehavior::Engaging, &state(true)),
+            "a ship that struck its colors kept firing at the player"
+        );
+    }
+
+    /// The living still do.
+    #[test]
+    fn an_engaging_ship_shoots() {
+        assert!(ship_may_fire(&AiShipBehavior::Engaging, &state(false)));
+    }
+
+    /// And only the engaging ones. A patrolling ship is not firing at you.
+    #[test]
+    fn a_ship_not_engaging_holds_fire() {
+        assert!(!ship_may_fire(&AiShipBehavior::Patrolling, &state(false)));
+        assert!(!ship_may_fire(&AiShipBehavior::Dead, &state(false)));
+    }
     use crate::combat::impact::{obliquity, Obliquity};
     use crate::building::Block;
     use crate::components::HullMaterial;
     use bevy::math::{IVec2, Vec2};
 
     const ALL_FACTIONS: [AiShipType; 10] = [
-        AiShipType::Leviathan, AiShipType::AbyssalCult, AiShipType::Drowned,
-        AiShipType::PressureKing, AiShipType::GlassEye, AiShipType::IronTide,
-        AiShipType::Blackwater, AiShipType::RustSwarm, AiShipType::Dreadnought,
-        AiShipType::VoidTitan,
+        AiShipType::StellarPreserve, AiShipType::SynthesisCollective, AiShipType::BrokenChoir,
+        AiShipType::CorpseStars, AiShipType::TheSilence, AiShipType::TerranHegemony,
+        AiShipType::GildedThrone, AiShipType::RecursiveKingdom, AiShipType::EternalHegemony,
+        AiShipType::Shepherd,
     ];
 
     /// The point of switching is to stop skipping. Every faction's answer has
@@ -1029,18 +1078,21 @@ pub fn announce_kills(
     }
 }
 
+/// Kill-announcement flavour: the faction name plus what kind of hull it was.
+/// For the plain faction name use `faction_display_name`.
 fn faction_name(ship_type: AiShipType) -> &'static str {
     use AiShipType::*;
     match ship_type {
-        Leviathan => "Leviathan hauler",
-        AbyssalCult => "Cult hybrid",
-        Drowned => "Drowned hulk",
-        PressureKing => "Pressure King",
-        GlassEye => "Glass Eye",
-        IronTide => "Iron Tide",
-        Blackwater => "Blackwater merc",
-        RustSwarm => "Rust Swarm raider",
-        Dreadnought => "Dreadnought",
-        VoidTitan => "Void Titan",
+        StellarPreserve => "Stellar Preserve hauler",
+        SynthesisCollective => "Synthesis hybrid",
+        BrokenChoir => "Broken Choir hulk",
+        CorpseStars => "Corpse Stars vessel",
+        TheSilence => "Silent One",
+        TerranHegemony => "Hegemony battleship",
+        GildedThrone => "Gilded Throne merc",
+        RecursiveKingdom => "Recursive Kingdom raider",
+        EternalHegemony => "Eternal Hegemony",
+        Shepherd => "The Shepherd",
     }
 }
+

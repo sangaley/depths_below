@@ -9,6 +9,7 @@ pub mod wreck;
 mod scavenger;
 pub mod simulation;
 mod crew;
+pub mod interior;
 mod power;
 
 use bevy::prelude::*;
@@ -79,6 +80,16 @@ impl Plugin for AiShipPlugin {
                     combat::check_ai_cripple.after(combat::process_ai_ship_damage_system),
                     combat::tick_reactor_meltdown,
                     combat::ai_chain_reactions,
+                    // What an enemy shows of itself. Concealment runs first so
+                    // a ship spawned this frame is already dark before anyone
+                    // looks at it; the reveal runs after breaches are recorded
+                    // so a hole opens its surroundings on the frame it lands.
+                    interior::conceal_new_ai_interiors,
+                    interior::record_ai_breaches
+                        .after(combat::process_ai_ship_damage_system),
+                    interior::reveal_breached_interior
+                        .after(interior::record_ai_breaches)
+                        .after(interior::conceal_new_ai_interiors),
                 )
                     .run_if(in_state(GameState::Exploring)),
             );

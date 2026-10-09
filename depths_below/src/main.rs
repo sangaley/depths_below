@@ -6,11 +6,11 @@ mod events;
 mod states;
 mod ship;
 mod world;
-mod creatures;
 mod crew;
 mod building;
 mod ui;
 mod meta;
+mod narrative;
 mod contracts;
 mod combat;
 mod radar;
@@ -32,7 +32,6 @@ use events::EventsPlugin;
 use resources::InputState;
 use ship::ShipPlugin;
 use world::WorldPlugin;
-use creatures::CreaturePlugin;
 use crew::CrewPlugin;
 use building::BuildingPlugin;
 use ui::UiPlugin;
@@ -88,7 +87,6 @@ fn main() {
         .add_plugins((
             ShipPlugin,
             WorldPlugin,
-            CreaturePlugin,
             CrewPlugin,
             BuildingPlugin,
             UiPlugin,
@@ -106,11 +104,14 @@ fn main() {
         ))
         .add_plugins(SpatialPlugin)
         .add_plugins(DemoPlugin)
+        .add_plugins(demo::CapturePlugin)
         .add_plugins(AutoplayPlugin)
         .add_plugins(DebugPlugin)
         .add_plugins(GameAudioPlugin)
         .add_plugins(GamepadPlugin)
         .add_plugins(TutorialPlugin)
+        .add_plugins(narrative::NarrativePlugin)
+        .add_plugins(ship::towing::TowingPlugin)
 
         .run();
 }

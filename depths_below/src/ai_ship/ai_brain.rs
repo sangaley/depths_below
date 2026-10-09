@@ -16,12 +16,12 @@ use crate::spatial::CreatureGrid;
 /// farther threat instead of just fixating on whatever's closest.
 ///
 /// Only the "attack anything/anyone in range" arms — the ones already
-/// worded that way in each faction's own flavor text (Drowned, Iron Tide's
-/// generic engage, Blackwater's tactical engage, Rust Swarm, Dreadnought,
-/// Void Titan) — actually USE best_target for their fire-at-this position.
-/// Player-specific narrative behaviors (Abyssal Cult protecting creatures
-/// FROM the player, Pressure King ramming intruders out of their depth
-/// zone, Glass Eye's player-shadowing, Leviathan's flee-only) keep
+/// worded that way in each faction's own flavor text (Broken Choir, Terran Hegemony's
+/// generic engage, Gilded Throne's tactical engage, Recursive Kingdom, Eternal Hegemony,
+/// The Shepherd) — actually USE best_target for their fire-at-this position.
+/// Player-specific narrative behaviors (Synthesis Collective protecting creatures
+/// FROM the player, Corpse Stars ramming intruders out of their depth
+/// zone, The Silence's player-shadowing, Stellar Preserve's flee-only) keep
 /// targeting the player exactly as before — generalizing those would blur
 /// what makes each faction distinct.
 ///
@@ -196,7 +196,7 @@ pub fn ai_brain_system(
                 (e, d, t.translation.truncate(), c.creature_type)
             }));
 
-        // Only the Rust Swarm scorer consumes this — wide range so
+        // Only the Recursive Kingdom scorer consumes this — wide range so
         // scavenger waves spawned at the edge of the area actually smell
         // the carcass and burn inward; picked-clean wrecks don't count.
         let nearest_wreck = wreck_query.iter()
@@ -213,8 +213,8 @@ pub fn ai_brain_system(
             behavior: AiShipBehavior,
             destination: Option<Vec2>,
             /// Who/where to actually FIRE at — distinct from `destination`,
-            /// which is sometimes an offset (Blackwater's flank point,
-            /// Pressure King's ram-from-above point), not the target itself.
+            /// which is sometimes an offset (Gilded Throne's flank point,
+            /// Corpse Stars's ram-from-above point), not the target itself.
             target: Option<(Entity, Vec2)>,
         }
 
@@ -226,7 +226,7 @@ pub fn ai_brain_system(
         // (ai_distress_system set alert_target/alert_timer); converge on and
         // engage whoever they're fighting. This is what makes a whole patrol
         // pile onto the player once one of them is scrapping, without spawning
-        // any ships out of thin air. Non-combatants (GlassEye, Leviathan)
+        // any ships out of thin air. Non-combatants (The Silence, Stellar Preserve)
         // never answer. Scored at 93 — above a faction's ordinary engage
         // (78-90) but below its own critical-flee/kamikaze (95-100), so
         // self-preservation and each faction's signature move still win.
@@ -265,7 +265,7 @@ pub fn ai_brain_system(
             // LEVIATHAN RIDERS: Hunt creatures, avoid combat, flee when hurt
             // Prioritize: find creatures > capture > flee > patrol
             // ----------------------------------------------------------------
-            AiShipType::Leviathan => {
+            AiShipType::StellarPreserve => {
                 // Critical flee
                 if hull_pct < 0.25 || fuel_pct < 0.1 {
                     actions.push(ScoredAction {
@@ -316,7 +316,7 @@ pub fn ai_brain_system(
             // ABYSSAL CULT: Protect creatures, attack creature-killers,
             // kamikaze ram when below 20% HP, patrol sacred waters
             // ----------------------------------------------------------------
-            AiShipType::AbyssalCult => {
+            AiShipType::SynthesisCollective => {
                 // KAMIKAZE when critically damaged - ram nearest target
                 // Detection range must exceed the standoff (movement.rs) or
                 // the ship engages, immediately backs off past the trigger
@@ -390,11 +390,11 @@ pub fn ai_brain_system(
             // THE DROWNED: Mindless ghost ships. Attack everything in range.
             // No fleeing, no self-preservation. Erratic movement.
             // ----------------------------------------------------------------
-            AiShipType::Drowned => {
+            AiShipType::BrokenChoir => {
                 // Never flee - already dead, can't die again (narratively)
 
                 // Attack anything nearby (detection must exceed the
-                // standoff distance — see AbyssalCult kamikaze comment).
+                // standoff distance — see Synthesis Collective kamikaze comment).
                 // "Anything" is now literal: best_target, not just player.
                 if let Some((_, t_pos)) = best_target {
                     if pos.distance(t_pos) < engage_range {
@@ -445,7 +445,7 @@ pub fn ai_brain_system(
             // Attack anyone above 800m in their territory.
             // Ram intruders upward. Don't flee. Ignore shallow threats.
             // ----------------------------------------------------------------
-            AiShipType::PressureKing => {
+            AiShipType::CorpseStars => {
                 // Only active in deep void - idle near station
                 if depth < 600.0 {
                     actions.push(ScoredAction {
@@ -459,7 +459,7 @@ pub fn ai_brain_system(
                     // own flavor text says "anyone," not "the player"
                     // specifically. Mis-scoped player-only in an earlier
                     // pass; best_target fixes it (detection must exceed the
-                    // standoff — see Abyssal Cult's kamikaze comment).
+                    // standoff — see Synthesis Collective's kamikaze comment).
                     if let Some((t_entity, t_pos)) = best_target {
                         if pos.distance(t_pos) < engage_range {
                             // Position above the target to push it up
@@ -516,7 +516,7 @@ pub fn ai_brain_system(
             // GLASS EYE: Silent watchers. NEVER attack. Always flee.
             // Follow player from safe distance. Fastest flee speed.
             // ----------------------------------------------------------------
-            AiShipType::GlassEye => {
+            AiShipType::TheSilence => {
                 // If under fire, flee at maximum speed
                 if under_fire {
                     let flee_dest = if let Some((_, p_pos, _)) = player_info {
@@ -573,7 +573,7 @@ pub fn ai_brain_system(
             // Slow to maneuver. Never flees unless nearly destroyed.
             // Maximum aggression at close range.
             // ----------------------------------------------------------------
-            AiShipType::IronTide => {
+            AiShipType::TerranHegemony => {
                 // Only retreat at extreme damage
                 if hull_pct < 0.10 && fuel_pct < 0.15 {
                     actions.push(ScoredAction {
@@ -641,7 +641,7 @@ pub fn ai_brain_system(
             // BLACKWATER PMC: Tactical mercs. Hunt bounties (player if hostile).
             // Flank targets. Coordinate. Disengage when outmatched.
             // ----------------------------------------------------------------
-            AiShipType::Blackwater => {
+            AiShipType::GildedThrone => {
                 // Tactical retreat when damaged (live to fight another day)
                 if hull_pct < 0.30 {
                     let flee_dest = if let Some((_, p_pos, _)) = player_info {
@@ -709,7 +709,7 @@ pub fn ai_brain_system(
             // RUST SWARM: Aggressive junk. Attack anything nearby.
             // No self-preservation. Kamikaze when critical. Mine everything.
             // ----------------------------------------------------------------
-            AiShipType::RustSwarm => {
+            AiShipType::RecursiveKingdom => {
                 // KAMIKAZE when critical - charge at nearest/biggest target
                 // (best_target — genuinely "nearest target" now, not just
                 // whichever one happens to be the player)
@@ -773,7 +773,7 @@ pub fn ai_brain_system(
             // at all. Engages anything in an enormous detection range and
             // grinds it down with sheer weapon coverage.
             // ----------------------------------------------------------------
-            AiShipType::Dreadnought => {
+            AiShipType::EternalHegemony => {
                 // Under fire → retaliate against whoever actually shot them.
                 if under_fire {
                     if let Some((_, t_pos)) = attacker_target {
@@ -813,7 +813,7 @@ pub fn ai_brain_system(
             // VOID TITAN: The apex threat. Never flees, never hesitates — if
             // you're in range, it's already coming for you.
             // ----------------------------------------------------------------
-            AiShipType::VoidTitan => {
+            AiShipType::Shepherd => {
                 // "If you're in range, it's already coming for you" —
                 // whoever "you" is, via best_target.
                 if let Some((_, t_pos)) = best_target {

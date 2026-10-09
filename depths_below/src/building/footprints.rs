@@ -2,72 +2,92 @@ use bevy::prelude::IVec2;
 use crate::components::ModuleType;
 
 // ============================================================================
-// NON-RECTANGULAR FOOTPRINTS
-// Most modules occupy a plain WxH rectangle (ModuleDef.size). A handful can
-// instead occupy an explicit, non-rectangular set of cells within their
-// bounding box — this is the override table for those.
-// Offsets are relative to the module's origin cell (0,0) and get rotated the
-// same way rectangle corners do, so all 4 orientations fall out for free.
+// FOOTPRINTS
 //
-// Each shape here is picked because of what the module *does*, not because
-// the shape looks interesting — see MODULES.md for the reasoning per module.
+// Every module occupies the plain WxH rectangle its `ModuleDef.size` names.
+// What a block claims on the grid is exactly what its sprite covers, and the
+// two cannot disagree.
+//
+// There WAS a table here of non-rectangular shapes -- an L-tromino corner
+// plate, a T-tetromino sickbay and bridge wing, an S-tetromino staggered
+// plate, plus-pentomino hubs -- each picked for what the module does. They
+// read well on paper and badly on screen: `size` is the bounding box, so the
+// sprite covered six cells while a T-shaped sickbay owned four, and the two
+// corners it did not own were painted over the corridor beside it. Cutting
+// the art to the shape fixed the overlap and left blocks whose silhouette did
+// not match anything else on the hull. Squares won.
+//
+// The hook stays because it costs nothing and threading it back through
+// ShipGrid, navigation and the spawner would be the expensive part. Add a
+// shape here and `vfx::footprint_tiles` in the history (dd5674d) is the code
+// that cuts its art to match -- a non-rectangular block needs both or it
+// overlaps its neighbours again.
 // ============================================================================
 
-// L-tromino, notch open toward +x/+y (top-right of its 2x2 bounding box).
-// Used by corner-hugging armor and anything that wraps a hull corner.
-const L_TROMINO_A: [IVec2; 3] = [
-    IVec2::new(0, 0),
-    IVec2::new(1, 0),
-    IVec2::new(0, 1),
-];
+pub fn footprint_override(_module_type: ModuleType) -> Option<&'static [IVec2]> {
+    None
+}
 
-// L-tromino, notch open toward -x/-y (bottom-left) — the mirror orientation.
-// Used for the "long run + a nook" shape (galley corridor + dining nook,
-// cargo hold filling a leftover corner).
-const L_TROMINO_B: [IVec2; 3] = [
-    IVec2::new(0, 0),
-    IVec2::new(1, 0),
-    IVec2::new(1, 1),
-];
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::building::ShipGrid;
+    use std::collections::HashMap;
 
-// T-tetromino — a 3-wide bar with a single stem, 3x2 bounding box.
-// Used for "wide top for field of view / treatment area, narrow stem for
-// access back into the ship" (bridge wings, triage-to-treatment sickbay).
-const T_TETROMINO: [IVec2; 4] = [
-    IVec2::new(0, 0),
-    IVec2::new(1, 0),
-    IVec2::new(2, 0),
-    IVec2::new(1, 1),
-];
+    /// No two modules may claim the same cell, on any ship anyone flies.
+    ///
+    /// Worth a test because the footprint table moved three times in a day —
+    /// L and T shapes in, then out again — and every change alters how many
+    /// cells a block claims. Growing a Bridge Wing from four cells to six put
+    /// it on top of a Memory Core on the crab and a Tractor Beam on the
+    /// pincer, and nothing failed: `ShipGrid` just lets one win the cell, so
+    /// the loser is a block you paid for that quietly does nothing.
+    ///
+    /// `starter_pre_*` are archived snapshots of older ships and are skipped
+    /// on purpose — they are history, not something anyone flies.
+    #[test]
+    fn no_design_stacks_two_modules_in_one_cell() {
+        let registry = crate::building::registry::build_registry();
+        let mut checked = 0;
 
-// S-tetromino — offset zigzag, 3x2 bounding box.
-// Used for staggered armor plating: no single straight seam runs through it.
-const S_TETROMINO: [IVec2; 4] = [
-    IVec2::new(0, 0),
-    IVec2::new(1, 0),
-    IVec2::new(1, 1),
-    IVec2::new(2, 1),
-];
+        let mut check = |label: &str, design: &crate::building::blueprint::Blueprint| {
+            let mut owner: HashMap<bevy::prelude::IVec2, crate::components::ModuleType> =
+                HashMap::new();
+            for m in &design.modules {
+                let def = registry.get(m.module_type);
+                for cell in ShipGrid::cells_for(
+                    m.grid_pos,
+                    def.size,
+                    m.rotation,
+                    footprint_override(m.module_type),
+                ) {
+                    if let Some(other) = owner.insert(cell, m.module_type) {
+                        panic!(
+                            "{label}: {:?} at {:?} claims {cell:?}, already taken by {other:?}",
+                            m.module_type, m.grid_pos
+                        );
+                    }
+                }
+            }
+            checked += 1;
+        };
 
-// Plus/cross pentomino — center + all 4 cardinal neighbors, 3x3 bounding box.
-// Used for true multi-directional hubs (multiple simultaneous docking
-// connections, a la ISS node modules) — not a routing/logistics network,
-// just a room with more than one "side."
-const PLUS_PENTOMINO: [IVec2; 5] = [
-    IVec2::new(1, 0),
-    IVec2::new(0, 1),
-    IVec2::new(1, 1),
-    IVec2::new(2, 1),
-    IVec2::new(1, 2),
-];
-
-pub fn footprint_override(module_type: ModuleType) -> Option<&'static [IVec2]> {
-    match module_type {
-        ModuleType::CornerArmorPlate => Some(&L_TROMINO_A),
-        ModuleType::GalleyMess | ModuleType::BulkCargoHold => Some(&L_TROMINO_B),
-        ModuleType::BridgeWing | ModuleType::SurgicalBay => Some(&T_TETROMINO),
-        ModuleType::StaggeredArmorPlate => Some(&S_TETROMINO),
-        ModuleType::DockingHub | ModuleType::WellnessHub => Some(&PLUS_PENTOMINO),
-        _ => None,
+        check("builtin starter", &crate::ship::builtin_starter_design());
+        let mut files: Vec<_> = std::fs::read_dir("designs")
+            .expect("designs/")
+            .chain(std::fs::read_dir("designs/factions").expect("designs/factions/"))
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.extension().is_some_and(|x| x == "json"))
+            .filter(|p| !p.to_string_lossy().contains("starter_pre_"))
+            .collect();
+        files.sort();
+        for path in files {
+            let name = path.to_string_lossy().to_string();
+            let Some(design) = crate::building::blueprint::load_design_file(&name) else {
+                panic!("{name} will not parse");
+            };
+            check(&name, &design);
+        }
+        assert!(checked > 10, "expected every shipped design, checked {checked}");
     }
 }

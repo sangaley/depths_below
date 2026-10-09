@@ -146,7 +146,7 @@ pub fn mission_board_input(
     viewing: Res<ViewingStation>,
     mut state: ResMut<ContractState>,
     mut selection: ResMut<MissionBoardSelection>,
-    currency: Res<Currency>,
+    mut currency: ResMut<Currency>,
     mut sim: ResMut<WorldSimulation>,
     mut accepted_events: MessageWriter<ContractAccepted>,
     mut notifications: MessageWriter<ShowNotification>,
@@ -182,6 +182,12 @@ pub fn mission_board_input(
                 });
                 return;
             }
+
+            // Actually take it. The check above existed but nothing was ever
+            // deducted, so accepting a contract was a free option with a
+            // downside only if you died — there was no reason not to take
+            // every job on the board.
+            currency.credits = currency.credits.saturating_sub(deposit);
 
             let mut contract = state.board_mut(viewing.0).remove(selection.index);
             contract.status = ContractStatus::Active;

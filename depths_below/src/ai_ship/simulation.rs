@@ -12,6 +12,14 @@ use super::spawner;
 /// ai_ship::movement). 10,000 means a ship materializes as a real entity
 /// before the player is even in its weapon range, instead of after.
 const RENDER_DISTANCE: f32 = 10_000.0;
+
+/// How many AI hulls may exist as real entities at once.
+///
+/// Each one is a full ship — hull cells, modules, decking, crew — so this is
+/// a frame-time budget, not a gameplay limit: everything past it stays in the
+/// simulation, still moving and still fighting, and materialises as soon as a
+/// slot frees. Nearest to the player wins the slot.
+const MAX_LIVE_AI_HULLS: usize = 8;
 /// Distance at which spawned entities get converted back to simulation. Was
 /// 3500 — well inside the new ~8,160 max standoff distance, so a ship
 /// holding a long-range fight would get yanked back to an abstract
@@ -37,68 +45,48 @@ pub fn init_world_simulation(
     // ai_weapon_fire_system) close enough to immediately engage, so the
     // standoff/orbit "keep distance" behavior in ai_ship_movement_system can
     // be watched in isolation without the rest of the world simulation.
-    // Drowned, not IronTide: IronTide is a ~10x16-cell battleship with a
+    // Broken Choir, not Terran Hegemony: Terran Hegemony is a ~10x16-cell battleship with a
     // full hull shell around every module — with the 45-unit "nearest
     // block" hit radius, shots just kept landing on whatever hull was
     // closest across that huge surface and never punched through to a
-    // module, which read as "modules are invincible". Drowned is much
+    // module, which read as "modules are invincible". Broken Choir is much
     // smaller (~6x10) while still holding a real standoff distance
-    // (unlike RustSwarm, which rams point-blank).
+    // (unlike Recursive Kingdom, which rams point-blank).
     if crate::demo::skip_ai_ship_spawn() {
         if std::env::var("DEPTHS_MOVETEST_ENEMY").ok().as_deref() == Some("1") {
             // DEPTHS_MOVETEST_ENEMY_FACTION overrides the dummy's faction for
-            // behavior-tree testing (e.g. "GlassEye", "IronTide") — defaults
-            // to Drowned for the original damage-model testing use case.
+            // behavior-tree testing (e.g. "The Silence", "Terran Hegemony") — defaults
+            // to Broken Choir for the original damage-model testing use case.
             let faction = match std::env::var("DEPTHS_MOVETEST_ENEMY_FACTION").ok().as_deref() {
-                Some("Leviathan") => AiShipType::Leviathan,
-                Some("AbyssalCult") => AiShipType::AbyssalCult,
-                Some("PressureKing") => AiShipType::PressureKing,
-                Some("GlassEye") => AiShipType::GlassEye,
-                Some("IronTide") => AiShipType::IronTide,
-                Some("Blackwater") => AiShipType::Blackwater,
-                Some("RustSwarm") => AiShipType::RustSwarm,
-                _ => AiShipType::Drowned,
+                Some("StellarPreserve") => AiShipType::StellarPreserve,
+                Some("SynthesisCollective") => AiShipType::SynthesisCollective,
+                Some("CorpseStars") => AiShipType::CorpseStars,
+                Some("TheSilence") => AiShipType::TheSilence,
+                Some("TerranHegemony") => AiShipType::TerranHegemony,
+                Some("GildedThrone") => AiShipType::GildedThrone,
+                Some("RecursiveKingdom") => AiShipType::RecursiveKingdom,
+                _ => AiShipType::BrokenChoir,
             };
-            sim.ships.push(SimulatedShip {
-                system_id: 0,
-                faction,
-                position: Vec2::new(500.0, 0.0),
-                velocity: Vec2::ZERO,
-                health: 1.0,
-                fuel: 1.0,
-                behavior: SimBehavior::Patrolling,
-                home_zone: Vec2::new(500.0, 0.0),
-                patrol_radius: 2000.0,
-                spawned: false,
-                bounty_id: None,
-            });
+            sim.ships.push(SimulatedShip::patrolling(
+                0, faction, Vec2::new(500.0, 0.0), Vec2::new(500.0, 0.0), 2000.0, 0.0,
+            ));
             info!("MOVETEST: single non-shooting {:?} dummy spawned at (500, 0) for damage-model testing", faction);
         }
 
         // TEMP [AI_VS_AI_DIAGNOSTIC]: spawns a tight cluster of guaranteed
-        // combat-capable ships (alternating Iron Tide / Rust Swarm / Drowned
-        // / Blackwater, all "attack anything in range" factions per
+        // combat-capable ships (alternating Terran Hegemony / Recursive Kingdom / Broken Choir
+        // / Gilded Throne, all "attack anything in range" factions per
         // ai_brain.rs) close enough together to be within engage range from
         // the start, for headlessly verifying AI-vs-AI combat actually
         // lands hits. Remove once the diagnosis is confirmed.
         if let Ok(count) = std::env::var("DEPTHS_AI_VS_AI_TEST").unwrap_or_default().parse::<usize>() {
-            let factions = [AiShipType::IronTide, AiShipType::RustSwarm, AiShipType::Drowned, AiShipType::Blackwater];
+            let factions = [AiShipType::TerranHegemony, AiShipType::RecursiveKingdom, AiShipType::BrokenChoir, AiShipType::GildedThrone];
             for i in 0..count {
                 let angle = (i as f32 / count as f32) * std::f32::consts::TAU;
                 let pos = Vec2::new(angle.cos(), angle.sin()) * 400.0;
-                sim.ships.push(SimulatedShip {
-                    system_id: 0,
-                    faction: factions[i % factions.len()],
-                    position: pos,
-                    velocity: Vec2::ZERO,
-                    health: 1.0,
-                    fuel: 1.0,
-                    behavior: SimBehavior::Patrolling,
-                    home_zone: pos,
-                    patrol_radius: 2000.0,
-                    spawned: false,
-                    bounty_id: None,
-                });
+                sim.ships.push(SimulatedShip::patrolling(
+                    0, factions[i % factions.len()], pos, pos, 2000.0, 0.0,
+                ));
             }
             info!("AI_VS_AI_TEST: spawned {} combat-capable ships in a 400u cluster", count);
         }
@@ -155,29 +143,104 @@ fn spawn_system_faction_population(sim: &mut WorldSimulation, system: &crate::ce
     let mut rng = rand::thread_rng();
     let cluster_center = crate::celestial::galaxy::faction_cluster_center(system);
 
-    for _ in 0..template.ship_count {
+    // How many, and arranged how.
+    //
+    // This used to drop `ship_count` ships uniformly inside ONE disc of
+    // radius*0.8 around a single point, which gave every system the same
+    // shape: a single clump of four-to-eight dots, most of them outside the
+    // 10,000-unit materialisation bubble, none of them anywhere in
+    // particular. Reported as "way too low and way too close to each other".
+    //
+    // Now the population is split into ELEMENTS — lone ships, pairs, and
+    // packs of three to five — and each element is placed in its own distance
+    // band. A pack flies in close company; the bands put some elements on top
+    // of the faction's holdings and others out at the edge of the territory,
+    // so the spacing between them is genuinely uneven rather than uniform.
+    let count = system_ship_count(template.ship_count, system.danger_tier);
+    let mut placed = 0usize;
+    while placed < count {
+        // Weighted so loners and pairs are common and a real pack is an event.
+        let roll = rng.gen::<f32>();
+        let size = if roll < 0.40 { 1 } else if roll < 0.70 { 2 } else { rng.gen_range(3..=5) };
+        let size = size.min(count - placed);
+
+        // Three bands rather than a uniform draw: uniform-in-a-disc actually
+        // concentrates toward the rim, which is the opposite of varied.
+        let band = match rng.gen_range(0..3) {
+            0 => rng.gen_range(0.10..0.30),
+            1 => rng.gen_range(0.35..0.60),
+            _ => rng.gen_range(0.65..0.95),
+        };
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-        let dist = rng.gen_range(0.0..template.radius * 0.8);
-        let pos = cluster_center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
+        let anchor = cluster_center
+            + Vec2::new(angle.cos(), angle.sin()) * (template.radius * band);
 
-        let patrol_angle = rng.gen_range(0.0..std::f32::consts::TAU);
-        let vel = Vec2::new(patrol_angle.cos(), patrol_angle.sin()) * 30.0;
+        // One speed for the element, so a pack holds formation instead of
+        // smearing out over the first leg.
+        let cruise = rng.gen_range(55.0..130.0);
+        let destination = patrol_waypoint(&mut rng, cluster_center, template.radius);
 
-        sim.ships.push(SimulatedShip {
-            system_id: system.id,
-            faction,
-            position: pos,
-            velocity: vel,
-            health: 1.0,
-            fuel: 1.0,
-            behavior: SimBehavior::Patrolling,
-            home_zone: cluster_center,
-            patrol_radius: template.radius,
-            spawned: false,
-            bounty_id: None,
-        });
+        for _ in 0..size {
+            let spread = if size == 1 { 0.0 } else { rng.gen_range(120.0..420.0) };
+            let a = rng.gen_range(0.0..std::f32::consts::TAU);
+            let pos = anchor + Vec2::new(a.cos(), a.sin()) * spread;
+            let mut ship = SimulatedShip::patrolling(
+                system.id,
+                faction,
+                pos,
+                cluster_center,
+                template.radius,
+                cruise * rng.gen_range(0.92..1.08),
+            );
+            ship.destination = destination;
+            sim.ships.push(ship);
+        }
+        placed += size;
     }
 }
+
+/// How many hulls a system's faction keeps on station.
+///
+/// The template count is the shallow-system baseline; `danger_tier` is the
+/// authored near-weak/far-strong curve, so a deep hostile system is busier
+/// than a border one instead of every system fielding the same handful.
+pub fn system_ship_count(template_count: usize, danger_tier: f32) -> usize {
+    let scale = 1.0 + (danger_tier / 100.0).clamp(0.0, 2.0);
+    ((template_count as f32 * 2.2 * scale).round() as usize).clamp(6, 40)
+}
+
+/// Close enough to call it arrived, and to pick the next leg.
+const ARRIVE_RADIUS: f32 = 450.0;
+
+/// Where a ship goes next.
+///
+/// Two in five legs head for something that matters — a station, a berth,
+/// whatever the loaded system put on the board — approached to a loose
+/// standoff rather than parked on top of it. The rest are ordinary patrol
+/// legs inside the territory. The mix is the point: traffic that only ever
+/// visited stations would read as a conveyor belt, and traffic that never did
+/// is the random walk this replaced.
+fn next_waypoint(rng: &mut impl Rng, ship: &SimulatedShip, anchors: &[Vec2]) -> Vec2 {
+    if !anchors.is_empty() && rng.gen::<f32>() < 0.4 {
+        let anchor = anchors[rng.gen_range(0..anchors.len())];
+        let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+        let standoff = rng.gen_range(600.0..2200.0);
+        let want = anchor + Vec2::new(angle.cos(), angle.sin()) * standoff;
+        // Only if it is somewhere this ship is allowed to be.
+        if want.distance(ship.home_zone) <= ship.patrol_radius {
+            return want;
+        }
+    }
+    patrol_waypoint(rng, ship.home_zone, ship.patrol_radius)
+}
+
+/// A point worth flying to inside a territory, for a ship with no better idea.
+fn patrol_waypoint(rng: &mut impl Rng, center: Vec2, radius: f32) -> Vec2 {
+    let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+    let dist = rng.gen_range(0.15..0.95) * radius;
+    center + Vec2::new(angle.cos(), angle.sin()) * dist
+}
+
 
 /// Tick the off-screen simulation: move ships, resolve encounters. Only
 /// ships in the Hot (loaded) or Warm (nearest-neighbor) systems actually
@@ -193,6 +256,7 @@ pub fn tick_world_simulation(
     time: Res<Time>,
     mut sim: ResMut<WorldSimulation>,
     streaming: Res<crate::celestial::resources::SystemStreamingManager>,
+    stations: Res<crate::world::home_base::SystemStations>,
 ) {
     sim.tick_timer.tick(time.delta());
     if !sim.tick_timer.just_finished() {
@@ -201,6 +265,12 @@ pub fn tick_world_simulation(
 
     let dt = sim.tick_timer.duration().as_secs_f32();
     let mut rng = rand::thread_rng();
+
+    // What is worth being near, in the system the player is actually in.
+    // Patrols and raiders both gravitate to the same places a player does,
+    // which is what makes the traffic read as purposeful rather than as
+    // Brownian motion over an empty map.
+    let anchors: Vec<Vec2> = stations.sites.iter().map(|s| s.pos).collect();
 
     let is_active_system = |system_id: u32| {
         streaming.loaded_system == Some(system_id) || streaming.warm_systems.contains(&system_id)
@@ -218,25 +288,30 @@ pub fn tick_world_simulation(
             continue;
         }
 
-        // Move
+        // Steer for the destination, arrive, pick another.
+        //
+        // This was a random walk: a fixed 30 u/s shoved by a random turn on
+        // one tick in ten. Net displacement over a minute was close to zero,
+        // which is why the map read as dots that "barely move". A ship now
+        // holds a course for somewhere, and the somewhere is chosen below.
+        let to_dest = ship.destination - ship.position;
+        let remaining = to_dest.length();
+        if remaining <= ARRIVE_RADIUS {
+            ship.destination = next_waypoint(&mut rng, ship, &anchors);
+        } else {
+            // Turn toward the bearing rather than snapping to it, so a course
+            // change reads as a turn and packs stay roughly in company.
+            let want = to_dest / remaining * ship.cruise;
+            ship.velocity = (ship.velocity * 0.75 + want * 0.25).clamp_length_max(ship.cruise);
+        }
+
         ship.position += ship.velocity * dt;
         ship.fuel = (ship.fuel - 0.001 * dt).max(0.0);
 
-        // Drift back toward home zone if too far. Was a flat 2500.0 for
-        // every ship regardless of its actual territory size — see
-        // SimulatedShip::patrol_radius doc comment.
-        let home_dist = ship.position.distance(ship.home_zone);
-        if home_dist > ship.patrol_radius {
-            let toward_home = (ship.home_zone - ship.position).normalize_or_zero();
-            ship.velocity = ship.velocity * 0.95 + toward_home * 20.0;
-        }
-
-        // Random course changes
-        if rng.gen::<f32>() < 0.1 {
-            let turn = rng.gen_range(-0.5..0.5);
-            let speed = ship.velocity.length().max(20.0);
-            let angle = ship.velocity.y.atan2(ship.velocity.x) + turn;
-            ship.velocity = Vec2::new(angle.cos(), angle.sin()) * speed;
+        // The leash still applies: a destination outside the territory, or a
+        // ship shoved out of it by combat, gets pulled back.
+        if ship.position.distance(ship.home_zone) > ship.patrol_radius {
+            ship.destination = patrol_waypoint(&mut rng, ship.home_zone, ship.patrol_radius * 0.6);
         }
 
         // Fuel exhaustion
@@ -342,12 +417,12 @@ pub fn spawn_raider_waves(
     let mut rng = rand::thread_rng();
 
     let faction = match rng.gen_range(0..3) {
-        0 => AiShipType::RustSwarm,   // swarm of junk ships
-        1 => AiShipType::Blackwater,  // tactical mercs
-        _ => AiShipType::Drowned,     // erratic ghost ships
+        0 => AiShipType::RecursiveKingdom,   // swarm of junk ships
+        1 => AiShipType::GildedThrone,  // tactical mercs
+        _ => AiShipType::BrokenChoir,     // erratic ghost ships
     };
     let count = match faction {
-        AiShipType::RustSwarm => rng.gen_range(3..=5),
+        AiShipType::RecursiveKingdom => rng.gen_range(3..=5),
         _ => rng.gen_range(2..=3),
     };
 
@@ -359,20 +434,18 @@ pub fn spawn_raider_waves(
         let angle = approach_angle + jitter;
         let dist = rng.gen_range(2200.0..3200.0);
         let pos = player_pos + Vec2::new(angle.cos(), angle.sin()) * dist;
-        let toward_player = (player_pos - pos).normalize_or_zero() * 60.0;
-        sim.ships.push(SimulatedShip {
-            system_id: streaming.loaded_system.unwrap_or(0),
+        let mut raider = SimulatedShip::patrolling(
+            streaming.loaded_system.unwrap_or(0),
             faction,
-            position: pos,
-            velocity: toward_player,
-            health: 1.0,
-            fuel: 1.0,
-            behavior: SimBehavior::Patrolling,
-            home_zone: player_pos,
-            patrol_radius: 5000.0,
-            spawned: false,
-            bounty_id: None,
-        });
+            pos,
+            player_pos,
+            5000.0,
+            rng.gen_range(70.0..110.0),
+        );
+        // A raid is the one case that already knows where it is going.
+        raider.velocity = (player_pos - pos).normalize_or_zero() * 60.0;
+        raider.destination = player_pos;
+        sim.ships.push(raider);
     }
 
     notifications.write(crate::events::ShowNotification {
@@ -394,15 +467,30 @@ pub fn sync_simulation_entities(
     let Ok(player_transform) = ship_query.single() else { return };
     let player_pos = player_transform.translation.truncate();
 
-    // Spawn ships that entered render distance
-    for sim_ship in sim.ships.iter_mut() {
-        if sim_ship.spawned || sim_ship.behavior == SimBehavior::Dead {
-            continue;
-        }
+    // Spawn ships that entered render distance, NEAREST FIRST and only up to
+    // the budget.
+    //
+    // An AI ship is not a sprite: it is a hull, its modules, its decking and
+    // its crew, the same as the player's. A dozen inside the bubble at once is
+    // thousands of entities. The population was small enough that this never
+    // came up; now that a system can field forty, the bubble needs a ceiling
+    // or a busy system turns into a slideshow the moment you fly into the
+    // middle of it. The rest stay simulated and keep moving — they are still
+    // there, still fighting each other, just not built yet.
+    let live = ai_ships.iter().count();
+    if live < MAX_LIVE_AI_HULLS {
+        let mut candidates: Vec<(usize, f32)> = sim
+            .ships
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| !s.spawned && s.behavior != SimBehavior::Dead)
+            .map(|(i, s)| (i, s.position.distance(player_pos)))
+            .filter(|(_, d)| *d < RENDER_DISTANCE)
+            .collect();
+        candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        let dist = sim_ship.position.distance(player_pos);
-        if dist < RENDER_DISTANCE {
-            // Spawn as real entity
+        for (index, _) in candidates.into_iter().take(MAX_LIVE_AI_HULLS - live) {
+            let Some(sim_ship) = sim.ships.get_mut(index) else { continue };
             let root = spawner::spawn_ai_ship(
                 sim_ship.faction,
                 sim_ship.position,
@@ -467,3 +555,108 @@ pub fn sync_simulation_entities(
     }
 }
 
+
+#[cfg(test)]
+mod population_tests {
+    use super::*;
+
+    /// A system's population must not be one clump.
+    ///
+    /// The old spawn put every ship in one disc around a single point, which
+    /// is what "way too close to each other" was describing. This asserts the
+    /// shape the replacement is supposed to have: several separate elements,
+    /// at genuinely different distances from the centre, with pack-sized
+    /// groups among them.
+    #[test]
+    fn a_system_is_populated_in_separated_groups() {
+        let mut sim = WorldSimulation::default();
+        let system = crate::celestial::resources::StarSystemDef {
+            id: 7,
+            name: "test".into(),
+            galaxy_pos: Vec2::ZERO,
+            local_center: Vec2::ZERO,
+            seed: 1,
+            faction: Some(AiShipType::RecursiveKingdom),
+            danger_tier: 60.0,
+            discovery: crate::celestial::resources::SystemDiscovery::Visited,
+            last_updated: 0.0,
+            resource_fraction_remaining: 1.0,
+        };
+        spawn_system_faction_population(&mut sim, &system);
+        let ships = &sim.ships;
+        assert!(ships.len() >= 20, "only {} ships spawned", ships.len());
+
+        let centre = crate::celestial::galaxy::faction_cluster_center(&system);
+        let mut bands: Vec<f32> = ships.iter().map(|s| s.position.distance(centre)).collect();
+        bands.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let spread = bands[bands.len() - 1] - bands[0];
+        assert!(
+            spread > 4_000.0,
+            "every ship sits at much the same range from the centre ({spread:.0} units between \
+             nearest and furthest) — that is the single clump this replaced"
+        );
+
+        // Clustering: for each ship, how far is its nearest neighbour? A mix
+        // means some are in company and some are genuinely alone.
+        let mut nearest: Vec<f32> = Vec::new();
+        for (i, a) in ships.iter().enumerate() {
+            let d = ships
+                .iter()
+                .enumerate()
+                .filter(|(j, _)| *j != i)
+                .map(|(_, b)| a.position.distance(b.position))
+                .fold(f32::MAX, f32::min);
+            nearest.push(d);
+        }
+        nearest.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let tightest = nearest[0];
+        let loneliest = nearest[nearest.len() - 1];
+        println!(
+            "nearest-neighbour spread: {:.0} .. {:.0} (median {:.0}) over {} ships",
+            tightest, loneliest, nearest[nearest.len() / 2], ships.len()
+        );
+        // Scale-free: what matters is that the spacing VARIES, not the units.
+        // A uniform scatter gives every ship much the same nearest neighbour;
+        // packs-and-loners gives a wide ratio between the tightest and the
+        // most isolated.
+        assert!(
+            loneliest > tightest * 4.0,
+            "spacing is uniform — tightest neighbour {tightest:.0}, loneliest {loneliest:.0}. \
+             That is the even scatter this replaced, not packs and loners"
+        );
+    }
+
+    /// Patrols have to actually go somewhere. The old random walk left a ship
+    /// roughly where it started however long you watched it.
+    #[test]
+    fn a_patrol_covers_ground() {
+        let mut rng = rand::thread_rng();
+        let home = Vec2::ZERO;
+        let mut ship = SimulatedShip::patrolling(1, AiShipType::GildedThrone, home, home, 12_000.0, 90.0);
+        ship.destination = Vec2::new(6_000.0, 0.0);
+        let start = ship.position;
+
+        // Two minutes of 2-second ticks, steering the way the real tick does.
+        for _ in 0..60 {
+            let to_dest = ship.destination - ship.position;
+            let remaining = to_dest.length();
+            if remaining <= ARRIVE_RADIUS {
+                ship.destination = next_waypoint(&mut rng, &ship, &[]);
+            } else {
+                let want = to_dest / remaining * ship.cruise;
+                ship.velocity = (ship.velocity * 0.75 + want * 0.25).clamp_length_max(ship.cruise);
+            }
+            ship.position += ship.velocity * 2.0;
+        }
+
+        let travelled = ship.position.distance(start);
+        assert!(
+            travelled > 3_000.0,
+            "two minutes of patrol moved the ship {travelled:.0} units — it is loitering, not patrolling"
+        );
+        assert!(
+            ship.position.distance(home) <= 12_000.0,
+            "patrol left its territory"
+        );
+    }
+}

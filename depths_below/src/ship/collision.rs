@@ -596,11 +596,11 @@ pub fn resolve_collisions(
             let energy =
                 ((approach - DAMAGE_MIN_SPEED) * DAMAGE_SCALE * mass_factor).min(DAMAGE_CAP);
             // Ram identity: (damage dealt mult, damage taken mult) per
-            // faction. Rust Swarm hulls ARE battering rams — they hit way
-            // harder and shrug most of it off; Pressure Kings ram heavy too.
+            // faction. Recursive Kingdom hulls ARE battering rams — they hit way
+            // harder and shrug most of it off; Corpse Stars ram heavy too.
             let ram_profile = |entity: Entity| match ship_types.get(entity) {
-                Ok(AiShipType::RustSwarm) => (2.5, 0.4),
-                Ok(AiShipType::PressureKing) => (1.8, 0.7),
+                Ok(AiShipType::RecursiveKingdom) => (2.5, 0.4),
+                Ok(AiShipType::CorpseStars) => (1.8, 0.7),
                 _ => (1.0, 1.0),
             };
             // Split by sqrt-softened inverse mass: the lighter body still

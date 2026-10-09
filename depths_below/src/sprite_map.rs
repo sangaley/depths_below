@@ -1,4 +1,18 @@
+use bevy::prelude::Color;
+
 use crate::components::{ModuleType, CreatureType, HullMaterial, HullLayer, PoiType};
+
+/// The body tone of `sprites/hull/hull_steel.png`, measured off the artwork
+/// itself: the median of its opaque pixels is (59, 69, 81).
+///
+/// Wedge plating builds its shape from untextured child quads, so unlike every
+/// other block it cannot get its colour from an image — something has to tell
+/// it what the hull around it looks like. That something used to be a guess
+/// per call site: `srgb(0.52, 0.52, 0.56)` in the registry and again in the
+/// build palette, more than twice as bright as the plating it bolts to, so a
+/// derived armour belt read as a pale fringe drawn around the ship rather than
+/// part of it. Anything that wants to match the hull reads this.
+pub const HULL_TONE: Color = Color::srgb(0.231, 0.271, 0.318);
 
 /// Maps ModuleType to sprite asset path. Returns None for unmapped types (colored rect fallback).
 pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
@@ -118,6 +132,7 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::EmergencyBulkhead => "sprites/modules/hull_beam.png",
         ModuleType::FirebreakWall => "sprites/modules/hull_beam.png",
         ModuleType::PressureSensor => "sprites/modules/depth_sensor.png",
+        ModuleType::MemoryCore => "sprites/modules/navigation.png",
         ModuleType::TargetingComputer => "sprites/modules/navigation.png",
         ModuleType::AutopilotCore => "sprites/modules/navigation.png",
         ModuleType::AICombatCore => "sprites/modules/navigation_2x1.png",
@@ -197,6 +212,26 @@ pub fn hull_layer_sprite_path(material: HullMaterial, layer: HullLayer) -> &'sta
         HullLayer::Hallway => "sprites/hull/hull_hallway.png",
         _ => hull_sprite_path(material),
     }
+}
+
+/// The seam-aware variant of a hull tile, chosen by which neighbours match.
+///
+/// `mask` is the four-bit neighbour set: 1 north, 2 south, 4 west, 8 east,
+/// where north is the cell at grid +y. Variant 00 is the untouched artwork, so
+/// a tile that spawns with the plain texture and is corrected a frame later
+/// does not flicker.
+///
+/// Derived from `hull_layer_sprite_path` rather than tabulated separately, so
+/// the two cannot drift: change which texture a layer uses and its variants
+/// follow. `tools/art/gen_hull_tiles.py` writes the files.
+pub fn hull_layer_sprite_variant(
+    material: HullMaterial,
+    layer: HullLayer,
+    mask: u8,
+) -> String {
+    let base = hull_layer_sprite_path(material, layer);
+    let stem = base.strip_suffix(".png").unwrap_or(base);
+    format!("{stem}_{:02}.png", mask & 0x0F)
 }
 
 pub fn hull_sprite_path(material: HullMaterial) -> &'static str {
