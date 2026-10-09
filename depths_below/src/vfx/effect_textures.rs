@@ -110,3 +110,21 @@ pub fn load_effect_textures(mut commands: Commands, assets: Res<AssetServer>) {
         ring: assets.load("sprites/effects/shock_ring.png"),
     });
 }
+
+#[cfg(test)]
+impl EffectTextures {
+    /// Empty handles, for headless tests of systems that spawn effects. Test
+    /// builds only: in the game an empty handle is an invisible effect, and
+    /// nothing outside a test should ever want one.
+    pub(crate) fn empty() -> Self {
+        Self {
+            smoke: Default::default(),
+            debris: Default::default(),
+            fireball: Default::default(),
+            flame: Default::default(),
+            muzzle: Default::default(),
+            spark: Default::default(),
+            ring: Default::default(),
+        }
+    }
+}
