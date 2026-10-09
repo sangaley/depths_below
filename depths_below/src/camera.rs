@@ -3,7 +3,7 @@ use bevy::input::mouse::MouseWheel;
 use bevy::sprite::Anchor;
 use bevy::asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use crate::components::{Ship, ShipPhysics, ShipLight, Module};
+use crate::components::{Ship, ShipPhysics, ShipLight, Module, HullSegment};
 use crate::resources::DepthState;
 use crate::events::ShipDamaged;
 use crate::states::GameState;
@@ -29,12 +29,16 @@ pub struct CameraState {
     /// freeze the mouse-aim turret so looking around doesn't spin the ship
     /// to face wherever the cursor happens to be.
     pub free_look_active: bool,
+    /// Set the first time the player scrolls or presses +/-. Until then the
+    /// camera frames the ship itself (`frame_ship_until_player_zooms`);
+    /// after, the zoom is theirs and stays where they put it.
+    pub user_zoomed: bool,
 }
 
 impl Default for CameraState {
     fn default() -> Self {
         Self {
-            zoom: 1.8,
+            zoom: DEFAULT_ZOOM,
             min_zoom: 0.5,
             // Was 8.0 — at scale 8 on a 1280x720 window the visible area is
             // only ~10,240x5,760 world units, so an enemy holding an
@@ -48,8 +52,30 @@ impl Default for CameraState {
             shake_offset: Vec2::ZERO,
             free_look_offset: Vec2::ZERO,
             free_look_active: false,
+            user_zoomed: false,
         }
     }
+}
+
+/// The zoom a small ship opens at, and the floor under the fitted zoom.
+const DEFAULT_ZOOM: f32 = 1.8;
+
+/// Share of the view's height the ship's turning circle should take. At the
+/// old fixed 1.8 the starter pincer filled 97% of a 720-high view, so in a
+/// fight there was no room on screen for anything but your own hull.
+const SHIP_FRAME_FRACTION: f32 = 0.5;
+
+/// Half the diagonal of one grid cell: a block's far corner from its centre.
+const CELL_HALF_DIAGONAL: f32 = 66.0 * std::f32::consts::FRAC_1_SQRT_2;
+
+/// Zoom at which a ship of this radius takes `SHIP_FRAME_FRACTION` of a view
+/// this many pixels tall. Never tighter than the old default, so small ships
+/// look exactly as they used to.
+pub fn framing_zoom(ship_radius: f32, view_height: f32) -> f32 {
+    if view_height <= 0.0 || ship_radius <= 0.0 {
+        return DEFAULT_ZOOM;
+    }
+    (2.0 * ship_radius / (SHIP_FRAME_FRACTION * view_height)).max(DEFAULT_ZOOM)
 }
 
 /// Camera can pan up to this far from the ship while free-looking.
@@ -68,6 +94,7 @@ impl Plugin for CameraPlugin {
                 Update,
                 (
                     camera_zoom_input,
+                    frame_ship_until_player_zooms,
                     camera_shake_on_damage,
                     camera_shake_on_kill,
                     camera_shake_update,
@@ -193,6 +220,7 @@ fn camera_zoom_input(
 
     for event in scroll_events.read() {
         if over_build_panel { continue; }
+        camera_state.user_zoomed = true;
         let zoom_delta = -event.y * 0.1;
         camera_state.zoom = (camera_state.zoom + zoom_delta)
             .clamp(camera_state.min_zoom, camera_state.max_zoom);
@@ -201,13 +229,37 @@ fn camera_zoom_input(
     // Keyboard zoom: +/= zooms in, -/_ zooms out (plus numpad variants)
     let kb_speed = 1.5 * time.delta_secs();
     if keyboard.pressed(KeyCode::Equal) || keyboard.pressed(KeyCode::NumpadAdd) {
+        camera_state.user_zoomed = true;
         camera_state.zoom = (camera_state.zoom - kb_speed)
             .clamp(camera_state.min_zoom, camera_state.max_zoom);
     }
     if keyboard.pressed(KeyCode::Minus) || keyboard.pressed(KeyCode::NumpadSubtract) {
+        camera_state.user_zoomed = true;
         camera_state.zoom = (camera_state.zoom + kb_speed)
             .clamp(camera_state.min_zoom, camera_state.max_zoom);
     }
+}
+
+/// Pulls the camera back far enough to see past the ship, and keeps doing it
+/// as the ship grows, until the player picks a zoom of their own.
+fn frame_ship_until_player_zooms(
+    mut camera_state: ResMut<CameraState>,
+    ships: Query<&Children, With<Ship>>,
+    blocks: Query<&Transform, Or<(With<Module>, With<HullSegment>)>>,
+    windows: Query<&Window>,
+) {
+    if camera_state.user_zoomed {
+        return;
+    }
+    let Ok(children) = ships.single() else { return };
+    let radius = children
+        .iter()
+        .filter_map(|child| blocks.get(child).ok())
+        .map(|t| t.translation.truncate().length() + CELL_HALF_DIAGONAL)
+        .fold(0.0_f32, f32::max);
+    let Some(window) = windows.iter().next() else { return };
+    camera_state.zoom = framing_zoom(radius, window.height())
+        .clamp(camera_state.min_zoom, camera_state.max_zoom);
 }
 
 /// Ceiling on accumulated hit shake. Low on purpose: this is a nudge that
@@ -664,5 +716,57 @@ fn update_depth_vignette(
             cone_transform.rotation = Quat::from_rotation_z(facing);
             cone_transform.scale = Vec3::new(cone_range, cone_range, 1.0);
         }
+    }
+}
+
+#[cfg(test)]
+mod framing_tests {
+    use super::*;
+
+    /// A ship whose blocks reach `reach` units out along +x, on a 1280x720 window.
+    fn app_with_ship(reach: f32) -> App {
+        let mut app = App::new();
+        app.init_resource::<CameraState>();
+        app.add_systems(Update, frame_ship_until_player_zooms);
+        app.world_mut().spawn(Window::default());
+        let ship = app.world_mut().spawn((Ship, Transform::default())).id();
+        for x in [-reach, 0.0, reach] {
+            let block = app.world_mut().spawn((HullSegment::default(), Transform::from_xyz(x, 0.0, 0.0))).id();
+            app.world_mut().entity_mut(ship).add_child(block);
+        }
+        app
+    }
+
+    /// The starter pincer reaches roughly 1,000 units from its centre. At the
+    /// old fixed zoom it filled the view; framed, its turning circle takes
+    /// half the height and the rest is room to see what is shooting at you.
+    #[test]
+    fn a_big_ship_is_framed_with_room_around_it() {
+        let mut app = app_with_ship(1000.0);
+        app.update();
+        let zoom = app.world().resource::<CameraState>().zoom;
+        let radius = 1000.0 + CELL_HALF_DIAGONAL;
+        let share = 2.0 * radius / (720.0 * zoom);
+        assert!((share - SHIP_FRAME_FRACTION).abs() < 0.01, "ship takes {share:.2} of the view at zoom {zoom}");
+    }
+
+    #[test]
+    fn a_small_ship_keeps_the_old_zoom() {
+        let mut app = app_with_ship(132.0);
+        app.update();
+        assert_eq!(app.world().resource::<CameraState>().zoom, DEFAULT_ZOOM);
+    }
+
+    /// Once the player has chosen a zoom, the camera stops second-guessing it.
+    #[test]
+    fn the_players_own_zoom_is_left_alone() {
+        let mut app = app_with_ship(1000.0);
+        {
+            let mut state = app.world_mut().resource_mut::<CameraState>();
+            state.user_zoomed = true;
+            state.zoom = 2.5;
+        }
+        app.update();
+        assert_eq!(app.world().resource::<CameraState>().zoom, 2.5);
     }
 }

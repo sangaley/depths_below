@@ -5,6 +5,7 @@ pub mod windows;
 pub mod theme;
 pub mod cursor;
 pub mod menu_buttons;
+pub mod offscreen_markers;
 
 use std::collections::{HashMap, HashSet};
 
@@ -94,6 +95,11 @@ impl Plugin for UiPlugin {
             // Main menu
             .add_systems(OnEnter(GameState::MainMenu), (spawn_main_menu, hide_hud))
             .add_systems(OnEnter(GameState::Exploring), show_hud)
+            .add_systems(
+                Update,
+                offscreen_markers::update_offscreen_markers.run_if(in_state(GameState::Exploring)),
+            )
+            .add_systems(OnExit(GameState::Exploring), offscreen_markers::clear_offscreen_markers)
             .add_systems(OnEnter(GameState::StationDocked), show_hud)
             .add_systems(OnExit(GameState::MainMenu), despawn_main_menu)
             // Game Over screen
