@@ -1078,9 +1078,13 @@ fn director_brain(
         Phase::Done | Phase::Aborted => {}
     }
 
-    // Pause/menu states shouldn't count against the stall watchdog.
-    if flying || at_station {
-        d.stall_timer += 1.0 / 60.0;
+    // Pause/menu states shouldn't count against the stall watchdog, and
+    // neither does training: it earns nothing by design and has its own
+    // 240s way out. Real seconds, too -- this added 1/60 per frame, and an
+    // offscreen run at several hundred fps "stalled" 44s in, walking out of
+    // the salvage lesson so training never finished.
+    if (flying || at_station) && d.phase != Phase::Training {
+        d.stall_timer += d.dt;
     }
     if d.stall_timer > STALL_SECONDS {
         d.stall_timer = 0.0;
