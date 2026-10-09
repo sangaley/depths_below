@@ -256,6 +256,50 @@ pub fn mining_system(
     }
 }
 
+/// How close the ship's root must be to a derelict or anomaly to loot it.
+/// Root-to-center; derelicts are solid now, so leave room for the ship's own
+/// hull between root and contact point.
+const LOOT_RANGE: f32 = 1400.0;
+
+fn lootable(poi: &SpacePoi) -> bool {
+    !poi.looted && matches!(poi.poi_type, SpacePoiType::DerelictShip | SpacePoiType::Anomaly)
+}
+
+/// Says so when something lootable comes within reach. E strips a derelict
+/// or anomaly outright, and nothing anywhere on screen mentioned it -- no
+/// prompt, no toolbar entry, no hint -- so the only players who ever got paid
+/// for one pressed E by accident. Once per object, like the station's
+/// "press F to dock".
+pub fn loot_prompt_system(
+    ship_query: Query<&Transform, With<Ship>>,
+    poi_query: Query<(Entity, &Transform, &SpacePoi), Without<Ship>>,
+    mut notifications: MessageWriter<ShowNotification>,
+    mut prompted: Local<Option<Entity>>,
+) {
+    let Ok(ship_transform) = ship_query.single() else { return };
+    let ship_pos = ship_transform.translation.truncate();
+    let in_reach = poi_query
+        .iter()
+        .filter(|(_, t, poi)| lootable(poi) && ship_pos.distance(t.translation.truncate()) <= LOOT_RANGE)
+        .min_by(|(_, a, _), (_, b, _)| {
+            ship_pos
+                .distance_squared(a.translation.truncate())
+                .total_cmp(&ship_pos.distance_squared(b.translation.truncate()))
+        });
+    let Some((entity, _, poi)) = in_reach else {
+        *prompted = None;
+        return;
+    };
+    if *prompted != Some(entity) {
+        *prompted = Some(entity);
+        notifications.write(ShowNotification {
+            message: format!("{} in reach - press E to strip it", poi.name),
+            notification_type: NotificationType::Info,
+            duration: 4.0,
+        });
+    }
+}
+
 /// Loot derelict ships when close
 pub fn loot_derelict_system(
     ship_query: Query<&Transform, With<Ship>>,
@@ -270,13 +314,8 @@ pub fn loot_derelict_system(
     let ship_pos = ship_transform.translation.truncate();
 
     for (poi_transform, mut poi) in poi_query.iter_mut() {
-        if poi.looted { continue; }
-        if !matches!(poi.poi_type, SpacePoiType::DerelictShip | SpacePoiType::Anomaly) { continue; }
-
-        let dist = ship_pos.distance(poi_transform.translation.truncate());
-        // Root-to-center; derelicts are solid now, so leave room for the
-        // ship's own hull between root and contact point.
-        if dist > 1400.0 { continue; }
+        if !lootable(&poi) { continue; }
+        if ship_pos.distance(poi_transform.translation.truncate()) > LOOT_RANGE { continue; }
 
         poi.looted = true;
         currency.credits += poi.loot_value;
@@ -286,5 +325,45 @@ pub fn loot_derelict_system(
             duration: 3.0,
         });
         return;
+    }
+}
+
+#[cfg(test)]
+mod loot_prompt_tests {
+    use super::*;
+
+    fn poi(kind: SpacePoiType, looted: bool) -> SpacePoi {
+        SpacePoi { poi_type: kind, looted, discovered: true, name: "Haven derelict".into(), loot_value: 100 }
+    }
+
+    fn prompts(app: &App) -> Vec<String> {
+        app.world().resource::<Messages<ShowNotification>>().iter_current_update_messages().map(|n| n.message.clone()).collect()
+    }
+
+    #[test]
+    fn a_derelict_in_reach_is_announced_once() {
+        let mut app = App::new();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, loot_prompt_system);
+        app.world_mut().spawn((Ship, Transform::default()));
+        app.world_mut().spawn((Transform::from_xyz(800.0, 0.0, 0.0), poi(SpacePoiType::DerelictShip, false)));
+        app.update();
+        assert_eq!(prompts(&app), vec!["Haven derelict in reach - press E to strip it".to_string()]);
+        app.update();
+        assert!(prompts(&app).is_empty(), "prompted again while still in reach");
+    }
+
+    /// Rocks, waystations and already-stripped hulks have nothing for E.
+    #[test]
+    fn nothing_to_loot_says_nothing() {
+        let mut app = App::new();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, loot_prompt_system);
+        app.world_mut().spawn((Ship, Transform::default()));
+        app.world_mut().spawn((Transform::from_xyz(500.0, 0.0, 0.0), poi(SpacePoiType::AsteroidNode, false)));
+        app.world_mut().spawn((Transform::from_xyz(600.0, 0.0, 0.0), poi(SpacePoiType::DerelictShip, true)));
+        app.world_mut().spawn((Transform::from_xyz(5000.0, 0.0, 0.0), poi(SpacePoiType::DerelictShip, false)));
+        app.update();
+        assert!(prompts(&app).is_empty());
     }
 }

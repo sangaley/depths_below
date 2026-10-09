@@ -146,6 +146,7 @@ pub fn order_salvage_detail(
     // Nearest wreck in dispatch range — distance measured to whichever
     // of its blocks is closest, not to the root origin.
     let mut best: Option<(Entity, Vec2, f32)> = None;
+    let mut nearest_any = f32::INFINITY;
     for (entity, gt, wreck, poi) in wreck_query.iter() {
         if poi.poi_type != PoiType::Wreck || wreck.loot_remaining == 0 {
             continue;
@@ -159,11 +160,29 @@ pub fn order_salvage_detail(
                 }
             }
         }
+        nearest_any = nearest_any.min(dist);
         if dist < ORDER_RANGE && best.map_or(true, |(_, _, d)| dist < d) {
             best = Some((entity, root_pos, dist));
         }
     }
-    let Some((wreck_entity, wreck_center, wreck_dist)) = best else { return };
+    let Some((wreck_entity, wreck_center, wreck_dist)) = best else {
+        // A wreck just past reach used to swallow F without a word: no
+        // detail, no reason. Say how far, and leave the press for a dock or
+        // settlement that may want it -- unless a station is in range, whose
+        // own prompt is already the one on screen.
+        if nearest_any < ORDER_RANGE * 2.0 && stations.nearest_in_range(ship_pos).is_none() {
+            notifications.write(ShowNotification {
+                message: format!(
+                    "Wreck out of reach ({}) - close within {} to send a detail.",
+                    crate::ui::format_range_km(nearest_any),
+                    crate::ui::format_range_km(ORDER_RANGE),
+                ),
+                notification_type: NotificationType::Info,
+                duration: 2.5,
+            });
+        }
+        return;
+    };
 
     // Yield to docking when the station is the closer of the two. F means
     // both things and position is the only way to tell them apart, so the
@@ -857,5 +876,48 @@ mod range_tests {
     fn far_side_of_a_big_wreck_is_not_stranded() {
         let big_hulk_span = 2.0 * 900.0;
         assert!(BREAK_RANGE + big_hulk_span < TELEPORT_RANGE);
+    }
+}
+
+#[cfg(test)]
+mod out_of_reach_tests {
+    use super::*;
+
+    fn app(wreck_at: f32) -> App {
+        let mut app = App::new();
+        app.init_resource::<InteractPress>();
+        app.init_resource::<ButtonInput<KeyCode>>();
+        app.init_resource::<crate::world::home_base::SystemStations>();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, (crate::resources::refresh_interact_press, order_salvage_detail).chain());
+        app.world_mut().spawn((Ship, GlobalTransform::default()));
+        app.world_mut().spawn((
+            GlobalTransform::from_xyz(wreck_at, 0.0, 0.0),
+            Wreck { loot_remaining: 3, is_explored: false },
+            PointOfInterest { poi_type: PoiType::Wreck, discovered: true },
+        ));
+        app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::KeyF);
+        app
+    }
+
+    fn notices(app: &App) -> Vec<String> {
+        app.world().resource::<Messages<ShowNotification>>().iter_current_update_messages().map(|n| n.message.clone()).collect()
+    }
+
+    /// F near a wreck that's just too far says so, and leaves the press free.
+    #[test]
+    fn a_wreck_just_past_reach_is_explained() {
+        let mut app = app(ORDER_RANGE + 400.0);
+        app.update();
+        assert_eq!(notices(&app), vec!["Wreck out of reach (3.4 km) - close within 3.0 km to send a detail.".to_string()]);
+        assert!(app.world().resource::<InteractPress>().pending());
+    }
+
+    /// Nothing anywhere near: nothing to explain.
+    #[test]
+    fn no_wreck_nearby_says_nothing() {
+        let mut app = app(ORDER_RANGE * 3.0);
+        app.update();
+        assert!(notices(&app).is_empty());
     }
 }

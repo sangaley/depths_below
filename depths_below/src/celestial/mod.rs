@@ -92,6 +92,7 @@ impl Plugin for CelestialPlugin {
                 warp::on_warp_complete.after(warp::execute_warp_jump),
                 poi::mining_system,
                 poi::loot_derelict_system,
+                poi::loot_prompt_system,
                 galaxy::passive_proximity_discovery_system,
             ).run_if(in_state(GameState::Exploring)))
             // Spawn initial star system on entering Exploring — chained so
