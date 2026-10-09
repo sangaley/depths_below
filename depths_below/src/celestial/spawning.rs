@@ -118,7 +118,7 @@ pub fn spawn_star_system(
             body_type: CelestialBodyType::Star,
             mass: star_mass,
             radius: star_radius,
-            name: format!("Star-{}", system_id),
+            name: super::galaxy::system_name(system_id),
         },
         Star {
             luminosity: star_class.radiation_multiplier(),
@@ -198,7 +198,7 @@ pub fn spawn_star_system(
                 body_type: CelestialBodyType::Planet,
                 mass: planet_mass,
                 radius: planet_radius,
-                name: format!("Planet-{}-{}", system_id, i + 1),
+                name: format!("{} {}", super::galaxy::system_name(system_id), super::galaxy::roman(i as u32 + 1)),
             },
             PlanetSpin {
                 // One turn every one to three minutes, either way round. Slow
@@ -462,7 +462,7 @@ pub fn spawn_asteroid_field(
                 poi_type: SpacePoiType::AsteroidNode,
                 looted: false,
                 discovered: false,
-                name: format!("Asteroid-{}-{}", system_id, i),
+                name: "Asteroid".into(),
                 loot_value: 0,
             },
             MineableResource {

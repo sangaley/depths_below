@@ -66,6 +66,47 @@ pub const SYSTEM_COUNT: usize = 30;
 /// it is home, and the tutorial runs here.
 pub const HAVEN_LOCAL_CENTER: Vec2 = Vec2::new(31_000.0, -68_400.0);
 
+/// Names for every system but Haven, dealt in id order. Generated systems
+/// used to be called "System-07", and the HUD, the warp notice and the solar
+/// flare warning all printed that (or "Star-0") to the player.
+const SYSTEM_NAMES: [&str; 40] = [
+    "Vesper", "Calder", "Morrow", "Ashfall", "Tamsin", "Kestrel", "Halcyon", "Brine",
+    "Sable", "Corvane", "Ilex", "Thule", "Merrow", "Cinder", "Lacuna", "Severn",
+    "Nadir", "Ostra", "Gallow", "Riven", "Tarn", "Ember", "Hollow", "Quillon",
+    "Ardent", "Mire", "Solace", "Vigil", "Anselm", "Durance", "Fenwick", "Marrow",
+    "Pyre", "Rook", "Umber", "Caddis", "Lorn", "Wake", "Tessaly", "Orison",
+];
+
+/// The player-facing name of a star system, derived from its id alone so
+/// anything holding an id can name it without the galaxy. Its star carries
+/// the same name, and its planets are numbered after it ("Calder II").
+pub fn system_name(id: u32) -> String {
+    if id == 0 {
+        return "Haven".to_string();
+    }
+    let i = (id - 1) as usize;
+    let base = SYSTEM_NAMES[i % SYSTEM_NAMES.len()];
+    match i / SYSTEM_NAMES.len() {
+        0 => base.to_string(),
+        lap => format!("{base} {}", roman(lap as u32 + 1)),
+    }
+}
+
+/// Roman numeral for a small positive number (planet order, repeated names).
+pub fn roman(mut n: u32) -> String {
+    const TABLE: [(u32, &str); 9] = [
+        (100, "C"), (90, "XC"), (50, "L"), (40, "XL"), (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"),
+    ];
+    let mut out = String::new();
+    for (value, numeral) in TABLE {
+        while n >= value {
+            out.push_str(numeral);
+            n -= value;
+        }
+    }
+    out
+}
+
 /// Abstract galaxy-map radius (NOT a real Transform coordinate — see
 /// StarSystemDef::galaxy_pos doc comment).
 pub const GALAXY_RADIUS: f32 = 5_000_000.0;
@@ -230,7 +271,7 @@ pub fn generate_galaxy_map(galaxy_seed: u64) -> GalaxyMap {
 
         systems.push(StarSystemDef {
             id,
-            name: format!("System-{:02}", id),
+            name: system_name(id),
             galaxy_pos: pos,
             local_center,
             seed: rng.gen::<u64>(),

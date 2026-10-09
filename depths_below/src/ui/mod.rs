@@ -883,7 +883,7 @@ fn setup_ui(mut commands: Commands) {
                 ..default()
             }, BorderColor::all(ThemeColors::BORDER_SUBTLE))).with_children(|c| {
                 spawn_stack(c, "SYS", false, |g| {
-                    g.spawn((Text::new("System-0"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::TEXT_TITLE), SystemInfoText));
+                    g.spawn((Text::new("Haven"), TextFont { font_size: FontSize::Px(ThemeFonts::BODY), ..default() }, TextColor(ThemeColors::TEXT_TITLE), SystemInfoText));
                     g.spawn((Text::new("Station Orbit"), TextFont { font_size: FontSize::Px(ThemeFonts::CAPTION), ..default() }, TextColor(ThemeColors::TEXT_SECONDARY), DepthZoneText));
                 });
                 spawn_stack(c, "HAVEN", false, |g| {
@@ -1301,7 +1301,7 @@ pub fn update_celestial_hud(
 ) {
     // System name
     if let Ok(mut text) = system_text_query.single_mut() {
-        text.0 = format!("System-{}", galaxy.current_system);
+        text.0 = crate::celestial::galaxy::system_name(galaxy.current_system);
     }
 
     let ship_pos = ship_query.single()

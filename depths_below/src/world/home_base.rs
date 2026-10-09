@@ -78,7 +78,7 @@ pub fn station_index(system_id: u32, slot: usize) -> usize {
 /// Mirrors the names galaxy::generate_galaxy_map gives its systems, so a
 /// station name can be derived from its index alone (no galaxy lookup).
 pub fn system_display_name(system_id: u32) -> String {
-    if system_id == 0 { "Haven".to_string() } else { format!("System-{:02}", system_id) }
+    crate::celestial::galaxy::system_name(system_id)
 }
 
 /// Display name for a global station index.

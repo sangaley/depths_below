@@ -10,6 +10,7 @@ pub mod burial;
 pub mod suits;
 pub mod eva_salvage;
 pub mod hiring;
+pub mod names;
 pub mod navigation;
 pub mod walking;
 use eva_salvage::EvaSalvaging;
@@ -189,15 +190,12 @@ fn crew_arrive_with_quarters(
     registry: Res<crate::building::ModuleRegistry>,
     ship_query: Query<Entity, With<Ship>>,
     quarters_query: Query<(&Quarters, &Module, &ChildOf)>,
-    crew_query: Query<&CrewMember>,
+    // Player crew only. AI crew are CrewMembers too, and counting them as
+    // "alive aboard" shrank the number of empty bunks to fill.
+    crew_query: Query<&CrewMember, Without<crate::ai_ship::components::OwnedByAiShip>>,
     mut roster: ResMut<CrewRoster>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    use rand::Rng;
-    const NAMES: [&str; 12] = [
-        "Reyes", "Okonkwo", "Falk", "Ito", "Marsh", "Deng",
-        "Ferrara", "Boone", "Ades", "Kowal", "Nyx", "Sorren",
-    ];
 
     let Ok(ship) = ship_query.single() else { return };
     for event in placed_events.read() {
@@ -233,14 +231,16 @@ fn crew_arrive_with_quarters(
         let berths = walking::quarters_cells(ours().map(|(_, module, _)| module));
 
         let mut rng = rand::thread_rng();
+        let mut aboard: Vec<String> = crew_query.iter().map(|c| c.name.clone()).collect();
         for i in 0..to_spawn {
-            let name = NAMES[rng.gen_range(0..NAMES.len())];
+            let name = names::unused_name(&aboard, &mut rng);
+            aboard.push(name.clone());
             let crew = commands
                 .spawn((
                     animation::crew_sprite(&assets, &crew_atlases),
                     Transform::from_translation(walking::berth_position(&berths, alive as usize + i as usize)),
                     CrewMember {
-                        name: name.to_string(),
+                        name,
                         health: 100.0,
                         max_health: 100.0,
                         oxygen: 100.0,
@@ -294,11 +294,6 @@ pub fn spawn_starter_crew(
     };
 
     // Sail with a full complement: every berth the hull provides is filled.
-    let crew_names = [
-        "Jones", "Smith", "Chen", "Morgan", "Rivera", "Volkov", "Tanaka", "Okafor",
-        "Reyes", "Okonkwo", "Falk", "Ito", "Marsh", "Deng",
-        "Ferrara", "Boone", "Ades", "Kowal", "Nyx", "Sorren",
-    ];
 
     let complement = quarters_query
         .iter()
@@ -321,10 +316,7 @@ pub fn spawn_starter_crew(
     for i in 0..complement {
         // Past the written names, hands are numbered rather than repeated —
         // two crew called Jones on the same roster reads as a bug.
-        let name = match crew_names.get(i) {
-            Some(n) => (*n).to_string(),
-            None => format!("Hand {}", i + 1),
-        };
+        let name = names::starting_name(i);
         let crew = commands.spawn((
             animation::crew_sprite(&assets, &crew_atlases),
             Transform::from_translation(walking::berth_position(&berths, i)),

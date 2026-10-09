@@ -50,22 +50,24 @@ const ROLES: [&str; 8] = [
     "freighter hand",
 ];
 
-const NAMES: [&str; 16] = [
-    "Vega", "Osei", "Lindqvist", "Aoki", "Mercer", "Duval", "Ramaswamy", "Kade",
-    "Willow", "Stross", "Imani", "Costa", "Brun", "Ferro", "Solano", "Pike",
-];
 
-fn ensure_pool(pool: &mut HiringPool, station_idx: usize) {
+/// Candidates never share a name with each other or with anyone aboard.
+fn ensure_pool(pool: &mut HiringPool, station_idx: usize, aboard: &[String]) {
     if pool.station_idx == Some(station_idx) && !pool.candidates.is_empty() {
         return;
     }
     let mut rng = rand::thread_rng();
     pool.station_idx = Some(station_idx);
+    let mut taken = aboard.to_vec();
     pool.candidates = (0..rng.gen_range(3..=5))
-        .map(|_| Candidate {
-            name: NAMES[rng.gen_range(0..NAMES.len())].to_string(),
-            role: ROLES[rng.gen_range(0..ROLES.len())],
-            cost: 150 + rng.gen_range(0..5) * 25,
+        .map(|_| {
+            let name = crate::crew::names::unused_name(&taken, &mut rng);
+            taken.push(name.clone());
+            Candidate {
+                name,
+                role: ROLES[rng.gen_range(0..ROLES.len())],
+                cost: 150 + rng.gen_range(0..5) * 25,
+            }
         })
         .collect();
 }
@@ -79,6 +81,7 @@ pub fn toggle_hiring_board(
     existing: Query<Entity, With<HiringPanel>>,
     stations: Res<home_base::SystemStations>,
     ship_query: Query<&Transform, With<Ship>>,
+    crew: Query<&CrewMember, Without<crate::ai_ship::components::OwnedByAiShip>>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyH) {
@@ -106,7 +109,8 @@ pub fn toggle_hiring_board(
         return;
     };
 
-    ensure_pool(&mut pool, station);
+    let aboard: Vec<String> = crew.iter().map(|c| c.name.clone()).collect();
+    ensure_pool(&mut pool, station, &aboard);
     selection.0 = 0;
     open.0 = true;
 
@@ -124,7 +128,7 @@ pub fn toggle_hiring_board(
         HiringPanel,
     )).with_children(|parent| {
         parent.spawn((
-            Text::new(format!("CREW FOR HIRE - STATION {}", station)),
+            Text::new(format!("CREW FOR HIRE - {}", home_base::station_display_name(station).to_uppercase())),
             TextFont { font_size: FontSize::Px(ThemeFonts::H2), ..default() },
             TextColor(ThemeColors::TEXT_TITLE),
             Node { margin: UiRect::bottom(Val::Px(ThemeSpacing::LG)), ..default() },
