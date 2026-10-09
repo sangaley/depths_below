@@ -30,6 +30,17 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //   DEPTHS_OFFSCREEN=1  — render into an image instead of the window, so
 //                          capture works however buried the window is. The
 //                          window itself shows nothing; for unattended runs.
+//   DEPTHS_KEYS=<script> — tap keys at set times, e.g. "3:KeyM,5:F7,8:Escape".
+//                          "6:Minus~3" HOLDS a key for 3s instead -- needed
+//                          for anything read with `pressed` rather than
+//                          `just_pressed`, like camera zoom.
+//                          Seconds of REAL time, so autoplay's time dilation
+//                          can't shift it. F7 is the capture key, so a script
+//                          can walk the screens and photograph each one.
+//                          Goes through the same ButtonInput press the
+//                          autoplay director and the gamepad bridge use --
+//                          never OS keystrokes, which land in whatever app is
+//                          focused rather than the game.
 //   DEPTHS_CASCADE=0.85 — pin the story's progress level, so a late beat can
 //                          be looked at without an hour of flying first.
 //   DEPTHS_CASCADE_TRACE=1 — print the arc's state once a second.
@@ -511,6 +522,114 @@ fn aim_camera_offscreen(
     }
 }
 
+/// A key press script read from `DEPTHS_KEYS`. See the header for the format.
+#[derive(Resource, Default)]
+struct ScriptedKeys {
+    /// (seconds, key, hold seconds), sorted by time. Hold 0 is a one-frame tap.
+    events: Vec<(f32, KeyCode, f32)>,
+    next: usize,
+    /// Keys currently down and when to let them go. A tap releases the next
+    /// frame -- one frame down is what `just_pressed` reads.
+    held: Vec<(KeyCode, f32)>,
+}
+
+/// Key names as Bevy spells them. Only what a script plausibly needs: letters,
+/// digits, function keys and the few named keys the game binds.
+fn parse_key(name: &str) -> Option<KeyCode> {
+    let name = name.trim();
+    if let Some(c) = name.strip_prefix("Key").filter(|c| c.len() == 1) {
+        let i = c.chars().next()? as u8;
+        if (b'A'..=b'Z').contains(&i) {
+            const L: [KeyCode; 26] = [
+                KeyCode::KeyA, KeyCode::KeyB, KeyCode::KeyC, KeyCode::KeyD, KeyCode::KeyE,
+                KeyCode::KeyF, KeyCode::KeyG, KeyCode::KeyH, KeyCode::KeyI, KeyCode::KeyJ,
+                KeyCode::KeyK, KeyCode::KeyL, KeyCode::KeyM, KeyCode::KeyN, KeyCode::KeyO,
+                KeyCode::KeyP, KeyCode::KeyQ, KeyCode::KeyR, KeyCode::KeyS, KeyCode::KeyT,
+                KeyCode::KeyU, KeyCode::KeyV, KeyCode::KeyW, KeyCode::KeyX, KeyCode::KeyY,
+                KeyCode::KeyZ,
+            ];
+            return Some(L[(i - b'A') as usize]);
+        }
+    }
+    if let Some(d) = name.strip_prefix("Digit").filter(|d| d.len() == 1) {
+        const D: [KeyCode; 10] = [
+            KeyCode::Digit0, KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3, KeyCode::Digit4,
+            KeyCode::Digit5, KeyCode::Digit6, KeyCode::Digit7, KeyCode::Digit8, KeyCode::Digit9,
+        ];
+        return d.parse::<usize>().ok().map(|n| D[n]);
+    }
+    Some(match name {
+        "F1" => KeyCode::F1, "F2" => KeyCode::F2, "F3" => KeyCode::F3, "F4" => KeyCode::F4,
+        "F5" => KeyCode::F5, "F6" => KeyCode::F6, "F7" => KeyCode::F7, "F8" => KeyCode::F8,
+        "F9" => KeyCode::F9, "F10" => KeyCode::F10, "F11" => KeyCode::F11, "F12" => KeyCode::F12,
+        "Tab" => KeyCode::Tab,
+        "Escape" => KeyCode::Escape,
+        "Enter" => KeyCode::Enter,
+        "Space" => KeyCode::Space,
+        "Semicolon" => KeyCode::Semicolon,
+        "BracketLeft" => KeyCode::BracketLeft,
+        "BracketRight" => KeyCode::BracketRight,
+        "ShiftLeft" => KeyCode::ShiftLeft,
+        "Minus" => KeyCode::Minus,
+        "Equal" => KeyCode::Equal,
+        _ => return None,
+    })
+}
+
+/// "3:KeyM,5:F7" -> [(3.0, M), (5.0, F7)]. A malformed entry is reported and
+/// skipped rather than aborting the run: a typo in one step should not cost
+/// the whole capture session.
+fn parse_script(script: &str) -> Vec<(f32, KeyCode, f32)> {
+    let mut events: Vec<(f32, KeyCode, f32)> = script
+        .split(',')
+        .filter(|s| !s.trim().is_empty())
+        .filter_map(|step| {
+            let parsed = (|| {
+                let (t, rest) = step.split_once(':')?;
+                let (k, hold) = match rest.split_once('~') {
+                    Some((k, h)) => (k, h.trim().parse::<f32>().ok()?),
+                    None => (rest, 0.0),
+                };
+                Some((t.trim().parse::<f32>().ok()?, parse_key(k)?, hold))
+            })();
+            if parsed.is_none() {
+                warn!("DEPTHS_KEYS: ignoring '{}'", step.trim());
+            }
+            parsed
+        })
+        .collect();
+    events.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    events
+}
+
+fn play_scripted_keys(
+    time: Res<Time<Real>>,
+    mut keyboard: ResMut<ButtonInput<KeyCode>>,
+    mut script: ResMut<ScriptedKeys>,
+) {
+    let now = time.elapsed_secs();
+    // Release what is due; keep pressing what is still being held, since
+    // ButtonInput forgets nothing on its own but other systems may release.
+    script.held.retain(|&(key, until)| {
+        if now >= until {
+            keyboard.release(key);
+            false
+        } else {
+            keyboard.press(key);
+            true
+        }
+    });
+    while let Some(&(at, key, hold)) = script.events.get(script.next) {
+        if now < at {
+            break;
+        }
+        keyboard.press(key);
+        // A tap's release time is "now", so it lets go on the next frame.
+        script.held.push((key, now + hold));
+        script.next += 1;
+    }
+}
+
 /// Marker so the capture plugin can be added unconditionally and cost nothing
 /// when neither the env var nor the key is used.
 pub struct CapturePlugin;
@@ -536,6 +655,14 @@ impl Plugin for CapturePlugin {
         }
         app.insert_resource(CaptureState { every, since: 0.0, index: 0, dir })
             .add_systems(Update, capture_frames);
+        if let Ok(script) = std::env::var("DEPTHS_KEYS") {
+            let events = parse_script(&script);
+            info!("DEPTHS_KEYS: {} scripted presses", events.len());
+            app.insert_resource(ScriptedKeys { events, ..default() }).add_systems(
+                PreUpdate,
+                play_scripted_keys.after(bevy::input::InputSystems),
+            );
+        }
         if std::env::var("DEPTHS_OFFSCREEN").ok().as_deref() == Some("1") {
             app.add_systems(Startup, create_offscreen_target)
                 .add_systems(
