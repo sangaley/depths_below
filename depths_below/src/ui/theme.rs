@@ -35,7 +35,11 @@ impl ThemeColors {
     // --- Text ---
     pub const TEXT_PRIMARY: Color = Color::srgba(0.88, 0.90, 0.95, 1.0);   // Main readable text
     pub const TEXT_SECONDARY: Color = Color::srgba(0.60, 0.64, 0.70, 1.0); // Labels, less important
-    pub const TEXT_MUTED: Color = Color::srgba(0.40, 0.43, 0.50, 1.0);     // Hints, disabled
+    // Hints, disabled. Was 0.40/0.43/0.50 -- about 3.9:1 on the HUD bar, under
+    // the 4.5:1 floor for small text, and the HUD's meter labels and control
+    // hints are all small text. Nudged up just past the floor; still well
+    // below TEXT_SECONDARY, so it keeps reading as the quiet tier.
+    pub const TEXT_MUTED: Color = Color::srgba(0.46, 0.49, 0.56, 1.0);
     pub const TEXT_TITLE: Color = Color::srgba(0.70, 0.82, 1.0, 1.0);      // Titles, headers
 
     // --- Accent colors (functional) ---
@@ -84,7 +88,7 @@ impl ThemeFonts {
     pub const BODY: f32 = 14.0;       // Standard readable text
     pub const BODY_SMALL: f32 = 12.0;  // Compact text, descriptions
     pub const CAPTION: f32 = 11.0;     // Labels, metadata
-    pub const TINY: f32 = 9.0;         // Min/max values, subtle info
+    pub const TINY: f32 = 10.0;        // Min/max values, subtle info (9 was below legible on the HUD)
 }
 
 /// Spacing constants — consistent rhythm
@@ -211,5 +215,40 @@ pub fn button_color_for_interaction(interaction: &Interaction) -> Color {
         Interaction::Hovered => ThemeColors::BG_HOVER,
         Interaction::Pressed => ThemeColors::BG_PRESSED,
         Interaction::None => ThemeColors::BG_ELEVATED,
+    }
+}
+
+#[cfg(test)]
+mod contrast_tests {
+    use super::*;
+
+    fn luminance(c: Color) -> f32 {
+        let l = c.to_linear();
+        0.2126 * l.red + 0.7152 * l.green + 0.0722 * l.blue
+    }
+
+    fn contrast(fg: Color, bg: Color) -> f32 {
+        let (a, b) = (luminance(fg), luminance(bg));
+        (a.max(b) + 0.05) / (a.min(b) + 0.05)
+    }
+
+    /// Muted text is what the HUD's small labels and control hints are drawn
+    /// in, so it has to clear the small-text floor on every surface it sits on.
+    #[test]
+    fn muted_text_is_legible_on_hud_and_panels() {
+        for (name, bg) in [
+            ("HUD_BG_SOLID", ThemeColors::HUD_BG_SOLID),
+            ("BG_PANEL", ThemeColors::BG_PANEL),
+            ("BG_VOID", ThemeColors::BG_VOID),
+        ] {
+            let ratio = contrast(ThemeColors::TEXT_MUTED, bg);
+            assert!(ratio >= 4.5, "TEXT_MUTED on {name} is {ratio:.2}:1");
+        }
+    }
+
+    /// And it stays the quiet tier: clearly dimmer than secondary text.
+    #[test]
+    fn muted_stays_below_secondary() {
+        assert!(luminance(ThemeColors::TEXT_MUTED) < 0.75 * luminance(ThemeColors::TEXT_SECONDARY));
     }
 }
