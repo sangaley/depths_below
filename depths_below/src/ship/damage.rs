@@ -27,7 +27,6 @@ pub fn process_ship_damage(
     mut death_cause: ResMut<crate::resources::DeathCause>,
     mut breach_events: MessageWriter<HullBreached>,
     mut room_depressurize_events: MessageWriter<RoomDepressurized>,
-    mut notifications: MessageWriter<ShowNotification>,
     mut commands: Commands,
     debug_tuning: Res<crate::debug::DebugTuning>,
     grid_query: Query<&crate::building::ShipGrid>,
@@ -165,12 +164,9 @@ pub fn process_ship_damage(
                                 severity: 1.0 - health_pct,
                             });
                         }
-
-                        notifications.write(ShowNotification {
-                            message: "Hull breach! Decompression in progress!".into(),
-                            notification_type: NotificationType::Danger,
-                            duration: 3.0,
-                        });
+                        // (Announced from the HullBreached event in the HUD,
+                        // which has the severity. Saying it here as well put
+                        // two breach notices up for every breach.)
                     }
                 } else if let Ok((_, mut module, _, parent)) = module_query.get_mut(step.entity) {
                     if parent.parent() != player_ship { continue; }
@@ -213,12 +209,7 @@ pub fn process_ship_damage(
                             severity: 1.0 - health_pct,
                         });
                     }
-
-                    notifications.write(ShowNotification {
-                        message: "Hull breach! Decompression in progress!".into(),
-                        notification_type: NotificationType::Danger,
-                        duration: 3.0,
-                    });
+                    // (Announced from the HullBreached event in the HUD.)
                 }
             }
 

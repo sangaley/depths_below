@@ -2062,6 +2062,11 @@ fn handle_menu_input(
 // GAME EVENT NOTIFICATIONS
 // ============================================================================
 
+/// Damage a crew member must take before it's worth a notice.
+const HURT_NOTICE_MIN: f32 = 5.0;
+/// Shortest gap between two hurt notices for the same person.
+const HURT_NOTICE_EVERY: f32 = 8.0;
+
 /// Reads from currently-silent events and sends ShowNotification
 fn handle_game_event_notifications(
     mut power_events: MessageReader<PowerStateChanged>,
@@ -2075,6 +2080,9 @@ fn handle_game_event_notifications(
     weapon_query: Query<&Weapon>,
     mut notifications: MessageWriter<ShowNotification>,
     mut low_ammo_warned: Local<bool>,
+    time: Res<Time>,
+    // Per crew member: damage not yet reported, and when they last got a notice.
+    mut hurt_ledger: Local<HashMap<Entity, (f32, f32)>>,
 ) {
     // Power state changes
     for event in power_events.read() {
@@ -2094,24 +2102,45 @@ fn handle_game_event_notifications(
     }
 
     // Hull breaches
+    // One notice per hit, not per plate: a single impact can open several
+    // segments in the same frame, and each used to get its own banner.
+    let (mut breaches, mut worst) = (0usize, 0.0f32);
     for event in breach_events.read() {
+        breaches += 1;
+        worst = worst.max(event.severity);
+    }
+    if breaches > 0 {
+        let count = if breaches > 1 { format!(" x{breaches}") } else { String::new() };
         notifications.write(ShowNotification {
-            message: format!("HULL BREACH! Decompression in progress! (Severity: {:.0}%)", event.severity * 100.0),
+            message: format!("HULL BREACH{count}! Decompression in progress! (Severity: {:.0}%)", worst * 100.0),
             notification_type: NotificationType::Danger,
             duration: 4.0,
         });
     }
 
     // Crew damage
+    let now = time.elapsed_secs();
     for event in crew_damage_events.read() {
         if let Ok(crew) = crew_query.get(event.crew) {
             // A fatal wound gets the death notice from report_crew_deaths;
             // "taking damage, -100" on top of it undersold what happened.
             if crew.health <= 0.0 {
+                hurt_ledger.remove(&event.crew);
                 continue;
             }
+            // Slow harm (thin air, smoke) arrives as a sliver every frame.
+            // Reported per event that was "hurt - asphyxiation (-0)" over two
+            // thousand times in one run. Add it up, and say so once it's real
+            // and not more than every few seconds per person.
+            let entry = hurt_ledger.entry(event.crew).or_insert((0.0, f32::NEG_INFINITY));
+            entry.0 += event.amount;
+            if entry.0 < HURT_NOTICE_MIN || now - entry.1 < HURT_NOTICE_EVERY {
+                continue;
+            }
+            let amount = entry.0;
+            *entry = (0.0, now);
             notifications.write(ShowNotification {
-                message: format!("{} hurt - {} (-{:.0})", crew.name, event.source.describe(), event.amount),
+                message: format!("{} hurt - {} (-{:.0})", crew.name, event.source.describe(), amount),
                 notification_type: NotificationType::Warning,
                 duration: 2.5,
             });
@@ -5691,9 +5720,33 @@ mod crew_hurt_notice_tests {
             .collect()
     }
 
+    /// Slivers of suffocation every frame make one notice, not one per frame.
+    #[test]
+    fn slow_harm_is_summed_and_rate_limited() {
+        let mut app = App::new();
+        app.init_resource::<Time>();
+        app.add_message::<PowerStateChanged>()
+            .add_message::<OxygenStateChanged>()
+            .add_message::<HullBreached>()
+            .add_message::<CrewDamaged>()
+            .add_message::<ShowNotification>()
+            .add_systems(Update, handle_game_event_notifications);
+        let crew = app.world_mut().spawn(hand("Stross", 80.0)).id();
+        let mut seen = 0;
+        for _ in 0..300 {
+            app.world_mut().resource_mut::<Time>().advance_by(std::time::Duration::from_millis(16));
+            app.world_mut().write_message(CrewDamaged { crew, amount: 0.05, source: CrewDamageSource::Suffocation });
+            app.update();
+            seen += notices(&app).len();
+        }
+        // 15 HP over ~4.8s: summed into one notice, the rest held back by the gap.
+        assert_eq!(seen, 1);
+    }
+
     #[test]
     fn only_our_living_crew_get_a_hurt_notice() {
         let mut app = App::new();
+        app.init_resource::<Time>();
         app.add_message::<PowerStateChanged>()
             .add_message::<OxygenStateChanged>()
             .add_message::<HullBreached>()
