@@ -116,38 +116,83 @@ pub fn distance_from_safety(ship_pos: Vec2, stations: &home_base::SystemStations
 }
 
 /// Checks if player entered a new depth zone
+/// Seconds a new zone must hold before it's announced. Hovering on a ring
+/// boundary -- which is exactly where a ship parked near a station sits --
+/// announced every crossing: 35 "Entering Asteroid Belt" in one 21-minute run.
+const ZONE_SETTLE_SECONDS: f32 = 2.5;
+
+fn zone_name(zone: ZoneType) -> &'static str {
+    match zone {
+        ZoneType::NearOrbit => "Near Orbit",
+        ZoneType::AsteroidBelt => "Asteroid Belt",
+        ZoneType::DeepSpace => "Deep Space",
+        ZoneType::Nebula => "Nebula",
+        ZoneType::BlackHole => "Black Hole Proximity",
+    }
+}
+
+/// The zone event stays immediate and Haven-relative (spawn tables and
+/// contracts read it). The *announcement* is measured from the local station
+/// (see SystemStations::local_range) and waits for the zone to settle.
 fn check_depth_zone_change(
     ship_state: Res<DepthState>,
+    time: Res<Time>,
+    stations: Res<home_base::SystemStations>,
+    ship: Query<&Transform, With<Ship>>,
     mut last_zone: Local<Option<crate::components::ZoneType>>,
+    mut announced: Local<Option<crate::components::ZoneType>>,
+    mut settling: Local<(Option<crate::components::ZoneType>, f32)>,
     mut zone_events: MessageWriter<DepthZoneChanged>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     let current_zone = depth_to_zone(ship_state.current_depth);
-
     if Some(current_zone) != *last_zone {
-        let first = last_zone.is_some();
         *last_zone = Some(current_zone);
-
         zone_events.write(DepthZoneChanged {
             new_depth: ship_state.current_depth,
             new_zone: current_zone,
         });
-
-        if first {
-            let zone_name = match current_zone {
-                ZoneType::NearOrbit => "Near Orbit",
-                ZoneType::AsteroidBelt => "Asteroid Belt",
-                ZoneType::DeepSpace => "Deep Space",
-                ZoneType::Nebula => "Nebula",
-                ZoneType::BlackHole => "Black Hole Proximity",
-            };
-            notifications.write(ShowNotification {
-                message: format!("Entering {}", zone_name),
-                notification_type: NotificationType::Warning,
-                duration: 3.0,
-            });
-        }
     }
+
+    let local = ship
+        .single()
+        .ok()
+        .and_then(|t| stations.local_range(t.translation.truncate()))
+        .unwrap_or(ship_state.current_depth);
+    if let Some(zone) = settled_zone(depth_to_zone(local), time.delta_secs(), &mut settling, &mut announced) {
+        notifications.write(ShowNotification {
+            message: format!("Entering {}", zone_name(zone)),
+            notification_type: NotificationType::Warning,
+            duration: 3.0,
+        });
+    }
+}
+
+/// Feeds one frame's zone in; returns a zone to announce once it has held for
+/// ZONE_SETTLE_SECONDS and differs from the last one announced. The very
+/// first zone of a run is recorded silently -- launching into Near Orbit is
+/// not news.
+fn settled_zone(
+    zone: ZoneType,
+    dt: f32,
+    settling: &mut (Option<ZoneType>, f32),
+    announced: &mut Option<ZoneType>,
+) -> Option<ZoneType> {
+    if announced.is_none() {
+        *announced = Some(zone);
+        *settling = (Some(zone), 0.0);
+        return None;
+    }
+    if settling.0 != Some(zone) {
+        *settling = (Some(zone), 0.0);
+    } else {
+        settling.1 += dt;
+    }
+    if *announced != Some(zone) && settling.1 >= ZONE_SETTLE_SECONDS {
+        *announced = Some(zone);
+        return Some(zone);
+    }
+    None
 }
 
 /// The zone a given range corresponds to. One function, on purpose.
@@ -664,5 +709,34 @@ mod settlement_dock_tests {
         let mut app = app(true);
         assert!(!docked_at_settlement(&mut app));
         assert!(app.world().resource::<InteractPress>().pending(), "the press was swallowed");
+    }
+}
+
+#[cfg(test)]
+mod zone_notice_tests {
+    use super::*;
+
+    fn run(frames: &[(ZoneType, f32)]) -> Vec<ZoneType> {
+        let (mut settling, mut announced) = ((None, 0.0), None);
+        frames.iter().filter_map(|(z, dt)| settled_zone(*z, *dt, &mut settling, &mut announced)).collect()
+    }
+
+    /// Wobbling across a ring for ten seconds announces nothing.
+    #[test]
+    fn hovering_on_a_boundary_is_quiet() {
+        let mut frames = vec![(ZoneType::NearOrbit, 0.1)];
+        for i in 0..100 {
+            let z = if (i / 10) % 2 == 0 { ZoneType::AsteroidBelt } else { ZoneType::NearOrbit };
+            frames.push((z, 0.1));
+        }
+        assert!(run(&frames).is_empty());
+    }
+
+    /// Crossing and staying is announced, once.
+    #[test]
+    fn a_real_crossing_is_announced_once() {
+        let mut frames = vec![(ZoneType::NearOrbit, 0.1)];
+        frames.extend(std::iter::repeat((ZoneType::AsteroidBelt, 0.1)).take(100));
+        assert_eq!(run(&frames), vec![ZoneType::AsteroidBelt]);
     }
 }

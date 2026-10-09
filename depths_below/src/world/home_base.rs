@@ -143,6 +143,18 @@ pub struct SystemStations {
 
 impl SystemStations {
     /// Nearest station to `pos` within docking range, if any.
+    /// Distance to the nearest station in the loaded system, if it has any.
+    ///
+    /// The zone names (Station Orbit, Near Space, Asteroid Belt...) were
+    /// measured from Haven at the origin, so in any other system the ship is
+    /// a thousand km out and everything read "Black Hole Proximity" -- the HUD
+    /// said it permanently and every arrival announced "Entering Black Hole
+    /// Proximity". Measured from the local station they mean the same thing
+    /// in every system.
+    pub fn local_range(&self, pos: Vec2) -> Option<f32> {
+        self.sites.iter().map(|s| pos.distance(s.pos)).reduce(f32::min)
+    }
+
     pub fn nearest_in_range(&self, pos: Vec2) -> Option<&StationSite> {
         self.sites
             .iter()

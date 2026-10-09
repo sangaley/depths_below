@@ -1471,8 +1471,10 @@ pub fn update_hud(
     mut power_query: Query<(&mut Text, &mut TextColor), (With<PowerText>, Without<DepthText>, Without<OxygenText>, Without<HullText>, Without<DepthZoneText>)>,
     mut hull_query: Query<(&mut Text, &mut TextColor), (With<HullText>, Without<DepthText>, Without<PowerText>, Without<OxygenText>, Without<DepthZoneText>)>,
     mut bar_query: Query<(&HudBar, &mut Node, &mut BackgroundColor)>,
+    local: (Res<crate::world::home_base::SystemStations>, Query<&Transform, With<Ship>>),
 ) {
     use theme::*;
+    let (stations, ship) = local;
     // Range from Haven Station
     if let Ok((mut text, mut text_color)) = depth_query.single_mut() {
         text.0 = format_range_km(depth_state.current_depth);
@@ -1485,7 +1487,16 @@ pub fn update_hud(
         };
     }
     if let Ok(mut text) = depth_zone_query.single_mut() {
-        text.0 = depth_zone_name(depth_state.current_depth).to_string();
+        // From the nearest station in this system, not from Haven.
+        let range = ship
+            .single()
+            .ok()
+            .and_then(|t| stations.local_range(t.translation.truncate()))
+            .unwrap_or(depth_state.current_depth);
+        let name = depth_zone_name(range);
+        if text.0 != name {
+            text.0 = name.to_string();
+        }
     }
 
     // Power
