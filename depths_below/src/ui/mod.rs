@@ -1956,7 +1956,10 @@ fn handle_game_event_notifications(
     mut oxygen_events: MessageReader<OxygenStateChanged>,
     mut breach_events: MessageReader<HullBreached>,
     mut crew_damage_events: MessageReader<CrewDamaged>,
-    crew_query: Query<&CrewMember>,
+    // Our crew only. AI ships' crew raise CrewDamaged too, and a raider
+    // venting its own compartments read out as "Wren taking damage!" --
+    // names nobody aboard has, about people the player was shooting at.
+    crew_query: Query<&CrewMember, Without<crate::ai_ship::components::OwnedByAiShip>>,
     weapon_query: Query<&Weapon>,
     mut notifications: MessageWriter<ShowNotification>,
     mut low_ammo_warned: Local<bool>,
@@ -1990,8 +1993,13 @@ fn handle_game_event_notifications(
     // Crew damage
     for event in crew_damage_events.read() {
         if let Ok(crew) = crew_query.get(event.crew) {
+            // A fatal wound gets the death notice from report_crew_deaths;
+            // "taking damage, -100" on top of it undersold what happened.
+            if crew.health <= 0.0 {
+                continue;
+            }
             notifications.write(ShowNotification {
-                message: format!("{} taking damage! ({:?}, -{:.0})", crew.name, event.source, event.amount),
+                message: format!("{} hurt - {} (-{:.0})", crew.name, event.source.describe(), event.amount),
                 notification_type: NotificationType::Warning,
                 duration: 2.5,
             });
@@ -5467,3 +5475,51 @@ mod map_projection_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod crew_hurt_notice_tests {
+    use super::*;
+    use crate::ai_ship::components::OwnedByAiShip;
+
+    fn hand(name: &str, health: f32) -> CrewMember {
+        CrewMember {
+            name: name.into(),
+            health,
+            max_health: 100.0,
+            oxygen: 100.0,
+            morale: 100.0,
+            state: CrewState::Idle,
+        }
+    }
+
+    fn notices(app: &App) -> Vec<String> {
+        app.world()
+            .resource::<Messages<ShowNotification>>()
+            .iter_current_update_messages()
+            .map(|n| n.message.clone())
+            .collect()
+    }
+
+    #[test]
+    fn only_our_living_crew_get_a_hurt_notice() {
+        let mut app = App::new();
+        app.add_message::<PowerStateChanged>()
+            .add_message::<OxygenStateChanged>()
+            .add_message::<HullBreached>()
+            .add_message::<CrewDamaged>()
+            .add_message::<ShowNotification>()
+            .add_systems(Update, handle_game_event_notifications);
+
+        let ours = app.world_mut().spawn(hand("Reyes", 70.0)).id();
+        let dead = app.world_mut().spawn(hand("Falk", 0.0)).id();
+        let raider = app.world_mut().spawn(Ship).id();
+        let theirs = app.world_mut().spawn((hand("Wren", 0.0), OwnedByAiShip { root: raider })).id();
+        for (crew, amount) in [(ours, 30.0), (dead, 100.0), (theirs, 100.0)] {
+            app.world_mut().write_message(CrewDamaged { crew, amount, source: CrewDamageSource::Decompression });
+        }
+        app.update();
+
+        assert_eq!(notices(&app), vec!["Reyes hurt - decompression (-30)".to_string()]);
+    }
+}
+
