@@ -30,11 +30,11 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use crate::ai_ship::components::{AiShip, AiShipWreck};
+use crate::ai_ship::components::{AiShip, AiShipWreck, SimBehavior, WorldSimulation};
 use crate::celestial::poi::{SpacePoi, SpacePoiType};
 use crate::combat::targeting::selection::TargetSelection;
 use crate::components::{DockingMenuSelection, DockingOverlay, Ship, Velocity, Wreck};
-use crate::contracts::{ContractState, ContractStatus, MissionBoardOpen};
+use crate::contracts::{ContractObjective, ContractState, ContractStatus, MissionBoardOpen};
 use crate::crew::eva_salvage::EvaSalvaging;
 use crate::events::{AiShipDestroyed, NotificationType, ShowNotification};
 use crate::resources::{Currency, FuelState, HullState, InputState, StaffingState};
@@ -455,6 +455,27 @@ struct Warp1<'w, 's> {
     galaxy_charging: Query<'w, 's, (), With<WarpCharging>>,
     galaxy_map: Res<'w, GalaxyMap>,
     streaming: Res<'w, SystemStreamingManager>,
+    /// Where accepted bounties' ships actually are (see bounty_lead).
+    sim: Res<'w, WorldSimulation>,
+}
+
+/// The system and position of the ship an accepted, unfinished bounty wants
+/// dead. Without this the director took bounties off the board and then
+/// patrolled whatever system it was in, so three runs in a row ended with
+/// one kill - the training raider - and combat went untested.
+fn bounty_lead(contracts: &ContractState, sim: &WorldSimulation) -> Option<(u32, Vec2)> {
+    contracts
+        .active_contracts
+        .iter()
+        .filter(|c| c.status != ContractStatus::Completed)
+        .find_map(|c| match c.objective {
+            ContractObjective::DestroyShip { target_id, destroyed: false, .. } => sim
+                .ships
+                .iter()
+                .find(|s| s.bounty_id == Some(target_id) && s.behavior != SimBehavior::Dead)
+                .map(|s| (s.system_id, s.position)),
+            _ => None,
+        })
 }
 
 fn director_brain(
@@ -849,6 +870,22 @@ fn director_brain(
                     || loot_nearby(&w, pos).is_some_and(|(dist, _)| dist < DIVERT_RANGE))
             {
                 d.go(Phase::Strip);
+            } else if let Some((sys, at)) = bounty_lead(&contracts, &warp.sim) {
+                // A bounty to chase. In this system: go to where its ship is,
+                // dashing if it's far, and it becomes a real contact on the
+                // way in. Elsewhere: call this system done so Home -> Jump
+                // takes us to it (the jump picks the bounty's system).
+                if Some(sys) == warp.streaming.loaded_system {
+                    d.search_for = 0.0;
+                    let dist = pos.distance(at);
+                    if !try_warp(&mut d, &mut warp.local_target, &fuel, at, dist) {
+                        fly_to(&mut d, pos, at, dist, 1500.0);
+                    }
+                } else {
+                    d.system_dry = true;
+                    d.log("hunt", "bounty target is in another system - heading out");
+                    d.go(Phase::Home);
+                }
             } else {
                 // Nothing in sight: ping for contacts, and drift outward so
                 // the sweep covers new space rather than the same empty box.
@@ -1042,6 +1079,15 @@ fn director_brain(
             // Pick the nearest system that isn't this one. Targeting by id
             // doesn't need it discovered first - that's the same thing the
             // galaxy map's click-anywhere does, just without the clicking.
+            if warp.galaxy_target.0.is_none() {
+                if let Some((sys, _)) = bounty_lead(&contracts, &warp.sim) {
+                    if Some(sys) != warp.streaming.loaded_system {
+                        let msg = format!("targeting {} to jump - bounty", crate::celestial::galaxy::system_name(sys));
+                        warp.galaxy_target.0 = Some(GalaxyWarpTarget::System(sys));
+                        d.log("jump", &msg);
+                    }
+                }
+            }
             if warp.galaxy_target.0.is_none() {
                 let here = warp.streaming.current_galaxy_pos;
                 let nearest = warp
