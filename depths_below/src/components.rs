@@ -1855,7 +1855,10 @@ pub struct WeaponCooldown {
 pub struct RadarPing {
     pub radius: f32,
     pub max_radius: f32,
+    /// Average outward speed; sets the ping's lifetime (max_radius / speed).
     pub speed: f32,
+    /// Seconds since the ping went out.
+    pub age: f32,
 }
 
 /// Marks an entity as revealed by radar

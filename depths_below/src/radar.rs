@@ -78,6 +78,7 @@ impl Plugin for RadarPlugin {
                     radar_ping_system.in_set(RadarSet::Input),
                     toggle_radar_display.in_set(RadarSet::Input),
                     update_radar_pings.in_set(RadarSet::Update),
+                    draw_radar_pings.in_set(RadarSet::Update).after(update_radar_pings),
                     update_radar_revealed.in_set(RadarSet::Update),
                     update_radar.in_set(RadarSet::Update),
                     update_depth_visibility.in_set(RadarSet::Visibility),
@@ -444,9 +445,10 @@ pub fn update_radar(
 /// Handles Z key radar ping - spawns expanding ring, reveals entities, generates noise
 fn radar_ping_system(
     mut commands: Commands,
-    asset_server: Res<AssetServer>,
     keyboard: Res<ButtonInput<KeyCode>>,
-    radar_query: Query<(&Radar, &Module)>,
+    // Our radar. Unscoped, the first active radar in the world answered --
+    // which could be an enemy's, with its range.
+    radar_query: Query<(&Radar, &Module), Without<crate::ai_ship::components::OwnedByAiShip>>,
     ship_query: Query<&Transform, With<Ship>>,
     mut noise_state: ResMut<NoiseState>,
     mut notifications: MessageWriter<ShowNotification>,
@@ -500,56 +502,74 @@ fn radar_ping_system(
         });
     }
 
-    // Spawn expanding ping ring visual
+    // The ping itself: drawn as a line by draw_radar_pings, not a sprite.
     commands.spawn((
-        (Sprite {
-                image: asset_server.load(crate::sprite_map::effect_sprite_path("radar_ring")),
-                color: Color::srgba(0.2, 0.8, 0.2, 0.5),
-                custom_size: Some(Vec2::splat(10.0)),
-                ..default()
-            }, Transform::from_translation(ship_transform.translation)),
+        Transform::from_translation(ship_transform.translation),
         RadarPing {
             radius: 0.0,
             max_radius: range,
             speed: 400.0,
+            age: 0.0,
         },
     ));
 
     // Noise spike - attracts creatures
     noise_state.noise_level += noise;
 
-    notifications.write(ShowNotification {
-        message: "PING!".into(),
-        notification_type: NotificationType::Info,
-        duration: 1.0,
-    });
+    // No separate "PING!" notice: the ring going out is the ping, and the
+    // scan result above is posted on the same press -- two notices a ping
+    // pushed everything else up the stack.
 }
 
 /// Expands radar ping rings and reveals entities they pass through
+/// Pale cyan, the HUD's own accent, rather than the old saturated green.
+const PING_COLOR: (f32, f32, f32) = (0.55, 0.85, 0.90);
+/// Peak opacity of the leading ring, at the moment it leaves the hull.
+const PING_PEAK_ALPHA: f32 = 0.5;
+/// The faint echo ring trails the leading edge at this fraction of its radius.
+const PING_ECHO: f32 = 0.88;
+
+/// Where a ping is at `age` seconds: (radius, opacity, finished).
+///
+/// It eases out -- quick off the hull, slowing as it spreads -- and fades as
+/// it goes, so the far edge of the sweep arrives as a whisper. The old ring
+/// was a sprite stretched to the ping's diameter, which stretched its line
+/// along with it: a hairline at the hull became a band hundreds of units
+/// thick at full range, bright green, over half the screen.
+pub fn ping_shape(age: f32, max_radius: f32, speed: f32) -> (f32, f32, bool) {
+    let lifetime = (max_radius / speed.max(1.0)).max(0.1);
+    let t = (age / lifetime).clamp(0.0, 1.0);
+    let eased = 1.0 - (1.0 - t).powi(3);
+    let alpha = PING_PEAK_ALPHA * (1.0 - t).powf(1.5);
+    (max_radius * eased, alpha, t >= 1.0)
+}
+
+/// Did the ring's edge cross `dist` between two frames? Swept rather than a
+/// band test at one radius: the edge moves fastest just off the hull, and a
+/// slow frame could otherwise step clean over a contact without seeing it.
+fn ring_crossed(prev_radius: f32, radius: f32, dist: f32) -> bool {
+    const EDGE: f32 = 30.0;
+    dist >= prev_radius - EDGE && dist <= radius + EDGE
+}
+
 fn update_radar_pings(
     mut commands: Commands,
     time: Res<Time>,
-    mut ping_query: Query<(Entity, &mut RadarPing, &mut Sprite, &Transform), Without<Creature>>,
+    mut ping_query: Query<(Entity, &mut RadarPing, &Transform), Without<Creature>>,
     creature_query: Query<(Entity, &Transform, &Creature), Without<RadarPing>>,
     ai_ship_ping_query: Query<(Entity, &Transform), (With<AiShip>, Without<RadarPing>, Without<Creature>)>,
 ) {
-    for (ping_entity, mut ping, mut sprite, transform) in ping_query.iter_mut() {
-        ping.radius += ping.speed * time.delta_secs();
-
-        // Update visual size
-        let diameter = ping.radius * 2.0;
-        sprite.custom_size = Some(Vec2::splat(diameter));
-
-        // Fade out as it expands
-        let alpha = 1.0 - (ping.radius / ping.max_radius);
-        sprite.color = Color::srgba(0.2, 0.8, 0.2, alpha.max(0.0) * 0.4);
+    for (ping_entity, mut ping, transform) in ping_query.iter_mut() {
+        ping.age += time.delta_secs();
+        let prev_radius = ping.radius;
+        let (radius, _, finished) = ping_shape(ping.age, ping.max_radius, ping.speed);
+        ping.radius = radius;
 
         // Reveal creatures the ring passes through
         let ping_pos = transform.translation.truncate();
         for (c_entity, c_transform, _creature) in creature_query.iter() {
             let dist = c_transform.translation.truncate().distance(ping_pos);
-            // Ring thickness of ~30 units
-            if (dist - ping.radius).abs() < 30.0 {
+            if ring_crossed(prev_radius, radius, dist) {
                 commands.entity(c_entity).insert(RadarRevealed {
                     timer: Timer::from_seconds(3.0, TimerMode::Once),
                 });
@@ -559,7 +579,7 @@ fn update_radar_pings(
         // Reveal AI ships the ring passes through
         for (ai_entity, ai_transform) in ai_ship_ping_query.iter() {
             let dist = ai_transform.translation.truncate().distance(ping_pos);
-            if (dist - ping.radius).abs() < 30.0 {
+            if ring_crossed(prev_radius, radius, dist) {
                 commands.entity(ai_entity).insert(AiShipRadarContact {
                     noise_signature: 50.0,
                     revealed_timer: Timer::from_seconds(3.0, TimerMode::Once),
@@ -567,10 +587,24 @@ fn update_radar_pings(
             }
         }
 
-        // Despawn when max radius reached
-        if ping.radius >= ping.max_radius {
+        if finished {
             commands.entity(ping_entity).despawn();
         }
+    }
+}
+
+/// Draws each ping as a thin line of constant on-screen width (a gizmo, so it
+/// stays a hairline at any zoom), with a fainter echo trailing just inside it.
+fn draw_radar_pings(mut gizmos: Gizmos, pings: Query<(&RadarPing, &Transform)>) {
+    let (r, g, b) = PING_COLOR;
+    for (ping, transform) in &pings {
+        let (radius, alpha, _) = ping_shape(ping.age, ping.max_radius, ping.speed);
+        if radius <= 1.0 || alpha <= 0.0 {
+            continue;
+        }
+        let at = Isometry2d::from_translation(transform.translation.truncate());
+        gizmos.circle_2d(at, radius, Color::srgba(r, g, b, alpha)).resolution(160);
+        gizmos.circle_2d(at, radius * PING_ECHO, Color::srgba(r, g, b, alpha * 0.35)).resolution(160);
     }
 }
 
@@ -666,4 +700,31 @@ fn update_depth_visibility(
         }
     }
 
+}
+
+#[cfg(test)]
+mod ping_tests {
+    use super::*;
+
+    /// Out quickly, then slower; brightest at the hull, gone at the edge.
+    #[test]
+    fn a_ping_eases_out_and_fades() {
+        let (max, speed) = (4000.0, 400.0); // a ten-second sweep
+        let (r1, a1, _) = ping_shape(1.0, max, speed);
+        let (r2, a2, _) = ping_shape(2.0, max, speed);
+        let (r9, _, _) = ping_shape(9.0, max, speed);
+        let (r10, a10, done) = ping_shape(10.0, max, speed);
+        assert!(r1 > r2 - r1, "first second should cover more ground than the second");
+        assert!(r10 - r9 < r2 - r1, "should be slowing by the end");
+        assert!(a1 > a2 && a2 > 0.0);
+        assert!((r10 - max).abs() < 0.01 && a10 == 0.0 && done);
+    }
+
+    /// A slow frame that carries the edge past a contact still reveals it.
+    #[test]
+    fn a_contact_the_edge_jumps_over_is_still_seen() {
+        assert!(ring_crossed(1000.0, 1300.0, 1150.0));
+        assert!(!ring_crossed(1000.0, 1300.0, 1600.0));
+        assert!(!ring_crossed(1000.0, 1300.0, 900.0));
+    }
 }
