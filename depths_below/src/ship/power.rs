@@ -76,6 +76,9 @@ pub fn update_power_system(
     power_graph: Res<PowerGraph>,
     mut power_state: ResMut<PowerState>,
     mut power_events: MessageWriter<PowerStateChanged>,
+    time: Res<Time>,
+    mut deficit_for: Local<f32>,
+    mut deficit_announced: Local<bool>,
 ) {
     let Ok(player_ship) = ship_query.single() else { return };
     let mut total_generation = 0.0;
@@ -110,21 +113,33 @@ pub fn update_power_system(
     }
 
     let new_balance = total_generation - total_consumption;
-    let was_critical = power_state.power_balance < 0.0;
     let is_critical = new_balance < 0.0;
 
     power_state.total_power_generation = total_generation;
     power_state.total_power_consumption = total_consumption;
     power_state.power_balance = new_balance;
 
-    // Fire event if power state changed critically
-    if was_critical != is_critical {
-        power_events.write(PowerStateChanged {
-            new_balance,
-            is_critical,
-        });
+    // Announce a deficit only once it has lasted. Every launch dipped for a
+    // second while the watch walked from the bunks to the reactors, so a new
+    // game opened on a red "Power deficit! Systems failing!" followed by
+    // "Power restored" before the player had touched a key. The PWR readout
+    // still flashes the moment the balance goes negative.
+    if is_critical {
+        *deficit_for += time.delta_secs();
+    } else {
+        *deficit_for = 0.0;
+    }
+    if is_critical && *deficit_for >= DEFICIT_GRACE && !*deficit_announced {
+        *deficit_announced = true;
+        power_events.write(PowerStateChanged { new_balance, is_critical: true });
+    } else if !is_critical && *deficit_announced {
+        *deficit_announced = false;
+        power_events.write(PowerStateChanged { new_balance, is_critical: false });
     }
 }
+
+/// Seconds a power deficit must last before it is announced.
+const DEFICIT_GRACE: f32 = 2.0;
 
 /// The flight power systems only run in flight, so at the berth the HUD read
 /// PWR 0/0 -- right where the shipyard tutorial says to balance reactors
@@ -235,7 +250,12 @@ const REACTOR_RESTART_THRESHOLD: f32 = 0.5;
 /// (that sync runs unconditionally, active or not, so a shut-down reactor's
 /// heat keeps dropping in the background — restart just watches for it).
 pub fn update_reactor_heat(
-    mut reactor_query: Query<(&mut Reactor, &mut Module)>,
+    // The player's reactors only. Unscoped, this ran on every reactor in the
+    // world: a kill switches the wreck's modules off, and this then switched
+    // its reactor back on and announced "Reactor back online - heat
+    // dissipated." for a ship we'd just destroyed -- and any enemy reactor
+    // running hot raised our heat warnings.
+    mut reactor_query: Query<(&mut Reactor, &mut Module), Without<crate::ai_ship::components::OwnedByAiShip>>,
     mut notifications: MessageWriter<ShowNotification>,
     mut warned_70: Local<bool>,
     mut warned_90: Local<bool>,
@@ -349,5 +369,120 @@ mod berth_power_tests {
         let p = app.world().resource::<PowerState>();
         assert_eq!((p.total_power_generation, p.total_power_consumption), (1000.0, 300.0));
         assert_eq!(p.power_balance, 700.0);
+    }
+}
+
+#[cfg(test)]
+mod reactor_scope_tests {
+    use super::*;
+    use crate::ai_ship::components::OwnedByAiShip;
+
+    fn reactor_module(active: bool) -> (Reactor, Module) {
+        (
+            Reactor { output: 100.0, heat: 0.0, max_heat: 100.0, explosion_risk: false },
+            Module {
+                module_type: ModuleType::SmallReactor,
+                health: 80.0,
+                max_health: 100.0,
+                power_consumption: 0.0,
+                power_generation: 100.0,
+                is_active: active,
+                grid_position: IVec2::ZERO,
+                size: IVec2::ONE,
+                rotation: Rotation::default(),
+            },
+        )
+    }
+
+    /// A destroyed ship's reactor stays dead, and we aren't told otherwise.
+    #[test]
+    fn an_enemy_wrecks_reactor_is_not_restarted() {
+        let mut app = App::new();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, update_reactor_heat);
+        let wreck = app.world_mut().spawn_empty().id();
+        let theirs = app.world_mut().spawn((reactor_module(false), OwnedByAiShip { root: wreck })).id();
+        app.update();
+        assert!(!app.world().get::<Module>(theirs).unwrap().is_active, "wreck reactor came back on");
+        assert_eq!(app.world().resource::<Messages<ShowNotification>>().iter_current_update_messages().count(), 0);
+    }
+
+    /// Our own cooled reactor still restarts.
+    #[test]
+    fn our_cooled_reactor_restarts() {
+        let mut app = App::new();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, update_reactor_heat);
+        let ours = app.world_mut().spawn(reactor_module(false)).id();
+        app.update();
+        assert!(app.world().get::<Module>(ours).unwrap().is_active);
+    }
+}
+
+#[cfg(test)]
+mod deficit_notice_tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn app() -> (App, Entity) {
+        let mut app = App::new();
+        app.init_resource::<Time>();
+        app.init_resource::<PowerState>();
+        app.init_resource::<PowerGraph>();
+        app.add_message::<PowerStateChanged>();
+        app.add_systems(Update, update_power_system);
+        let ship = app.world_mut().spawn(Ship).id();
+        app.world_mut().resource_mut::<PowerGraph>().powered_tiles.insert(IVec2::ZERO);
+        let load = Module {
+            module_type: ModuleType::HelmStation,
+            health: 100.0,
+            max_health: 100.0,
+            power_consumption: 50.0,
+            power_generation: 0.0,
+            is_active: true,
+            grid_position: IVec2::ZERO,
+            size: IVec2::ONE,
+            rotation: Rotation::default(),
+        };
+        app.world_mut().spawn((load, ChildOf(ship)));
+        (app, ship)
+    }
+
+    fn step(app: &mut App, secs: f32) -> Vec<bool> {
+        app.world_mut().resource_mut::<Time>().advance_by(Duration::from_secs_f32(secs));
+        app.update();
+        app.world().resource::<Messages<PowerStateChanged>>().iter_current_update_messages().map(|e| e.is_critical).collect()
+    }
+
+    /// A one-second dip (the watch changing at launch) says nothing at all.
+    #[test]
+    fn a_brief_dip_is_not_announced() {
+        let (mut app, ship) = app();
+        assert!(step(&mut app, 0.5).is_empty());
+        assert!(step(&mut app, 0.5).is_empty());
+        let reactor = Module {
+            module_type: ModuleType::SmallReactor,
+            health: 100.0,
+            max_health: 100.0,
+            power_consumption: 0.0,
+            power_generation: 100.0,
+            is_active: true,
+            grid_position: IVec2::new(1, 0),
+            size: IVec2::ONE,
+            rotation: Rotation::default(),
+        };
+        app.world_mut().spawn((reactor, ChildOf(ship)));
+        assert!(step(&mut app, 0.5).is_empty(), "announced a recovery from a deficit nobody was told about");
+    }
+
+    /// A real shortfall is announced once, after the grace period.
+    #[test]
+    fn a_lasting_deficit_is_announced_once() {
+        let (mut app, _) = app();
+        let mut seen = Vec::new();
+        for _ in 0..10 {
+            seen.extend(step(&mut app, 0.5));
+        }
+        assert_eq!(seen, vec![true]);
     }
 }

@@ -103,7 +103,9 @@ impl AtmosphericEventType {
     fn random_message(&self, rng: &mut impl Rng) -> &'static str {
         match self {
             Self::HullCreaking => match rng.gen_range(0..4) {
-                0 => "The hull groans under radiation stress...",
+                // Was "...under radiation stress": radiation damage is off,
+                // so the line named a threat the ship can't actually face.
+                0 => "The hull groans under some unseen strain...",
                 1 => "Metal creaks ominously around you.",
                 2 => "A deep, resonant groan echoes through the hull.",
                 _ => "The bulkheads shudder with a low creak.",

@@ -302,14 +302,10 @@ pub fn fire_missiles_system(
             thrust_mult: tuning.map(|t| t.velocity).unwrap_or(1.0),
         });
 
-        // Launch notification for heavy missiles
-        if module.module_type == ModuleType::HeavyMissile {
-            notifications.write(ShowNotification {
-                message: "Heavy missile launched!".into(),
-                notification_type: NotificationType::Warning,
-                duration: 1.5,
-            });
-        }
+        // (No launch notification. There was a yellow "Heavy missile
+        // launched!" for every one of our own shots: two launchers on the
+        // starter filled the notification stack in any fight, burying the
+        // messages that matter. The missile leaving the hull is the feedback.)
     }
 }
 
