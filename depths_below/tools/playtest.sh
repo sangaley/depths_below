@@ -2,9 +2,12 @@
 # Playtest harness: launch the game, let it run, capture engine-side frames,
 # then report anything that looks wrong.
 #
-# Engine-side capture (DEPTHS_SHOTS) photographs the render target, so the
-# game can sit behind other windows and the frames are still the game. An OS
-# screen grab photographs the display and catches whatever is in front.
+# Engine-side capture (DEPTHS_SHOTS) photographs the render target, so it is
+# always the game and never whatever app is in front -- unlike an OS screen
+# grab. It does NOT see through a fully covered window, though: macOS stops
+# that window drawing and every frame after the first comes back black.
+# DEPTHS_OFFSCREEN=1 renders into an image instead, so the run can sit behind
+# anything. The window shows nothing while it is on.
 #
 #   tools/playtest.sh [seconds] [label] [extra env assignments...]
 #
@@ -49,7 +52,7 @@ echo "[playtest] running '$LABEL' for ${SECS}s"
 # solid black and looks exactly like a rendering regression. It is not.
 # `env` is required: caffeinate treats the first token as its command, so
 # inline VAR=value assignments would be swallowed.
-caffeinate -di env DEPTHS_SKIP_MENU=1 DEPTHS_SHOTS=6 DEPTHS_SHOTS_DIR="$OUT" "$@" \
+caffeinate -di env DEPTHS_SKIP_MENU=1 DEPTHS_SHOTS=6 DEPTHS_OFFSCREEN=1 DEPTHS_SHOTS_DIR="$OUT" "$@" \
   cargo run >"$LOG" 2>&1 &
 RUNNER=$!
 disown "$RUNNER" 2>/dev/null || true   # keep job control quiet on kill

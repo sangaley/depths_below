@@ -20,10 +20,16 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //   DEPTHS_SHOTS=<n>    — engine-side screenshot every n seconds during
 //                          NORMAL play: no autopilot, no menu skip, nothing
 //                          else changed. F7 takes one on demand. Captures the
-//                          render target, not the display, so it works while
-//                          the game is behind other windows and never
+//                          render target, not the display, so it never
 //                          photographs whatever app happens to be in front.
+//                          It CANNOT see through a window that is fully
+//                          covered: macOS stops that window drawing, and the
+//                          frames come back black. Use DEPTHS_OFFSCREEN for
+//                          anything run in the background.
 //                          Dir: DEPTHS_SHOTS_DIR (default /tmp/depths_shots).
+//   DEPTHS_OFFSCREEN=1  — render into an image instead of the window, so
+//                          capture works however buried the window is. The
+//                          window itself shows nothing; for unattended runs.
 //   DEPTHS_CASCADE=0.85 — pin the story's progress level, so a late beat can
 //                          be looked at without an hour of flying first.
 //   DEPTHS_CASCADE_TRACE=1 — print the arc's state once a second.
@@ -399,6 +405,7 @@ fn demo_screenshots(
     time: Res<Time>,
     mut since_last: Local<f32>,
     mut index: Local<u32>,
+    offscreen: Option<Res<OffscreenTarget>>,
 ) {
     *since_last += time.delta_secs();
     if *since_last < 4.0 {
@@ -411,7 +418,7 @@ fn demo_screenshots(
     let path = format!("{}/frame_{:03}.png", dir, *index);
     *index += 1;
 
-    commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path));
+    commands.spawn(screenshot_of(offscreen.as_deref())).observe(save_to_disk(path));
 }
 
 // ============================================================================
@@ -422,11 +429,87 @@ fn demo_screenshots(
 // mechanism with nothing else attached.
 //
 // It matters that this is an engine capture rather than an OS screen grab.
-// `Screenshot::primary_window()` reads the render target, so the game can be
-// buried behind other windows and the frame still comes out clean and at the
-// render resolution. An OS grab photographs the display, which means it
-// catches whatever is actually in front — verified the hard way.
+// `Screenshot::primary_window()` reads the render target, so it never catches
+// another app the way an OS grab of the display does — verified the hard way.
+// But a render target only holds what was drawn, and macOS stops drawing a
+// window that is fully covered: a background playtest got one real frame,
+// the instant the window opened, then 63 blank. DEPTHS_OFFSCREEN renders into
+// an image instead, which keeps drawing regardless; see `OffscreenTarget`.
 // ============================================================================
+
+/// The image the game renders into when `DEPTHS_OFFSCREEN=1`, instead of the
+/// window.
+///
+/// Engine-side capture photographs a render target, so it never catches
+/// another app -- but it can only photograph what the game actually DRAWS,
+/// and macOS stops a window drawing once another window fully covers it.
+/// Playtests run with this app in front, so a background run produced one
+/// real frame (the instant the window opened) and then nothing: the director
+/// itself reported 63 of 64 frames blank. Rendering into an image takes the
+/// window out of the capture path entirely.
+///
+/// The window shows nothing while this is on. It is for unattended runs.
+#[derive(Resource, Clone)]
+pub struct OffscreenTarget(pub Handle<Image>);
+
+/// Marks the camera once it has been pointed at the offscreen image, so the
+/// redirect happens exactly once however late the camera spawns.
+#[derive(Component)]
+struct RendersOffscreen;
+
+/// The screenshot to take: of the offscreen image when the game is rendering
+/// into one, of the window otherwise. Every capture goes through this, or one
+/// of them would quietly keep photographing an empty window.
+pub fn screenshot_of(offscreen: Option<&OffscreenTarget>) -> Screenshot {
+    match offscreen {
+        Some(target) => Screenshot::image(target.0.clone()),
+        None => Screenshot::primary_window(),
+    }
+}
+
+/// The window's LOGICAL size (see main.rs), so the offscreen view frames the
+/// same patch of space and lays the HUD out identically at scale 1.0.
+const OFFSCREEN_SIZE: (u32, u32) = (1280, 720);
+
+fn create_offscreen_target(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    use bevy::render::render_resource::{TextureFormat, TextureUsages};
+    let mut image = Image::new_target_texture(
+        OFFSCREEN_SIZE.0,
+        OFFSCREEN_SIZE.1,
+        TextureFormat::Rgba8UnormSrgb,
+        None,
+    );
+    // `new_target_texture` sets the flags for drawing INTO the image. A
+    // screenshot copies it back OUT, which needs COPY_SRC as well -- without
+    // it this captures black for a reason that has nothing to do with macOS,
+    // and would be misread as "offscreen rendering doesn't work".
+    image.texture_descriptor.usage |= TextureUsages::COPY_SRC;
+    commands.insert_resource(OffscreenTarget(images.add(image)));
+    info!("capture: rendering offscreen at {}x{}", OFFSCREEN_SIZE.0, OFFSCREEN_SIZE.1);
+}
+
+fn aim_camera_offscreen(
+    mut commands: Commands,
+    target: Res<OffscreenTarget>,
+    cameras: Query<Entity, (With<crate::camera::MainCamera>, Without<RendersOffscreen>)>,
+) {
+    for camera in &cameras {
+        commands.entity(camera).insert((
+            bevy::camera::RenderTarget::Image(bevy::camera::ImageRenderTarget {
+                handle: target.0.clone(),
+                scale_factor: 1.0,
+            }),
+            // Without this the HUD vanishes from every frame. Bevy draws UI on
+            // the camera marked IsDefaultUiCamera, or failing that the highest
+            // camera targeting the PRIMARY WINDOW -- and an image target is
+            // neither, so the whole interface was drawing to nowhere. No UI
+            // root in this game sets UiTargetCamera, so this one marker moves
+            // all of it.
+            bevy::ui::IsDefaultUiCamera,
+            RendersOffscreen,
+        ));
+    }
+}
 
 /// Marker so the capture plugin can be added unconditionally and cost nothing
 /// when neither the env var nor the key is used.
@@ -453,6 +536,13 @@ impl Plugin for CapturePlugin {
         }
         app.insert_resource(CaptureState { every, since: 0.0, index: 0, dir })
             .add_systems(Update, capture_frames);
+        if std::env::var("DEPTHS_OFFSCREEN").ok().as_deref() == Some("1") {
+            app.add_systems(Startup, create_offscreen_target)
+                .add_systems(
+                    Update,
+                    aim_camera_offscreen.run_if(resource_exists::<OffscreenTarget>),
+                );
+        }
     }
 }
 
@@ -461,6 +551,7 @@ fn capture_frames(
     time: Res<Time>,
     keys: Res<ButtonInput<KeyCode>>,
     mut st: ResMut<CaptureState>,
+    offscreen: Option<Res<OffscreenTarget>>,
 ) {
     let on_demand = keys.just_pressed(KeyCode::F7);
 
@@ -490,5 +581,83 @@ fn capture_frames(
     if on_demand {
         info!("capture: {}", path);
     }
-    commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path));
+    commands
+        .spawn(screenshot_of(offscreen.as_deref()))
+        .observe(save_to_disk(path));
+}
+
+#[cfg(test)]
+mod offscreen_tests {
+    use super::*;
+    use bevy::render::render_resource::TextureUsages;
+
+    fn app() -> App {
+        let mut app = App::new();
+        app.init_resource::<Assets<Image>>();
+        app.add_systems(Startup, create_offscreen_target);
+        app.add_systems(
+            Update,
+            aim_camera_offscreen.run_if(resource_exists::<OffscreenTarget>),
+        );
+        app
+    }
+
+    /// The image has to be readable BACK out. `new_target_texture` only sets
+    /// the flags for drawing into it; without COPY_SRC every capture comes
+    /// back black -- the same symptom as a covered window, for an unrelated
+    /// reason, and exactly the kind that gets misdiagnosed.
+    #[test]
+    fn the_target_can_be_drawn_into_and_read_back_out() {
+        let mut app = app();
+        app.update();
+        let handle = app.world().resource::<OffscreenTarget>().0.clone();
+        let usage = app.world().resource::<Assets<Image>>().get(&handle).unwrap().texture_descriptor.usage;
+        assert!(usage.contains(TextureUsages::RENDER_ATTACHMENT), "cannot be rendered into");
+        assert!(usage.contains(TextureUsages::COPY_SRC), "cannot be read back -- every capture would be black");
+    }
+
+    /// Matches the window's logical size, so the frame shows the same patch
+    /// of space and the HUD lays out as it does on screen.
+    #[test]
+    fn the_target_matches_the_window() {
+        let mut app = app();
+        app.update();
+        let handle = app.world().resource::<OffscreenTarget>().0.clone();
+        let image = app.world().resource::<Assets<Image>>().get(&handle).unwrap();
+        assert_eq!((image.width(), image.height()), OFFSCREEN_SIZE);
+    }
+
+    /// The camera is redirected AND made the UI camera. The second half is the
+    /// one that bit: Bevy draws UI on the IsDefaultUiCamera, or failing that
+    /// the highest camera targeting the primary window. An image target is
+    /// neither, so without the marker the whole HUD drew to nowhere and every
+    /// frame showed the world with no interface at all.
+    #[test]
+    fn the_camera_renders_offscreen_with_its_hud() {
+        let mut app = app();
+        let camera = app.world_mut().spawn(crate::camera::MainCamera).id();
+        app.update();
+        app.update();
+        let world = app.world();
+        assert!(
+            matches!(world.get::<bevy::camera::RenderTarget>(camera), Some(bevy::camera::RenderTarget::Image(_))),
+            "camera still renders to the window"
+        );
+        assert!(
+            world.get::<bevy::ui::IsDefaultUiCamera>(camera).is_some(),
+            "camera renders offscreen but is not the UI camera -- the HUD would be missing"
+        );
+    }
+
+    /// Redirected once, not every frame. A second insert each frame would
+    /// churn the camera's render target for nothing.
+    #[test]
+    fn the_camera_is_redirected_once() {
+        let mut app = app();
+        let camera = app.world_mut().spawn(crate::camera::MainCamera).id();
+        for _ in 0..4 {
+            app.update();
+        }
+        assert!(app.world().get::<RendersOffscreen>(camera).is_some());
+    }
 }

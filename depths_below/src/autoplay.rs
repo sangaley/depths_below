@@ -1519,6 +1519,7 @@ fn director_watch(
     mut notifications: MessageReader<ShowNotification>,
     mut deaths: MessageReader<AiShipDestroyed>,
     mut last_phase: Local<Option<Phase>>,
+    offscreen: Option<Res<crate::demo::OffscreenTarget>>,
 ) {
     let mut want_shot = false;
 
@@ -1596,7 +1597,7 @@ fn director_watch(
         let path = PathBuf::from(format!("{}/shot_{:04}_{:?}.png", d.dir, d.shots, d.phase));
         d.shots += 1;
         commands
-            .spawn(Screenshot::primary_window())
+            .spawn(crate::demo::screenshot_of(offscreen.as_deref()))
             .observe(save_if_legible(path));
     }
 }
