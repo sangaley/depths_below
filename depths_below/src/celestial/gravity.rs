@@ -5,6 +5,12 @@ use super::components::*;
 use super::resources::*;
 use super::events::GravityWarning;
 
+/// Pull, in u/s², at which flying near a body is worth a warning: about a
+/// fifth of the starter's thrust, enough to bend a course you aren't steering.
+pub const GRAVITY_NOTICE: f32 = 40.0;
+/// Pull at which escaping takes most of your engines: two-thirds of thrust.
+pub const GRAVITY_SEVERE: f32 = 120.0;
+
 /// Accumulate gravity forces on all GravityAffected entities from all GravityWells.
 /// Uses influence_radius to skip distant wells.
 pub fn accumulate_gravity(
@@ -56,9 +62,16 @@ pub fn apply_gravity_to_velocity(
     mut query: Query<(&GravityForce, &GravityAffected, &mut Velocity), Without<Ship>>,
 ) {
     let dt = time.delta_secs();
-    for (gravity_force, affected, mut velocity) in query.iter_mut() {
-        let acceleration = gravity_force.0 / affected.mass.max(1.0);
-        velocity.0 += acceleration * dt;
+    // The field IS the acceleration. Every well is built as
+    // `surface_gravity * r²`, so `strength / d²` lands directly in u/s², and
+    // in real gravity a pebble and a hulk fall at the same rate. This used to
+    // divide by `GravityAffected::mass`, which the bodies' masses were tuned
+    // as a "how much does gravity touch this" dial -- harmless while the
+    // field was tiny, but once wells were given real strength it meant a
+    // 0.5-mass projectile bent at TWICE the field while the ship barely felt
+    // it. One rule for everything now.
+    for (gravity_force, _affected, mut velocity) in query.iter_mut() {
+        velocity.0 += gravity_force.0 * dt;
     }
 }
 
@@ -82,12 +95,17 @@ pub fn apply_gravity_to_ship(
 
     let force_magnitude = gravity_force.0.length();
 
-    // Apply gravity as acceleration (F = ma, a = F/m)
-    let acceleration = gravity_force.0 / physics.mass.max(1.0);
-    velocity.0 += acceleration * dt;
+    // The field is already an acceleration -- see apply_gravity_to_velocity.
+    // Dividing by `physics.mass` (1200 for the starter) made the pull about
+    // 1/1200th of what every well was tuned for: 0.026 u/s² at Haven's spawn
+    // against 180 u/s² of thrust, which is why flying past a star felt like
+    // nothing. The mass still matters for thrust, where it should.
+    let _ = physics;
+    velocity.0 += gravity_force.0 * dt;
 
-    // Warn player when gravity is pulling them
-    if force_magnitude > 100.0 && !*warned_light {
+    // Warn player when gravity is pulling them. Thresholds are in u/s² against
+    // the starter's ~180 of thrust: a noticeable tug, then most of your engines.
+    if force_magnitude > GRAVITY_NOTICE && !*warned_light {
         *warned_light = true;
         notifications.write(ShowNotification {
             message: "Gravitational pull detected - watch your trajectory!".into(),
@@ -95,7 +113,7 @@ pub fn apply_gravity_to_ship(
             duration: 3.0,
         });
     }
-    if force_magnitude > 400.0 && !*warned_heavy {
+    if force_magnitude > GRAVITY_SEVERE && !*warned_heavy {
         *warned_heavy = true;
         notifications.write(ShowNotification {
             message: "EXTREME GRAVITY! Full thrust required to escape!".into(),
@@ -104,14 +122,14 @@ pub fn apply_gravity_to_ship(
         });
     }
 
-    // Reset warnings when force drops
-    if force_magnitude < 50.0 {
+    // Reset warnings when the pull drops well below the notice line
+    if force_magnitude < GRAVITY_NOTICE * 0.6 {
         *warned_light = false;
         *warned_heavy = false;
     }
 
     // Fire warning events for UI
-    if force_magnitude > 50.0 {
+    if force_magnitude > GRAVITY_NOTICE {
         if let Ok(ship_transform) = ship_transform_query.single() {
             let ship_pos = ship_transform.translation.truncate();
             // Find the strongest gravity source
@@ -128,5 +146,90 @@ pub fn apply_gravity_to_ship(
                 });
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod gravity_tests {
+    use super::*;
+
+    /// No MinimalPlugins: its TimePlugin rewrites `Time` from the wall clock
+    /// and would discard the delta advanced here.
+    fn app() -> App {
+        let mut app = App::new();
+        app.init_resource::<Time>();
+        app.add_message::<GravityWarning>();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, (apply_gravity_to_ship, apply_gravity_to_velocity));
+        app
+    }
+
+    fn step(app: &mut App, secs: f32) {
+        app.world_mut().resource_mut::<Time>().advance_by(std::time::Duration::from_secs_f32(secs));
+        app.update();
+    }
+
+    /// The test the last gravity change did not have. That change checked the
+    /// FIELD (`strength / d²`) and assumed it was what the ship felt; the
+    /// system then divided by the ship's mass, so a pull tuned at 31 u/s²
+    /// arrived as 0.026. Here the real system runs on a real-mass ship and the
+    /// velocity it produces is what gets measured.
+    #[test]
+    fn a_ship_accelerates_at_the_full_field_whatever_its_mass() {
+        let mut app = app();
+        let field = Vec2::new(31.0, 0.0); // Haven's spawn
+        let ship = app
+            .world_mut()
+            .spawn((
+                crate::components::Ship,
+                GravityForce(field),
+                Velocity(Vec2::ZERO),
+                ShipPhysics::default(), // mass 1200
+                Transform::default(),
+            ))
+            .id();
+        step(&mut app, 1.0);
+        let v = app.world().get::<Velocity>(ship).unwrap().0;
+        assert!(
+            (v - field).length() < 0.01,
+            "after 1s in a 31 u/s² field the ship moves at {v}; dividing by its mass of \
+             1200 would give about 0.026"
+        );
+    }
+
+    /// Real gravity: a pebble and a hulk fall together. Before, each body's
+    /// `mass` acted as a dial, so a 0.5-mass projectile bent at twice the
+    /// field and a 50-mass severed section at a fiftieth of it.
+    #[test]
+    fn every_body_falls_at_the_same_rate() {
+        let mut app = app();
+        let field = Vec2::new(0.0, -20.0);
+        let bodies: Vec<Entity> = [0.2f32, 0.5, 3.0, 50.0]
+            .iter()
+            .map(|&m| {
+                app.world_mut()
+                    .spawn((GravityForce(field), GravityAffected { mass: m }, Velocity(Vec2::ZERO)))
+                    .id()
+            })
+            .collect();
+        step(&mut app, 2.0);
+        for (i, e) in bodies.iter().enumerate() {
+            let v = app.world().get::<Velocity>(*e).unwrap().0;
+            assert!(
+                (v - field * 2.0).length() < 0.01,
+                "body {i} fell at {v}, not the field's {}", field * 2.0
+            );
+        }
+    }
+
+    /// The warning and HUD lines are in u/s², and sit below the starter's
+    /// ~180 of thrust so they mean something: a notice well inside what the
+    /// engines can beat, a severe warning before the pull overpowers them.
+    #[test]
+    fn warnings_sit_inside_what_the_engines_can_beat() {
+        const THRUST: f32 = 180.0;
+        assert!(GRAVITY_NOTICE < GRAVITY_SEVERE);
+        assert!(GRAVITY_SEVERE < THRUST, "a 'severe' pull should still be escapable");
+        assert!(GRAVITY_NOTICE > 10.0, "a notice should be a real tug, not noise");
     }
 }

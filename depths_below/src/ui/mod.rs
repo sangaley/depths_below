@@ -1325,20 +1325,25 @@ pub fn update_celestial_hud(
                 _ => "Unknown",
             };
 
-            let intensity = if gravity_force > 400.0 {
+            // In u/s², against the starter's ~180 of thrust. These were sized
+            // for the old force-over-mass scale, where nothing short of a black
+            // hole ever left "Weak" -- Haven's spawn now pulls at ~31, which is
+            // a real tug and should say so.
+            use crate::celestial::gravity::{GRAVITY_NOTICE, GRAVITY_SEVERE};
+            let intensity = if gravity_force > GRAVITY_SEVERE {
                 "EXTREME"
-            } else if gravity_force > 200.0 {
+            } else if gravity_force > GRAVITY_NOTICE {
                 "Strong"
-            } else if gravity_force > 50.0 {
+            } else if gravity_force > GRAVITY_NOTICE * 0.35 {
                 "Moderate"
             } else {
                 "Weak"
             };
 
             text.0 = format!("Grav: {} ({})", intensity, source_name);
-            text_color.0 = if gravity_force > 400.0 {
+            text_color.0 = if gravity_force > GRAVITY_SEVERE {
                 Color::srgb(1.0, 0.0, 0.0)
-            } else if gravity_force > 200.0 {
+            } else if gravity_force > GRAVITY_NOTICE {
                 Color::srgb(1.0, 1.0, 0.0)
             } else {
                 Color::srgb(0.8, 0.4, 0.3)
