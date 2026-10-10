@@ -1041,58 +1041,8 @@ mod gunnery_tests {
     }
 }
 
-/// Tell the player they won, and how.
-///
-/// AiShipDestroyed reached the audio system and nothing else, so a kill — the
-/// payoff of the whole fight — produced no line, no readout, nothing but the
-/// target going quiet. The CAUSE is the interesting part and it was already
-/// being computed and thrown away: check_ai_cripple decides whether a crew
-/// struck colours, the reactor let go, or you ground the hull to nothing, and
-/// each leaves a different wreck to pick over.
-pub fn announce_kills(
-    mut destroyed: MessageReader<AiShipDestroyed>,
-    mut notifications: MessageWriter<ShowNotification>,
-) {
-    for event in destroyed.read() {
-        let (line, kind) = match event.cause {
-            // The cleanest kill and the best salvage — worth naming as a win,
-            // not just as a death.
-            ShipDeathCause::Struck => (
-                format!("{} struck colors - intact derelict", faction_name(event.ship_type)),
-                NotificationType::Success,
-            ),
-            ShipDeathCause::Meltdown => (
-                format!("{} reactor breach - she's gone", faction_name(event.ship_type)),
-                NotificationType::Warning,
-            ),
-            ShipDeathCause::Gutted => (
-                format!("{} gutted - little left to salvage", faction_name(event.ship_type)),
-                NotificationType::Info,
-            ),
-        };
-        notifications.write(ShowNotification {
-            message: line,
-            notification_type: kind,
-            duration: 3.5,
-        });
-    }
-}
-
-/// Kill-announcement flavour: the faction name plus what kind of hull it was.
-/// For the plain faction name use `faction_display_name`.
-fn faction_name(ship_type: AiShipType) -> &'static str {
-    use AiShipType::*;
-    match ship_type {
-        StellarPreserve => "Stellar Preserve hauler",
-        SynthesisCollective => "Synthesis hybrid",
-        BrokenChoir => "Broken Choir hulk",
-        CorpseStars => "Corpse Stars vessel",
-        TheSilence => "Silent One",
-        TerranHegemony => "Hegemony battleship",
-        GildedThrone => "Gilded Throne merc",
-        RecursiveKingdom => "Recursive Kingdom raider",
-        EternalHegemony => "Eternal Hegemony",
-        Shepherd => "The Shepherd",
-    }
-}
+// (Kills are announced once, by ai_ship::wreck when the wreck forms: its
+// headline names the cause -- struck colours, core detonation, gutted -- and
+// the wreck's condition. A second announcer here put up a line saying the
+// same thing for every kill, which in a swarm fight was half the stack.)
 
