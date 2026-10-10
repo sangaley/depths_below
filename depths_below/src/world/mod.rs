@@ -313,7 +313,58 @@ fn same_spot(a: Vec2, b: Vec2) -> bool {
     a.distance_squared(b) < 1.0
 }
 
+/// At most one discovery toast in this many seconds; whatever else turns up
+/// meanwhile goes into one "N more sites" line when it's up.
+///
+/// The band of chunk sites south of Haven is dense and discovery fires within
+/// 700 of a ship over 1,500 long, so crossing it at speed logged fourteen
+/// sites in four seconds -- fourteen toasts, mostly for things still under
+/// the hull, and the story's own notices pushed off the stack.
+const DISCOVERY_TOAST_EVERY: f32 = 3.0;
+
+/// Discoveries waiting for the toast window to close.
+#[derive(Default)]
+struct HeldDiscoveries {
+    names: Vec<String>,
+    window_until: f32,
+}
+
+impl HeldDiscoveries {
+    /// One toast now if the window is shut, else hold `name` for the batch.
+    fn announce(&mut self, now: f32, message: String, name: String) -> Option<String> {
+        if now >= self.window_until {
+            self.window_until = now + DISCOVERY_TOAST_EVERY;
+            Some(message)
+        } else {
+            self.names.push(name);
+            None
+        }
+    }
+
+    /// The batched line, once the window has closed on anything held.
+    fn flush(&mut self, now: f32) -> Option<String> {
+        if self.names.is_empty() || now < self.window_until {
+            return None;
+        }
+        self.window_until = now + DISCOVERY_TOAST_EVERY;
+        let names = std::mem::take(&mut self.names);
+        Some(match names.as_slice() {
+            [one] => format!("Discovered {one}!"),
+            [a, b] => format!("Discovered 2 more sites: {a}, {b}"),
+            [a, b, c] => format!("Discovered 3 more sites: {a}, {b}, {c}"),
+            [a, b, c, rest @ ..] => format!(
+                "Discovered {} more sites: {a}, {b}, {c} and {} others (M: map)",
+                names.len(),
+                rest.len()
+            ),
+            [] => unreachable!(),
+        })
+    }
+}
+
 fn check_poi_discovery(
+    time: Res<Time>,
+    mut held: Local<HeldDiscoveries>,
     ship_query: Query<&GlobalTransform, With<Ship>>,
     mut poi_query: Query<(&GlobalTransform, &mut PointOfInterest)>,
     // The celestial layer, which is what exists outside Haven. Deliberately
@@ -326,6 +377,14 @@ fn check_poi_discovery(
     mut poi_events: MessageWriter<PoiDiscovered>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
+    let now = time.elapsed_secs();
+    if let Some(message) = held.flush(now) {
+        notifications.write(ShowNotification {
+            message,
+            notification_type: NotificationType::Success,
+            duration: 4.0,
+        });
+    }
     let Ok(ship_gt) = ship_query.single() else { return };
     let ship_pos = ship_gt.translation().truncate();
 
@@ -344,11 +403,13 @@ fn check_poi_discovery(
         }
         discovered.special.push((pos, sp.name.clone()));
         poi_events.write(PoiDiscovered { poi_type: kind, position: pos });
-        notifications.write(ShowNotification {
-            message: format!("Contact logged: {}", sp.name),
-            notification_type: NotificationType::Info,
-            duration: 4.0,
-        });
+        if let Some(message) = held.announce(now, format!("Contact logged: {}", sp.name), sp.name.clone()) {
+            notifications.write(ShowNotification {
+                message,
+                notification_type: NotificationType::Info,
+                duration: 4.0,
+            });
+        }
     }
 
     for (poi_gt, mut poi) in poi_query.iter_mut() {
@@ -387,11 +448,14 @@ fn check_poi_discovery(
                 position: poi_pos,
             });
 
-            notifications.write(ShowNotification {
-                message: format!("Discovered {}!", poi.poi_type.display_name()),
-                notification_type: NotificationType::Success,
-                duration: 3.0,
-            });
+            let name = poi.poi_type.display_name();
+            if let Some(message) = held.announce(now, format!("Discovered {name}!"), name.to_string()) {
+                notifications.write(ShowNotification {
+                    message,
+                    notification_type: NotificationType::Success,
+                    duration: 3.0,
+                });
+            }
         }
     }
 }
@@ -632,6 +696,7 @@ mod rediscovery_tests {
 
     fn app() -> App {
         let mut app = App::new();
+        app.init_resource::<Time>();
         app.init_resource::<DiscoveredLocations>();
         app.add_message::<PoiDiscovered>();
         app.add_message::<ShowNotification>();
@@ -671,6 +736,22 @@ mod rediscovery_tests {
         assert_eq!(app.world().resource::<DiscoveredLocations>().wrecks.len(), 1);
     }
 
+    fn wait(app: &mut App, secs: f32) {
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(std::time::Duration::from_secs_f32(secs));
+    }
+
+    fn messages(app: &App) -> Vec<String> {
+        app.world()
+            .resource::<Messages<ShowNotification>>()
+            .iter_current_update_messages()
+            .map(|n| n.message.clone())
+            .collect()
+    }
+
+    /// Logged at once; announced once the toast window from the first one
+    /// has closed.
     #[test]
     fn a_different_wreck_nearby_still_is() {
         let mut app = app();
@@ -678,8 +759,31 @@ mod rediscovery_tests {
         app.update();
         wreck_at(&mut app, Vec2::new(-250.0, 100.0));
         app.update();
-        assert_eq!(announcements(&app), 1);
         assert_eq!(app.world().resource::<DiscoveredLocations>().wrecks.len(), 2);
+        wait(&mut app, DISCOVERY_TOAST_EVERY + 0.1);
+        app.update();
+        assert_eq!(messages(&app), vec!["Discovered Drifting Wreck!".to_string()]);
+    }
+
+    /// Crossing a dense band: the first find gets its toast, the rest one
+    /// line between them, not a toast each.
+    #[test]
+    fn a_burst_of_finds_is_two_toasts_not_six() {
+        let mut app = app();
+        for k in 0..6 {
+            wreck_at(&mut app, Vec2::new(100.0 * k as f32 - 250.0, 50.0));
+        }
+        app.update();
+        assert_eq!(announcements(&app), 1);
+        assert_eq!(app.world().resource::<DiscoveredLocations>().wrecks.len(), 6);
+        wait(&mut app, 1.0);
+        app.update();
+        assert_eq!(announcements(&app), 0, "a toast inside the window");
+        wait(&mut app, DISCOVERY_TOAST_EVERY);
+        app.update();
+        let batch = messages(&app);
+        assert_eq!(batch.len(), 1);
+        assert!(batch[0].starts_with("Discovered 5 more sites"), "{}", batch[0]);
     }
 }
 
