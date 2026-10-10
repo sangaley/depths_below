@@ -370,24 +370,19 @@ pub fn update_mission_board_display(
 // CONTRACT HUD (top-right during Exploring)
 // ============================================================================
 
-/// Top edge of the contract tracker: just below the HUD's top bar.
-pub const CONTRACT_HUD_TOP: f32 = 48.0;
-
+/// Spawns the contract tracker at the top of the HUD's right-hand column, so
+/// the notifications below it are laid out under it instead of on top of it.
+/// (At top 12 on its own it was drawn over CRED/CREW/CARGO with the
+/// notifications running underneath.)
 pub fn spawn_contract_hud(
     mut commands: Commands,
+    column: Query<Entity, With<crate::ui::RightColumn>>,
 ) {
-    commands.spawn((
+    let tracker = commands.spawn((
         (Node {
-                position_type: PositionType::Absolute,
-                // Under the top bar, in line with the notification stack --
-                // which then starts below this (ui::stack_notifications_under_tracker).
-                // At top 12 it was drawn over CRED/CREW/CARGO, and the
-                // notifications ran underneath it.
-                right: Val::Px(crate::ui::theme::ThemeSpacing::LG),
-                top: Val::Px(CONTRACT_HUD_TOP),
-                // Same width as the notification stack below it. Unbounded,
-                // a few bounty lines ("... vessel: Hunting - in Ashfall")
-                // ran left across the flight-training card; long lines wrap.
+                // Same width as the notifications under it. Unbounded, a few
+                // bounty lines ("... vessel: Hunting - in Ashfall") ran left
+                // across the flight-training card; long lines wrap.
                 max_width: Val::Px(360.0),
                 flex_direction: FlexDirection::Column,
                 padding: UiRect::all(Val::Px(8.0)),
@@ -399,7 +394,10 @@ pub fn spawn_contract_hud(
             (Text::new(""), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(Color::WHITE)),
             ContractHudText,
         ));
-    });
+    }).id();
+    if let Ok(column) = column.single() {
+        commands.entity(column).insert_children(0, &[tracker]);
+    }
 }
 
 pub fn despawn_contract_hud(
@@ -541,5 +539,26 @@ mod bounty_whereabouts_tests {
     fn a_live_target_uses_where_it_actually_is() {
         let sim = sim_with(0, Vec2::new(50_000.0, 0.0));
         assert_eq!(bounty_whereabouts(7, Some(Vec2::new(3_000.0, 0.0)), &sim, Some(0), Vec2::ZERO).as_deref(), Some("3.0 km"));
+    }
+}
+
+#[cfg(test)]
+mod tracker_column_tests {
+    use super::*;
+
+    /// The tracker goes in the right-hand column, ahead of the notifications,
+    /// so layout puts the notices under it.
+    #[test]
+    fn the_tracker_heads_the_right_column() {
+        let mut app = App::new();
+        app.add_systems(Update, spawn_contract_hud);
+        let notices = app.world_mut().spawn(Node::default()).id();
+        let column = app.world_mut().spawn((Node::default(), crate::ui::RightColumn)).id();
+        app.world_mut().entity_mut(column).add_child(notices);
+        app.update();
+        let children: Vec<Entity> = app.world().get::<Children>(column).unwrap().iter().collect();
+        assert_eq!(children.len(), 2);
+        assert!(app.world().get::<ContractHudRoot>(children[0]).is_some(), "tracker isn't first");
+        assert_eq!(children[1], notices);
     }
 }

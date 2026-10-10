@@ -100,7 +100,6 @@ impl Plugin for UiPlugin {
                 offscreen_markers::update_offscreen_markers.run_if(in_state(GameState::Exploring)),
             )
             .add_systems(OnExit(GameState::Exploring), offscreen_markers::clear_offscreen_markers)
-            .add_systems(Update, stack_notifications_under_tracker)
             .add_systems(OnEnter(GameState::StationDocked), show_hud)
             .add_systems(OnExit(GameState::MainMenu), despawn_main_menu)
             // Game Over screen
@@ -931,19 +930,34 @@ fn setup_ui(mut commands: Commands) {
             });
         });
 
-        // ===== NOTIFICATION CONTAINER =====
+        // ===== RIGHT COLUMN: contract tracker, then notifications =====
+        // One column so layout stacks them. They used to be placed apart and
+        // the notifications pushed down by the tracker's measured height,
+        // which lagged and missed wrapped lines: notices kept landing on the
+        // tracker's last line. The tracker joins this column when it spawns
+        // (contracts::ui::spawn_contract_hud), ahead of the notifications.
         parent.spawn((
-            (Node {
-                    position_type: PositionType::Absolute,
-                    right: Val::Px(ThemeSpacing::LG),
-                    top: Val::Px(NOTIFICATIONS_TOP),
+            Node {
+                position_type: PositionType::Absolute,
+                right: Val::Px(ThemeSpacing::LG),
+                top: Val::Px(RIGHT_COLUMN_TOP),
+                flex_direction: FlexDirection::Column,
+                align_items: AlignItems::FlexEnd,
+                row_gap: Val::Px(ThemeSpacing::SM),
+                max_width: Val::Px(360.0),
+                ..default()
+            },
+            RightColumn,
+        )).with_children(|column| {
+            column.spawn((
+                Node {
                     flex_direction: FlexDirection::Column,
                     row_gap: Val::Px(ThemeSpacing::SM),
-                    max_width: Val::Px(360.0),
                     ..default()
-                }),
-            NotificationContainer,
-        ));
+                },
+                NotificationContainer,
+            ));
+        });
 
         // ===== BOTTOM BAR — Controls =====
         parent.spawn((Node {
@@ -4871,30 +4885,13 @@ fn spawn_docking_menu(
     });
 }
 
-/// Where the notification stack starts when nothing sits above it.
-const NOTIFICATIONS_TOP: f32 = 48.0;
+/// Top of the right-hand HUD column (contract tracker, then notifications):
+/// just below the top bar.
+pub const RIGHT_COLUMN_TOP: f32 = 48.0;
 
-/// The contract tracker and the notifications share the top-right corner.
-/// Each was placed on its own, so the tracker covered the first notices and
-/// both garbled each other. Notifications now start under the tracker,
-/// whatever its height, and move back up when it's hidden or empty.
-fn stack_notifications_under_tracker(
-    tracker: Query<(&Node, &ComputedNode), (With<crate::contracts::ui::ContractHudRoot>, Without<NotificationContainer>)>,
-    mut stack: Query<&mut Node, With<NotificationContainer>>,
-) {
-    let tracker_bottom = tracker
-        .iter()
-        .find(|(node, _)| node.display != Display::None)
-        .map(|(_, computed)| computed.size().y * computed.inverse_scale_factor())
-        .filter(|h| *h > 0.0)
-        .map(|h| crate::contracts::ui::CONTRACT_HUD_TOP + h + theme::ThemeSpacing::SM);
-    let top = Val::Px(tracker_bottom.unwrap_or(NOTIFICATIONS_TOP));
-    if let Ok(mut node) = stack.single_mut() {
-        if node.top != top {
-            node.top = top;
-        }
-    }
-}
+/// The right-hand column the contract tracker and the notifications stack in.
+#[derive(Component)]
+pub struct RightColumn;
 
 /// Selling cargo, refuelling, rearming and repairs all live in the services
 /// menu, and only a settlement berth ever opened it. A station -- where the
@@ -5960,43 +5957,6 @@ mod weapon_rack_tests {
     fn power_weapons_show_no_fake_ammo() {
         let beam = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 999, max: 999, alive: true };
         assert_eq!(rack_line("Laser", &[beam]).ammo, "power");
-    }
-}
-
-#[cfg(test)]
-mod notification_stack_tests {
-    use super::*;
-
-    fn app() -> App {
-        let mut app = App::new();
-        app.add_systems(Update, stack_notifications_under_tracker);
-        app.world_mut().spawn((Node { top: Val::Px(NOTIFICATIONS_TOP), ..default() }, NotificationContainer));
-        app
-    }
-
-    fn stack_top(app: &mut App) -> Val {
-        let mut q = app.world_mut().query_filtered::<&Node, With<NotificationContainer>>();
-        q.single(app.world()).unwrap().top
-    }
-
-    /// No tracker on screen: notifications sit right under the top bar.
-    #[test]
-    fn without_a_tracker_the_stack_stays_up_top() {
-        let mut app = app();
-        app.world_mut().spawn((Node { display: Display::None, ..default() }, ComputedNode::default(), crate::contracts::ui::ContractHudRoot));
-        app.update();
-        assert_eq!(stack_top(&mut app), Val::Px(NOTIFICATIONS_TOP));
-    }
-
-    /// A tracker on screen pushes the stack down below it.
-    #[test]
-    fn a_tracker_pushes_the_stack_below_it() {
-        let mut app = app();
-        let computed = ComputedNode { size: Vec2::new(300.0, 60.0), inverse_scale_factor: 1.0, ..default() };
-        app.world_mut().spawn((Node::default(), computed, crate::contracts::ui::ContractHudRoot));
-        app.update();
-        let expected = crate::contracts::ui::CONTRACT_HUD_TOP + 60.0 + theme::ThemeSpacing::SM;
-        assert_eq!(stack_top(&mut app), Val::Px(expected));
     }
 }
 
