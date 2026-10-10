@@ -457,6 +457,13 @@ pub fn spawn_raider_waves(
     });
 }
 
+/// A destroyed AI ship whose simulated entry has been marked dead. The
+/// bookkeeping is meant to happen once per kill; without a marker it ran
+/// every frame for every wreck, and each pass found a *living* spawned ship
+/// of the same faction and marked that one dead too.
+#[derive(Component)]
+pub struct SimSettled;
+
 /// Spawn/despawn real entities based on player proximity
 pub fn sync_simulation_entities(
     mut commands: Commands,
@@ -464,7 +471,7 @@ pub fn sync_simulation_entities(
     registry: Res<ModuleRegistry>,
     asset_server: Res<AssetServer>,
     ship_query: Query<&Transform, With<Ship>>,
-    ai_ships: Query<(Entity, &Transform, &AiShipType, &AiShipState, Option<&BountyTarget>), With<AiShip>>,
+    ai_ships: Query<(Entity, &Transform, &AiShipType, &AiShipState, Option<&BountyTarget>, Has<SimSettled>), With<AiShip>>,
 ) {
     let Ok(player_transform) = ship_query.single() else { return };
     let player_pos = player_transform.translation.truncate();
@@ -479,7 +486,10 @@ pub fn sync_simulation_entities(
     // or a busy system turns into a slideshow the moment you fly into the
     // middle of it. The rest stay simulated and keep moving — they are still
     // there, still fighting each other, just not built yet.
-    let live = ai_ships.iter().count();
+    // Living hulls only. Wrecks keep their AiShip component, and counting
+    // them meant a system where the player had won a few fights could never
+    // spawn another ship -- including a bounty target sitting 1.5 km away.
+    let live = ai_ships.iter().filter(|(_, _, _, state, _, _)| !state.is_destroyed).count();
     if live < MAX_LIVE_AI_HULLS {
         let mut candidates: Vec<(usize, f32)> = sim
             .ships
@@ -514,25 +524,35 @@ pub fn sync_simulation_entities(
     // "dead" entry — so the player can fly away and come back later to
     // actually scavenge the hull they shot up, instead of it vanishing the
     // moment they're out of range.
-    for (entity, transform, ship_type, state, bounty) in ai_ships.iter() {
+    for (entity, transform, ship_type, state, bounty, settled) in ai_ships.iter() {
         // Bounty-tagged ships are matched back to their exact sim entry by
         // id — the faction-only match below is ambiguous whenever more than
         // one ship of the same faction is spawned at once, which would risk
         // flagging the wrong sim ship (possibly the actual bounty target) as
         // dead/despawned.
         if state.is_destroyed {
+            if settled {
+                continue;
+            }
             // One-time sim bookkeeping so this faction slot frees up for
             // future spawns — doesn't touch the real (now-wreck) entity.
+            // Without a bounty id, the nearest spawned ship of its faction is
+            // the best guess at which entry it was.
+            let wreck_at = transform.translation.truncate();
             let sim_ship = if let Some(bounty) = bounty {
                 sim.ships.iter_mut().find(|s| s.bounty_id == Some(bounty.0))
             } else {
-                sim.ships.iter_mut().find(|s| s.spawned && s.faction == *ship_type)
+                sim.ships
+                    .iter_mut()
+                    .filter(|s| s.spawned && s.faction == *ship_type)
+                    .min_by(|a, b| a.position.distance(wreck_at).total_cmp(&b.position.distance(wreck_at)))
             };
             if let Some(sim_ship) = sim_ship {
                 sim_ship.behavior = SimBehavior::Dead;
                 sim_ship.health = 0.0;
                 sim_ship.spawned = false;
             }
+            commands.entity(entity).try_insert(SimSettled);
             continue;
         }
 
@@ -670,5 +690,51 @@ mod population_tests {
             ship.position.distance(home) <= 12_000.0,
             "patrol left its territory"
         );
+    }
+}
+
+#[cfg(test)]
+mod wreck_bookkeeping_tests {
+    use super::*;
+
+    fn app() -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()));
+        app.insert_resource(crate::building::registry::build_registry());
+        app.init_resource::<WorldSimulation>();
+        app.add_systems(Update, sync_simulation_entities);
+        app.world_mut().spawn((Ship, Transform::default()));
+        app
+    }
+
+    fn state(destroyed: bool) -> AiShipState {
+        let mut s = AiShipState::default();
+        s.is_destroyed = destroyed;
+        s
+    }
+
+    /// One wreck marks one simulated ship dead, once -- not a living ship of
+    /// the same faction every frame after.
+    #[test]
+    fn a_wreck_settles_one_entry_once() {
+        let mut app = app();
+        {
+            let mut sim = app.world_mut().resource_mut::<WorldSimulation>();
+            for x in [100.0, 3_000.0] {
+                let mut ship = SimulatedShip::patrolling(0, AiShipType::RecursiveKingdom, Vec2::new(x, 0.0), Vec2::ZERO, 500.0, 100.0);
+                ship.spawned = true;
+                sim.ships.push(ship);
+            }
+        }
+        // The wreck of the ship at x=100, and the living one at x=3000.
+        app.world_mut().spawn((AiShip, AiShipType::RecursiveKingdom, state(true), Transform::from_xyz(100.0, 0.0, 0.0)));
+        app.world_mut().spawn((AiShip, AiShipType::RecursiveKingdom, state(false), Transform::from_xyz(3_000.0, 0.0, 0.0)));
+        for _ in 0..5 {
+            app.update();
+        }
+        let sim = app.world().resource::<WorldSimulation>();
+        let dead = sim.ships.iter().filter(|s| s.behavior == SimBehavior::Dead).count();
+        assert_eq!(dead, 1, "the wreck took a living ship's entry with it");
+        assert!(sim.ships[1].spawned, "the living ship lost its entry");
     }
 }
