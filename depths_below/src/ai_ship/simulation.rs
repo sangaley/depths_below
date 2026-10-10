@@ -234,7 +234,7 @@ const STATION_PICKET: std::ops::Range<f32> = 30_000.0..55_000.0;
 
 /// Holdings out on open bearings, and how far from the star. Past the largest
 /// star (150 km radius) with room to spare.
-const OPEN_HOLDINGS: usize = 2;
+const OPEN_HOLDINGS: usize = 3;
 const OPEN_HOLDING_RANGE: std::ops::Range<f32> = 250_000.0..450_000.0;
 
 /// Where a system's faction keeps its ships: its cluster point first, then a
@@ -276,9 +276,14 @@ fn clear_of_stations(mut pos: Vec2, stations: &[Vec2]) -> Vec2 {
 /// The template count is the shallow-system baseline; `danger_tier` is the
 /// authored near-weak/far-strong curve, so a deep hostile system is busier
 /// than a border one instead of every system fielding the same handful.
+///
+/// Roughly double what it was (2.2x, 6-40): spread over a system's holdings,
+/// that left a whole system with seven or eight hostiles on the map, and the
+/// playtester wanted more. Only MAX_LIVE_AI_HULLS are ever full entities at
+/// once, so the rest cost a position update each.
 pub fn system_ship_count(template_count: usize, danger_tier: f32) -> usize {
     let scale = 1.0 + (danger_tier / 100.0).clamp(0.0, 2.0);
-    ((template_count as f32 * 2.2 * scale).round() as usize).clamp(6, 40)
+    ((template_count as f32 * 4.0 * scale).round() as usize).clamp(12, 72)
 }
 
 /// Close enough to call it arrived, and to pick the next leg.
