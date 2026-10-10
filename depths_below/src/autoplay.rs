@@ -776,8 +776,26 @@ fn director_brain(
                 .filter(|c| c.status == ContractStatus::Active)
                 .count();
 
+            // A bounty on offer is worth a visit even with three jobs open:
+            // surveys and retrieval jobs can sit unfinished for a long time,
+            // and at three active the board was never opened again - so the
+            // only work that ends in a fight was never taken.
+            let bounty_on_offer = contracts
+                .available_by_station
+                .get(board.0 .0)
+                .is_some_and(|list| {
+                    list.iter().any(|c| {
+                        matches!(c.objective, ContractObjective::DestroyShip { .. })
+                            && c.deposit <= currency.credits
+                    })
+                });
+            let have_bounty = contracts.active_contracts.iter().any(|c| {
+                c.status == ContractStatus::Active
+                    && matches!(c.objective, ContractObjective::DestroyShip { .. })
+            });
+            let room = active < 3 || (bounty_on_offer && !have_bounty && active < 5);
             if !board_open.0 {
-                if active >= 3 || d.step > 24 {
+                if !room || d.step > 24 {
                     d.go(Phase::Launch);
                 } else if d.beat > 0.6 {
                     d.beat = 0.0;
@@ -803,7 +821,7 @@ fn director_brain(
             if d.beat > 0.45 {
                 d.beat = 0.0;
                 d.step += 1;
-                if active >= 3 || d.step > 24 {
+                if !room || d.step > 24 {
                     d.tap(KeyCode::KeyJ); // close board
                 } else if let Some(row) = bounty_row {
                     let at = cursor.index();
