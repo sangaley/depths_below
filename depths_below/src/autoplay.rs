@@ -199,6 +199,10 @@ pub struct Director {
     crew_window_open: bool,
     /// How long the current recovered log has been up unread.
     log_up_for: f32,
+    /// Station discs (centre, keep-out radius) in the loaded system, refreshed
+    /// each frame so fly_to can route round them instead of grinding into a
+    /// kilometres-wide hull -- one run lost an armour plate doing exactly that.
+    obstacles: Vec<(Vec2, f32)>,
     /// Seconds spent searching this system with nothing to fight. Kept across
     /// Hunt/Strip hops: on phase_elapsed, every detour to a nearby POI reset
     /// the sweep clock, so a system was never declared dry and the run
@@ -351,6 +355,7 @@ impl Plugin for AutoplayPlugin {
             crew_window_open: false,
             log_up_for: 0.0,
             search_for: 0.0,
+            obstacles: Vec::new(),
         };
         director.log("start", &format!("target {}c", target));
 
@@ -498,6 +503,7 @@ fn director_brain(
     if matches!(d.phase, Phase::Done | Phase::Aborted) {
         return;
     }
+    d.obstacles = stations.sites.iter().map(|s| (s.pos, s.radius() * 1.1 + 1_300.0)).collect();
 
     // ---- goal check -------------------------------------------------------
     if currency.credits >= d.target {
@@ -753,7 +759,7 @@ fn director_brain(
             // Module repair spends whatever it can now. Run every visit, it
             // turned all the money into hull plating and left nothing for a
             // bounty deposit or fuel; keep a working fund instead.
-            if want == 6 && currency.credits < 1_000 {
+            if want == 6 && currency.credits < 2_500 {
                 d.step += 1;
                 return;
             }
@@ -1222,7 +1228,7 @@ fn try_warp(
 }
 
 fn fly_to(d: &mut Director, pos: Vec2, tp: Vec2, dist: f32, hold: f32) {
-    let delta = tp - pos;
+    let delta = detour(&d.obstacles, pos, tp) - pos;
     if delta.length_squared() > 1.0 {
         d.aim = Some(delta.normalize());
     }
@@ -1231,6 +1237,36 @@ fn fly_to(d: &mut Director, pos: Vec2, tp: Vec2, dist: f32, hold: f32) {
     } else if dist < hold * 0.6 {
         d.hold(KeyCode::KeyS);
     }
+}
+
+/// Where to steer for `tp` from `pos` without crossing any obstacle disc:
+/// `tp` itself if the way is clear, otherwise a point off the obstacle's rim
+/// on our side of it.
+fn detour(obstacles: &[(Vec2, f32)], pos: Vec2, tp: Vec2) -> Vec2 {
+    let path = tp - pos;
+    let len = path.length();
+    if len < 1.0 {
+        return tp;
+    }
+    let dir = path / len;
+    for &(center, keep_out) in obstacles {
+        // Already inside the keep-out (docking, salvaging beside it): no detour.
+        if pos.distance(center) < keep_out || tp.distance(center) < keep_out {
+            continue;
+        }
+        let along = (center - pos).dot(dir);
+        if along <= 0.0 || along >= len {
+            continue;
+        }
+        let closest = pos + dir * along;
+        if closest.distance(center) >= keep_out {
+            continue;
+        }
+        // Go round on whichever side the line already leans to.
+        let side = (closest - center).normalize_or(Vec2::new(-dir.y, dir.x));
+        return center + side * (keep_out * 1.15);
+    }
+    tp
 }
 
 /// Fight at weapon range: hold `STANDOFF`, retro-thrust rather than coast into
@@ -1772,5 +1808,25 @@ fn director_watch(
         commands
             .spawn(crate::demo::screenshot_of(offscreen.as_deref()))
             .observe(save_if_legible(path));
+    }
+}
+
+#[cfg(test)]
+mod detour_tests {
+    use super::*;
+
+    #[test]
+    fn a_clear_line_goes_straight() {
+        let obstacles = [(Vec2::new(0.0, 10_000.0), 3_000.0)];
+        assert_eq!(detour(&obstacles, Vec2::new(-8_000.0, 0.0), Vec2::new(8_000.0, 0.0)), Vec2::new(8_000.0, 0.0));
+    }
+
+    #[test]
+    fn a_station_in_the_way_is_flown_round() {
+        let obstacles = [(Vec2::ZERO, 3_000.0)];
+        let from = Vec2::new(-8_000.0, 200.0);
+        let wp = detour(&obstacles, from, Vec2::new(8_000.0, 0.0));
+        assert!(wp.distance(Vec2::ZERO) > 3_000.0, "waypoint {wp} is inside the station");
+        assert!(wp.y > 0.0, "should go round the side the line leans to");
     }
 }
