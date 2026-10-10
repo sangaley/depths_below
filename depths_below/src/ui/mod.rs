@@ -4515,6 +4515,25 @@ fn repair_priority(category: ModuleCategory) -> u8 {
     }
 }
 
+/// The Repair Modules row: what the credits on hand will buy.
+fn repair_modules_row(damage: f32, credits: u32) -> String {
+    let full = damage * MODULE_REPAIR_RATE;
+    if damage < 0.1 {
+        "All modules at full health".to_string()
+    } else if credits as f32 >= full {
+        format!("Restore all {:.0} damaged HP", damage)
+    } else if credits as f32 >= MODULE_REPAIR_RATE {
+        format!(
+            "All {}c buys {:.0} of {:.0} HP - vital systems first",
+            credits,
+            credits as f32 / MODULE_REPAIR_RATE,
+            damage
+        )
+    } else {
+        format!("{:.0} HP damaged - {:.0}c per HP", damage, MODULE_REPAIR_RATE)
+    }
+}
+
 /// How many HP to restore on each module, given (priority, damage) per module
 /// in query order, the credits on hand and the price per HP. Spends no more
 /// than the credits cover, highest priority first.
@@ -5504,7 +5523,10 @@ fn docking_menu_input(
                     total_module_damage += module.max_health - module.health;
                 }
             }
-            format!("{:.0} HP damaged - vital systems first if credits run short", total_module_damage)
+            // Say what pressing it will do. Short of the full bill it spends
+            // everything on hand, and without this the first a captain knew
+            // of that was the wallet reading zero.
+            repair_modules_row(total_module_damage, currency.credits)
         }, {
             let mut total_module_damage = 0.0f32;
             for module in module_query.iter() {
@@ -5976,6 +5998,14 @@ mod module_repair_tests {
         // 400c at 5c/HP buys 80 HP: the reactor's 50 first, then 30 of the gun's 100.
         let plan = plan_module_repair(&[(4, 100.0), (0, 50.0)], 400, 5.0);
         assert_eq!(plan, vec![30.0, 50.0]);
+    }
+
+    /// Short of the full bill, the row says the whole balance goes.
+    #[test]
+    fn the_row_says_what_the_money_buys() {
+        assert_eq!(repair_modules_row(100.0, 10_000), "Restore all 100 damaged HP");
+        assert_eq!(repair_modules_row(610.0, 1_688), "All 1688c buys 338 of 610 HP - vital systems first");
+        assert_eq!(repair_modules_row(0.0, 50), "All modules at full health");
     }
 
     #[test]
