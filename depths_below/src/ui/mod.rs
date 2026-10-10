@@ -3280,8 +3280,11 @@ fn build_map_snapshot(
             .and_then(|id| world_data.galaxy_map.systems.iter().find(|s| s.id == id))
             .map(|s| s.name.clone())
             .unwrap_or_else(|| "Uncharted space".to_string()),
+        // From the station's edge, as docking measures it: the centre of a
+        // station kilometres across read "3.5 km" while you were 1.4 km off
+        // its hull, and the number said nothing about whether F would dock.
         nearest_station: world_data.stations.closest(player_pos)
-            .map(|s| (s.name.clone(), player_pos.distance(s.pos))),
+            .map(|s| (s.name.clone(), (player_pos.distance(s.pos) - s.radius()).max(0.0))),
     }
 }
 

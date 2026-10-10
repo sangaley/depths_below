@@ -62,7 +62,12 @@ pub fn station_radius(index: usize) -> f32 {
 /// Stations and hulls are solid (see ship::collision), and the root of a big
 /// ship can sit ~800 units behind its own nose, so the range is measured from
 /// the station's edge, with room for the hull in between.
-pub const DOCK_MARGIN: f32 = 1_800.0;
+///
+/// 7 km, at the playtester's call. At 1.8 km a station kilometres across
+/// filled the screen well before F would take, and "close enough" by eye
+/// was not close enough by the rules. The map's "Nearest station" reads
+/// from the same edge, so under 7 km there means you can dock.
+pub const DOCK_MARGIN: f32 = 7_000.0;
 
 /// The largest docking range of any station (Haven's), from its centre. For
 /// code that needs one bound; per-station checks use StationSite::dock_range.

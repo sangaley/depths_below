@@ -200,7 +200,7 @@ pub fn order_salvage_detail(
     // radius flung a detail out AND berthed the ship, stranding them.
     //
     // Only yield to a station that can actually take the press, though.
-    // ORDER_RANGE (3000) reaches well past DOCK_RANGE (1800), so "nearer" on
+    // ORDER_RANGE (3000) once reached well past DOCK_RANGE (1800), so "nearer" on
     // its own left a dead band: a station at 2000 with a wreck at 2500 beat
     // the wreck here and was then out of range to dock, and F did nothing at
     // all.
