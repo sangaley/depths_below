@@ -493,6 +493,7 @@ fn director_brain(
     build_state: Res<State<BuildState>>,
     mut warp: Warp1,
     w: World1,
+    board: (Res<crate::contracts::ViewingStation>, Res<crate::contracts::ui::MissionBoardSelection>),
 ) {
     if matches!(d.phase, Phase::Done | Phase::Aborted) {
         return;
@@ -749,6 +750,13 @@ fn director_brain(
             }
             d.beat = 0.0;
             let want = ROUTINE[d.step as usize];
+            // Module repair spends whatever it can now. Run every visit, it
+            // turned all the money into hull plating and left nothing for a
+            // bounty deposit or fuel; keep a working fund instead.
+            if want == 6 && currency.credits < 1_000 {
+                d.step += 1;
+                return;
+            }
             if sel.0 != want {
                 d.tap(KeyCode::ArrowDown);
             } else {
@@ -778,14 +786,34 @@ fn director_brain(
                 return;
             }
 
-            // Board is open: walk the list and Enter on each available job.
-            // Down-then-Enter repeatedly takes the top of the list as it
-            // shrinks, which is exactly what a player does.
+            // Board is open. Bounties first: they're the work that ends in a
+            // fight, and taking whatever sat at the top gave survey after
+            // survey and three runs with no combat in them. Walk the cursor
+            // to the first bounty the deposit can be paid for and take it.
+            let (viewing, cursor) = (&board.0, &board.1);
+            let bounty_row = contracts
+                .available_by_station
+                .get(viewing.0)
+                .and_then(|list| {
+                    list.iter().position(|c| {
+                        matches!(c.objective, ContractObjective::DestroyShip { .. })
+                            && c.deposit <= currency.credits
+                    })
+                });
             if d.beat > 0.45 {
                 d.beat = 0.0;
                 d.step += 1;
                 if active >= 3 || d.step > 24 {
                     d.tap(KeyCode::KeyJ); // close board
+                } else if let Some(row) = bounty_row {
+                    let at = cursor.index();
+                    d.tap(if at < row {
+                        KeyCode::ArrowDown
+                    } else if at > row {
+                        KeyCode::ArrowUp
+                    } else {
+                        KeyCode::Enter
+                    });
                 } else if d.step % 2 == 1 {
                     d.tap(KeyCode::Enter);
                 } else {
@@ -1252,9 +1280,13 @@ fn head_for_dock(
     };
 
     let dist = pos.distance(site.pos);
-    // Stop off the structure, not at its centre: stations are kilometres
-    // across now, and 400 from the middle is deep inside the hull.
-    fly_to(d, pos, site.pos, dist, site.radius() + crate::celestial::warp::STATION_ARRIVAL_STANDOFF);
+    // Aim for a point just off the hull on our side of the station, with a
+    // tight arrival band. Holding a standoff from the centre instead left the
+    // 20% slack of fly_to's band at kilometre scale: the ship parked 4,400-
+    // 4,800 from Haven's centre, outside its 4,400 docking range, for good.
+    let approach = site.pos
+        + (pos - site.pos).normalize_or(Vec2::X) * (site.radius() + crate::celestial::warp::STATION_ARRIVAL_STANDOFF);
+    fly_to(d, pos, approach, pos.distance(approach), 150.0);
 
     // Only inside the real docking radius, and on a slow beat so we aren't
     // mashing a key that means something else the moment we drift out.
@@ -1341,7 +1373,11 @@ fn dispatch_salvage(
         return;
     }
 
-    if station_distance(stations, pos).is_some_and(|sd| sd < DOCK_RANGE * 0.95) {
+    // The game's own rule for "F would dock here", not an approximation of
+    // it: 95% of the largest dock range left a band at every smaller station
+    // and at Haven's edge where F docked instead of sending the detail, and
+    // the run looped launch -> F -> docked every twelve seconds.
+    if stations.nearest_in_range(pos).is_some() {
         if let Some(site) = nearest_station(stations, pos) {
             let away = (pos - site).normalize_or_zero();
             if away != Vec2::ZERO {

@@ -32,6 +32,13 @@ pub struct MissionBoardSelection {
     index: usize,
 }
 
+impl MissionBoardSelection {
+    /// The highlighted row (available contracts first, then active ones).
+    pub fn index(&self) -> usize {
+        self.index
+    }
+}
+
 #[derive(Component)]
 pub struct ContractHudRoot;
 
