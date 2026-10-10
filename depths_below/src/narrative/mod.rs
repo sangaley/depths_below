@@ -6,6 +6,7 @@ pub mod doppelganger;
 pub mod expedition;
 pub mod interference;
 pub mod reader;
+pub mod trail;
 pub mod truth;
 
 use bevy::prelude::*;

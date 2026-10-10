@@ -39,6 +39,9 @@ pub struct Expedition {
     pub trail_exhausted: bool,
     /// Latched so the closing message is said once, not every frame.
     wall_announced: bool,
+    /// The next record on the trail: the system it lies in and its title
+    /// (see narrative::trail). What the HUD line and the amber marker point at.
+    pub next: Option<(u32, &'static str)>,
 }
 
 /// Records that count toward the trail in this build.
@@ -48,9 +51,12 @@ fn trail_total() -> usize {
 
 fn update_expedition(
     stats: Res<Statistics>,
+    galaxy: Res<crate::celestial::resources::GalaxyMap>,
     mut exp: ResMut<Expedition>,
     mut notifications: MessageWriter<crate::events::ShowNotification>,
 ) {
+    exp.next = super::trail::next_record(&galaxy, &stats.logs_found, TRAIL_MAX_TIER)
+        .map(|(system, entry)| (system, entry.title));
     exp.total = trail_total();
     exp.found = LOG_ENTRIES
         .iter()
@@ -106,6 +112,9 @@ fn update_expedition_hud(
     state: Res<State<GameState>>,
     build: Res<State<crate::states::BuildState>>,
     mut hud: Query<(&mut Text, &mut TextColor, &mut Visibility), With<ExpeditionHudText>>,
+    streaming: Res<crate::celestial::resources::SystemStreamingManager>,
+    ship: Query<&Transform, With<crate::components::Ship>>,
+    carriers: Query<(&Transform, &crate::components::LogEntry)>,
 ) {
     let Ok((mut text, mut colour, mut vis)) = hud.single_mut() else { return };
 
@@ -120,13 +129,28 @@ fn update_expedition_hud(
         return;
     }
 
+    // Where the next record is. "find the rest" gave no direction at all,
+    // and with records placed one per system the trail can now say: which
+    // system, or how far once you're in it.
+    let here = |title: &str| -> Option<f32> {
+        let ship = ship.single().ok()?.translation.truncate();
+        carriers
+            .iter()
+            .find(|(_, log)| log.title == title)
+            .map(|(t, _)| t.translation.truncate().distance(ship))
+    };
+    let lead = match exp.next {
+        Some((system, title)) if streaming.loaded_system == Some(system) => match here(title) {
+            Some(dist) => format!("next record: {}", crate::ui::format_range_km(dist)),
+            None => "next record: somewhere in this system".to_string(),
+        },
+        Some((system, _)) => format!("next record: {}", crate::celestial::galaxy::system_name(system)),
+        None => "find the rest".to_string(),
+    };
     let want = if exp.trail_exhausted {
         "EXPEDITION RECORDS   the trail ends here".to_string()
     } else {
-        format!(
-            "EXPEDITION RECORDS  {}/{}   find the rest",
-            exp.found, exp.total
-        )
+        format!("EXPEDITION RECORDS  {}/{}   {}", exp.found, exp.total, lead)
     };
     if **text != want {
         **text = want;

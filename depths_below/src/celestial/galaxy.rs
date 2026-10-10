@@ -496,6 +496,8 @@ pub fn spawn_system_contents(
     asset_server: &AssetServer,
     textures: &crate::vfx::procedural_textures::CelestialTextures,
     def: &StarSystemDef,
+    // The expedition records this system holds (narrative::trail::records_in).
+    records: &[&'static crate::narrative::logs::LogEntryDef],
 ) -> StarSystemInfo {
     let mut rng = StdRng::seed_from_u64(def.seed);
 
@@ -524,7 +526,7 @@ pub fn spawn_system_contents(
     let planet_positions: Vec<Vec2> = system_info.planet_entities.iter()
         .map(|_| def.local_center + Vec2::new(rng.gen_range(-30_000.0..30_000.0), rng.gen_range(-30_000.0..30_000.0)))
         .collect();
-    super::poi::spawn_system_pois(commands, def.local_center, def.id, &planet_positions, &mut rng, def.danger_tier);
+    super::poi::spawn_system_pois(commands, def.local_center, def.id, &planet_positions, &mut rng, records);
 
     system_info
 }
@@ -564,7 +566,8 @@ pub fn load_system(
     catch_up_system(def, now);
     def.discovery = SystemDiscovery::Visited;
     let def = galaxy_map.systems.iter().find(|s| s.id == system_id)?;
-    Some(spawn_system_contents(commands, asset_server, textures, def))
+    let records = crate::narrative::trail::records_in(galaxy_map, system_id);
+    Some(spawn_system_contents(commands, asset_server, textures, def, &records))
 }
 
 #[cfg(test)]

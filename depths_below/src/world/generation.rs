@@ -211,22 +211,11 @@ fn spawn_poi(
         });
     }
 
-    // Attach log entries to Wrecks, Ruins, and Caves
-    // This layer only ever exists near the world origin, which in practice
-    // means the space around Haven, so it only carries the opening band. The
-    // rest of the corpus lives on celestial derelicts and anomalies, which
-    // exist in every system (see celestial::poi::spawn_system_pois).
-    let can_have_log = matches!(poi_type, PoiType::Wreck | PoiType::Ruins | PoiType::Cave);
-    if can_have_log && rng.gen::<f32>() < 0.45 {
-        let key = ((depth_level as u64) << 32) ^ (rng.gen::<u32>() as u64);
-        if let Some(entry) = crate::narrative::logs::pick_log(0, key) {
-            entity_commands.insert(LogEntry {
-                title: entry.title.to_string(),
-                text: entry.text.to_string(),
-                depth_hint: 0.0,
-            });
-        }
-    }
+    // No expedition records on this layer. It only exists around Haven, and
+    // rolling records onto its dense wrecks, ruins and caves handed a new
+    // player half the demo's trail in three minutes, then nothing. Every
+    // record now has one planned home on a system derelict (narrative::trail).
+
 
     entity_commands.insert(ChildOf(parent));
 }

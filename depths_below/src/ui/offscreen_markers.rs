@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::ai_ship::components::{AiShip, AiShipTarget, AiShipWreck};
 use crate::camera::MainCamera;
-use crate::components::Ship;
+use crate::components::{LogEntry, Ship};
 use super::theme::{ThemeColors, ThemeFonts};
 
 // ============================================================================
@@ -66,6 +66,10 @@ pub fn edge_point(offset: Vec2, screen: Vec2, insets: EdgeInsets) -> Option<(Vec
     Some((half + dir * t, dir.y.atan2(dir.x)))
 }
 
+/// The expedition-record marker: amber, the trail's colour, distinct from the
+/// red and grey of ships.
+const RECORD_COLOR: Color = Color::srgba(0.90, 0.72, 0.35, 0.85);
+
 /// Closer ships draw stronger; the furthest ones are barely there.
 fn marker_alpha(distance: f32) -> f32 {
     let t = ((distance - 4_000.0) / (MARKER_RANGE - 4_000.0)).clamp(0.0, 1.0);
@@ -107,6 +111,11 @@ pub fn update_offscreen_markers(
     mut markers: Query<(Entity, &OffscreenMarker, &mut Node)>,
     mut chevrons: Query<(&mut UiTransform, &mut BorderColor)>,
     mut labels: Query<(&mut Text, &mut TextColor)>,
+    trail: (
+        Res<crate::narrative::expedition::Expedition>,
+        Res<crate::celestial::resources::SystemStreamingManager>,
+        Query<(Entity, &Transform, &LogEntry)>,
+    ),
 ) {
     let (Ok((cam_tf, projection)), Some(window), Ok((player, player_tf))) =
         (camera.single(), windows.iter().next(), player.single())
@@ -138,6 +147,25 @@ pub fn update_offscreen_markers(
         };
         let hostile = target.is_some_and(|t| t.entity == Some(player));
         wanted.insert(entity, (centre, bearing, marker_color(hostile, distance), super::format_range_km(distance)));
+    }
+
+    // The next expedition record, when it lies in this system: an amber
+    // marker at any range, and over the derelict itself once it's in view --
+    // a derelict is dark until the torch finds it, so "on screen" is not
+    // "visible".
+    let (expedition, streaming, carriers) = &trail;
+    if let Some((system, title)) = expedition.next {
+        if streaming.loaded_system == Some(system) {
+            if let Some((entity, tf, _)) = carriers.iter().find(|(_, _, log)| log.title == title) {
+                let pos = tf.translation.truncate();
+                let world = pos - cam;
+                let offset = Vec2::new(world.x, -world.y) / scale;
+                let (centre, bearing) = edge_point(offset, screen, INSETS)
+                    .unwrap_or((screen / 2.0 + offset - Vec2::new(0.0, 36.0), std::f32::consts::FRAC_PI_2));
+                let label = format!("record {}", super::format_range_km(pos.distance(home)));
+                wanted.insert(entity, (centre, bearing, RECORD_COLOR, label));
+            }
+        }
     }
 
     for (marker_entity, marker, mut node) in &mut markers {
@@ -233,6 +261,8 @@ mod tests {
     fn app() -> App {
         let mut app = App::new();
         app.add_systems(Update, update_offscreen_markers);
+        app.init_resource::<crate::narrative::expedition::Expedition>();
+        app.init_resource::<crate::celestial::resources::SystemStreamingManager>();
         app.world_mut().spawn(Window::default()); // 1280 x 720
         app.world_mut().spawn((MainCamera, Transform::default(), Projection::Orthographic(OrthographicProjection {
             scale: 2.0,
@@ -289,5 +319,37 @@ mod tests {
         let color = app.world().get::<TextColor>(label).unwrap().0.to_srgba();
         assert!(color.red > color.green * 2.0, "hostile marker is not red: {color:?}");
         assert_eq!(app.world().get::<Text>(label).unwrap().0, "6.0 km");
+    }
+}
+
+#[cfg(test)]
+mod record_marker_tests {
+    use super::*;
+
+    /// The next expedition record gets an amber marker when it lies in the
+    /// loaded system -- at any range, unlike ships.
+    #[test]
+    fn the_next_record_is_marked_in_its_system() {
+        let mut app = App::new();
+        app.add_systems(Update, update_offscreen_markers);
+        app.world_mut().spawn(Window::default());
+        app.world_mut().spawn((MainCamera, Transform::default(), Projection::Orthographic(OrthographicProjection::default_2d())));
+        app.world_mut().spawn((Ship, Transform::default()));
+        let title = crate::narrative::logs::LOG_ENTRIES[0].title;
+        let carrier = app.world_mut().spawn((
+            Transform::from_xyz(60_000.0, 0.0, 0.0),
+            LogEntry { title: title.to_string(), text: String::new(), depth_hint: 0.0 },
+        )).id();
+        let mut exp = crate::narrative::expedition::Expedition::default();
+        exp.next = Some((0, title));
+        app.insert_resource(exp);
+        let mut streaming = crate::celestial::resources::SystemStreamingManager::default();
+        streaming.loaded_system = Some(0);
+        app.insert_resource(streaming);
+        app.update();
+        app.update();
+        let mut q = app.world_mut().query::<&OffscreenMarker>();
+        let targets: Vec<Entity> = q.iter(app.world()).map(|m| m.target).collect();
+        assert_eq!(targets, vec![carrier]);
     }
 }

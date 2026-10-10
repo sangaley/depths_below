@@ -74,24 +74,33 @@ pub enum ResourceNodeType {
 }
 
 /// Spawn POIs when a new star system is generated
+/// How far from the spawn berth Haven's first record waits: past the asteroid
+/// rocks and the station's neighbourhood, a short flight once training ends.
+const FIRST_RECORD_FROM_SPAWN: f32 = 18_000.0;
+
 pub fn spawn_system_pois(
     commands: &mut Commands,
     system_center: Vec2,
     system_id: u32,
     planet_positions: &[Vec2],
     rng: &mut impl Rng,
-    danger_tier: f32,
+    // The expedition records this system holds, in reading order (see
+    // narrative::trail). Each goes on a derelict of its own.
+    records: &[&'static crate::narrative::logs::LogEntryDef],
 ) {
-    // Which band of the log corpus this system is allowed to hold. Derelicts
-    // and anomalies are the carriers: they exist in every system, unlike the
-    // chunk-layer points of interest that logs used to hang on.
-    let log_tier = crate::narrative::logs::tier_for_danger(danger_tier);
-    // Derelict ships (1-3 per system)
-    let derelict_count = rng.gen_range(1..=3);
+    // Derelict ships (1-3 per system, and at least one per record held)
+    let derelict_count = rng.gen_range(1..=3).max(records.len());
     for i in 0..derelict_count {
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
         let dist = rng.gen_range(30_000.0..80_000.0);
-        let pos = system_center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
+        let mut pos = system_center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
+        // The trail starts at home: Haven's first record lies a short flight
+        // out from the berth, on the side away from the star, rather than
+        // anywhere up to 150 km off.
+        if system_id == 0 && i == 0 && !records.is_empty() {
+            let spawn = crate::world::home_base::SPAWN_BERTH;
+            pos = spawn + (spawn - system_center).normalize_or(Vec2::Y) * FIRST_RECORD_FROM_SPAWN;
+        }
 
         let poi = commands.spawn((
             (Sprite {
@@ -108,17 +117,16 @@ pub fn spawn_system_pois(
             },
             StarSystemMember { system_id },
         )).id();
-        // Not every hulk has something to read. Keyed by system and index so
-        // the same derelict always carries the same entry across reloads.
-        if rng.gen::<f32>() < 0.55 {
-            let key = (system_id as u64) << 8 | i as u64;
-            if let Some(entry) = crate::narrative::logs::pick_log(log_tier, key) {
-                commands.entity(poi).insert(LogEntry {
-                    title: entry.title.to_string(),
-                    text: entry.text.to_string(),
-                    depth_hint: 0.0,
-                });
-            }
+        // The record this derelict holds, if the trail put one here. (The
+        // roll that used to decide whether a hulk had something to read is
+        // still drawn, so the rest of the system lays out as it always has.)
+        let _ = rng.gen::<f32>();
+        if let Some(entry) = records.get(i) {
+            commands.entity(poi).insert(LogEntry {
+                title: entry.title.to_string(),
+                text: entry.text.to_string(),
+                depth_hint: 0.0,
+            });
         }
     }
 
@@ -149,17 +157,10 @@ pub fn spawn_system_pois(
             },
             StarSystemMember { system_id },
         )).id();
-        // The type comment has said "story trigger" since it was written and
-        // nothing ever read it. An anomaly always carries a log, and always
-        // the deepest band its system is allowed.
-        let key = (system_id as u64) << 8 | 0xA1;
-        if let Some(entry) = crate::narrative::logs::pick_log(log_tier, key) {
-            commands.entity(poi).insert(LogEntry {
-                title: entry.title.to_string(),
-                text: entry.text.to_string(),
-                depth_hint: 0.0,
-            });
-        }
+        // Anomalies no longer carry records: every record has one planned
+        // home on a derelict (narrative::trail), and a second copy here
+        // would only ever be a repeat.
+        let _ = poi;
     }
 
     // Space station (1 per system, near a planet)

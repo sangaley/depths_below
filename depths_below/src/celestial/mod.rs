@@ -126,7 +126,8 @@ fn spawn_initial_system(
 
     galaxy::catch_up_system(&mut galaxy_map.systems[0], time.elapsed_secs_f64());
     let def = galaxy_map.systems[0].clone();
-    let system_info = galaxy::spawn_system_contents(&mut commands, &asset_server, &textures, &def);
+    let records = crate::narrative::trail::records_in(&galaxy_map, def.id);
+    let system_info = galaxy::spawn_system_contents(&mut commands, &asset_server, &textures, &def, &records);
 
     galaxy.next_system_id = def.id + 1;
     galaxy.systems.push(system_info);
