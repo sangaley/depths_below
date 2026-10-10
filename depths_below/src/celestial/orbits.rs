@@ -27,15 +27,56 @@ pub fn update_orbital_positions(
         let direction = if orbit.clockwise { -1.0 } else { 1.0 };
         let angle = orbit.phase + angular_speed * t * direction;
 
-        // Ellipse: r = a(1 - e^2) / (1 + e*cos(theta))
-        let r = orbit.semi_major_axis * (1.0 - orbit.eccentricity * orbit.eccentricity)
-            / (1.0 + orbit.eccentricity * angle.cos());
+        let r = orbit_radius(orbit.semi_major_axis, orbit.eccentricity, angle);
 
         let x = parent_pos.x + r * angle.cos();
         let y = parent_pos.y + r * angle.sin();
 
         transform.translation.x = x;
         transform.translation.y = y;
+    }
+}
+
+/// How far from its star an orbiting body is at polar angle `theta`: the
+/// ellipse `r = a(1 - e²) / (1 + e·cos θ)`, star at the focus.
+pub fn orbit_radius(semi_major_axis: f32, eccentricity: f32, theta: f32) -> f32 {
+    semi_major_axis * (1.0 - eccentricity * eccentricity) / (1.0 + eccentricity * theta.cos())
+}
+
+/// Points sampled round a planet's path when measuring clearance from it.
+/// A path 1,000 km out is checked every ~6 km, so a point can read at most
+/// ~3 km further from the path than it is, well inside the margin anything
+/// placed against a path keeps (a whole planet radius).
+const PATH_SAMPLES: usize = 1024;
+
+/// The tube a planet sweeps: every point of its elliptical orbit, `radius`
+/// either side. Planets are solid and go all the way round every few
+/// minutes, so anything placed in the tube is eventually run over.
+#[derive(Clone, Copy, Debug)]
+pub struct PlanetPath {
+    pub semi_major_axis: f32,
+    pub eccentricity: f32,
+    pub radius: f32,
+}
+
+impl PlanetPath {
+    /// How far `offset` (measured from the star) is from the planet's
+    /// surface at its closest pass. Negative when the planet runs over it.
+    pub fn clearance(&self, offset: Vec2) -> f32 {
+        let step = std::f32::consts::TAU / PATH_SAMPLES as f32;
+        let nearest = (0..PATH_SAMPLES)
+            .map(|i| {
+                let theta = i as f32 * step;
+                Vec2::from_angle(theta) * orbit_radius(self.semi_major_axis, self.eccentricity, theta)
+            })
+            .map(|on_path| on_path.distance(offset))
+            .fold(f32::INFINITY, f32::min);
+        nearest - self.radius
+    }
+
+    /// The furthest the planet's surface ever gets from the star.
+    pub fn outer_reach(&self) -> f32 {
+        self.semi_major_axis * (1.0 + self.eccentricity) + self.radius
     }
 }
 
@@ -127,8 +168,7 @@ pub fn draw_orbit_paths(
         let center = parent_transform.translation.truncate();
 
         let at = |theta: f32| -> Vec2 {
-            let r = orbit.semi_major_axis * (1.0 - orbit.eccentricity * orbit.eccentricity)
-                / (1.0 + orbit.eccentricity * theta.cos());
+            let r = orbit_radius(orbit.semi_major_axis, orbit.eccentricity, theta);
             center + Vec2::new(r * theta.cos(), r * theta.sin())
         };
 

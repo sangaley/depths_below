@@ -130,6 +130,11 @@ pub struct StarSystemInfo {
     /// up to 60,000 across the radius, so anything placed "between two
     /// orbits" using centres alone can land inside one of them.
     pub planet_bands: Vec<(f32, f32)>,
+    /// Each planet's whole path, eccentricity included. `planet_bands`
+    /// treats orbits as circles; at eccentricity up to 0.3 a planet strays
+    /// up to 30% either side of that circle, which is what anything placed
+    /// to stay out of its way has to allow for (see `poi::KeepClear`).
+    pub planet_paths: Vec<super::orbits::PlanetPath>,
 }
 
 /// Global galaxy state

@@ -526,7 +526,12 @@ pub fn spawn_system_contents(
     let planet_positions: Vec<Vec2> = system_info.planet_entities.iter()
         .map(|_| def.local_center + Vec2::new(rng.gen_range(-30_000.0..30_000.0), rng.gen_range(-30_000.0..30_000.0)))
         .collect();
-    super::poi::spawn_system_pois(commands, def.local_center, def.id, &planet_positions, &mut rng, records);
+    let keep_clear = super::poi::KeepClear {
+        center: def.local_center,
+        star_radius: system_info.star_radius,
+        planets: &system_info.planet_paths,
+    };
+    super::poi::spawn_system_pois(commands, &keep_clear, def.id, &planet_positions, &mut rng, records);
 
     system_info
 }
@@ -950,5 +955,113 @@ mod haven_spawn_tests {
                 );
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use crate::celestial::components::{CelestialBody, CelestialBodyType, OrbitalPath};
+    use crate::celestial::poi::{SpacePoi, SpacePoiType};
+    use crate::components::LogEntry;
+
+    /// One system spawned headlessly, the way `load_system` spawns it.
+    fn spawn(galaxy: &GalaxyMap, def: &StarSystemDef) -> (App, StarSystemInfo) {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()));
+        app.init_asset::<Image>();
+        let records = crate::narrative::trail::records_in(galaxy, def.id);
+        let def = def.clone();
+        let textures = crate::vfx::procedural_textures::CelestialTextures {
+            solid: default(),
+            glow: default(),
+            ring: default(),
+        };
+        let info = app
+            .world_mut()
+            .run_system_once(move |mut commands: Commands, assets: Res<AssetServer>| {
+                spawn_system_contents(&mut commands, &assets, &textures, &def, &records)
+            })
+            .unwrap();
+        (app, info)
+    }
+
+    /// The places a pilot is sent to: everything but the asteroid rocks.
+    fn destinations(app: &mut App) -> Vec<(SpacePoiType, Vec2, bool)> {
+        let world = app.world_mut();
+        let mut q = world.query::<(&SpacePoi, &Transform, Option<&LogEntry>)>();
+        q.iter(world)
+            .filter(|(poi, _, _)| poi.poi_type != SpacePoiType::AsteroidNode)
+            .map(|(poi, tf, log)| (poi.poi_type, tf.translation.truncate(), log.is_some()))
+            .collect()
+    }
+
+    /// Every derelict, anomaly and waystation -- and so every expedition
+    /// record -- is somewhere a ship can stop: well outside its star, and
+    /// never on a planet's path. Measured against the planets as spawned,
+    /// walking each actual ellipse, not through `KeepClear` itself.
+    #[test]
+    fn points_of_interest_are_clear_of_stars_and_planet_paths() {
+        let galaxy = generate_galaxy_map(42);
+        for def in &galaxy.systems {
+            let (mut app, info) = spawn(&galaxy, def);
+            let world = app.world_mut();
+            let mut q = world.query::<(&CelestialBody, &OrbitalPath)>();
+            let paths: Vec<(Vec<Vec2>, f32)> = q
+                .iter(world)
+                .filter(|(body, _)| body.body_type == CelestialBodyType::Planet)
+                .map(|(body, orbit)| {
+                    let points = (0..2048)
+                        .map(|k| {
+                            let theta = k as f32 / 2048.0 * std::f32::consts::TAU;
+                            let r = crate::celestial::orbits::orbit_radius(
+                                orbit.semi_major_axis, orbit.eccentricity, theta,
+                            );
+                            def.local_center + Vec2::from_angle(theta) * r
+                        })
+                        .collect();
+                    (points, body.radius)
+                })
+                .collect();
+            for (kind, pos, _) in destinations(&mut app) {
+                let from_star = pos.distance(def.local_center);
+                assert!(
+                    from_star > info.star_radius * 1.4,
+                    "{}: {kind:?} {from_star:.0} from a star of radius {:.0}",
+                    def.name, info.star_radius,
+                );
+                for (points, radius) in &paths {
+                    let nearest = points.iter().map(|p| p.distance(pos)).fold(f32::INFINITY, f32::min);
+                    assert!(
+                        nearest > radius + 1_000.0,
+                        "{}: {kind:?} {nearest:.0} from the path of a planet of radius {radius:.0}",
+                        def.name,
+                    );
+                }
+            }
+        }
+    }
+
+    /// A jump drops you at a system's station, and that system's records are
+    /// a short hop from it. Haven's first is the exception: it lies off the
+    /// spawn berth, where training ends.
+    #[test]
+    fn records_wait_a_short_hop_from_the_station() {
+        let galaxy = generate_galaxy_map(42);
+        let mut checked = 0;
+        for def in galaxy.systems.iter().filter(|s| s.id != 0) {
+            let (mut app, _) = spawn(&galaxy, def);
+            let station = crate::world::home_base::station_sites(def.id, def.local_center)[0].pos;
+            for (_, pos, _) in destinations(&mut app).into_iter().filter(|(_, _, record)| *record) {
+                // 15-35 km by design; up to ~57 km in seed 42 where a planet's
+                // path or the star crowds the station and the record has to
+                // look further round. Hundreds of km before.
+                let hop = pos.distance(station);
+                assert!(hop < 75_000.0, "{}: a record {hop:.0} from the station", def.name);
+                checked += 1;
+            }
+        }
+        assert!(checked > 10, "only {checked} records checked");
     }
 }

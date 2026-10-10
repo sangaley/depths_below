@@ -73,14 +73,104 @@ pub enum ResourceNodeType {
     ExoticMatter,
 }
 
-/// Spawn POIs when a new star system is generated
 /// How far from the spawn berth Haven's first record waits: past the asteroid
 /// rocks and the station's neighbourhood, a short flight once training ends.
 const FIRST_RECORD_FROM_SPAWN: f32 = 18_000.0;
 
+/// How far from a system's station its records wait. A jump drops you at the
+/// station, so the record is a short hop from where you turn up -- the
+/// tracker's "next record: 24 km" is the whole errand, not a trek across a
+/// system half a million units wide on a tank that has to get you home.
+const RECORD_FROM_STATION: std::ops::Range<f32> = 15_000.0..35_000.0;
+
+/// Bearings tried round the station before a record settles for the nearest
+/// clear point outward. Stepped by the golden angle so no two repeat.
+const RECORD_BEARINGS: usize = 64;
+const GOLDEN_ANGLE: f32 = 2.399_963;
+
+/// How close to a star's centre a point of interest may sit, in star radii.
+/// At one and a half radii the pull is under half the surface's 110-145
+/// u/s² -- at most ~64, a third of the starter's thrust: enough to warn a
+/// pilot, never enough to trap one. Not two radii: some stations sit closer
+/// in than that (Ostra's is at 1.6), and a record by the station has to be
+/// allowed where the station itself is.
+const STAR_KEEP_OUT_RADII: f32 = 1.5;
+
+/// How far `KeepClear::settle` moves a blocked point outward per try.
+const SETTLE_STEP: f32 = 2_000.0;
+
+/// Where in a system nothing solid ever reaches.
+///
+/// Points of interest used to be dropped 30-100 km from the star's centre,
+/// which was open space when stars were small. Stars are solid now and 40-150
+/// km in radius, and in the seed-42 galaxy 12 of the 24 placed expedition
+/// records lay inside their sun, 11 more in the crushing pull just above it,
+/// and every waystation in the galaxy was inside its star. A playtest jumped
+/// to Vesper for its record and spent the whole tank dashing at it: each dash
+/// landed in the star and the star pushed the ship back out.
+///
+/// Planets are solid too and sweep their whole path every few minutes, so a
+/// point also keeps a planet's radius clear of every planet's path.
+pub struct KeepClear<'a> {
+    pub center: Vec2,
+    pub star_radius: f32,
+    pub planets: &'a [super::orbits::PlanetPath],
+}
+
+impl KeepClear<'_> {
+    fn floor(&self) -> f32 {
+        self.star_radius * STAR_KEEP_OUT_RADII
+    }
+
+    /// Whether nothing solid ever comes near `pos`.
+    pub fn is_clear(&self, pos: Vec2) -> bool {
+        let offset = pos - self.center;
+        offset.length() >= self.floor()
+            && self.planets.iter().all(|p| p.clearance(offset) >= p.radius)
+    }
+
+    /// `pos` if it's clear, else the first clear point further out from the
+    /// star on the same bearing. Past every planet's furthest reach is
+    /// always clear, so this always lands somewhere.
+    pub fn settle(&self, pos: Vec2) -> Vec2 {
+        let offset = pos - self.center;
+        let dir = offset.normalize_or(Vec2::X);
+        let beyond = self
+            .planets
+            .iter()
+            .map(|p| p.outer_reach() + p.radius)
+            .fold(self.floor(), f32::max);
+        let mut dist = offset.length().max(self.floor());
+        while dist < beyond {
+            let at = self.center + dir * dist;
+            if self.is_clear(at) {
+                return at;
+            }
+            dist += SETTLE_STEP;
+        }
+        self.center + dir * beyond
+    }
+
+    /// Where a record waits near the station at `station`: `reach` out on
+    /// `bearing` if that's clear, else the first clear bearing round it,
+    /// widening a little each lap.
+    fn near_station(&self, station: Vec2, bearing: f32, reach: f32) -> Vec2 {
+        for k in 0..RECORD_BEARINGS {
+            let lap = (k / 16) as f32;
+            let at = station
+                + Vec2::from_angle(bearing + k as f32 * GOLDEN_ANGLE) * (reach + lap * 10_000.0);
+            if self.is_clear(at) {
+                return at;
+            }
+        }
+        self.settle(station + Vec2::from_angle(bearing) * reach)
+    }
+}
+
+/// Spawn POIs when a new star system is generated
 pub fn spawn_system_pois(
     commands: &mut Commands,
-    system_center: Vec2,
+    keep_clear: &KeepClear,
     system_id: u32,
     planet_positions: &[Vec2],
     rng: &mut impl Rng,
@@ -88,19 +178,31 @@ pub fn spawn_system_pois(
     // narrative::trail). Each goes on a derelict of its own.
     records: &[&'static crate::narrative::logs::LogEntryDef],
 ) {
+    let system_center = keep_clear.center;
+    let station = crate::world::home_base::station_sites(system_id, system_center)
+        .first()
+        .map(|site| site.pos);
     // Derelict ships (1-3 per system, and at least one per record held)
     let derelict_count = rng.gen_range(1..=3).max(records.len());
     for i in 0..derelict_count {
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
         let dist = rng.gen_range(30_000.0..80_000.0);
-        let mut pos = system_center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
-        // The trail starts at home: Haven's first record lies a short flight
-        // out from the berth, on the side away from the star, rather than
-        // anywhere up to 150 km off.
-        if system_id == 0 && i == 0 && !records.is_empty() {
+        let pos = if system_id == 0 && i == 0 && !records.is_empty() {
+            // The trail starts at home: Haven's first record lies a short
+            // flight out from the berth, on the side away from the star.
             let spawn = crate::world::home_base::SPAWN_BERTH;
-            pos = spawn + (spawn - system_center).normalize_or(Vec2::Y) * FIRST_RECORD_FROM_SPAWN;
-        }
+            spawn + (spawn - system_center).normalize_or(Vec2::Y) * FIRST_RECORD_FROM_SPAWN
+        } else if let (Some(station), true) = (station, i < records.len()) {
+            // A record: a short hop from the station a jump arrives at.
+            let t = (dist - 30_000.0) / 50_000.0;
+            let reach = RECORD_FROM_STATION.start
+                + t * (RECORD_FROM_STATION.end - RECORD_FROM_STATION.start);
+            keep_clear.near_station(station, angle, reach)
+        } else {
+            // Anything else: the same 30-80 km, counted from where the
+            // star's pull eases off rather than from its centre.
+            keep_clear.settle(system_center + Vec2::from_angle(angle) * (keep_clear.floor() + dist))
+        };
 
         let poi = commands.spawn((
             (Sprite {
@@ -140,7 +242,7 @@ pub fn spawn_system_pois(
     if rng.gen::<f32>() < 0.4 {
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
         let dist = rng.gen_range(50_000.0..100_000.0);
-        let pos = system_center + Vec2::new(angle.cos() * dist, angle.sin() * dist);
+        let pos = keep_clear.settle(system_center + Vec2::from_angle(angle) * (keep_clear.floor() + dist));
 
         let poi = commands.spawn((
             (Sprite {
@@ -169,7 +271,12 @@ pub fn spawn_system_pois(
             rng.gen_range(-8_000.0..8_000.0),
             rng.gen_range(-8_000.0..8_000.0),
         );
-        let pos = *planet_pos + station_offset;
+        // `planet_positions` are rolled points near the star, not planets;
+        // keep their bearing, counted out from the star's keep-out.
+        let offset = *planet_pos + station_offset - system_center;
+        let pos = keep_clear.settle(
+            system_center + offset.normalize_or(Vec2::X) * (keep_clear.floor() + offset.length()),
+        );
 
         commands.spawn((
             (Sprite {

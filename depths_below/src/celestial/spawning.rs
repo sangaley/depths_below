@@ -147,6 +147,7 @@ pub fn spawn_star_system(
     let planet_count = rng.gen_range(2..=6);
     let mut planet_entities = Vec::new();
     let mut planet_bands: Vec<(f32, f32)> = Vec::new();
+    let mut planet_paths = Vec::new();
 
     // Walking frontier for orbit placement: the outer edge of what has been
     // placed so far, starting at the star's own surface.
@@ -239,6 +240,11 @@ pub fn spawn_star_system(
 
         planet_entities.push(planet_entity);
         planet_bands.push((orbit_distance, planet_radius));
+        planet_paths.push(super::orbits::PlanetPath {
+            semi_major_axis: orbit_distance,
+            eccentricity,
+            radius: planet_radius,
+        });
     }
 
     StarSystemInfo {
@@ -249,6 +255,7 @@ pub fn spawn_star_system(
         is_alive: true,
         star_radius,
         planet_bands,
+        planet_paths,
     }
 }
 

@@ -944,7 +944,7 @@ fn director_brain(
             {
                 // The next expedition record is in this system: go and read
                 // it, the way the tracker tells a player to. Pickup is within
-                // 500 of the derelict, so close right in.
+                // LOG_PICKUP_RANGE of the derelict; close right in.
                 d.search_for = 0.0;
                 let dist = pos.distance(at);
                 if !try_warp(&mut d, &mut warp.local_target, &fuel, at, dist) {
