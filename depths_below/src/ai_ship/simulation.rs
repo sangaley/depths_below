@@ -141,7 +141,6 @@ fn spawn_system_faction_population(sim: &mut WorldSimulation, system: &crate::ce
     let Some(faction) = system.faction else { return };
     let Some(template) = faction_territories().into_iter().find(|t| t.faction == faction) else { return };
     let mut rng = rand::thread_rng();
-    let cluster_center = crate::celestial::galaxy::faction_cluster_center(system);
 
     // How many, and arranged how.
     //
@@ -156,47 +155,120 @@ fn spawn_system_faction_population(sim: &mut WorldSimulation, system: &crate::ce
     // band. A pack flies in close company; the bands put some elements on top
     // of the faction's holdings and others out at the edge of the territory,
     // so the spacing between them is genuinely uneven rather than uniform.
+    //
+    // And not all in one place. Every element used to be placed round the one
+    // faction cluster point, 14-18 km of territory in a system a million units
+    // across: wherever you met them, you met all of them, and everywhere else
+    // was empty. Reported as "only in a single pack and not spread around".
+    // Elements now spread over several holdings (see `faction_holdings`), the
+    // cluster point keeping the largest share.
+    let holdings = faction_holdings(system, &mut rng);
     let count = system_ship_count(template.ship_count, system.danger_tier);
-    let mut placed = 0usize;
-    while placed < count {
-        // Weighted so loners and pairs are common and a real pack is an event.
-        let roll = rng.gen::<f32>();
-        let size = if roll < 0.40 { 1 } else if roll < 0.70 { 2 } else { rng.gen_range(3..=5) };
-        let size = size.min(count - placed);
+    // Fixed shares, not a roll per element: with packs of up to five, a roll
+    // could still put fourteen of eighteen ships in one holding.
+    for (&home, quota) in holdings.iter().zip(holding_quotas(count, holdings.len())) {
+        let mut placed = 0usize;
+        while placed < quota {
+            // Weighted so loners and pairs are common and a real pack is an event.
+            let roll = rng.gen::<f32>();
+            let size = if roll < 0.40 { 1 } else if roll < 0.70 { 2 } else { rng.gen_range(3..=5) };
+            let size = size.min(quota - placed);
 
-        // Three bands rather than a uniform draw: uniform-in-a-disc actually
-        // concentrates toward the rim, which is the opposite of varied.
-        let band = match rng.gen_range(0..3) {
-            0 => rng.gen_range(0.10..0.30),
-            1 => rng.gen_range(0.35..0.60),
-            _ => rng.gen_range(0.65..0.95),
-        };
-        let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-        let anchor = cluster_center
-            + Vec2::new(angle.cos(), angle.sin()) * (template.radius * band);
+            // Three bands rather than a uniform draw: uniform-in-a-disc actually
+            // concentrates toward the rim, which is the opposite of varied.
+            let band = match rng.gen_range(0..3) {
+                0 => rng.gen_range(0.10..0.30),
+                1 => rng.gen_range(0.35..0.60),
+                _ => rng.gen_range(0.65..0.95),
+            };
+            let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+            let anchor = home + Vec2::new(angle.cos(), angle.sin()) * (template.radius * band);
 
-        // One speed for the element, so a pack holds formation instead of
-        // smearing out over the first leg.
-        let cruise = rng.gen_range(55.0..130.0);
-        let destination = patrol_waypoint(&mut rng, cluster_center, template.radius);
+            // One speed for the element, so a pack holds formation instead of
+            // smearing out over the first leg.
+            let cruise = rng.gen_range(55.0..130.0);
+            let destination = patrol_waypoint(&mut rng, home, template.radius);
 
-        for _ in 0..size {
-            let spread = if size == 1 { 0.0 } else { rng.gen_range(120.0..420.0) };
-            let a = rng.gen_range(0.0..std::f32::consts::TAU);
-            let pos = anchor + Vec2::new(a.cos(), a.sin()) * spread;
-            let mut ship = SimulatedShip::patrolling(
-                system.id,
-                faction,
-                pos,
-                cluster_center,
-                template.radius,
-                cruise * rng.gen_range(0.92..1.08),
-            );
-            ship.destination = destination;
-            sim.ships.push(ship);
+            for _ in 0..size {
+                let spread = if size == 1 { 0.0 } else { rng.gen_range(120.0..420.0) };
+                let a = rng.gen_range(0.0..std::f32::consts::TAU);
+                let pos = anchor + Vec2::new(a.cos(), a.sin()) * spread;
+                let mut ship = SimulatedShip::patrolling(
+                    system.id,
+                    faction,
+                    pos,
+                    home,
+                    template.radius,
+                    cruise * rng.gen_range(0.92..1.08),
+                );
+                ship.destination = destination;
+                sim.ships.push(ship);
+            }
+            placed += size;
         }
-        placed += size;
     }
+}
+
+/// Share of a system's ships kept at the faction's cluster point; the rest
+/// spread evenly over its other holdings.
+const CLUSTER_SHARE: f32 = 0.35;
+
+/// How many of `count` ships each of `holdings` keeps: `CLUSTER_SHARE` at
+/// the first (the cluster point), the rest evenly over the others.
+fn holding_quotas(count: usize, holdings: usize) -> Vec<usize> {
+    if holdings <= 1 {
+        return vec![count];
+    }
+    let cluster = ((count as f32 * CLUSTER_SHARE).round() as usize).clamp(1, count);
+    let rest = count - cluster;
+    let others = holdings - 1;
+    std::iter::once(cluster)
+        .chain((0..others).map(|k| rest / others + usize::from(k < rest % others)))
+        .collect()
+}
+
+/// How far from each station its picket holds: out of sight of the berth a
+/// jump arrives at (enemy edge markers reach 25 km), near enough that traffic
+/// round a station is something you meet.
+const STATION_PICKET: std::ops::Range<f32> = 30_000.0..55_000.0;
+
+/// Holdings out on open bearings, and how far from the star. Past the largest
+/// star (150 km radius) with room to spare.
+const OPEN_HOLDINGS: usize = 2;
+const OPEN_HOLDING_RANGE: std::ops::Range<f32> = 250_000.0..450_000.0;
+
+/// Where a system's faction keeps its ships: its cluster point first, then a
+/// picket off each station, then patrols on open bearings. None closer than
+/// `STATION_PICKET.start` to any station -- the open bearings and the
+/// cluster point both fall at station-like distances from the star.
+fn faction_holdings(system: &crate::celestial::resources::StarSystemDef, rng: &mut impl Rng) -> Vec<Vec2> {
+    let stations: Vec<Vec2> = crate::world::home_base::station_sites(system.id, system.local_center)
+        .iter()
+        .map(|site| site.pos)
+        .collect();
+    let mut holdings = vec![crate::celestial::galaxy::faction_cluster_center(system)];
+    for &station in &stations {
+        let bearing = rng.gen_range(0.0..std::f32::consts::TAU);
+        holdings.push(station + Vec2::from_angle(bearing) * rng.gen_range(STATION_PICKET));
+    }
+    for _ in 0..OPEN_HOLDINGS {
+        let bearing = rng.gen_range(0.0..std::f32::consts::TAU);
+        holdings.push(system.local_center + Vec2::from_angle(bearing) * rng.gen_range(OPEN_HOLDING_RANGE));
+    }
+    holdings.into_iter().map(|h| clear_of_stations(h, &stations)).collect()
+}
+
+/// `pos`, pushed straight out from any station it's within
+/// `STATION_PICKET.start` of.
+fn clear_of_stations(mut pos: Vec2, stations: &[Vec2]) -> Vec2 {
+    // A few passes: a push off one station can, rarely, land near the other.
+    for _ in 0..4 {
+        let Some(&near) = stations.iter().find(|s| s.distance(pos) < STATION_PICKET.start) else {
+            break;
+        };
+        pos = near + (pos - near).normalize_or(Vec2::X) * STATION_PICKET.start;
+    }
+    pos
 }
 
 /// How many hulls a system's faction keeps on station.
@@ -646,6 +718,44 @@ mod population_tests {
             "spacing is uniform — tightest neighbour {tightest:.0}, loneliest {loneliest:.0}. \
              That is the even scatter this replaced, not packs and loners"
         );
+    }
+
+    /// Spread over the system, not one territory: several holdings occupied,
+    /// far apart, none holding most of the fleet, and none parked on a
+    /// station's berth.
+    #[test]
+    fn a_system_is_populated_across_several_holdings() {
+        let galaxy = crate::celestial::galaxy::generate_galaxy_map(42);
+        for system in galaxy.systems.iter().filter(|s| s.faction.is_some()) {
+            let mut sim = WorldSimulation::default();
+            spawn_system_faction_population(&mut sim, system);
+            let mut homes: Vec<(Vec2, usize)> = Vec::new();
+            for ship in &sim.ships {
+                match homes.iter_mut().find(|(h, _)| h.distance(ship.home_zone) < 1.0) {
+                    Some((_, n)) => *n += 1,
+                    None => homes.push((ship.home_zone, 1)),
+                }
+            }
+            assert!(homes.len() >= 3, "{}: ships in only {} holdings", system.name, homes.len());
+            let most = homes.iter().map(|(_, n)| *n).max().unwrap();
+            assert!(
+                most * 10 <= sim.ships.len() * 7,
+                "{}: {most} of {} ships in one holding",
+                system.name,
+                sim.ships.len()
+            );
+            for site in crate::world::home_base::station_sites(system.id, system.local_center) {
+                for (home, _) in &homes {
+                    assert!(
+                        home.distance(site.pos) > 25_000.0,
+                        "{}: a holding {:.0} from {}",
+                        system.name,
+                        home.distance(site.pos),
+                        site.name
+                    );
+                }
+            }
+        }
     }
 
     /// Patrols have to actually go somewhere. The old random walk left a ship
