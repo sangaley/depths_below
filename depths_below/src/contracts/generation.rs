@@ -230,8 +230,13 @@ fn generate_single_contract(
             let ct = creatures[rng.gen_range(0..creatures.len())];
             let count = kill_count_for_star(star);
             (
-                format!("Kill {} {:?}s", count, ct),
-                format!("Eliminate {} {:?} creatures in the {:?} zone.", count, ct, zone),
+                format!("Kill {} {}s", count, spaced(&format!("{ct:?}"))),
+                format!(
+                    "Eliminate {} {} creatures in {}.",
+                    count,
+                    spaced(&format!("{ct:?}")),
+                    crate::world::zone_display_name(zone)
+                ),
                 ContractObjective::Kill { creature_type: ct, target_count: count, current_count: 0 },
             )
         }
@@ -239,8 +244,8 @@ fn generate_single_contract(
             let pois = poi_types();
             let pt = pois[rng.gen_range(0..pois.len())];
             (
-                format!("Explore {:?}", pt),
-                format!("Discover a {:?} point of interest.", pt),
+                format!("Explore {}", pt.display_name()),
+                format!("Find a {} and get close enough to log it.", pt.display_name()),
                 ContractObjective::ExplorePoi { poi_type: pt, discovered: false },
             )
         }
@@ -267,16 +272,20 @@ fn generate_single_contract(
             let creatures = creatures_for_star(star);
             let ct = creatures[rng.gen_range(0..creatures.len())];
             (
-                format!("Capture {:?} alive", ct),
-                format!("Capture a living {:?} specimen using Creature Containment.", ct),
+                format!("Capture a {} alive", spaced(&format!("{ct:?}"))),
+                format!("Capture a living {} specimen using Creature Containment.", spaced(&format!("{ct:?}"))),
                 ContractObjective::CaptureLive { creature_type: ct, captured: false },
             )
         }
         ContractType::SurveyZone => {
             let seconds = survey_seconds_for_star(star);
             (
-                format!("Survey {:?} Zone", zone),
-                format!("Spend {:.0} seconds in the {:?} zone to complete the survey.", seconds, zone),
+                format!("Survey {}", crate::world::zone_display_name(zone)),
+                format!(
+                    "Spend {:.0} seconds in {} to complete the survey.",
+                    seconds,
+                    crate::world::zone_display_name(zone)
+                ),
                 ContractObjective::SurveyZone { zone, required_seconds: seconds, elapsed_seconds: 0.0 },
             )
         }
@@ -460,5 +469,38 @@ mod poi_target_tests {
                 .any(|d| crate::world::depth_to_zone(d as f32) == want);
             assert!(found, "star {star} asks for {want:?}, which no range produces");
         }
+    }
+}
+
+/// "VoidDrifter" -> "Void Drifter". Contract text printed enum identifiers
+/// straight into the board ("Survey AsteroidBelt Zone", "Explore Wreck");
+/// creature types have no display names of their own, so their identifier is
+/// at least split into words.
+fn spaced(identifier: &str) -> String {
+    let mut out = String::with_capacity(identifier.len() + 4);
+    for (i, ch) in identifier.chars().enumerate() {
+        if i > 0 && ch.is_uppercase() {
+            out.push(' ');
+        }
+        out.push(ch);
+    }
+    out
+}
+
+#[cfg(test)]
+mod contract_text_tests {
+    use super::*;
+
+    #[test]
+    fn identifiers_read_as_words() {
+        assert_eq!(spaced("VoidDrifter"), "Void Drifter");
+        assert_eq!(spaced("Stalker"), "Stalker");
+    }
+
+    #[test]
+    fn zone_titles_use_display_names() {
+        use crate::components::ZoneType;
+        assert_eq!(crate::world::zone_display_name(ZoneType::AsteroidBelt), "Outer Approach");
+        assert_eq!(crate::world::zone_display_name(ZoneType::BlackHole), "The Outer Dark");
     }
 }

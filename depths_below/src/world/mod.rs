@@ -122,13 +122,21 @@ pub fn distance_from_safety(ship_pos: Vec2, stations: &home_base::SystemStations
 /// announced every crossing: 35 "Entering Asteroid Belt" in one 21-minute run.
 const ZONE_SETTLE_SECONDS: f32 = 2.5;
 
-fn zone_name(zone: ZoneType) -> &'static str {
+/// The name a range band is shown under: HUD, zone notices, contract titles.
+///
+/// These describe distance from the nearest station, honestly. The old names
+/// were depth zones from the submarine days and promised things that weren't
+/// there: "Asteroid Belt" three km from a station whose rocks are kept twelve
+/// km clear, "Nebula" with no nebula, and "Black Hole Proximity" anywhere
+/// over 30 km out -- which, chasing a bounty, was most of a system. The
+/// ZoneType variants keep their old identifiers; gameplay reads those.
+pub fn zone_display_name(zone: ZoneType) -> &'static str {
     match zone {
-        ZoneType::NearOrbit => "Near Orbit",
-        ZoneType::AsteroidBelt => "Asteroid Belt",
+        ZoneType::NearOrbit => "Near Space",
+        ZoneType::AsteroidBelt => "Outer Approach",
         ZoneType::DeepSpace => "Deep Space",
-        ZoneType::Nebula => "Nebula",
-        ZoneType::BlackHole => "Black Hole Proximity",
+        ZoneType::Nebula => "Far Reaches",
+        ZoneType::BlackHole => "The Outer Dark",
     }
 }
 
@@ -163,7 +171,7 @@ fn check_depth_zone_change(
     let candidate = zone_with_margin(local, *announced);
     if let Some(zone) = settled_zone(candidate, time.delta_secs(), &mut settling, &mut announced) {
         notifications.write(ShowNotification {
-            message: format!("Entering {}", zone_name(zone)),
+            message: format!("Entering {}", zone_display_name(zone)),
             notification_type: NotificationType::Warning,
             duration: 3.0,
         });

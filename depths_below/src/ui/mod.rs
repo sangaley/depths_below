@@ -1452,12 +1452,11 @@ pub fn format_range_km(units: f32) -> String {
 /// Returns the space zone name for a given distance
 // Thresholds must match world::depth_to_zone (radial distance rings)
 fn depth_zone_name(depth: f32) -> &'static str {
-    if depth < 600.0 { "Station Orbit" }
-    else if depth < 3000.0 { "Near Space" }
-    else if depth < 8000.0 { "Asteroid Belt" }
-    else if depth < 16000.0 { "Deep Space" }
-    else if depth < 30000.0 { "Nebula" }
-    else { "Black Hole Proximity" }
+    if depth < 600.0 {
+        "Station Orbit"
+    } else {
+        crate::world::zone_display_name(crate::world::depth_to_zone(depth))
+    }
 }
 
 /// Updates HUD text and bars
