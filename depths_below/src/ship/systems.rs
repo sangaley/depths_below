@@ -131,9 +131,13 @@ pub fn update_inventory_capacity(
     mut inventory: ResMut<Inventory>,
 ) {
     let base_capacity = 100.0f32;
+    // Every intact hold, switched "on" or not. Holds draw no power and don't
+    // start switched on (spawner::starts_active), so gating on is_active left
+    // the starter's 440-capacity bay out entirely: 0/100 at the start, then
+    // 0/860 once a Repair Modules visit happened to switch everything on.
     let cargo_bonus: f32 = cargo_query
         .iter()
-        .filter(|(_, module)| module.is_active)
+        .filter(|(_, module)| module.health > 0.0)
         .map(|(cargo, _)| cargo.capacity)
         .sum();
     inventory.max_capacity = base_capacity + cargo_bonus;
@@ -256,4 +260,39 @@ pub fn cleanup_game_entities(
     noise_state.noise_level = 0.0;
 
     info!("Game entities cleaned up for restart");
+}
+
+#[cfg(test)]
+mod cargo_capacity_tests {
+    use super::*;
+
+    fn hold(health: f32, active: bool) -> (CargoHold, Module) {
+        (
+            CargoHold { capacity: 440.0, current_weight: 0.0 },
+            Module {
+                module_type: ModuleType::BulkCargoHold,
+                health,
+                max_health: 100.0,
+                power_consumption: 0.0,
+                power_generation: 0.0,
+                is_active: active,
+                grid_position: IVec2::ZERO,
+                size: IVec2::ONE,
+                rotation: Rotation::default(),
+            },
+        )
+    }
+
+    #[test]
+    fn an_intact_hold_counts_whether_or_not_it_is_switched_on() {
+        let mut app = App::new();
+        app.init_resource::<Inventory>();
+        app.add_systems(Update, update_inventory_capacity);
+        app.world_mut().spawn(hold(100.0, false));
+        app.world_mut().spawn(hold(0.0, true)); // shot to pieces
+        let raider = app.world_mut().spawn_empty().id();
+        app.world_mut().spawn((hold(100.0, true), crate::ai_ship::components::OwnedByAiShip { root: raider }));
+        app.update();
+        assert_eq!(app.world().resource::<Inventory>().max_capacity, 540.0);
+    }
 }
