@@ -180,6 +180,10 @@ pub fn issue_suits(
     }
 }
 
+/// Seconds a suited hand spends in good air, suit topped up, before they hang
+/// it back up.
+const SUIT_STOW_SECONDS: f32 = 15.0;
+
 /// Burns suit air in vacuum, refills it in atmosphere, and suffocates whoever
 /// is caught without.
 ///
@@ -196,6 +200,8 @@ pub fn suit_air(
         (Without<EvaSalvaging>, Without<OwnedByAiShip>),
     >,
     mut wounds: MessageWriter<CrewDamaged>,
+    // Seconds each suited hand has been in good air with a full suit.
+    mut settled: Local<std::collections::HashMap<Entity, f32>>,
 ) {
     let dt = time.delta_secs();
     if dt <= 0.0 {
@@ -216,8 +222,23 @@ pub fn suit_air(
             if suited && member.oxygen < 100.0 {
                 member.oxygen = (member.oxygen + (100.0 / SUIT_REFILL_SECONDS) * dt).min(100.0);
             }
+            // Once the danger has passed, the suit goes back on the rack.
+            // Nothing took one off short of running it dry, so suits issued
+            // for a breach or an EVA stayed on their wearers for good and the
+            // airlock emptied for the rest of the run.
+            if suited && member.oxygen >= 100.0 {
+                let held = settled.entry(entity).or_insert(0.0);
+                *held += dt;
+                if *held >= SUIT_STOW_SECONDS {
+                    commands.entity(entity).try_remove::<Suited>();
+                    settled.remove(&entity);
+                }
+            } else {
+                settled.remove(&entity);
+            }
             continue;
         }
+        settled.remove(&entity);
 
         if suited && member.oxygen > 0.0 {
             member.oxygen = (member.oxygen - (100.0 / SUIT_AIR_SECONDS) * dt).max(0.0);
@@ -526,5 +547,60 @@ pub fn suited_damage_control(
         // post arrived at the hole still flagged Working and stood there
         // contributing precisely nothing.
         member.state = CrewState::Repairing;
+    }
+}
+
+#[cfg(test)]
+mod stow_tests {
+    use super::*;
+
+    fn app() -> App {
+        let mut app = App::new();
+        app.init_resource::<Time>();
+        app.init_resource::<AirField>();
+        app.add_message::<CrewDamaged>();
+        app.add_systems(Update, suit_air);
+        app.world_mut().resource_mut::<AirField>().pressure.insert(IVec2::ZERO, 1.0);
+        app
+    }
+
+    fn suited_hand(app: &mut App, oxygen: f32) -> Entity {
+        app.world_mut().spawn((
+            CrewMember {
+                name: "Okonkwo".into(),
+                health: 100.0,
+                max_health: 100.0,
+                oxygen,
+                morale: 100.0,
+                state: CrewState::Idle,
+            },
+            Transform::from_translation(crate::building::grid_to_local(IVec2::ZERO).extend(0.6)),
+            Suited,
+        )).id()
+    }
+
+    fn run(app: &mut App, seconds: f32) {
+        for _ in 0..(seconds * 10.0) as u32 {
+            app.world_mut().resource_mut::<Time>().advance_by(std::time::Duration::from_millis(100));
+            app.update();
+        }
+    }
+
+    /// Safe and topped up: the suit goes back on the rack.
+    #[test]
+    fn a_suit_is_stowed_once_the_danger_has_passed() {
+        let mut app = app();
+        let hand = suited_hand(&mut app, 100.0);
+        run(&mut app, SUIT_STOW_SECONDS + 1.0);
+        assert!(app.world().get::<Suited>(hand).is_none(), "suit never came off");
+    }
+
+    /// Not before it's been refilled and they've been safe a while.
+    #[test]
+    fn a_suit_stays_on_while_it_refills() {
+        let mut app = app();
+        let hand = suited_hand(&mut app, 20.0);
+        run(&mut app, 5.0);
+        assert!(app.world().get::<Suited>(hand).is_some());
     }
 }

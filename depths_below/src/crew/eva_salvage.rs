@@ -148,7 +148,17 @@ pub fn order_salvage_detail(
     let mut best: Option<(Entity, Vec2, f32)> = None;
     let mut nearest_any = f32::INFINITY;
     for (entity, gt, wreck, poi) in wreck_query.iter() {
-        if poi.poi_type != PoiType::Wreck || wreck.loot_remaining == 0 {
+        if poi.poi_type != PoiType::Wreck {
+            continue;
+        }
+        // Worth a detail while it has cargo OR plating to break into scrap --
+        // the same test run_salvage_detail uses to send crew back for another
+        // trip. Requiring cargo here meant a gutted hulk (loot spent, hull
+        // still there) couldn't be ordered at all, and F said nothing.
+        let has_blocks = children_query
+            .get(entity)
+            .is_ok_and(|children| children.iter().any(|c| block_query.get(c).is_ok()));
+        if wreck.loot_remaining == 0 && !has_blocks {
             continue;
         }
         let root_pos = gt.translation().truncate();
@@ -325,9 +335,9 @@ pub fn order_salvage_detail(
         .sum();
     let mut free_suits = racked.saturating_sub(already_suited.iter().count() as u32);
     if free_suits == 0 {
-        if !press.claim() {
-            return;
-        }
+        // The press was claimed above. Claiming it a second time here always
+        // failed and returned first, so "no suits" was never said -- F just
+        // did nothing.
         notifications.write(ShowNotification {
             message: if racked == 0 {
                 "No airlock aboard - nowhere to suit up for EVA.".into()
@@ -837,10 +847,15 @@ fn board_crew(
     }
     // try_* — the crew member may have died (and been despawned) the
     // same frame they board; see the despawn-race pattern in wreck.rs.
+    // Back through the lock, the suit goes back on its rack. Suits never came
+    // off: every detail permanently took four out of the airlock, until "all
+    // suits are already out" and salvage stopped working for the rest of the
+    // run.
     commands
         .entity(entity)
         .try_insert(ChildOf(ship))
-        .try_remove::<EvaSalvaging>();
+        .try_remove::<EvaSalvaging>()
+        .try_remove::<Suited>();
 }
 
 #[cfg(test)]
@@ -914,6 +929,34 @@ mod out_of_reach_tests {
         app.update();
         assert_eq!(notices(&app), vec!["Wreck out of reach (3.4 km) - close within 3.0 km to send a detail.".to_string()]);
         assert!(app.world().resource::<InteractPress>().pending());
+    }
+
+    /// A hulk with its cargo gone but its plating still there is still work:
+    /// the order goes through (here as far as the suit check, with no airlock
+    /// aboard), instead of F doing nothing at all.
+    #[test]
+    fn a_gutted_hulk_with_plating_can_still_be_ordered() {
+        let mut app = App::new();
+        app.init_resource::<InteractPress>();
+        app.init_resource::<ButtonInput<KeyCode>>();
+        app.init_resource::<crate::world::home_base::SystemStations>();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, (crate::resources::refresh_interact_press, order_salvage_detail).chain());
+        app.world_mut().spawn((Ship, GlobalTransform::default()));
+        let hulk = app.world_mut().spawn((
+            GlobalTransform::from_xyz(800.0, 0.0, 0.0),
+            Wreck { loot_remaining: 0, is_explored: true },
+            PointOfInterest { poi_type: PoiType::Wreck, discovered: true },
+        )).id();
+        let plate = app.world_mut().spawn((
+            HullSegment::default(),
+            Sprite::default(),
+            GlobalTransform::from_xyz(820.0, 0.0, 0.0),
+        )).id();
+        app.world_mut().entity_mut(hulk).add_child(plate);
+        app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::KeyF);
+        app.update();
+        assert_eq!(notices(&app), vec!["No airlock aboard - nowhere to suit up for EVA.".to_string()]);
     }
 
     /// Nothing anywhere near: nothing to explain.
