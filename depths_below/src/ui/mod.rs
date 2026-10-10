@@ -5169,7 +5169,15 @@ fn docking_menu_input(
 
                     let remaining_missing = fuel_state.max_fuel - fuel_state.current_fuel;
                     if remaining_missing > 1.0 {
-                        let cost = (remaining_missing * 0.5 * discounts.fuel) as u32;
+                        // `far` too: the services list posts the price with
+                        // it, and the bill has to match the price posted.
+                        let per_unit = 0.5 * discounts.fuel * far;
+                        let cost = (remaining_missing * per_unit) as u32;
+                        // Whatever the credits stretch to, not all or nothing.
+                        // A captain 100c short of a full tank used to get no
+                        // fuel at all, and a playtest sat at one station with
+                        // 436c and a near-empty tank for fifteen minutes.
+                        let affordable = (currency.credits as f32 / per_unit).floor();
                         if currency.credits >= cost {
                             currency.credits -= cost;
                             fuel_state.current_fuel = fuel_state.max_fuel;
@@ -5178,9 +5186,22 @@ fn docking_menu_input(
                                 notification_type: NotificationType::Success,
                                 duration: 3.0,
                             });
+                        } else if affordable >= 1.0 {
+                            let bought = affordable.min(remaining_missing);
+                            let paid = ((bought * per_unit) as u32).min(currency.credits);
+                            currency.credits -= paid;
+                            fuel_state.current_fuel += bought;
+                            notifications.write(ShowNotification {
+                                message: format!(
+                                    "Bought {:.0} fuel (-{}c) - a full tank is {}c",
+                                    bought, paid, cost
+                                ),
+                                notification_type: NotificationType::Warning,
+                                duration: 3.0,
+                            });
                         } else {
                             notifications.write(ShowNotification {
-                                message: format!("Not enough credits for full refuel (need {}c)", cost),
+                                message: format!("No credits for fuel (a full tank is {}c)", cost),
                                 notification_type: NotificationType::Warning,
                                 duration: 2.0,
                             });

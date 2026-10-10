@@ -705,7 +705,8 @@ pub fn station_docking(
         // broke player is never stranded, and the rest is bought.
         oxygen_state.current_oxygen = oxygen_state.max_oxygen;
         const DOCK_FUEL_RESERVE: f32 = 260.0;
-        if fuel_state.current_fuel < DOCK_FUEL_RESERVE {
+        let topped_up = fuel_state.current_fuel < DOCK_FUEL_RESERVE;
+        if topped_up {
             fuel_state.current_fuel = DOCK_FUEL_RESERVE.min(fuel_state.max_fuel);
         }
         for (mut weapon, parent) in weapon_query.iter_mut() {
@@ -714,9 +715,12 @@ pub fn station_docking(
             }
         }
 
+        // Say what docking actually gave: "fuel resupplied" on every arrival
+        // read as a full tank, then the shop asked for credits to fill it.
+        let resupplied = if topped_up { "O2 and reserve fuel" } else { "O2" };
         notifications.write(ShowNotification {
             message: format!(
-                "Docked at {} - O2 and fuel resupplied. B: build | U: shop | J: jobs | Enter: launch",
+                "Docked at {} - {resupplied} resupplied. B: build | U: shop | J: jobs | Enter: launch",
                 site.name
             ),
             notification_type: NotificationType::Success,
