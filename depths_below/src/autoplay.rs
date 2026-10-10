@@ -1412,37 +1412,6 @@ fn head_for_dock(
     true
 }
 
-/// Distance to the nearest station, if this system has any.
-fn station_distance(stations: &SystemStations, pos: Vec2) -> Option<f32> {
-    stations
-        .sites
-        .iter()
-        .map(|s| pos.distance(s.pos))
-        .fold(None, |best: Option<f32>, d| match best {
-            Some(b) if b <= d => best,
-            _ => Some(d),
-        })
-}
-
-/// Where to park to work a wreck, given F means "dock" inside a station's
-/// radius and "send a detail" outside it.
-///
-/// The two share a key with no mutual exclusion (home_base::dock_at_station
-/// and crew::eva_salvage both read KeyF), so the parking spot decides which
-/// one a press actually performs. Holding the usual 1300 off a wreck near
-/// Haven put the ship 1470 from the station — it docked instead of salvaging
-/// and the run wedged. Closing right up to the wreck settles it.
-fn salvage_hold_distance(stations: &SystemStations, wreck: Vec2) -> f32 {
-    match station_distance(stations, wreck) {
-        // Wreck itself sits well clear of any station: normal standoff.
-        Some(d) if d > DOCK_RANGE * 1.6 => SALVAGE_HOLD,
-        // Near a station — get in close enough that our own position is
-        // outside the dock radius even though the wreck is near it.
-        Some(_) => 300.0,
-        None => SALVAGE_HOLD,
-    }
-}
-
 /// Position of the nearest station, if any.
 fn nearest_station(stations: &SystemStations, pos: Vec2) -> Option<Vec2> {
     stations
@@ -1474,7 +1443,12 @@ fn dispatch_salvage(
     wreck: Vec2,
     dist: f32,
 ) {
-    let hold = salvage_hold_distance(stations, wreck);
+    // The usual standoff everywhere, stations included. Near a station it
+    // used to be 300 off the wreck's centre, to keep out of the dock radius;
+    // with docking at 7 km that caught Haven's training wreck, and 300 off a
+    // hull's centre is inside the hull, so the ship circled it for four
+    // minutes and never got close enough to press F.
+    let hold = SALVAGE_HOLD;
 
     if dist > hold * 1.5 {
         fly_to(d, pos, wreck, dist, hold);
@@ -1486,11 +1460,13 @@ fn dispatch_salvage(
     }
 
     // Inside a station's docking range F only salvages alongside the wreck
-    // (eva_salvage::station_takes_the_press); out here a press would dock.
-    // Near a station the hold is 300, so this is a guard, not the usual path.
-    if stations.nearest_in_range(pos).is_some() && dist > crate::crew::eva_salvage::ALONGSIDE {
-        fly_to(d, pos, wreck, dist, 300.0);
-        return;
+    // and nearer it than the station; anywhere else in range a press docks.
+    if let Some(site) = stations.nearest_in_range(pos) {
+        let edge = (pos.distance(site.pos) - site.radius()).max(0.0);
+        if crate::crew::eva_salvage::station_takes_the_press(edge, dist) {
+            fly_to(d, pos, wreck, dist, 900.0);
+            return;
+        }
     }
 
     d.tap(KeyCode::KeyF);

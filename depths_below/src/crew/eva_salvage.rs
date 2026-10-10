@@ -109,7 +109,7 @@ pub const ALONGSIDE: f32 = 1_500.0;
 /// approach is full of chunk-layer wrecks, F almost never docked. Nearer
 /// still matters alongside, or parking on a wreck beside a station would
 /// berth the ship with the detail on the hull.
-fn station_takes_the_press(edge: f32, wreck_dist: f32) -> bool {
+pub fn station_takes_the_press(edge: f32, wreck_dist: f32) -> bool {
     wreck_dist > ALONGSIDE || edge < wreck_dist
 }
 
