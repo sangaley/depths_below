@@ -413,10 +413,24 @@ pub fn order_salvage_detail(
     }
 
     if dispatched > 0 {
+        // F docks too, and goes to whichever is nearer. Beside a station with
+        // a fresh kill next to it, a player pressing F to dock got a detail
+        // out, then a recall, then another detail -- and never docked, with
+        // "press F to dock" still on screen. Say why it wasn't a dock.
+        let (message, duration) = match stations.nearest_in_range(ship_pos) {
+            Some(site) => (
+                format!(
+                    "Salvage detail EVA: {} crew - the wreck is nearer than {}. F recalls them; to dock, get closer to the station than the wreck.",
+                    dispatched, site.name
+                ),
+                5.0,
+            ),
+            None => (format!("Salvage detail EVA: {} crew (F to recall)", dispatched), 2.5),
+        };
         notifications.write(ShowNotification {
-            message: format!("Salvage detail EVA: {} crew (F to recall)", dispatched),
+            message,
             notification_type: NotificationType::Info,
-            duration: 2.5,
+            duration,
         });
     } else {
         notifications.write(ShowNotification {
