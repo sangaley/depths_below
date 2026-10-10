@@ -82,14 +82,69 @@ fn vary(tint: Color, rng: &mut impl Rng) -> Color {
     )
 }
 
-pub fn spawn_star_system(
-    commands: &mut Commands,
-    asset_server: &AssetServer,
-    center: Vec2,
-    system_id: u32,
-    rng: &mut impl Rng,
-    textures: &CelestialTextures,
-) -> StarSystemInfo {
+/// One planet as `roll_star_system` rolls it: everything about it the seed
+/// decides, before any entity exists.
+pub struct PlanetRoll {
+    pub planet_type: PlanetType,
+    pub radius: f32,
+    pub mass: f32,
+    pub orbit_distance: f32,
+    pub period: f32,
+    pub eccentricity: f32,
+    pub phase: f32,
+    pub clockwise: bool,
+    sprite: String,
+    color: Color,
+    spin_rate: f32,
+    has_atmosphere: bool,
+    has_rings: bool,
+    resource_richness: f32,
+}
+
+impl PlanetRoll {
+    /// The tube this planet sweeps round its star.
+    pub fn path(&self) -> super::orbits::PlanetPath {
+        super::orbits::PlanetPath {
+            semi_major_axis: self.orbit_distance,
+            eccentricity: self.eccentricity,
+            radius: self.radius,
+        }
+    }
+}
+
+/// A star system as its seed decides it, before any entity exists.
+pub struct SystemRoll {
+    pub star_class: StarSizeClass,
+    flare_threshold: f32,
+    pub planets: Vec<PlanetRoll>,
+}
+
+impl SystemRoll {
+    pub fn star_radius(&self) -> f32 {
+        self.star_class.radius()
+    }
+
+    pub fn planet_paths(&self) -> Vec<super::orbits::PlanetPath> {
+        self.planets.iter().map(PlanetRoll::path).collect()
+    }
+}
+
+/// Every draw `spawn_star_system` makes, in the order it has always made
+/// them, with no Bevy world involved.
+///
+/// Split out so a system's planets can be known without spawning it.
+/// Stations are placed by `world::home_base::station_sites`, which runs long
+/// before (and long after) the system is loaded -- for the map, docking,
+/// contracts and the warp arrival point -- and a station that doesn't know
+/// where the planets go gets run over by one: in the seed-42 galaxy 16 of 31
+/// systems had a station on a planet's path.
+///
+/// The ORDER is load-bearing. The spawner's stream carries on into the
+/// asteroid field and the points of interest, so one draw moved or retyped
+/// here (an f64 where an f32 was, a range changed) reshuffles every system in
+/// the galaxy. Cosmetic rolls are kept even though only the spawner uses
+/// them, for the same reason.
+pub fn roll_star_system(rng: &mut impl Rng) -> SystemRoll {
     // Pick star class based on seed
     let star_class = match rng.gen_range(0..10) {
         0..=3 => StarSizeClass::Dwarf,
@@ -97,61 +152,15 @@ pub fn spawn_star_system(
         8 => StarSizeClass::Giant,
         _ => StarSizeClass::Supergiant,
     };
-
-    let star_radius = star_class.radius();
-    let star_mass = star_class.mass();
-
-    // Spawn star
-    let star_entity = commands.spawn((
-        (Sprite {
-                image: textures.solid.clone(),
-                color: match star_class {
-                    StarSizeClass::Dwarf => Color::srgb(1.0, 0.6, 0.3),
-                    StarSizeClass::Main => Color::srgb(1.0, 0.95, 0.8),
-                    StarSizeClass::Giant => Color::srgb(1.0, 0.8, 0.4),
-                    StarSizeClass::Supergiant => Color::srgb(0.7, 0.8, 1.0),
-                },
-                custom_size: Some(Vec2::splat(star_radius * 2.0)),
-                ..default()
-            }, Transform::from_xyz(center.x, center.y, -1.0)),
-        CelestialBody {
-            body_type: CelestialBodyType::Star,
-            mass: star_mass,
-            radius: star_radius,
-            name: super::galaxy::system_name(system_id),
-        },
-        Star {
-            luminosity: star_class.radiation_multiplier(),
-            radiation_output: star_class.radiation_multiplier() * 10.0,
-            size_class: star_class,
-            flare_buildup: 0.0,
-            flare_threshold: rng.gen_range(0.7..0.95),
-            is_dying: false,
-            death_timer: 10.0, // 10 second countdown when dying starts
-        },
-        GravityWell {
-            // Same derivation as planets: inverse-square lands on the chosen
-            // surface acceleration when strength is that acceleration times
-            // the radius squared.
-            strength: star_class.surface_gravity() * star_radius * star_radius,
-            // Six radii. Haven's spawn sits under two radii out, where this
-            // still pulls at roughly a quarter of surface strength -- the
-            // star should be felt from the moment you launch.
-            influence_radius: star_radius * 6.0,
-            falloff: GravityFalloff::InverseSquare,
-        },
-        StarSystemMember { system_id },
-    )).id();
+    let flare_threshold = rng.gen_range(0.7..0.95);
 
     // Generate 2-6 planets
     let planet_count = rng.gen_range(2..=6);
-    let mut planet_entities = Vec::new();
-    let mut planet_bands: Vec<(f32, f32)> = Vec::new();
-    let mut planet_paths = Vec::new();
+    let mut planets = Vec::with_capacity(planet_count);
 
     // Walking frontier for orbit placement: the outer edge of what has been
     // placed so far, starting at the star's own surface.
-    let mut orbit_frontier = star_radius;
+    let mut orbit_frontier = star_class.radius();
     let mut prev_radius = 0.0f32;
 
     for i in 0..planet_count {
@@ -179,48 +188,135 @@ pub fn spawn_star_system(
         );
         let orbit_distance = orbit_frontier;
         prev_radius = planet_radius;
-        let orbit_period = orbital_period(orbit_distance) * rng.gen_range(0.88..1.12);
+        let period = orbital_period(orbit_distance) * rng.gen_range(0.88..1.12);
         let eccentricity = rng.gen_range(0.0..0.3);
         let phase = rng.gen_range(0.0..std::f32::consts::TAU);
         let clockwise = rng.gen_bool(0.5);
+        let sprite = planet_sprite_path(planet_type, rng);
+        let color = vary(planet_type.tint(), rng);
+        // One turn every one to three minutes, either way round. Slow
+        // enough to read as a world rather than a top, quick enough
+        // that a feature visibly crosses the disc while you watch.
+        let spin_rate = std::f32::consts::TAU / rng.gen_range(60.0f32..180.0)
+            * if rng.gen_bool(0.5) { 1.0 } else { -1.0 };
+        let has_atmosphere = rng.gen_bool(planet_type.atmosphere_chance());
+        let has_rings = rng.gen_bool(planet_type.ring_chance());
+        let resource_richness = rng.gen_range(0.1..1.0);
+
+        planets.push(PlanetRoll {
+            planet_type,
+            radius: planet_radius,
+            mass: planet_mass,
+            orbit_distance,
+            period,
+            eccentricity,
+            phase,
+            clockwise,
+            sprite,
+            color,
+            spin_rate,
+            has_atmosphere,
+            has_rings,
+            resource_richness,
+        });
+    }
+
+    SystemRoll { star_class, flare_threshold, planets }
+}
+
+pub fn spawn_star_system(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    center: Vec2,
+    system_id: u32,
+    rng: &mut impl Rng,
+    textures: &CelestialTextures,
+) -> StarSystemInfo {
+    let roll = roll_star_system(rng);
+    let star_class = roll.star_class;
+    let star_radius = roll.star_radius();
+    let star_mass = star_class.mass();
+
+    // Spawn star
+    let star_entity = commands.spawn((
+        (Sprite {
+                image: textures.solid.clone(),
+                color: match star_class {
+                    StarSizeClass::Dwarf => Color::srgb(1.0, 0.6, 0.3),
+                    StarSizeClass::Main => Color::srgb(1.0, 0.95, 0.8),
+                    StarSizeClass::Giant => Color::srgb(1.0, 0.8, 0.4),
+                    StarSizeClass::Supergiant => Color::srgb(0.7, 0.8, 1.0),
+                },
+                custom_size: Some(Vec2::splat(star_radius * 2.0)),
+                ..default()
+            }, Transform::from_xyz(center.x, center.y, -1.0)),
+        CelestialBody {
+            body_type: CelestialBodyType::Star,
+            mass: star_mass,
+            radius: star_radius,
+            name: super::galaxy::system_name(system_id),
+        },
+        Star {
+            luminosity: star_class.radiation_multiplier(),
+            radiation_output: star_class.radiation_multiplier() * 10.0,
+            size_class: star_class,
+            flare_buildup: 0.0,
+            flare_threshold: roll.flare_threshold,
+            is_dying: false,
+            death_timer: 10.0, // 10 second countdown when dying starts
+        },
+        GravityWell {
+            // Same derivation as planets: inverse-square lands on the chosen
+            // surface acceleration when strength is that acceleration times
+            // the radius squared.
+            strength: star_class.surface_gravity() * star_radius * star_radius,
+            // Six radii. Haven's spawn sits under two radii out, where this
+            // still pulls at roughly a quarter of surface strength -- the
+            // star should be felt from the moment you launch.
+            influence_radius: star_radius * 6.0,
+            falloff: GravityFalloff::InverseSquare,
+        },
+        StarSystemMember { system_id },
+    )).id();
+
+    let planet_paths = roll.planet_paths();
+    let mut planet_entities = Vec::new();
+
+    for (i, planet) in roll.planets.into_iter().enumerate() {
+        let planet_type = planet.planet_type;
+        let planet_radius = planet.radius;
 
         // Initial position on orbit
-        let initial_x = center.x + orbit_distance * phase.cos();
-        let initial_y = center.y + orbit_distance * phase.sin();
+        let initial_x = center.x + planet.orbit_distance * planet.phase.cos();
+        let initial_y = center.y + planet.orbit_distance * planet.phase.sin();
 
         let planet_entity = commands.spawn((
             (Sprite {
-                    image: asset_server.load(planet_sprite_path(planet_type, rng)),
-                    color: vary(planet_type.tint(), rng),
+                    image: asset_server.load(planet.sprite),
+                    color: planet.color,
                     custom_size: Some(Vec2::splat(planet_radius * 2.0)),
                     ..default()
                 }, Transform::from_xyz(initial_x, initial_y, -0.9)),
             CelestialBody {
                 body_type: CelestialBodyType::Planet,
-                mass: planet_mass,
+                mass: planet.mass,
                 radius: planet_radius,
                 name: format!("{} {}", super::galaxy::system_name(system_id), super::galaxy::roman(i as u32 + 1)),
             },
-            PlanetSpin {
-                // One turn every one to three minutes, either way round. Slow
-                // enough to read as a world rather than a top, quick enough
-                // that a feature visibly crosses the disc while you watch.
-                rate: std::f32::consts::TAU / rng.gen_range(60.0f32..180.0)
-                    * if rng.gen_bool(0.5) { 1.0 } else { -1.0 },
-            },
+            PlanetSpin { rate: planet.spin_rate },
             Planet {
                 planet_type,
-                has_atmosphere: rng.gen_bool(planet_type.atmosphere_chance()),
-                has_rings: rng.gen_bool(planet_type.ring_chance()),
-                resource_richness: rng.gen_range(0.1..1.0),
+                has_atmosphere: planet.has_atmosphere,
+                has_rings: planet.has_rings,
+                resource_richness: planet.resource_richness,
             },
             OrbitalPath {
                 parent: star_entity,
-                semi_major_axis: orbit_distance,
-                eccentricity,
-                phase,
-                period: orbit_period,
-                clockwise,
+                semi_major_axis: planet.orbit_distance,
+                eccentricity: planet.eccentricity,
+                phase: planet.phase,
+                period: planet.period,
+                clockwise: planet.clockwise,
             },
             GravityWell {
                 // Inverse-square gravity is `strength / distance²`, so to get
@@ -239,12 +335,6 @@ pub fn spawn_star_system(
         )).id();
 
         planet_entities.push(planet_entity);
-        planet_bands.push((orbit_distance, planet_radius));
-        planet_paths.push(super::orbits::PlanetPath {
-            semi_major_axis: orbit_distance,
-            eccentricity,
-            radius: planet_radius,
-        });
     }
 
     StarSystemInfo {
@@ -254,7 +344,6 @@ pub fn spawn_star_system(
         center,
         is_alive: true,
         star_radius,
-        planet_bands,
         planet_paths,
     }
 }
@@ -357,6 +446,14 @@ fn place_in_pack(pack: Vec2, radius: f32, placed: &[(Vec2, f32)], rng: &mut impl
 /// How many packs a field breaks into.
 const PACK_COUNT: usize = 5;
 
+/// One rock's size, edge to edge.
+const ROCK_SIZE: std::ops::Range<f32> = 200.0..800.0;
+
+/// How far past its spread a field's rocks can reach: a pack centre lands
+/// anywhere inside the spread, its rocks up to a pack radius from that, and
+/// a rock's edge up to half the biggest size further.
+pub(crate) const FIELD_OVERHANG: f32 = PACK_RADIUS + ROCK_SIZE.end * 0.5;
+
 /// Radius of one pack. Sized against the clearance the overlap nudge needs:
 /// two average rocks (size ~500, so radius ~250) must sit at least
 /// `(250 + 250) * 1.1 + 40` = 590 units apart, and seven rocks need room for
@@ -397,7 +494,7 @@ pub fn spawn_asteroid_field(
     // Still deterministic: same seed, same draw sequence, same layout.
     let mut placed: Vec<(Vec2, f32)> = Vec::new();
     for i in 0..count {
-        let size = rng.gen_range(200.0..800.0);
+        let size = rng.gen_range(ROCK_SIZE);
         let mass = size * 0.5;
         let radius = size * 0.5;
 
@@ -535,7 +632,7 @@ mod field_density_tests {
         let packs = pack_centers(Vec2::ZERO, spread, keep_clear, &mut rng);
         let mut placed: Vec<(Vec2, f32)> = Vec::new();
         for i in 0..count {
-            let size = rng.gen_range(200.0..800.0);
+            let size = rng.gen_range(ROCK_SIZE);
             let radius = size * 0.5;
             let pack = packs[(i as usize) % packs.len()];
             let pos = place_in_pack(pack, radius, &placed, &mut rng);

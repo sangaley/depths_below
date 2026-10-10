@@ -124,9 +124,16 @@ impl KeepClear<'_> {
 
     /// Whether nothing solid ever comes near `pos`.
     pub fn is_clear(&self, pos: Vec2) -> bool {
+        self.is_clear_by(pos, 0.0)
+    }
+
+    /// Whether nothing solid ever comes near anything within `margin` of
+    /// `pos`: the same rule for something with a size of its own, like a
+    /// station and the docking range round it.
+    pub fn is_clear_by(&self, pos: Vec2, margin: f32) -> bool {
         let offset = pos - self.center;
-        offset.length() >= self.floor()
-            && self.planets.iter().all(|p| p.clearance(offset) >= p.radius)
+        offset.length() >= self.floor() + margin
+            && self.planets.iter().all(|p| p.clears(offset, p.radius + margin))
     }
 
     /// `pos` if it's clear, else the first clear point further out from the
@@ -151,6 +158,38 @@ impl KeepClear<'_> {
         self.center + dir * beyond
     }
 
+    /// The clear point nearest `pos` on its own bearing from the star,
+    /// keeping everything within `margin` of it clear as well.
+    ///
+    /// Unlike `settle` this looks inward as well as out and takes whichever
+    /// is closer. A station that starts a few km inside a planet's path
+    /// should step off it, not be sent out past every world in the system.
+    pub fn nudge(&self, pos: Vec2, margin: f32) -> Vec2 {
+        let offset = pos - self.center;
+        let dir = offset.normalize_or(Vec2::X);
+        let from_star = offset.length();
+        let inner = self.floor() + margin;
+        // A radius and the margin past every planet's furthest reach is
+        // always clear, so the outward search has an end.
+        let beyond = self
+            .planets
+            .iter()
+            .map(|p| p.outer_reach() + p.radius + margin)
+            .fold(inner, f32::max);
+        let mut step = 0.0;
+        while from_star + step < beyond {
+            // Outward first, so a tie goes to the side the star pulls less.
+            for dist in [from_star + step, from_star - step] {
+                let at = self.center + dir * dist;
+                if dist >= inner && self.is_clear_by(at, margin) {
+                    return at;
+                }
+            }
+            step += SETTLE_STEP;
+        }
+        self.center + dir * beyond.max(from_star)
+    }
+
     /// Where a record waits near the station at `station`: `reach` out on
     /// `bearing` if that's clear, else the first clear bearing round it,
     /// widening a little each lap.
@@ -172,6 +211,9 @@ pub fn spawn_system_pois(
     commands: &mut Commands,
     keep_clear: &KeepClear,
     system_id: u32,
+    // The system's primary station, where a jump arrives
+    // (`world::home_base::station_sites`).
+    station: Option<Vec2>,
     planet_positions: &[Vec2],
     rng: &mut impl Rng,
     // The expedition records this system holds, in reading order (see
@@ -179,9 +221,6 @@ pub fn spawn_system_pois(
     records: &[&'static crate::narrative::logs::LogEntryDef],
 ) {
     let system_center = keep_clear.center;
-    let station = crate::world::home_base::station_sites(system_id, system_center)
-        .first()
-        .map(|site| site.pos);
     // Derelict ships (1-3 per system, and at least one per record held)
     let derelict_count = rng.gen_range(1..=3).max(records.len());
     for i in 0..derelict_count {

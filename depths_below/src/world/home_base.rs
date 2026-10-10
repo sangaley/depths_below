@@ -4,6 +4,8 @@ use crate::events::{ShowNotification, NotificationType};
 use crate::resources::{OxygenState, FuelState};
 use crate::states::GameState;
 use super::station_types::{StationType, station_type, station_type_name};
+use crate::celestial::poi::KeepClear;
+use crate::celestial::resources::StarSystemDef;
 
 // ============================================================================
 // STATIONS
@@ -158,24 +160,43 @@ pub fn station_display_name(index: usize) -> String {
 /// from the system center and away from each other — a golden-angle spread
 /// keyed by (system, slot) means no two stations in a system share a
 /// direction, and no two systems put theirs in the same relative spot.
-pub fn station_sites(system_id: u32, local_center: Vec2) -> Vec<StationSite> {
+///
+/// Each spot is then nudged along its bearing until the station and its
+/// docking range keep clear of the star and of every planet's path (see
+/// `poi::KeepClear`). Planets are solid and sweep their whole ellipse every
+/// few minutes, and placed without them 16 of the 31 systems in the seed-42
+/// galaxy had a station a planet ran through -- and with it the point a jump
+/// arrives at. The planets come from the system's seed (`galaxy::system_roll`,
+/// the same rolls its spawn makes), so this needs nothing spawned and gives
+/// the same answer whether the system is loaded or not.
+pub fn station_sites(def: &StarSystemDef) -> Vec<StationSite> {
+    let roll = crate::celestial::galaxy::system_roll(def);
+    let planets = roll.planet_paths();
+    let keep_clear = KeepClear {
+        center: def.local_center,
+        star_radius: roll.star_radius(),
+        planets: &planets,
+    };
     (0..STATIONS_PER_SYSTEM)
         .map(|slot| {
-            let index = station_index(system_id, slot);
+            let index = station_index(def.id, slot);
             let pos = if index == 0 {
                 // Haven keeps its fixed spot: the ship spawns beside it.
                 STATION_POS
             } else {
                 let n = index as f32;
                 let angle = n * 2.399963; // golden angle, radians
-                // 180k-420k out: past the planets and the asteroid field, far
-                // enough apart that two stations never share a screen.
+                // 180k-420k out to begin with, far enough apart that two
+                // stations never share a screen.
                 let radius = 180_000.0 + ((n * 0.6180339).fract()) * 240_000.0;
-                local_center + Vec2::new(angle.cos(), angle.sin()) * radius
+                keep_clear.nudge(
+                    def.local_center + Vec2::new(angle.cos(), angle.sin()) * radius,
+                    station_radius(index) + DOCK_MARGIN,
+                )
             };
             StationSite {
                 index,
-                system_id,
+                system_id: def.id,
                 pos,
                 name: station_display_name(index),
                 kind: station_type(index),
@@ -262,15 +283,15 @@ pub fn refresh_system_stations(
 
     stations.system_id = current;
     stations.sites = match current {
-        Some(id) => {
-            let center = galaxy_map
-                .systems
-                .iter()
-                .find(|s| s.id == id)
-                .map(|s| s.local_center)
-                .unwrap_or(crate::celestial::galaxy::HAVEN_LOCAL_CENTER);
-            station_sites(id, center)
-        }
+        Some(id) => match galaxy_map.systems.iter().find(|s| s.id == id) {
+            Some(def) => station_sites(def),
+            // Docked at Haven before the galaxy is rolled. Haven's layout is
+            // fixed, so its stations don't have to wait for the rest.
+            None if id == 0 => station_sites(&crate::celestial::galaxy::haven_def()),
+            // A system with no record has no planets to place around; stay
+            // empty, which re-runs this once the galaxy catches up.
+            None => Vec::new(),
+        },
         // Blind-warped into empty space: no system, no stations.
         None => Vec::new(),
     };

@@ -590,8 +590,9 @@ const WARP_DASH_DISTANCE_PER_SECOND: f32 = 80_000.0;
 /// Ceiling on a local dash, however far across the system it goes.
 ///
 /// Without it the drives invert at the extremes: the longest in-system hop
-/// is to a station 420,000 out (`home_base::station_sites`), which on the
-/// distance term alone charges 5.75s -- longer than leaving for another star
+/// is to a station 420,000 out or more (`home_base::station_sites` starts
+/// them there, and nudges some further off a planet's path), which on the
+/// distance term alone charges 5.75s and up -- longer than leaving for another star
 /// entirely, which starts at 4s. Crossing a room must not cost more than
 /// crossing the galaxy, so the local drive is bounded rather than linear
 /// forever.

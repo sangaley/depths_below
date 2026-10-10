@@ -66,6 +66,28 @@ pub const SYSTEM_COUNT: usize = 30;
 /// it is home, and the tutorial runs here.
 pub const HAVEN_LOCAL_CENTER: Vec2 = Vec2::new(31_000.0, -68_400.0);
 
+/// Haven's seed, fixed like its centre, so the home system is the same in
+/// every galaxy -- and its stations, which need its planets, can be placed
+/// before the galaxy is rolled.
+pub const HAVEN_SEED: u64 = 42;
+
+/// Haven's entry in the galaxy, the one system not rolled.
+pub fn haven_def() -> StarSystemDef {
+    StarSystemDef {
+        id: 0,
+        name: "Haven".to_string(),
+        galaxy_pos: Vec2::ZERO,
+        // Matches today's spawn_initial_system center exactly.
+        local_center: HAVEN_LOCAL_CENTER,
+        seed: HAVEN_SEED,
+        faction: None,
+        danger_tier: 0.0,
+        discovery: SystemDiscovery::Visited,
+        last_updated: 0.0,
+        resource_fraction_remaining: 1.0,
+    }
+}
+
 /// Names for every system but Haven, dealt in id order. Generated systems
 /// used to be called "System-07", and the HUD, the warp notice and the solar
 /// flare warning all printed that (or "Star-0") to the player.
@@ -224,19 +246,7 @@ pub fn generate_galaxy_map(galaxy_seed: u64) -> GalaxyMap {
     non_haven.sort_by(|a, b| a.length().partial_cmp(&b.length()).unwrap());
 
     let mut systems = Vec::with_capacity(SYSTEM_COUNT + 1);
-    systems.push(StarSystemDef {
-        id: 0,
-        name: "Haven".to_string(),
-        galaxy_pos: Vec2::ZERO,
-        // Matches today's spawn_initial_system center exactly.
-        local_center: HAVEN_LOCAL_CENTER,
-        seed: 42,
-        faction: None,
-        danger_tier: 0.0,
-        discovery: SystemDiscovery::Visited,
-        last_updated: 0.0,
-        resource_fraction_remaining: 1.0,
-    });
+    systems.push(haven_def());
 
     // Every system's local_center lives in the SAME shared local coordinate
     // space (only ever one system is physically "Hot" at a time, so this
@@ -411,15 +421,38 @@ const FIELD_SPREAD: f32 = 30_000.0;
 /// at pack spacing still reads as scattered singles.
 const FIELD_ROCKS: u32 = 30;
 
+/// How far from the field's centre a rock's edge can reach.
+const FIELD_REACH: f32 = FIELD_SPREAD + super::spawning::FIELD_OVERHANG;
+
+/// Room between the field's outermost rock and a planet's surface at its
+/// closest pass: a hull's length, so a ship working the edge of the field is
+/// not run down by a world.
+const FIELD_PLANET_MARGIN: f32 = 2_000.0;
+
+/// Spacing of the points tried along a bearing when looking for room.
+const FIELD_STEP: f32 = 2_000.0;
+
+/// When the station's bearing has no room for the field, it swings round
+/// the star five degrees at a time, alternating sides, up to half a turn.
+const FIELD_SWING_STEP: f32 = 5.0 * std::f32::consts::PI / 180.0;
+const FIELD_SWINGS: usize = 72;
+
 /// How much room to leave around the station a player arrives at. Rocks are
 /// solid, and the field is aimed at that station now, so without a bubble one
 /// could spawn on top of the ship. Wide enough that the nearest rock is a
 /// short burn (~180 cells) rather than a collision.
 const STATION_KEEP_CLEAR: f32 = 12_000.0;
 
+/// The star and planets `spawn_system_contents` will spawn for this system,
+/// rolled from its seed without spawning anything -- the same stream, so the
+/// same worlds (see `spawning::roll_star_system`).
+pub fn system_roll(def: &StarSystemDef) -> super::spawning::SystemRoll {
+    super::spawning::roll_star_system(&mut StdRng::seed_from_u64(def.seed))
+}
+
 /// This system's primary station, which is where the player turns up.
 fn station_pos(def: &StarSystemDef) -> Vec2 {
-    crate::world::home_base::station_sites(def.id, def.local_center)
+    crate::world::home_base::station_sites(def)
         .first()
         .map(|s| s.pos)
         .unwrap_or(def.local_center)
@@ -430,13 +463,50 @@ fn station_pos(def: &StarSystemDef) -> Vec2 {
 ///
 /// Falls back to due east only if the station resolves exactly onto the star,
 /// which `station_sites` never produces.
-fn station_field_bearing(def: &StarSystemDef) -> f32 {
-    let to_station = station_pos(def) - def.local_center;
+fn station_field_bearing(star: Vec2, station: Vec2) -> f32 {
+    let to_station = station - star;
     if to_station.length_squared() < 1.0 {
         0.0
     } else {
         to_station.to_angle()
     }
+}
+
+/// Whether a field centred at `offset` from the star keeps every rock out
+/// of the star and clear of every planet's path.
+fn field_fits(star_radius: f32, planets: &[super::orbits::PlanetPath], offset: Vec2) -> bool {
+    offset.length() - FIELD_REACH >= star_radius
+        && planets.iter().all(|p| p.clears(offset, FIELD_REACH + FIELD_PLANET_MARGIN))
+}
+
+/// Distance from the star to the middle of the widest stretch along `dir`
+/// where the whole field fits between the star and the planets' paths.
+///
+/// A stretch still open at the outermost planet's furthest reach runs out
+/// past every world, and doesn't count: offered alongside the real gaps it
+/// tends to win on width -- it is unbounded -- and drags the field out to
+/// where nobody flies.
+fn widest_gap_along(star_radius: f32, planets: &[super::orbits::PlanetPath], dir: Vec2) -> Option<f32> {
+    let outermost = planets.iter().map(|p| p.outer_reach()).fold(star_radius, f32::max);
+    let first = star_radius + FIELD_REACH;
+    let at = |i: usize| first + i as f32 * FIELD_STEP;
+    let mut widest: Option<(usize, usize)> = None;
+    let mut open: Option<usize> = None;
+    let mut i = 0;
+    while at(i) <= outermost {
+        if field_fits(star_radius, planets, dir * at(i)) {
+            open.get_or_insert(i);
+        } else if let Some(from) = open.take() {
+            let to = i - 1;
+            if widest.is_none_or(|(a, b)| to - from > b - a) {
+                widest = Some((from, to));
+            }
+        }
+        i += 1;
+    }
+    // The middle POINT tried, not the midpoint: every point tried in the
+    // stretch is known to fit, and the field goes on one of them.
+    widest.map(|(from, to)| at((from + to) / 2))
 }
 
 /// Where to put this system's asteroid field, as an offset from the star.
@@ -451,38 +521,30 @@ fn station_field_bearing(def: &StarSystemDef) -> f32 {
 ///
 /// Still one field, not a belt: this keeps the original shape and rock count
 /// and only moves it somewhere it can exist. It goes in the middle of the
-/// widest gap between the star's surface and the planet orbits, at `angle`
-/// around the star, so it clears the star and both neighbouring orbits
+/// widest gap between the star's surface and the planets' paths, at `angle`
+/// around the star, so it clears the star and the worlds either side
 /// without being pinned to one side of every system in the galaxy.
-fn asteroid_field_offset(star_radius: f32, planet_bands: &[(f32, f32)], angle: f32) -> Vec2 {
-    // Free radial intervals: from the star's surface outward, the stretches
-    // no planet occupies. Measured between planet EDGES, not orbit centres —
-    // a planet 60,000 in radius swallows the midpoint of the gap its centre
-    // sits in, so centre-based placement can put the field inside a world.
-    let mut intervals: Vec<(f32, f32)> = Vec::new();
-    let mut cursor = star_radius;
-    for &(orbit, radius) in planet_bands {
-        let inner = orbit - radius;
-        if inner > cursor {
-            intervals.push((cursor, inner));
+///
+/// The gaps are measured against each planet's real ellipse. They used to be
+/// circular bands of `orbit ± radius`, but at eccentricity up to 0.3 a planet
+/// strays up to 30% either side of its orbit's circle -- a gap that is wide
+/// on the circles can be closed on the real paths -- and 89 rocks in the
+/// seed-42 galaxy sat where a planet passes. All planets' ellipses point the
+/// same way, so a bearing pinched shut usually has room a little way round;
+/// if `angle` has none the field swings round the star until one does.
+fn asteroid_field_offset(star_radius: f32, planets: &[super::orbits::PlanetPath], angle: f32) -> Vec2 {
+    for k in 0..=FIELD_SWINGS {
+        // 0, +1, -1, +2, -2... steps either side of the station's bearing.
+        let side = if k % 2 == 1 { 1.0 } else { -1.0 };
+        let dir = Vec2::from_angle(angle + ((k + 1) / 2) as f32 * FIELD_SWING_STEP * side);
+        if let Some(distance) = widest_gap_along(star_radius, planets, dir) {
+            return dir * distance;
         }
-        cursor = cursor.max(orbit + radius);
     }
-    // Outside the outermost planet there is always room, but this is a
-    // FALLBACK, not a candidate. Offered alongside the real gaps it tends to
-    // win on width -- it is unbounded -- and drags the field out past every
-    // planet, which is exactly where nobody flies.
-    if intervals.is_empty() {
-        intervals.push((cursor, cursor + FIELD_SPREAD * 3.0));
-    }
-
-    let (lo, hi) = intervals
-        .into_iter()
-        .max_by(|a, b| (a.1 - a.0).partial_cmp(&(b.1 - b.0)).unwrap_or(std::cmp::Ordering::Equal))
-        .unwrap_or((star_radius, star_radius + FIELD_SPREAD * 3.0));
-
-    let distance = (lo + hi) * 0.5;
-    Vec2::new(angle.cos(), angle.sin()) * distance
+    // No gap anywhere round the star: just outside the outermost path, on
+    // the station's side. Always clear, if out of the way.
+    let outermost = planets.iter().map(|p| p.outer_reach()).fold(star_radius, f32::max);
+    Vec2::from_angle(angle) * (outermost + FIELD_REACH + FIELD_PLANET_MARGIN)
 }
 
 /// Spawns a system's full contents (star, planets, asteroids, POIs)
@@ -511,14 +573,15 @@ pub fn spawn_system_contents(
     // as near you. Aiming it at the station you dock at means every system
     // has visible rocks from where you actually turn up, without the field
     // being any denser or larger.
-    let field_angle = station_field_bearing(def);
+    let station = station_pos(def);
+    let field_angle = station_field_bearing(def.local_center, station);
     super::spawning::spawn_asteroid_field(
         commands, asset_server,
         def.local_center + asteroid_field_offset(
-            system_info.star_radius, &system_info.planet_bands, field_angle,
+            system_info.star_radius, &system_info.planet_paths, field_angle,
         ),
         FIELD_ROCKS, FIELD_SPREAD,
-        Some((station_pos(def), STATION_KEEP_CLEAR)),
+        Some((station, STATION_KEEP_CLEAR)),
         def.id, &mut rng,
         def.resource_fraction_remaining,
     );
@@ -531,7 +594,7 @@ pub fn spawn_system_contents(
         star_radius: system_info.star_radius,
         planets: &system_info.planet_paths,
     };
-    super::poi::spawn_system_pois(commands, &keep_clear, def.id, &planet_positions, &mut rng, records);
+    super::poi::spawn_system_pois(commands, &keep_clear, def.id, Some(station), &planet_positions, &mut rng, records);
 
     system_info
 }
@@ -622,6 +685,7 @@ mod galaxy_tests {
 mod asteroid_placement_tests {
     use super::*;
     use crate::celestial::components::StarSizeClass;
+    use crate::celestial::orbits::{orbit_radius, PlanetPath};
     use crate::celestial::spawning::ORBIT_GAP_MIN;
 
     const CLASSES: [StarSizeClass; 4] = [
@@ -632,11 +696,9 @@ mod asteroid_placement_tests {
     ];
 
     /// Planets the way `spawn_star_system` walks them outward: each orbit
-    /// clears the previous body's radius, its own, and a gap. Returned as
-    /// `(orbit, radius)` because the radius is what the field placer needs —
-    /// a 60,000-radius giant swallows the midpoint of the gap its centre is
-    /// in, so centres alone are not enough to place anything safely.
-    fn bands(star_radius: f32, radii: &[f32], gap: f32) -> Vec<(f32, f32)> {
+    /// clears the previous body's radius, its own, and a gap. Every one at
+    /// eccentricity `e`, which the walk knows nothing about.
+    fn paths(star_radius: f32, radii: &[f32], gap: f32, e: f32) -> Vec<PlanetPath> {
         let mut frontier = star_radius;
         let mut prev = 0.0;
         radii
@@ -644,9 +706,22 @@ mod asteroid_placement_tests {
             .map(|&r| {
                 frontier += prev + r + gap;
                 prev = r;
-                (frontier, r)
+                PlanetPath { semi_major_axis: frontier, eccentricity: e, radius: r }
             })
             .collect()
+    }
+
+    /// Closest a planet's surface comes to `offset`, walking its ellipse
+    /// densely rather than trusting `PlanetPath::clearance`.
+    fn surface_gap(path: &PlanetPath, offset: Vec2) -> f32 {
+        (0..4096)
+            .map(|k| {
+                let theta = k as f32 / 4096.0 * std::f32::consts::TAU;
+                Vec2::from_angle(theta) * orbit_radius(path.semi_major_axis, path.eccentricity, theta)
+            })
+            .map(|p| p.distance(offset))
+            .fold(f32::INFINITY, f32::min)
+            - path.radius
     }
 
     /// The original fault: the field's offset was hardcoded to (50,000, 0)
@@ -659,36 +734,43 @@ mod asteroid_placement_tests {
             let star = class.radius();
             for radii in [vec![], vec![20_000.0], vec![60_000.0, 20_000.0, 40_000.0]] {
                 for gap in [ORBIT_GAP_MIN, 140_000.0] {
-                    let b = bands(star, &radii, gap);
-                    let inner = asteroid_field_offset(star, &b, 0.7).length() - FIELD_SPREAD;
-                    assert!(
-                        inner >= star,
-                        "{class:?} with {} planets: field reaches {inner}, inside the star",
-                        radii.len()
-                    );
+                    for e in [0.0, 0.3] {
+                        let p = paths(star, &radii, gap, e);
+                        let inner = asteroid_field_offset(star, &p, 0.7).length() - FIELD_REACH;
+                        assert!(
+                            inner >= star,
+                            "{class:?} with {} planets at e={e}: rocks reach {inner}, inside the star",
+                            radii.len()
+                        );
+                    }
                 }
             }
         }
     }
 
-    /// Planets are solid too, and now large enough that this is the binding
-    /// constraint rather than a formality.
+    /// Planets are solid too, large, and on ellipses: at e=0.3 a world
+    /// strays 30% either side of its orbit's circle, which is what closed
+    /// the gaps the old circular bands said were open.
     #[test]
-    fn the_field_clears_every_planet() {
+    fn the_field_clears_every_planets_real_path() {
         for class in CLASSES {
             let star = class.radius();
             for radii in [vec![20_000.0], vec![60_000.0, 20_000.0], vec![10_000.0, 60_000.0, 30_000.0]] {
                 for gap in [ORBIT_GAP_MIN, 140_000.0] {
-                    let b = bands(star, &radii, gap);
-                    let d = asteroid_field_offset(star, &b, 2.1).length();
-                    let (lo, hi) = (d - FIELD_SPREAD, d + FIELD_SPREAD);
-                    for (orbit, radius) in &b {
-                        let (p_lo, p_hi) = (orbit - radius, orbit + radius);
-                        assert!(
-                            hi <= p_lo || lo >= p_hi,
-                            "{class:?}: field spans {lo}..{hi}, overlapping a planet \
-                             occupying {p_lo}..{p_hi}"
-                        );
+                    for e in [0.0, 0.15, 0.3] {
+                        for angle in [0.0, 2.1, std::f32::consts::PI, 4.4] {
+                            let p = paths(star, &radii, gap, e);
+                            let field = asteroid_field_offset(star, &p, angle);
+                            for path in &p {
+                                let gap_to_rocks = surface_gap(path, field) - FIELD_REACH;
+                                assert!(
+                                    gap_to_rocks > 0.0,
+                                    "{class:?}, e={e}, bearing {angle}: a planet of radius {} \
+                                     passes {:.0} inside the field's outermost rock",
+                                    path.radius, -gap_to_rocks
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -700,13 +782,32 @@ mod asteroid_placement_tests {
     #[test]
     fn the_field_is_not_always_in_the_same_direction() {
         let star = StarSizeClass::Main.radius();
-        let b = bands(star, &[30_000.0, 20_000.0], ORBIT_GAP_MIN);
-        let a = asteroid_field_offset(star, &b, 0.0);
-        let c = asteroid_field_offset(star, &b, 2.4);
+        let p = paths(star, &[30_000.0, 20_000.0], ORBIT_GAP_MIN, 0.0);
+        let a = asteroid_field_offset(star, &p, 0.0);
+        let c = asteroid_field_offset(star, &p, 2.4);
         assert!(a.distance(c) > FIELD_SPREAD, "two angles put the field in the same place");
         assert!(
-            (a.length() - c.length()).abs() < 1.0,
-            "angle changed the distance from the star, not just the direction"
+            (a.length() - c.length()).abs() <= FIELD_STEP,
+            "on circular orbits the angle changed the distance from the star, not just the direction"
+        );
+    }
+
+    /// A bearing an eccentric world pinches shut is not given up on: the
+    /// field swings round to where there is room, rather than out past every
+    /// planet. All the ellipses point the same way (perihelion at angle 0),
+    /// so the gaps are narrowest there and widest opposite.
+    #[test]
+    fn a_pinched_bearing_swings_the_field_rather_than_exiling_it() {
+        // Supergiant, one inner world on the tightest gap at e=0.3: at
+        // perihelion its surface comes within 5k of the star's, far too
+        // little for a field ~65k across.
+        let star = StarSizeClass::Supergiant.radius();
+        let p = paths(star, &[20_000.0, 20_000.0], ORBIT_GAP_MIN, 0.3);
+        let field = asteroid_field_offset(star, &p, 0.0);
+        assert!(
+            field.length() < p[1].outer_reach(),
+            "field sent out to {:.0}, past every planet, when there is room further round",
+            field.length()
         );
     }
 }
@@ -824,24 +925,13 @@ mod galaxy_layout_tests {
 #[cfg(test)]
 mod haven_spawn_tests {
     use super::*;
-    use crate::celestial::components::StarSizeClass;
+    use crate::celestial::orbits::PlanetPath;
     use crate::world::home_base::STATION_POS;
-    use rand::rngs::StdRng;
-    use rand::SeedableRng;
 
-    /// Haven's star class, the way `spawn_star_system` rolls it: the first
-    /// draw off a stream seeded with the system's own seed, which for Haven is
-    /// the fixed 42. Derived rather than hardcoded so this keeps telling the
-    /// truth if that roll is ever retuned.
+    /// Haven's star, as its fixed seed rolls it. Derived rather than
+    /// hardcoded so this keeps telling the truth if that roll is retuned.
     fn havens_star_radius() -> f32 {
-        let mut rng = StdRng::seed_from_u64(42);
-        let class = match rng.gen_range(0..10) {
-            0..=3 => StarSizeClass::Dwarf,
-            4..=7 => StarSizeClass::Main,
-            8 => StarSizeClass::Giant,
-            _ => StarSizeClass::Supergiant,
-        };
-        class.radius()
+        system_roll(&haven_def()).star_radius()
     }
 
     fn spawn_to_star() -> f32 {
@@ -902,26 +992,14 @@ mod haven_spawn_tests {
     #[test]
     fn havens_asteroids_are_near_the_spawn() {
         let radius = havens_star_radius();
-        let def = StarSystemDef {
-            id: 0,
-            name: "Haven".into(),
-            galaxy_pos: Vec2::ZERO,
-            local_center: HAVEN_LOCAL_CENTER,
-            seed: 42,
-            faction: None,
-            danger_tier: 0.0,
-            discovery: SystemDiscovery::Visited,
-            last_updated: 0.0,
-            resource_fraction_remaining: 1.0,
-        };
+        let bearing = station_field_bearing(HAVEN_LOCAL_CENTER, STATION_POS);
 
         // Across the range of first-planet sizes and gaps the walk can roll.
         for first_radius in [10_000.0f32, 30_000.0, 60_000.0] {
             for gap in [crate::celestial::spawning::ORBIT_GAP_MIN, 140_000.0] {
                 let orbit = radius + first_radius + gap;
-                let bands = [(orbit, first_radius)];
-                let field = HAVEN_LOCAL_CENTER
-                    + asteroid_field_offset(radius, &bands, station_field_bearing(&def));
+                let planets = [PlanetPath { semi_major_axis: orbit, eccentricity: 0.0, radius: first_radius }];
+                let field = HAVEN_LOCAL_CENTER + asteroid_field_offset(radius, &planets, bearing);
                 let from_spawn = field.distance(STATION_POS);
                 assert!(
                     from_spawn < FIELD_SPREAD * 2.0,
@@ -940,18 +1018,17 @@ mod haven_spawn_tests {
         for first_radius in [10_000.0f32, 30_000.0, 60_000.0] {
             for gap in [crate::celestial::spawning::ORBIT_GAP_MIN, 140_000.0] {
                 let orbit = star + first_radius + gap;
-                let bands = [(orbit, first_radius)];
-                let d = asteroid_field_offset(star, &bands, 0.0).length();
+                let planet = PlanetPath { semi_major_axis: orbit, eccentricity: 0.0, radius: first_radius };
+                let field = asteroid_field_offset(star, &[planet], 0.0);
                 assert!(
-                    d - FIELD_SPREAD > star,
-                    "field reaches {} from the centre, inside a star of {star}",
-                    d - FIELD_SPREAD
+                    field.length() - FIELD_REACH > star,
+                    "rocks reach {} from the centre, inside a star of {star}",
+                    field.length() - FIELD_REACH
                 );
-                let (lo, hi) = (d - FIELD_SPREAD, d + FIELD_SPREAD);
-                let (p_lo, p_hi) = (orbit - first_radius, orbit + first_radius);
                 assert!(
-                    hi <= p_lo || lo >= p_hi,
-                    "field spans {lo}..{hi}, overlapping the planet at {p_lo}..{p_hi}"
+                    planet.clearance(field) > FIELD_REACH,
+                    "the planet passes {:.0} from the field's centre, inside its rocks",
+                    planet.clearance(field)
                 );
             }
         }
@@ -1052,7 +1129,7 @@ mod placement_tests {
         let mut checked = 0;
         for def in galaxy.systems.iter().filter(|s| s.id != 0) {
             let (mut app, _) = spawn(&galaxy, def);
-            let station = crate::world::home_base::station_sites(def.id, def.local_center)[0].pos;
+            let station = crate::world::home_base::station_sites(def)[0].pos;
             for (_, pos, _) in destinations(&mut app).into_iter().filter(|(_, _, record)| *record) {
                 // 15-35 km by design; up to ~57 km in seed 42 where a planet's
                 // path or the star crowds the station and the record has to
@@ -1063,5 +1140,123 @@ mod placement_tests {
             }
         }
         assert!(checked > 10, "only {checked} records checked");
+    }
+
+    /// Each spawned planet as (points round its ellipse, radius), walked
+    /// from the entities themselves.
+    fn spawned_paths(app: &mut App, center: Vec2) -> Vec<(Vec<Vec2>, f32)> {
+        let world = app.world_mut();
+        let mut q = world.query::<(&CelestialBody, &OrbitalPath)>();
+        q.iter(world)
+            .filter(|(body, _)| body.body_type == CelestialBodyType::Planet)
+            .map(|(body, orbit)| {
+                let points = (0..2048)
+                    .map(|k| {
+                        let theta = k as f32 / 2048.0 * std::f32::consts::TAU;
+                        let r = crate::celestial::orbits::orbit_radius(
+                            orbit.semi_major_axis, orbit.eccentricity, theta,
+                        );
+                        center + Vec2::from_angle(theta) * r
+                    })
+                    .collect();
+                (points, body.radius)
+            })
+            .collect()
+    }
+
+    fn nearest(points: &[Vec2], pos: Vec2) -> f32 {
+        points.iter().map(|p| p.distance(pos)).fold(f32::INFINITY, f32::min)
+    }
+
+    const SEEDS: [u64; 4] = [42, 1, 7, 99_999];
+
+    /// Stations are placed from planets rolled off the system's seed, never
+    /// from spawned ones -- docking, the map and warp arrival need them with
+    /// nothing loaded. That only works while the roll and the spawn agree, so
+    /// compare the roll with what actually spawns.
+    #[test]
+    fn the_seed_roll_is_the_system_that_spawns() {
+        for seed in SEEDS {
+            let galaxy = generate_galaxy_map(seed);
+            for def in &galaxy.systems {
+                let roll = system_roll(def);
+                let (mut app, info) = spawn(&galaxy, def);
+                assert_eq!(roll.star_radius(), info.star_radius, "seed {seed}: {} star", def.name);
+                let world = app.world_mut();
+                let mut q = world.query::<(&CelestialBody, &OrbitalPath)>();
+                let mut spawned: Vec<(f32, f32, f32)> = q
+                    .iter(world)
+                    .filter(|(body, _)| body.body_type == CelestialBodyType::Planet)
+                    .map(|(body, orbit)| (orbit.semi_major_axis, orbit.eccentricity, body.radius))
+                    .collect();
+                spawned.sort_by(|a, b| a.0.total_cmp(&b.0));
+                let rolled: Vec<(f32, f32, f32)> = roll
+                    .planet_paths()
+                    .iter()
+                    .map(|p| (p.semi_major_axis, p.eccentricity, p.radius))
+                    .collect();
+                assert_eq!(rolled, spawned, "seed {seed}: {} planets", def.name);
+            }
+        }
+    }
+
+    /// Planets sweep their whole ellipse every few minutes and are solid.
+    /// No station -- nor the docking range round it, where a jump drops you
+    /// -- and no asteroid may sit anywhere one passes. Before this, 16 of the
+    /// 31 systems in seed 42 had a station on a planet's path and 89 rocks
+    /// sat on one. Measured against the planets as spawned, walking each
+    /// actual ellipse.
+    #[test]
+    fn no_station_or_rock_is_on_a_planets_path() {
+        for seed in SEEDS {
+            let galaxy = generate_galaxy_map(seed);
+            for def in &galaxy.systems {
+                let (mut app, info) = spawn(&galaxy, def);
+                let paths = spawned_paths(&mut app, def.local_center);
+
+                for site in crate::world::home_base::station_sites(def) {
+                    let from_star = site.pos.distance(def.local_center);
+                    assert!(
+                        from_star > info.star_radius * 1.4,
+                        "seed {seed}: {} {from_star:.0} from a star of radius {:.0}",
+                        site.name, info.star_radius,
+                    );
+                    for (points, radius) in &paths {
+                        let surface = nearest(points, site.pos) - radius;
+                        assert!(
+                            surface > site.dock_range(),
+                            "seed {seed}: a planet of radius {radius:.0} passes {surface:.0} from \
+                             {}, inside its {:.0} docking range",
+                            site.name, site.dock_range(),
+                        );
+                    }
+                }
+
+                let world = app.world_mut();
+                let mut q = world.query::<(&CelestialBody, &Transform)>();
+                let rocks: Vec<(Vec2, f32)> = q
+                    .iter(world)
+                    .filter(|(body, _)| body.body_type == CelestialBodyType::Asteroid)
+                    .map(|(body, tf)| (tf.translation.truncate(), body.radius))
+                    .collect();
+                assert!(!rocks.is_empty(), "seed {seed}: {} has no asteroids", def.name);
+                for (pos, rock) in rocks {
+                    assert!(
+                        pos.distance(def.local_center) - rock > info.star_radius,
+                        "seed {seed}: {} has a rock inside its star",
+                        def.name,
+                    );
+                    for (points, radius) in &paths {
+                        let surface = nearest(points, pos) - radius - rock;
+                        assert!(
+                            surface > 1_000.0,
+                            "seed {seed}: {} has a rock {surface:.0} from the surface of a \
+                             planet of radius {radius:.0} at its closest pass",
+                            def.name,
+                        );
+                    }
+                }
+            }
+        }
     }
 }
