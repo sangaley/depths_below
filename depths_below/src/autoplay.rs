@@ -203,6 +203,8 @@ pub struct Director {
     /// each frame so fly_to can route round them instead of grinding into a
     /// kilometres-wide hull -- one run lost an armour plate doing exactly that.
     obstacles: Vec<(Vec2, f32)>,
+    /// A recall has gone out to the detail currently on the hull.
+    recall_sent: bool,
     /// Seconds spent searching this system with nothing to fight. Kept across
     /// Hunt/Strip hops: on phase_elapsed, every detour to a nearby POI reset
     /// the sweep clock, so a system was never declared dry and the run
@@ -356,6 +358,7 @@ impl Plugin for AutoplayPlugin {
             log_up_for: 0.0,
             search_for: 0.0,
             obstacles: Vec::new(),
+            recall_sent: false,
         };
         director.log("start", &format!("target {}c", target));
 
@@ -447,6 +450,7 @@ struct World1<'w, 's> {
     eva: Query<'w, 's, (), With<EvaSalvaging>>,
     dock_menu: Query<'w, 's, &'static DockingMenuSelection, With<DockingOverlay>>,
     log_card: Query<'w, 's, &'static Visibility, With<crate::narrative::reader::LogCardRoot>>,
+    records: Query<'w, 's, (&'static Transform, &'static crate::components::LogEntry), Without<Ship>>,
 }
 
 /// Both drives, bundled: the G-key local dash and the V-key interstellar
@@ -462,6 +466,8 @@ struct Warp1<'w, 's> {
     streaming: Res<'w, SystemStreamingManager>,
     /// Where accepted bounties' ships actually are (see bounty_lead).
     sim: Res<'w, WorldSimulation>,
+    /// The next expedition record and the system it's in (narrative::trail).
+    expedition: Res<'w, crate::narrative::expedition::Expedition>,
 }
 
 /// The system and position of the ship an accepted, unfinished bounty wants
@@ -579,16 +585,23 @@ fn director_brain(
         }
 
         // A detail that never comes home would pin the ship for the rest of
-        // the run. Recall them the way a player would and carry on.
-        if d.eva_hold > 150.0 && d.beat > 1.5 {
+        // the run. Recall them the way a player would and carry on -- at once
+        // when training is waiting on the dock lesson, which says docking
+        // recalls them; the crew can strip plating for minutes otherwise.
+        let dock_lesson = tutorial.pending() == Some(Advance::Dock);
+        if !d.recall_sent && (d.eva_hold > 150.0 || dock_lesson) && d.beat > 1.5 {
             d.beat = 0.0;
             d.eva_hold = 0.0;
+            // Once: F again before they're aboard would only re-send the
+            // recall and repeat its notice every beat.
+            d.recall_sent = true;
             d.log("salvage", "detail out too long - recalling");
             d.tap(KeyCode::KeyF);
         }
         return;
     }
     d.eva_hold = 0.0;
+    d.recall_sent = false;
 
     // ---- mid-jump ---------------------------------------------------------
     // A charging drive owns the ship. Hold G and touch nothing else: steering
@@ -922,6 +935,21 @@ fn director_brain(
                     || loot_nearby(&w, pos).is_some_and(|(dist, _)| dist < DIVERT_RANGE))
             {
                 d.go(Phase::Strip);
+            } else if let Some(at) = warp
+                .expedition
+                .next
+                .filter(|(sys, _)| Some(*sys) == warp.streaming.loaded_system)
+                .and_then(|(_, title)| w.records.iter().find(|(_, log)| log.title == title))
+                .map(|(t, _)| t.translation.truncate())
+            {
+                // The next expedition record is in this system: go and read
+                // it, the way the tracker tells a player to. Pickup is within
+                // 500 of the derelict, so close right in.
+                d.search_for = 0.0;
+                let dist = pos.distance(at);
+                if !try_warp(&mut d, &mut warp.local_target, &fuel, at, dist) {
+                    fly_to(&mut d, pos, at, dist, 250.0);
+                }
             } else if let Some((sys, at)) = bounty_lead(&contracts, &warp.sim) {
                 // A bounty to chase. In this system: go to where its ship is,
                 // dashing if it's far, and it becomes a real contact on the
@@ -1135,6 +1163,15 @@ fn director_brain(
                 if let Some((sys, _)) = bounty_lead(&contracts, &warp.sim) {
                     if Some(sys) != warp.streaming.loaded_system {
                         let msg = format!("targeting {} to jump - bounty", crate::celestial::galaxy::system_name(sys));
+                        warp.galaxy_target.0 = Some(GalaxyWarpTarget::System(sys));
+                        d.log("jump", &msg);
+                    }
+                }
+            }
+            if warp.galaxy_target.0.is_none() {
+                if let Some((sys, _)) = warp.expedition.next {
+                    if Some(sys) != warp.streaming.loaded_system {
+                        let msg = format!("targeting {} to jump - next record", crate::celestial::galaxy::system_name(sys));
                         warp.galaxy_target.0 = Some(GalaxyWarpTarget::System(sys));
                         d.log("jump", &msg);
                     }
