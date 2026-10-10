@@ -326,6 +326,29 @@ mod shape {
 /// The four docking-arm directions.
 const ARMS: [Vec2; 4] = [Vec2::X, Vec2::Y, Vec2::NEG_X, Vec2::NEG_Y];
 
+/// Solar panel size, and where the panels sit: two per side on the north
+/// and south arms.
+const SOLAR_PANEL: Vec2 = Vec2::new(0.22, 0.10);
+fn solar_panel_centers() -> impl Iterator<Item = Vec2> {
+    [Vec2::Y, Vec2::NEG_Y].into_iter().flat_map(|dir| {
+        [0.68, 0.80].into_iter().flat_map(move |along| {
+            [-1.0f32, 1.0].into_iter().map(move |side| {
+                dir * along + Vec2::X * side * (shape::ARM_W * 0.5 + 0.11)
+            })
+        })
+    })
+}
+
+/// Radiator fin size, and where the fins sit along the west arm.
+const RADIATOR: Vec2 = Vec2::new(0.022, 0.12);
+fn radiator_centers() -> impl Iterator<Item = Vec2> {
+    [0.66, 0.74, 0.82].into_iter().flat_map(|along| {
+        [-1.0f32, 1.0].into_iter().map(move |side| {
+            Vec2::NEG_X * along + Vec2::Y * side * (shape::ARM_W * 0.5 + 0.06)
+        })
+    })
+}
+
 /// Collision shape for a station of `radius`: one disc over the hub and ring,
 /// then each docking arm as a row of circles ending in its head. A single
 /// circle either walled off the empty space between the arms or let ships
@@ -338,6 +361,17 @@ pub fn station_collider_circles(radius: f32) -> Vec<(Vec2, f32)> {
             circles.push((dir * along * radius, ARM_W * 0.7 * radius));
         }
         circles.push((dir * (ARM_TO + HEAD_LEN * 0.5) * radius, HEAD_W * 0.5 * radius));
+    }
+    // The solar wings and radiator fins are hull too. Drawn but not solid,
+    // a ship could slide straight over them -- one autoplay run sat parked on
+    // top of Haven's solar array for minutes.
+    for at in solar_panel_centers() {
+        for across in [-0.3, 0.0, 0.3] {
+            circles.push(((at + Vec2::X * SOLAR_PANEL.x * across) * radius, SOLAR_PANEL.y * 0.75 * radius));
+        }
+    }
+    for at in radiator_centers() {
+        circles.push((at * radius, RADIATOR.y * 0.5 * radius));
     }
     circles
 }
@@ -474,23 +508,15 @@ fn spawn_station(commands: &mut Commands, site: &StationSite) {
     // Solar wings on the north and south arms.
     let panel = Color::srgb(0.10, 0.16, 0.30);
     let panel_frame = Color::srgb(0.30, 0.36, 0.50);
-    for dir in [Vec2::Y, Vec2::NEG_Y] {
-        for along in [0.68, 0.80] {
-            for side in [-1.0, 1.0] {
-                let at = dir * along + Vec2::X * side * (ARM_W * 0.5 + 0.11);
-                part(commands, Vec2::new(0.22, 0.10), panel_frame, at, 0.0, 0.007);
-                part(commands, Vec2::new(0.20, 0.085), panel, at, 0.0, 0.0075);
-            }
-        }
+    for at in solar_panel_centers() {
+        part(commands, SOLAR_PANEL, panel_frame, at, 0.0, 0.007);
+        part(commands, SOLAR_PANEL * Vec2::new(0.91, 0.85), panel, at, 0.0, 0.0075);
     }
 
     // Radiator fins along the west arm.
     let radiator = Color::srgb(0.42, 0.47, 0.56);
-    for along in [0.66, 0.74, 0.82] {
-        for side in [-1.0, 1.0] {
-            let at = Vec2::NEG_X * along + Vec2::Y * side * (ARM_W * 0.5 + 0.06);
-            part(commands, Vec2::new(0.022, 0.12), radiator, at, 0.0, 0.007);
-        }
+    for at in radiator_centers() {
+        part(commands, RADIATOR, radiator, at, 0.0, 0.007);
     }
 
     // A few running lights around the ring.
@@ -750,6 +776,23 @@ mod station_size_tests {
             kind: station_type(0),
         };
         assert!(SPAWN_BERTH.distance(STATION_POS) < haven.dock_range());
+    }
+
+    /// Every drawn part of the station is solid: points across each solar
+    /// panel and radiator fin sit inside the collision shape.
+    #[test]
+    fn wings_and_radiators_are_solid() {
+        let circles = station_collider_circles(1.0);
+        let inside = |p: Vec2| circles.iter().any(|(c, r)| c.distance(p) <= *r);
+        for at in solar_panel_centers() {
+            for dx in [-0.35, 0.0, 0.35] {
+                let p = at + Vec2::new(dx * SOLAR_PANEL.x, 0.0);
+                assert!(inside(p), "solar panel point {p} is not solid");
+            }
+        }
+        for at in radiator_centers() {
+            assert!(inside(at), "radiator {at} is not solid");
+        }
     }
 
     /// The point of the change: a station is several times the starter's
