@@ -508,6 +508,13 @@ fn tick_market_events(
 }
 
 /// Discover log entries when near POIs that have them
+/// How close the ship's ROOT must get to a record to read it. Was 500, which
+/// suited the chunk layer's flat, non-solid wrecks. Records live on system
+/// derelicts now, which are solid, and a big hull's root sits ~1,100 units
+/// behind its nose -- at 500 no starter-sized ship could ever read one. Same
+/// reach as stripping a derelict with E (celestial::poi).
+const LOG_PICKUP_RANGE: f32 = 1_400.0;
+
 fn discover_log_entries(
     ship_query: Query<&GlobalTransform, With<Ship>>,
     // Deliberately does NOT require PointOfInterest. That component only
@@ -536,7 +543,7 @@ fn discover_log_entries(
         // included, which made the ending unreachable on any second run until
         // the process was restarted. logs_found IS reset, so it is the right
         // and only source of truth.
-        if dist < 500.0 && !statistics.logs_found.contains(&log.title) {
+        if dist < LOG_PICKUP_RANGE && !statistics.logs_found.contains(&log.title) {
             statistics.logs_found.push(log.title.clone());
 
             // The ending keys on *finding* the finale, not on holding it, so
