@@ -1383,19 +1383,22 @@ fn head_for_dock(
     // 20% slack of fly_to's band at kilometre scale: the ship parked 4,400-
     // 4,800 from Haven's centre, outside its 4,400 docking range, for good.
     //
-    // F docks only when the station's edge is nearer than any wreck: the game
-    // gives the press to whichever is closer (eva_salvage). Parked 1,400 off
-    // the hull with a hulk nearer than that, every press put a detail on the
-    // wreck and the dock lesson recalled it -- 125 s of out-and-back in one
-    // run. So with a wreck about, close right in on the hull first.
+    // F docks unless the ship is alongside a wreck and nearer it than the
+    // station (eva_salvage::station_takes_the_press). Parked with a hulk
+    // alongside, every press put a detail on the wreck and the dock lesson
+    // recalled it -- 125 s of out-and-back in one run. So with a wreck
+    // alongside, close right in on the hull first.
     let edge = (dist - site.radius()).max(0.0);
+    // `wreck_near` is root to root and the game measures to the wreck's
+    // nearest block, so allow a margin on "alongside".
+    let alongside = crate::crew::eva_salvage::ALONGSIDE + 1_000.0;
     let standoff = match wreck_near {
-        Some(w) if w < crate::celestial::warp::STATION_ARRIVAL_STANDOFF + 1_500.0 => 300.0,
+        Some(w) if w < alongside => 300.0,
         _ => crate::celestial::warp::STATION_ARRIVAL_STANDOFF,
     };
     let approach = site.pos + (pos - site.pos).normalize_or(Vec2::X) * (site.radius() + standoff);
     fly_to(d, pos, approach, pos.distance(approach), 150.0);
-    let station_wins = wreck_near.is_none_or(|w| edge < w);
+    let station_wins = wreck_near.is_none_or(|w| w > alongside || edge < w);
 
     // Only inside the real docking radius, and on a slow beat so we aren't
     // mashing a key that means something else the moment we drift out.
@@ -1482,18 +1485,11 @@ fn dispatch_salvage(
         return;
     }
 
-    // The game's own rule for "F would dock here", not an approximation of
-    // it: 95% of the largest dock range left a band at every smaller station
-    // and at Haven's edge where F docked instead of sending the detail, and
-    // the run looped launch -> F -> docked every twelve seconds.
-    if stations.nearest_in_range(pos).is_some() {
-        if let Some(site) = nearest_station(stations, pos) {
-            let away = (pos - site).normalize_or_zero();
-            if away != Vec2::ZERO {
-                d.aim = Some(away);
-                d.hold(KeyCode::KeyW);
-            }
-        }
+    // Inside a station's docking range F only salvages alongside the wreck
+    // (eva_salvage::station_takes_the_press); out here a press would dock.
+    // Near a station the hold is 300, so this is a guard, not the usual path.
+    if stations.nearest_in_range(pos).is_some() && dist > crate::crew::eva_salvage::ALONGSIDE {
+        fly_to(d, pos, wreck, dist, 300.0);
         return;
     }
 

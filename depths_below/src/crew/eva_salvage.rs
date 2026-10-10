@@ -94,6 +94,25 @@ type BlockQuery<'w, 's> = Query<
     (Or<(With<Module>, With<HullSegment>)>, Without<CrewMember>),
 >;
 
+/// Within this of a wreck (to its nearest block, from the ship's root), F
+/// salvages it even inside a station's docking range: about a hull-length,
+/// alongside it.
+pub const ALONGSIDE: f32 = 1_500.0;
+
+/// Inside a station's docking range, whether F docks rather than sending a
+/// detail to a wreck `wreck_dist` off, with the station's structure `edge`
+/// away.
+///
+/// F docks, unless the ship is alongside the wreck and nearer to it than to
+/// the station. Plain "nearer wins" was fine with 1.8 km of docking range;
+/// at 7 km it gave F to any wreck within 3 km, and round Haven, whose
+/// approach is full of chunk-layer wrecks, F almost never docked. Nearer
+/// still matters alongside, or parking on a wreck beside a station would
+/// berth the ship with the detail on the hull.
+fn station_takes_the_press(edge: f32, wreck_dist: f32) -> bool {
+    wreck_dist > ALONGSIDE || edge < wreck_dist
+}
+
 /// F key: dispatch a salvage detail at the nearest lootable wreck in
 /// range, or recall the detail that's already out.
 pub fn order_salvage_detail(
@@ -194,21 +213,15 @@ pub fn order_salvage_detail(
         return;
     };
 
-    // Yield to docking when the station is the closer of the two. F means
-    // both things and position is the only way to tell them apart, so the
-    // nearer one wins - otherwise parking on a wreck inside a station's dock
-    // radius flung a detail out AND berthed the ship, stranding them.
-    //
-    // Only yield to a station that can actually take the press, though.
-    // ORDER_RANGE (3000) once reached well past DOCK_RANGE (1800), so "nearer" on
-    // its own left a dead band: a station at 2000 with a wreck at 2500 beat
-    // the wreck here and was then out of range to dock, and F did nothing at
-    // all.
+    // Yield to docking when a station can take the press (see
+    // `station_takes_the_press`). Only to a station actually in range,
+    // though, or F would do nothing at all between the two.
     if let Some(site) = stations.nearest_in_range(ship_pos) {
         // To the station's edge, not its centre: stations are kilometres
         // across, and their centre is "farther" than a wreck the ship is
         // nowhere near.
-        if (ship_pos.distance(site.pos) - site.radius()).max(0.0) < wreck_dist {
+        let edge = (ship_pos.distance(site.pos) - site.radius()).max(0.0);
+        if station_takes_the_press(edge, wreck_dist) {
             return;
         }
     }
@@ -420,7 +433,7 @@ pub fn order_salvage_detail(
         let (message, duration) = match stations.nearest_in_range(ship_pos) {
             Some(site) => (
                 format!(
-                    "Salvage detail EVA: {} crew - the wreck is nearer than {}. F recalls them; to dock, get closer to the station than the wreck.",
+                    "Salvage detail EVA: {} crew - you're alongside a wreck. F recalls them; pull off it to dock at {}.",
                     dispatched, site.name
                 ),
                 5.0,
@@ -974,6 +987,19 @@ mod out_of_reach_tests {
     }
 
     /// Nothing anywhere near: nothing to explain.
+    /// Inside docking range F docks, unless the ship is alongside a wreck
+    /// and nearer it than the station -- and a wreck a few km off, which
+    /// used to win just by being nearer than the station's hull, doesn't.
+    #[test]
+    fn inside_docking_range_f_docks_unless_alongside_a_wreck() {
+        // Haven's approach: 5 km off the hull, a chunk wreck 2.5 km away.
+        assert!(station_takes_the_press(5_000.0, 2_500.0));
+        // Alongside a wreck, well off the station: salvage.
+        assert!(!station_takes_the_press(5_000.0, 600.0));
+        // Alongside a wreck that sits against the hull, nearer the station: dock.
+        assert!(station_takes_the_press(300.0, 900.0));
+    }
+
     #[test]
     fn no_wreck_nearby_says_nothing() {
         let mut app = app(ORDER_RANGE * 3.0);
