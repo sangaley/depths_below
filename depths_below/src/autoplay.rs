@@ -930,11 +930,6 @@ fn director_brain(
                     d.tap(KeyCode::Backslash);
                 }
                 engage(&mut d, pos, vel, tp, dist);
-            } else if d.strip_cooldown <= 0.0
-                && (salvageable(&w, &d, pos).is_some_and(|(dist, _, _)| dist < DIVERT_RANGE)
-                    || loot_nearby(&w, pos).is_some_and(|(dist, _)| dist < DIVERT_RANGE))
-            {
-                d.go(Phase::Strip);
             } else if let Some(at) = warp
                 .expedition
                 .next
@@ -945,11 +940,21 @@ fn director_brain(
                 // The next expedition record is in this system: go and read
                 // it, the way the tracker tells a player to. Pickup is within
                 // LOG_PICKUP_RANGE of the derelict; close right in.
+                //
+                // Ahead of stripping wrecks: the director plays a captain
+                // following the story, which is what a pacing run measures.
+                // Strip-first spent six minutes on Haven's hulks with the
+                // first record 18 km away.
                 d.search_for = 0.0;
                 let dist = pos.distance(at);
                 if !try_warp(&mut d, &mut warp.local_target, &fuel, at, dist) {
                     fly_to(&mut d, pos, at, dist, 250.0);
                 }
+            } else if d.strip_cooldown <= 0.0
+                && (salvageable(&w, &d, pos).is_some_and(|(dist, _, _)| dist < DIVERT_RANGE)
+                    || loot_nearby(&w, pos).is_some_and(|(dist, _)| dist < DIVERT_RANGE))
+            {
+                d.go(Phase::Strip);
             } else if let Some((sys, at)) = bounty_lead(&contracts, &warp.sim) {
                 // A bounty to chase. In this system: go to where its ship is,
                 // dashing if it's far, and it becomes a real contact on the
@@ -1111,7 +1116,7 @@ fn director_brain(
                 }
             }
 
-            if !head_for_dock(&mut d, &stations, pos, !w.eva.is_empty()) {
+            if !head_for_dock(&mut d, &stations, pos, !w.eva.is_empty(), nearest_wreck(&w, pos)) {
                 // No station loaded here — this is where an interstellar hop
                 // would go once warp routing is wired in.
                 d.log("home", "no station in this system");
@@ -1159,19 +1164,20 @@ fn director_brain(
             // Pick the nearest system that isn't this one. Targeting by id
             // doesn't need it discovered first - that's the same thing the
             // galaxy map's click-anywhere does, just without the clicking.
+            // The story first, then the money (see Hunt).
             if warp.galaxy_target.0.is_none() {
-                if let Some((sys, _)) = bounty_lead(&contracts, &warp.sim) {
+                if let Some((sys, _)) = warp.expedition.next {
                     if Some(sys) != warp.streaming.loaded_system {
-                        let msg = format!("targeting {} to jump - bounty", crate::celestial::galaxy::system_name(sys));
+                        let msg = format!("targeting {} to jump - next record", crate::celestial::galaxy::system_name(sys));
                         warp.galaxy_target.0 = Some(GalaxyWarpTarget::System(sys));
                         d.log("jump", &msg);
                     }
                 }
             }
             if warp.galaxy_target.0.is_none() {
-                if let Some((sys, _)) = warp.expedition.next {
+                if let Some((sys, _)) = bounty_lead(&contracts, &warp.sim) {
                     if Some(sys) != warp.streaming.loaded_system {
-                        let msg = format!("targeting {} to jump - next record", crate::celestial::galaxy::system_name(sys));
+                        let msg = format!("targeting {} to jump - bounty", crate::celestial::galaxy::system_name(sys));
                         warp.galaxy_target.0 = Some(GalaxyWarpTarget::System(sys));
                         d.log("jump", &msg);
                     }
@@ -1361,6 +1367,7 @@ fn head_for_dock(
     stations: &SystemStations,
     pos: Vec2,
     crew_out: bool,
+    wreck_near: Option<f32>,
 ) -> bool {
     let Some(site) = stations.sites.iter().min_by(|a, b| {
         pos.distance(a.pos)
@@ -1375,16 +1382,27 @@ fn head_for_dock(
     // tight arrival band. Holding a standoff from the centre instead left the
     // 20% slack of fly_to's band at kilometre scale: the ship parked 4,400-
     // 4,800 from Haven's centre, outside its 4,400 docking range, for good.
-    let approach = site.pos
-        + (pos - site.pos).normalize_or(Vec2::X) * (site.radius() + crate::celestial::warp::STATION_ARRIVAL_STANDOFF);
+    //
+    // F docks only when the station's edge is nearer than any wreck: the game
+    // gives the press to whichever is closer (eva_salvage). Parked 1,400 off
+    // the hull with a hulk nearer than that, every press put a detail on the
+    // wreck and the dock lesson recalled it -- 125 s of out-and-back in one
+    // run. So with a wreck about, close right in on the hull first.
+    let edge = (dist - site.radius()).max(0.0);
+    let standoff = match wreck_near {
+        Some(w) if w < crate::celestial::warp::STATION_ARRIVAL_STANDOFF + 1_500.0 => 300.0,
+        _ => crate::celestial::warp::STATION_ARRIVAL_STANDOFF,
+    };
+    let approach = site.pos + (pos - site.pos).normalize_or(Vec2::X) * (site.radius() + standoff);
     fly_to(d, pos, approach, pos.distance(approach), 150.0);
+    let station_wins = wreck_near.is_none_or(|w| edge < w);
 
     // Only inside the real docking radius, and on a slow beat so we aren't
     // mashing a key that means something else the moment we drift out.
     // F is overloaded: at a station it docks, and within eva_salvage's
     // ORDER_RANGE of a wreck it ALSO throws a detail out. One press did both
     // in an earlier run, docking the ship with nineteen crew on the hull.
-    if dist < site.dock_range() * 0.95 && d.beat > 1.0 && !crew_out {
+    if dist < site.dock_range() * 0.95 && station_wins && d.beat > 1.0 && !crew_out {
         d.beat = 0.0;
         d.tap(KeyCode::KeyF);
     }
@@ -1508,6 +1526,12 @@ fn salvageable(w: &World1, d: &Director, pos: Vec2) -> Option<(f32, Vec2, Entity
         })
 }
 
+/// Distance to the nearest wreck of any kind -- stripped or not, since the
+/// game still sends a detail to a gutted hulk with plating left on it.
+fn nearest_wreck(w: &World1, pos: Vec2) -> Option<f32> {
+    nearest(w.wrecks.iter().map(|(_, t, _)| t.translation.truncate()), pos).map(|(dist, _)| dist)
+}
+
 fn loot_nearby(w: &World1, pos: Vec2) -> Option<(f32, Vec2)> {
     // Only what E can actually take. Asteroid nodes and waystations are
     // SpacePois too and are never "looted", so chasing every unlooted one sent
@@ -1615,7 +1639,8 @@ fn drive_tutorial(
                 return;
             }
             let Ok((tf, _vel)) = w.ships.single() else { return };
-            head_for_dock(d, stations, tf.translation.truncate(), !w.eva.is_empty());
+            let pos = tf.translation.truncate();
+            head_for_dock(d, stations, pos, !w.eva.is_empty(), nearest_wreck(w, pos));
         }
         Advance::Build => {
             if beat_ready {
