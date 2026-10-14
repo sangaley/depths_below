@@ -248,7 +248,19 @@ pub fn spawn_ai_ship_with_design(
     crate::ship::lay_hallways(&mut hull_cells, &design.modules);
 
     // Spawn hull segments as children
-    spawn_ai_hull(commands, asset_server, root, &hull_cells, health_mult);
+    let hull_max = spawn_ai_hull(commands, asset_server, root, &hull_cells, health_mult);
+
+    // The loadout as built. Every "how much is left" ratio divides by this,
+    // because dead blocks are despawned and can't be counted later.
+    commands.entity(root).insert(AiLoadout {
+        guns: design.modules.iter()
+            .filter(|m| super::combat::is_weapon_type(m.module_type))
+            .count() as u32,
+        engines: design.modules.iter()
+            .filter(|m| super::combat::is_engine_type(m.module_type))
+            .count() as u32,
+        hull_max,
+    });
 
     // Spawn modules as children, reusing existing spawn_module
     for mp in &design.modules {
@@ -353,14 +365,16 @@ fn roll_crew_complement(rng: &mut impl Rng, floor: u32, typical: u32, ceiling: u
     sample.round() as u32
 }
 
-/// Spawns hull segment children for the AI ship
+/// Spawns hull segment children for the AI ship. Returns the summed max
+/// health of everything it spawned -- the ship's hull as built.
 fn spawn_ai_hull(
     commands: &mut Commands,
     asset_server: &AssetServer,
     parent: Entity,
     hull_cells: &[BlueprintHullCell],
     health_mult: f32,
-) {
+) -> f32 {
+    let mut hull_max = 0.0;
     for cell in hull_cells {
         let health = cell.material.health_multiplier() * 100.0 * health_mult;
         let radiation_shielding = cell.material.radiation_shielding();
@@ -406,5 +420,7 @@ fn spawn_ai_hull(
         )).id();
 
         commands.entity(hull_entity).insert(ChildOf(parent));
+        hull_max += health;
     }
+    hull_max
 }

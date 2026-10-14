@@ -2,28 +2,35 @@ use bevy::prelude::*;
 use rand::Rng;
 use crate::components::*;
 use crate::events::*;
-use crate::building::GridOccupancy;
 use crate::building::rooms::RoomMap;
 
 /// Reads FireStarted events and ignites modules that aren't already on fire.
 pub fn apply_fire_ignition(
     mut commands: Commands,
     mut fire_events: MessageReader<FireStarted>,
-    module_query: Query<(Entity, &Module), (Without<DestroyedModule>, Without<OnFire>)>,
+    module_query: Query<(Entity, &Module, &ChildOf), (Without<DestroyedModule>, Without<OnFire>)>,
+    player: Query<Entity, With<Ship>>,
     room_map: Res<RoomMap>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
+    let player = player.single().ok();
     for event in fire_events.read() {
         // Check if module exists, is not destroyed, and not already on fire
-        let Ok((entity, module)) = module_query.get(event.module) else {
+        let Ok((entity, module, parent)) = module_query.get(event.module) else {
             continue;
         };
+        // The room map and the alarm are the player's. An enemy module's cell
+        // numbers mean nothing in our room map, and "Fire in Reactor!" for a
+        // reactor burning on someone else's ship is a false alarm.
+        let ours = Some(parent.parent()) == player;
 
         // Can't ignite in heavily depressurized rooms (no oxygen to sustain fire)
-        if let Some(&room_id) = room_map.tile_to_room.get(&event.grid_position) {
-            if let Some(room) = room_map.rooms.get(room_id) {
-                if room.air_level < 0.3 {
-                    continue;
+        if ours {
+            if let Some(&room_id) = room_map.tile_to_room.get(&event.grid_position) {
+                if let Some(room) = room_map.rooms.get(room_id) {
+                    if room.air_level < 0.3 {
+                        continue;
+                    }
                 }
             }
         }
@@ -36,11 +43,13 @@ pub fn apply_fire_ignition(
             duration: Timer::from_seconds(15.0, TimerMode::Once),
         });
 
-        notifications.write(ShowNotification {
-            message: format!("Fire in {}!", module.module_type.name()),
-            notification_type: NotificationType::Danger,
-            duration: 3.0,
-        });
+        if ours {
+            notifications.write(ShowNotification {
+                message: format!("Fire in {}!", module.module_type.name()),
+                notification_type: NotificationType::Danger,
+                duration: 3.0,
+            });
+        }
     }
 }
 
@@ -48,32 +57,44 @@ pub fn apply_fire_ignition(
 pub fn update_fire(
     mut commands: Commands,
     time: Res<Time>,
-    mut fire_query: Query<(Entity, &mut OnFire, &mut Module, &mut Sprite), Without<DestroyedModule>>,
+    mut fire_query: Query<(Entity, &mut OnFire, &mut Module, &mut Sprite, &ChildOf), Without<DestroyedModule>>,
     room_map: Res<RoomMap>,
-    occupancy: Res<GridOccupancy>,
+    player: Query<Entity, With<Ship>>,
+    ship_grids: Query<&crate::building::ShipGrid>,
     alive_modules: Query<Entity, (With<Module>, Without<DestroyedModule>, Without<OnFire>)>,
-    sealed_query: Query<(&HullSegment, &Transform), With<BulkheadSealed>>,
-    firebreak_query: Query<&Module, (With<FirebreakMarker>, Without<DestroyedModule>, Without<OnFire>)>,
+    sealed_query: Query<(&HullSegment, &Transform, &ChildOf), With<BulkheadSealed>>,
+    firebreak_query: Query<(&Module, &ChildOf), (With<FirebreakMarker>, Without<DestroyedModule>, Without<OnFire>)>,
     mut fire_events: MessageWriter<FireStarted>,
     mut extinguish_events: MessageWriter<FireExtinguished>,
 ) {
     let dt = time.delta_secs();
     let mut rng = rand::thread_rng();
 
-    // Build set of sealed bulkhead positions to block fire spread
+    let player = player.single().ok();
+
+    // Build set of sealed bulkhead positions to block fire spread. Ours only:
+    // positions are ship-local, so these only mean anything on our grid.
     let mut sealed_positions: std::collections::HashSet<IVec2> = sealed_query
         .iter()
-        .map(|(_, transform)| crate::building::rooms::transform_to_grid(transform))
+        .filter(|(_, _, parent)| Some(parent.parent()) == player)
+        .map(|(_, transform, _)| crate::building::rooms::transform_to_grid(transform))
         .collect();
 
     // FirebreakWall always blocks fire spread (no seal needed)
-    for fb_module in firebreak_query.iter() {
-        sealed_positions.insert(fb_module.grid_position);
+    for (fb_module, parent) in firebreak_query.iter() {
+        if Some(parent.parent()) == player {
+            sealed_positions.insert(fb_module.grid_position);
+        }
     }
 
-    for (entity, mut fire, mut module, mut sprite) in fire_query.iter_mut() {
-        // Vacuum/decompression suppression — fire can't burn without air
-        if let Some(&room_id) = room_map.tile_to_room.get(&module.grid_position) {
+    for (entity, mut fire, mut module, mut sprite, parent) in fire_query.iter_mut() {
+        let ship = parent.parent();
+        let ours = Some(ship) == player;
+
+        // Vacuum/decompression suppression — fire can't burn without air.
+        // Only our rooms are mapped.
+        let room = if ours { room_map.tile_to_room.get(&module.grid_position) } else { None };
+        if let Some(&room_id) = room {
             if let Some(room) = room_map.rooms.get(room_id) {
                 if room.air_level < 0.2 {
                     // Fully extinguish — not enough oxygen
@@ -123,17 +144,22 @@ pub fn update_fire(
         let b = 0.22 * (1.0 - fire.intensity);
         sprite.color = Color::srgb(r, g, b);
 
-        // Spread on timer tick
+        // Spread on timer tick, through the burning block's OWN ship's grid.
+        // This read the player's GridOccupancy with the block's local cell,
+        // so a fire on any enemy or wreck -- an overheated gun, a burning
+        // reactor -- jumped to whatever of ours sat at the same cell numbers,
+        // anywhere in the world. Angled armour plates are modules and burn.
         if fire.spread_timer.just_finished() {
             let spread_chance = 0.3 * fire.intensity;
+            let Ok(grid) = ship_grids.get(ship) else { continue };
             for offset in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
                 let adj_pos = module.grid_position + offset;
                 // Block fire spread across sealed bulkheads
-                if sealed_positions.contains(&adj_pos) {
+                if ours && sealed_positions.contains(&adj_pos) {
                     continue;
                 }
                 if rng.gen::<f32>() < spread_chance {
-                    if let Some(&adj_entity) = occupancy.cells.get(&adj_pos) {
+                    if let Some(adj_entity) = grid.get(adj_pos) {
                         // Only spread to alive, non-burning modules
                         if alive_modules.get(adj_entity).is_ok() {
                             fire_events.write(FireStarted {

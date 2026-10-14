@@ -113,21 +113,31 @@ pub fn queue_hull_removal(
 
 /// When a hull segment is destroyed (0 HP), apply 15% max_health stress damage to adjacent hull.
 /// This can cascade through already-weakened segments but won't one-shot healthy hull.
+/// Player ship only. Cells are ship-LOCAL and the room map and breach events
+/// are the player's: matched on grid_position alone, a plate lost on one ship
+/// stressed every other ship's plate at the neighbouring local cell, wherever
+/// in the world it was.
 pub fn process_hull_cascade(
     mut commands: Commands,
     mut hull_destroy_events: MessageReader<HullSegmentDestroyed>,
-    mut hull_query: Query<(Entity, &mut HullSegment), Without<HullDestroyed>>,
+    mut hull_query: Query<(Entity, &mut HullSegment, &ChildOf), Without<HullDestroyed>>,
+    parents: Query<&ChildOf>,
+    ship_query: Query<Entity, With<Ship>>,
     mut breach_events: MessageWriter<HullBreached>,
     room_map: Res<RoomMap>,
     mut room_depressurize_events: MessageWriter<RoomDepressurized>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
+    let player_ship = ship_query.single().ok();
     let mut destroyed_positions: Vec<IVec2> = Vec::new();
 
     for event in hull_destroy_events.read() {
         // Mark the destroyed hull segment
         commands.entity(event.segment).try_insert(HullDestroyed);
-        destroyed_positions.push(event.grid_position);
+        let on_player = parents.get(event.segment).ok().map(|p| p.parent()) == player_ship;
+        if on_player && player_ship.is_some() {
+            destroyed_positions.push(event.grid_position);
+        }
     }
 
     // Apply stress damage to adjacent hull segments
@@ -135,8 +145,8 @@ pub fn process_hull_cascade(
         for offset in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
             let adj_pos = *destroyed_pos + offset;
 
-            for (hull_entity, mut hull) in hull_query.iter_mut() {
-                if hull.grid_position != adj_pos {
+            for (hull_entity, mut hull, parent) in hull_query.iter_mut() {
+                if Some(parent.parent()) != player_ship || hull.grid_position != adj_pos {
                     continue;
                 }
 

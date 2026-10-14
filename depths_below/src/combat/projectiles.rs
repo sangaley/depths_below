@@ -127,7 +127,14 @@ pub(super) fn projectile_collision(
     // of actual size, so a shot aimed dead-center at a large ship (most of
     // the roster — Terran Hegemony, Eternal Hegemony, The Shepherd...) could sail
     // straight through its visible hull without ever registering as a hit.
-    mut ai_ship_query: Query<(Entity, &Transform, Option<&mut crate::combat::shields::ShipShield>), With<AiShip>>,
+    mut ai_ship_query: Query<(
+        Entity,
+        &Transform,
+        Option<&mut crate::combat::shields::ShipShield>,
+        // For the AI-vs-AI arm's block walk — see stage 2 below.
+        &GlobalTransform,
+        Option<&crate::building::ShipGrid>,
+    ), With<AiShip>>,
     mut damage_events: MessageWriter<ShipDamaged>,
     mut ai_damage_events: MessageWriter<AiShipDamaged>,
     mut notifications: MessageWriter<ShowNotification>,
@@ -181,7 +188,7 @@ pub(super) fn projectile_collision(
 
             // Check AI ships if no creature was hit (single-target) or always for AoE
             if !hit_any || is_aoe {
-                for (ai_entity, ai_transform, mut shield) in ai_ship_query.iter_mut() {
+                for (ai_entity, ai_transform, mut shield, _, _) in ai_ship_query.iter_mut() {
                     let ai_pos = shield.as_ref().map(|s| s.world_center(ai_transform))
                         .unwrap_or_else(|| ai_transform.translation.truncate());
                     let hit_radius = shield.as_ref().map(|s| s.radius).unwrap_or(SUBMARINE_RADIUS);
@@ -389,44 +396,67 @@ pub(super) fn projectile_collision(
             // don't get this arm — creatures don't fight AI ships here.
             if !hit_player {
                 if let Some(owner_root) = owner_ai_root {
-                    for (ai_entity, ai_transform, mut shield) in ai_ship_query.iter_mut() {
+                    for (ai_entity, ai_transform, mut shield, ai_gt, grid) in ai_ship_query.iter_mut() {
                         if ai_entity == owner_root { continue; }
                         let ai_pos = shield.as_ref().map(|s| s.world_center(ai_transform))
                             .unwrap_or_else(|| ai_transform.translation.truncate());
-                        let hit_radius = shield.as_ref().map(|s| s.radius).unwrap_or(SUBMARINE_RADIUS);
-                        let dist = proj_pos.distance(ai_pos);
+                        let reach = shield.as_ref().map(|s| s.radius).unwrap_or(SUBMARINE_RADIUS);
+                        // Broad phase over the whole step, not its end point.
+                        let (dist, _) = super::new_projectiles::segment_closest(
+                            projectile.prev_pos, proj_pos, ai_pos,
+                        );
+                        if dist > PROJECTILE_RADIUS + reach { continue; }
 
-                        if dist < PROJECTILE_RADIUS + hit_radius {
-                            // Shield absorbs first, same as the player's own
-                            // hit path above — this arm used to skip straight
-                            // to hull/module damage, so an AI ship's shield
-                            // never visibly took a hit (or blocked anything)
-                            // even though the hull underneath WAS being
-                            // damaged correctly.
-                            if let Some(shield) = shield.as_deref_mut() {
-                                if shield.is_up() {
-                                    shield.absorb(projectile.damage);
-                                    spawn_hit_effect(&mut commands, proj_pos, Color::srgb(0.5, 0.8, 1.0), 16.0);
-                                    commands.entity(proj_entity).despawn();
-                                    break;
-                                }
+                        // Same two tests the player's hull gets above. The
+                        // shield stops a round only while it is UP, inside the
+                        // bubble, and on the lit arc; this arm used to absorb
+                        // on is_up() alone, ignoring the arc.
+                        if let Some(shield) = shield.as_deref_mut() {
+                            if shield.is_up()
+                                && proj_pos.distance(ai_pos) < shield.radius
+                                && shield.covers_arc(proj_pos - ai_pos)
+                            {
+                                shield.absorb(projectile.damage);
+                                spawn_hit_effect(&mut commands, proj_pos, Color::srgb(0.5, 0.8, 1.0), 16.0);
+                                commands.entity(proj_entity).despawn();
+                                break;
                             }
-
-                            ai_damage_events.write(AiShipDamaged {
-                                target: ai_entity,
-                                source: DamageSource::Explosion,
-                                amount: projectile.damage,
-                                position: Some(proj_pos),
-                                direction: Some(projectile.direction),
-                                attacker: Some(owner_root),
-                            });
-
-                            spawn_hit_effect(&mut commands, ai_pos, Color::srgb(1.0, 0.5, 0.2), 16.0);
-                            spawn_floating_damage(&mut commands, ai_pos, projectile.damage, Color::srgb(1.0, 0.8, 0.3));
-
-                            commands.entity(proj_entity).despawn();
-                            break;
                         }
+
+                        // ...and the hull is hit only where the round crosses
+                        // a LIVE BLOCK. The bubble radius used to be the
+                        // hitbox whether the shield was up or not, so stray
+                        // fire burst in open space a long way short of the
+                        // hull and damaged the ship anyway.
+                        let Some(grid) = grid else { continue };
+                        let inv = ai_gt.affine().inverse();
+                        let to_cell = |world: Vec2| {
+                            let p = inv.transform_point3(world.extend(0.0)).truncate();
+                            Vec2::new(p.x / 66.0, (p.y + 33.0) / 66.0)
+                        };
+                        let Some(step) = grid
+                            .walk(to_cell(projectile.prev_pos), to_cell(proj_pos))
+                            .into_iter()
+                            .next()
+                        else { continue };
+                        let local = Vec2::new(step.cell.x as f32 * 66.0, step.cell.y as f32 * 66.0 - 33.0);
+                        let block_pos = ai_gt.affine().transform_point3(local.extend(0.0)).truncate();
+
+                        ai_damage_events.write(AiShipDamaged {
+                            target: ai_entity,
+                            source: DamageSource::Explosion,
+                            amount: projectile.damage,
+                            position: Some(block_pos),
+                            // From the ship TOWARD the attacker, the
+                            // convention every other damage writer uses.
+                            direction: Some(-projectile.direction),
+                            attacker: Some(owner_root),
+                        });
+
+                        spawn_hit_effect(&mut commands, block_pos, Color::srgb(1.0, 0.5, 0.2), 16.0);
+
+                        commands.entity(proj_entity).despawn();
+                        break;
                     }
                 }
             }

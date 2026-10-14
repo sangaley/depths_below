@@ -208,15 +208,22 @@ pub fn fire_laser_system(
 
             if perpendicular_dist < shield.radius + 60.0 {
                 // Stick to whatever block this weapon was already cutting
-                // into, as long as it's still alive — only re-scan for a
-                // fresh nearest block once it's gone.
-                let locked = laser_locks.get(&weapon_entity).copied();
+                // into, as long as it's still alive, still on THIS ship, and
+                // still on the beam — only re-scan once any of that fails.
+                // The lock is per weapon, not per ship, so without the
+                // ownership test a beam swung onto a second ship kept
+                // damaging a block on the first, wherever it now was.
+                let locked = laser_locks.get(&weapon_entity).copied()
+                    .filter(|e| children.contains(e));
+                let still_on_beam = |gt: &GlobalTransform| {
+                    on_beam(gt.translation().truncate(), weapon_pos, beam_dir, beam_range)
+                };
                 let mut target: Option<(Entity, bool)> = None; // (entity, is_module)
                 if let Some(locked_entity) = locked {
-                    if let Ok((module, _)) = ai_module_query.get(locked_entity) {
-                        if module.health > 0.0 { target = Some((locked_entity, true)); }
-                    } else if let Ok((hull, _)) = ai_hull_query.get(locked_entity) {
-                        if hull.health > 0.0 { target = Some((locked_entity, false)); }
+                    if let Ok((module, gt)) = ai_module_query.get(locked_entity) {
+                        if module.health > 0.0 && still_on_beam(gt) { target = Some((locked_entity, true)); }
+                    } else if let Ok((hull, gt)) = ai_hull_query.get(locked_entity) {
+                        if hull.health > 0.0 && still_on_beam(gt) { target = Some((locked_entity, false)); }
                     }
                 }
 
@@ -234,10 +241,9 @@ pub fn fire_laser_system(
                     for child in children.iter() {
                         if let Ok((_, gt)) = ai_module_query.get(child) {
                             let pos = gt.translation().truncate();
+                            if !on_beam(pos, weapon_pos, beam_dir, beam_range) { continue; }
                             let proj = (pos - weapon_pos).dot(beam_dir);
-                            if proj < 0.0 || proj > beam_range { continue; }
-                            let perp = pos.distance(weapon_pos + beam_dir * proj);
-                            if perp < 45.0 && best_module.map(|(_, bp)| proj < bp).unwrap_or(true) {
+                            if best_module.map(|(_, bp)| proj < bp).unwrap_or(true) {
                                 best_module = Some((child, proj));
                             }
                         }
@@ -246,17 +252,18 @@ pub fn fire_laser_system(
                     for child in children.iter() {
                         if let Ok((_, gt)) = ai_hull_query.get(child) {
                             let pos = gt.translation().truncate();
+                            if !on_beam(pos, weapon_pos, beam_dir, beam_range) { continue; }
                             let proj = (pos - weapon_pos).dot(beam_dir);
-                            if proj < 0.0 || proj > beam_range { continue; }
-                            let perp = pos.distance(weapon_pos + beam_dir * proj);
-                            if perp < 45.0 && best_hull.map(|(_, bp)| proj < bp).unwrap_or(true) {
+                            if best_hull.map(|(_, bp)| proj < bp).unwrap_or(true) {
                                 best_hull = Some((child, proj));
                             }
                         }
                     }
 
-                    let hit_module = matches!((best_module, best_hull), (Some((_, mp)), Some((_, hp))) if mp <= hp)
-                        || (best_module.is_some() && best_hull.is_none());
+                    let hit_module = beam_meets_module_first(
+                        best_module.map(|(_, p)| p),
+                        best_hull.map(|(_, p)| p),
+                    );
 
                     target = if hit_module {
                         best_module.map(|(e, _)| (e, true))
@@ -286,8 +293,28 @@ pub fn fire_laser_system(
                         blocked = true;
                         if module.health <= 0.0 { laser_locks.remove(&weapon_entity); }
                     }
-                } else if let Ok((mut hull, gt)) = ai_hull_query.get_mut(block_entity) {
-                    hull.health = (hull.health - damage).max(0.0);
+                } else if let Ok((hull, _)) = ai_hull_query.get(block_entity) {
+                    // ARMOUR EXPOSURE, as check_projectile_hits does it: a
+                    // module still under this plate takes the beam's small
+                    // pass-through share and the plate spends the rest. The
+                    // module is found by footprint, since a plate and the
+                    // module it covers share a cell centre.
+                    let cell = hull.grid_position;
+                    let covered = children.iter().find(|child| {
+                        ai_module_query.get(*child).ok().is_some_and(|(module, _)| {
+                            let footprint = crate::building::footprints::footprint_override(module.module_type);
+                            crate::building::ShipGrid::cells_for(module.grid_position, module.size, module.rotation, footprint)
+                                .contains(&cell)
+                        })
+                    });
+                    let (to_plate, to_module) = beam_split(damage, covered.is_some());
+                    if let (Some(module_entity), true) = (covered, to_module > 0.0) {
+                        if let Ok((mut module, _)) = ai_module_query.get_mut(module_entity) {
+                            module.health = (module.health - to_module).max(0.0);
+                        }
+                    }
+                    let Ok((mut hull, gt)) = ai_hull_query.get_mut(block_entity) else { continue };
+                    hull.health = (hull.health - to_plate).max(0.0);
                     hit_pos = Some(gt.translation().truncate());
                     ai_damage_events.write(crate::events::AiShipDamaged {
                         target: ai_entity,
@@ -395,6 +422,82 @@ pub fn fire_laser_system(
         if hit_count > 0 {
             spawn_hit_effect(&mut commands, actual_end, Color::srgb(0.4, 1.0, 0.5), 8.0);
         }
+    }
+}
+
+/// Half-width of the beam's footprint on a block: a block whose centre is
+/// within this of the beam line (and ahead of the emitter, inside range) is
+/// one the beam can be cutting into.
+const BEAM_BLOCK_REACH: f32 = 45.0;
+
+/// Is a block centred at `pos` on the beam this frame?
+fn on_beam(pos: Vec2, origin: Vec2, dir: Vec2, range: f32) -> bool {
+    let proj = (pos - origin).dot(dir);
+    if proj < 0.0 || proj > range {
+        return false;
+    }
+    pos.distance(origin + dir * proj) < BEAM_BLOCK_REACH
+}
+
+/// Does the beam reach the nearest module before the nearest plate?
+///
+/// Strictly before. A plate and the module it covers sit on the same cell
+/// centre, so they tie, and `<=` handed every tie to the module: the beam
+/// reached straight under the armour every time, the one weapon in the game
+/// that ignored plating.
+fn beam_meets_module_first(module_proj: Option<f32>, hull_proj: Option<f32>) -> bool {
+    match (module_proj, hull_proj) {
+        (Some(m), Some(h)) => m < h,
+        (Some(_), None) => true,
+        _ => false,
+    }
+}
+
+/// One tick of beam damage on a plate: (to the plate, to the module under
+/// it). A beam is unspecialised, so the bleed-through is the ammo table's
+/// default -- the same split a kinetic round with no profile gets.
+fn beam_split(damage: f32, covers_module: bool) -> (f32, f32) {
+    let pass = if covers_module {
+        crate::combat::ammo_types::armor_pass_through(None)
+    } else {
+        0.0
+    };
+    (damage * (1.0 - pass), damage * pass)
+}
+
+#[cfg(test)]
+mod beam_tests {
+    use super::*;
+
+    /// The report: beams always hit under the plating. A plate and its
+    /// module tie on distance, and the tie has to go to the plate.
+    #[test]
+    fn a_tie_goes_to_the_plate() {
+        assert!(!beam_meets_module_first(Some(300.0), Some(300.0)));
+        assert!(beam_meets_module_first(Some(234.0), Some(300.0)), "an exposed module in front is still hit");
+        assert!(beam_meets_module_first(Some(300.0), None));
+        assert!(!beam_meets_module_first(None, Some(300.0)));
+    }
+
+    /// Armour stops most of a beam, never all of it, and nothing leaks
+    /// through a plate with nothing behind it.
+    #[test]
+    fn a_plate_soaks_most_of_the_beam() {
+        let (plate, module) = beam_split(100.0, true);
+        assert!(plate > module && module > 0.0, "plate {plate}, module {module}");
+        assert!((plate + module - 100.0).abs() < 1e-4, "damage was created or lost");
+        assert_eq!(beam_split(100.0, false), (100.0, 0.0));
+    }
+
+    /// A held lock must be re-checked against where the beam is now. A block
+    /// the beam has swung off (or one behind the emitter) is not on it.
+    #[test]
+    fn a_block_off_the_beam_is_not_on_it() {
+        let (origin, dir, range) = (Vec2::ZERO, Vec2::X, 1000.0);
+        assert!(on_beam(Vec2::new(500.0, 20.0), origin, dir, range));
+        assert!(!on_beam(Vec2::new(500.0, 200.0), origin, dir, range), "swung off");
+        assert!(!on_beam(Vec2::new(-50.0, 0.0), origin, dir, range), "behind the emitter");
+        assert!(!on_beam(Vec2::new(1200.0, 0.0), origin, dir, range), "out of range");
     }
 }
 
@@ -519,7 +622,7 @@ pub fn update_ion_pulses(
     // can never match an AI ship entity, and ai_ship_query below reads
     // &Transform on AiShip — same missing-canceling-pair issue as
     // fire_laser_system's weapon_query/ai_module_query conflict.
-    mut pulse_query: Query<(Entity, &mut IonPulse, &mut Transform, &mut Velocity, &mut Sprite, &GravityForce), Without<crate::ai_ship::components::AiShip>>,
+    mut pulse_query: Query<(Entity, &mut IonPulse, &mut Transform, &Velocity, &mut Sprite), Without<crate::ai_ship::components::AiShip>>,
     mut creature_query: Query<(Entity, &Transform, &mut Creature), Without<IonPulse>>,
     mut ai_ship_query: Query<
         (Entity, &Transform, &Children, &mut crate::combat::shields::ShipShield),
@@ -531,7 +634,7 @@ pub fn update_ion_pulses(
 ) {
     let dt = time.delta_secs();
 
-    'pulses: for (entity, mut pulse, mut transform, mut velocity, mut sprite, gravity) in pulse_query.iter_mut() {
+    'pulses: for (entity, mut pulse, mut transform, velocity, mut sprite) in pulse_query.iter_mut() {
         // Decay energy over time
         pulse.current_energy -= pulse.decay_rate * dt;
 
@@ -549,8 +652,9 @@ pub fn update_ion_pulses(
             continue;
         }
 
-        // Apply gravity
-        velocity.0 += gravity.0 * dt;
+        // Gravity is already in Velocity -- apply_gravity_to_velocity
+        // integrates it for everything GravityAffected; adding it here too
+        // bent pulses at twice the field.
 
         // Move
         transform.translation.x += velocity.0.x * dt;
@@ -759,6 +863,13 @@ pub fn fire_plasma_system(
                 launch_dir: direction,
                 life: 4.0,
                 prev_pos: weapon_pos,
+                // Our own ship, so check_missile_hits treats the hull it
+                // starts inside as the launcher's, not as an enemy's: with
+                // `None` the player read as foreign and every bolt cooked
+                // off in its own mount. launch_axis stays ZERO -- "never an
+                // obstruction" -- since a bolt aimed at a target has no tube.
+                owner_ship: Some(player_ship),
+                launch_cell: module.grid_position,
                 ..default()
             },
             Velocity(direction * speed),
@@ -876,6 +987,9 @@ pub fn fire_emp_missiles(
                 launch_dir: direction,
                 life: 7.0,
                 prev_pos: weapon_pos,
+                // Same as the plasma bolt: our hull is the launcher's own.
+                owner_ship: Some(player_ship),
+                launch_cell: module.grid_position,
                 ..default()
             },
             EmpWarhead {
@@ -910,22 +1024,46 @@ pub fn emp_detonation(
     owner_parent_query: Query<&ChildOf>,
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
     mut notifications: MessageWriter<ShowNotification>,
+    // What a ship-bound EMP actually reaches first: the bubble, or the hull.
+    ai_ships: Query<
+        (Entity, &Transform, &crate::combat::shields::ShipShield),
+        With<crate::ai_ship::components::AiShip>,
+    >,
+    hulls: Query<(&GlobalTransform, &crate::building::ShipGrid)>,
 ) {
     let player_ship = ship_query.single().ok();
 
     for (missile_entity, missile_transform, emp, missile) in missile_query.iter() {
         let owner_ship = owner_parent_query.get(missile.owner).ok().map(|p| p.parent());
         if !missile.armed { continue; }
+        // Spent this frame: move_missiles already queued its despawn.
+        if missile.life <= 0.0 { continue; }
 
         let missile_pos = missile_transform.translation.truncate();
 
-        // Detonate once close to whatever it's actually guided at.
-        let detonated = missile.target
+        // Detonate on whatever it meets first. Closing to within 40 of the
+        // target's ROOT was the only fuse, and a ship's root sits inside its
+        // own hull behind the shield -- so against a ship the round never
+        // got there, and check_missile_hits used to pop it as a plain
+        // warhead on the way in. Now: a live shield stops it at the bubble
+        // (so a raised shield still buys distance from the burst), a dropped
+        // one lets it reach the plating. The root test stays for creatures.
+        let near_target = missile.target
             .and_then(|t| target_position_query.get(t).ok())
-            .map(|gt| missile_pos.distance(gt.translation().truncate()) < 40.0)
-            .unwrap_or(false);
+            .is_some_and(|gt| missile_pos.distance(gt.translation().truncate()) < 40.0);
+        let hit_ship = ai_ships.iter().any(|(ai_entity, ai_transform, shield)| {
+            if Some(ai_entity) == owner_ship { return false; }
+            let center = shield.world_center(ai_transform);
+            let on_bubble = shield.is_up()
+                && missile_pos.distance(center) < shield.radius
+                && shield.covers_arc(missile_pos - center);
+            on_bubble || hulls.get(ai_entity).is_ok_and(|(gt, grid)| {
+                let here = crate::building::world_to_cell(gt, missile_pos);
+                grid.get(IVec2::new(here.x.round() as i32, here.y.round() as i32)).is_some()
+            })
+        });
 
-        if !detonated { continue; }
+        if !(near_target || hit_ship) { continue; }
 
         // EMP DETONATION!
         // The comment has always said "purple-blue expanding ring"; it was a

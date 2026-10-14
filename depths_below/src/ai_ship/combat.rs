@@ -458,15 +458,19 @@ pub fn ai_distress_system(
 /// Process damage to AI ships — per-module penetration
 pub fn process_ai_ship_damage_system(
     mut damage_events: MessageReader<AiShipDamaged>,
-    mut ai_ships: Query<(&mut AiShipState, &Children), With<AiShip>>,
-    mut hull_query: Query<(&mut HullSegment, &Transform, &OwnedByAiShip), Without<Module>>,
-    mut module_query: Query<(&mut Module, &Transform, &OwnedByAiShip), Without<HullSegment>>,
+    mut ai_ships: Query<(&mut AiShipState, &Children, Option<&AiLoadout>), With<AiShip>>,
+    // GlobalTransform, not Transform: a block's Transform is ship-LOCAL and
+    // `event.position` is world space, so "nearest to the impact" was
+    // measured between two different frames and landed on blocks nowhere
+    // near the shot (and the damage numbers floated up near the origin).
+    mut hull_query: Query<(&mut HullSegment, &GlobalTransform, &OwnedByAiShip), Without<Module>>,
+    mut module_query: Query<(&mut Module, &GlobalTransform, &OwnedByAiShip), Without<HullSegment>>,
     mut destroyed_events: MessageWriter<AiShipDestroyed>,
     ai_ship_query: Query<(&Transform, &AiShipType, Option<&BountyTarget>), With<AiShip>>,
     mut commands: Commands,
 ) {
     for event in damage_events.read() {
-        let Ok((mut state, children)) = ai_ships.get_mut(event.target) else {
+        let Ok((mut state, children, loadout)) = ai_ships.get_mut(event.target) else {
             continue;
         };
 
@@ -487,7 +491,7 @@ pub fn process_ai_ship_damage_system(
         for child in children.iter() {
             if let Ok((_, hull_transform, owned)) = hull_query.get(child) {
                 if owned.root == event.target {
-                    let dist = hull_transform.translation.truncate().distance(impact_pos);
+                    let dist = hull_transform.translation().truncate().distance(impact_pos);
                     hull_hits.push((child, dist));
                 }
             }
@@ -506,13 +510,13 @@ pub fn process_ai_ship_damage_system(
 
                 spawn_floating_damage(
                     &mut commands,
-                    hull_transform.translation.truncate(),
+                    hull_transform.translation().truncate(),
                     damage_to_apply,
                     Color::srgb(1.0, 0.3, 0.3),
                 );
                 spawn_hit_effect(
                     &mut commands,
-                    hull_transform.translation.truncate(),
+                    hull_transform.translation().truncate(),
                     Color::srgb(1.0, 0.5, 0.2),
                     16.0,
                 );
@@ -525,7 +529,7 @@ pub fn process_ai_ship_damage_system(
             for child in children.iter() {
                 if let Ok((_, mod_transform, owned)) = module_query.get(child) {
                     if owned.root == event.target {
-                        let dist = mod_transform.translation.truncate().distance(impact_pos);
+                        let dist = mod_transform.translation().truncate().distance(impact_pos);
                         module_hits.push((child, dist));
                     }
                 }
@@ -547,7 +551,7 @@ pub fn process_ai_ship_damage_system(
 
                     spawn_floating_damage(
                         &mut commands,
-                        mod_transform.translation.truncate(),
+                        mod_transform.translation().truncate(),
                         damage_to_apply,
                         Color::srgb(1.0, 0.6, 0.2),
                     );
@@ -555,7 +559,10 @@ pub fn process_ai_ship_damage_system(
             }
         }
 
-        // Recalculate hull integrity
+        // Recalculate hull integrity -- against the hull the ship was built
+        // with. Summing max_health over the survivors made integrity climb
+        // back up as dead plates were despawned, so a ship stripped to its
+        // last few tiles read as barely scratched and Gutted could not fire.
         let mut total_hull_hp = 0.0_f32;
         let mut max_hull_hp = 0.0_f32;
         for child in children.iter() {
@@ -565,6 +572,9 @@ pub fn process_ai_ship_damage_system(
                     max_hull_hp += hull.max_health;
                 }
             }
+        }
+        if let Some(loadout) = loadout {
+            max_hull_hp = max_hull_hp.max(loadout.hull_max);
         }
         state.hull_integrity = if max_hull_hp > 0.0 {
             total_hull_hp / max_hull_hp
@@ -597,10 +607,11 @@ const CRIPPLE_THRESHOLD: f32 = 0.25;
 /// dangerous here — see tick_reactor_meltdown.
 pub const MELTDOWN_SECONDS: f32 = 8.0;
 
-/// Counts a class of modules on one AI ship as (alive, total). Destroyed
-/// modules keep their entity (they're marked, not despawned), so the totals
-/// are the ship's original loadout without storing anything at spawn.
-fn subsystem_tally(
+/// Counts a class of modules on one AI ship as (alive, total). The total is
+/// only what still EXISTS: a destroyed module is despawned half a second
+/// after it dies (`ship::damage::tick_pending_removal`). Ratios divide by
+/// the spawn-time count instead -- see `surviving_fraction`.
+pub(crate) fn subsystem_tally(
     root: Entity,
     children: &Children,
     module_query: &Query<(&Module, &OwnedByAiShip)>,
@@ -619,12 +630,34 @@ fn subsystem_tally(
     (alive, total)
 }
 
-fn is_weapon_module(module: &Module) -> bool {
-    ModuleCategory::Weapons.module_types().contains(&module.module_type)
+/// Share of a subsystem class still alive, out of what the ship was BUILT
+/// with (`AiLoadout`), not out of what is left of it. Dividing by the live
+/// total read a ship with one gun left of four as fully armed, because the
+/// three dead ones had already been despawned. A ship spawned without a
+/// loadout falls back to the live total; a class it never had reads 0.
+pub(crate) fn surviving_fraction(alive: u32, total_now: u32, original: Option<u32>) -> f32 {
+    let total = original.map_or(total_now, |o| o.max(total_now));
+    if total == 0 {
+        0.0
+    } else {
+        alive as f32 / total as f32
+    }
+}
+
+pub(crate) fn is_weapon_type(module_type: ModuleType) -> bool {
+    ModuleCategory::Weapons.module_types().contains(&module_type)
+}
+
+pub(crate) fn is_engine_type(module_type: ModuleType) -> bool {
+    ModuleCategory::Propulsion.module_types().contains(&module_type)
+}
+
+pub(crate) fn is_weapon_module(module: &Module) -> bool {
+    is_weapon_type(module.module_type)
 }
 
 fn is_engine_module(module: &Module) -> bool {
-    ModuleCategory::Propulsion.module_types().contains(&module.module_type)
+    is_engine_type(module.module_type)
 }
 
 /// A ship is DEFEATED when it can no longer fight, not when its last hull
@@ -639,26 +672,28 @@ fn is_engine_module(module: &Module) -> bool {
 /// the game (wreck.rs scores loot by how intact the hull still is).
 pub fn check_ai_cripple(
     mut ai_ships: Query<
-        (Entity, &Transform, &AiShipType, &Children, &mut AiShipState, Option<&BountyTarget>),
+        (Entity, &Transform, &AiShipType, &Children, &mut AiShipState, Option<&BountyTarget>, Option<&AiLoadout>),
         (With<AiShip>, Without<ReactorMeltdown>),
     >,
     module_query: Query<(&Module, &OwnedByAiShip)>,
     mut destroyed_events: MessageWriter<AiShipDestroyed>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    for (entity, transform, ship_type, children, mut state, bounty) in ai_ships.iter_mut() {
+    for (entity, transform, ship_type, children, mut state, bounty, loadout) in ai_ships.iter_mut() {
         if state.is_destroyed { continue; }
 
         let (guns_alive, guns_total) = subsystem_tally(entity, children, &module_query, is_weapon_module);
         let (engines_alive, engines_total) = subsystem_tally(entity, children, &module_query, is_engine_module);
 
-        // An unarmed hull (The Silence) is toothless by construction; an
-        // engineless one is already adrift. Either way the ratio for a class
-        // it never had must not read as "still fine".
-        let toothless = guns_total == 0
-            || (guns_alive as f32 / guns_total as f32) <= CRIPPLE_THRESHOLD;
-        let immobile = engines_total == 0
-            || (engines_alive as f32 / engines_total as f32) <= CRIPPLE_THRESHOLD;
+        // Against the spawn-time loadout, not the survivors: dead modules are
+        // despawned, so the live total shrank with every loss and the ratio
+        // never fell. An unarmed hull (The Silence) is toothless by
+        // construction and an engineless one already adrift -- a class it
+        // never had reads 0, never "still fine".
+        let toothless = surviving_fraction(guns_alive, guns_total, loadout.map(|l| l.guns))
+            <= CRIPPLE_THRESHOLD;
+        let immobile = surviving_fraction(engines_alive, engines_total, loadout.map(|l| l.engines))
+            <= CRIPPLE_THRESHOLD;
         if !(toothless && immobile) { continue; }
 
         state.is_destroyed = true;
@@ -820,26 +855,37 @@ pub fn ai_chain_reactions(
     // ParamSet because the "what just blew up" query and the "damage the
     // neighbours" query both touch Module — one shared, one mutable.
     mut modules: ParamSet<(
-        Query<(&Module, &GlobalTransform, &OwnedByAiShip), Added<DestroyedModule>>,
+        Query<(&Module, &GlobalTransform, &OwnedByAiShip, Has<Explosive>), Added<DestroyedModule>>,
         Query<(&mut Module, &GlobalTransform, &OwnedByAiShip), Without<HullSegment>>,
     )>,
     mut hull_query: Query<(&mut HullSegment, &GlobalTransform, &OwnedByAiShip), Without<Module>>,
     mut damage_events: MessageWriter<AiShipDamaged>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    let blasts: Vec<(Entity, Vec2, f32)> = modules.p0().iter()
-        .filter_map(|(module, gt, owned)| {
+    let blasts: Vec<(Entity, Vec2, f32, bool)> = modules.p0().iter()
+        .filter_map(|(module, gt, owned, fused)| {
             let blast = match module.module_type {
                 ModuleType::WarheadBay => 90.0,
                 ModuleType::AmmoFeedUnit | ModuleType::AmmoBay => 55.0,
                 ModuleType::FuelTank | ModuleType::FuelProcessor => 40.0,
                 _ => return None,
             };
-            Some((owned.root, gt.translation().truncate(), blast))
+            Some((owned.root, gt.translation().truncate(), blast, fused))
         })
         .collect();
 
-    for (root, pos, blast) in blasts {
+    for (root, pos, blast, fused) in blasts {
+        notifications.write(ShowNotification {
+            message: "Magazine cook-off aboard the target!".into(),
+            notification_type: NotificationType::Success,
+            duration: 2.5,
+        });
+        // A block that carries `Explosive` (ammo bays and fuel tanks do) is
+        // already blowing up through ship::damage::queue_ai_detonation, on
+        // its own fuse with its own fires. Applying this blast as well
+        // cooked every such magazine off twice.
+        if fused { continue; }
+
         for (mut hull, hull_gt, hull_owned) in hull_query.iter_mut() {
             if hull_owned.root != root { continue; }
             if hull_gt.translation().truncate().distance(pos) > COOKOFF_RADIUS { continue; }
@@ -853,11 +899,6 @@ pub fn ai_chain_reactions(
         }
 
         crate::combat::spawn_explosion(&mut commands, &fx, pos, 60.0, Color::srgb(1.0, 0.7, 0.2));
-        notifications.write(ShowNotification {
-            message: "Magazine cook-off aboard the target!".into(),
-            notification_type: NotificationType::Success,
-            duration: 2.5,
-        });
 
         // Bookkeeping only — the damage above is already applied; this makes
         // the ship recompute its hull integrity (and remember it was hit).
@@ -943,6 +984,69 @@ fn angle_proof_round(faction: AiShipType) -> KineticAmmoType {
         SynthesisCollective | CorpseStars | TheSilence => KineticAmmoType::HESH,
         // Gravity does not care what angle you hit at.
         EternalHegemony | Shepherd => KineticAmmoType::Singularity,
+    }
+}
+
+#[cfg(test)]
+mod cripple_tests {
+    use super::*;
+
+    fn module(module_type: ModuleType, health: f32) -> Module {
+        Module {
+            module_type,
+            health,
+            max_health: 100.0,
+            power_consumption: 0.0,
+            power_generation: 0.0,
+            is_active: health > 0.0,
+            grid_position: IVec2::ZERO,
+            size: IVec2::ONE,
+            rotation: Rotation::North,
+        }
+    }
+
+    /// The ratio is out of what was built, not out of what is left.
+    #[test]
+    fn losses_count_against_the_original_loadout() {
+        // One gun left of four; the three dead ones are already despawned,
+        // so the live tally says 1 of 1.
+        assert_eq!(surviving_fraction(1, 1, Some(4)), 0.25);
+        // No loadout recorded: the live total is all there is.
+        assert_eq!(surviving_fraction(1, 2, None), 0.5);
+        // A class the ship never had, or has lost entirely, reads empty.
+        assert_eq!(surviving_fraction(0, 0, Some(0)), 0.0);
+        assert_eq!(surviving_fraction(0, 0, None), 0.0);
+    }
+
+    /// The real system, the way the game leaves it mid-fight: three of four
+    /// guns and both engines shot away and despawned, one gun still alive.
+    /// That ship is beaten and must strike. Before the loadout it read
+    /// "1 of 1 guns" and fought on forever.
+    #[test]
+    fn a_ship_whose_dead_modules_were_despawned_still_strikes() {
+        let mut app = App::new();
+        app.add_message::<AiShipDestroyed>();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, check_ai_cripple);
+
+        let ship = app.world_mut().spawn((
+            AiShip,
+            Transform::default(),
+            AiShipType::RecursiveKingdom,
+            AiShipState::default(),
+            AiLoadout { guns: 4, engines: 2, hull_max: 1000.0 },
+        )).id();
+        app.world_mut().spawn((
+            module(ModuleType::Gatling, 100.0),
+            OwnedByAiShip { root: ship },
+            ChildOf(ship),
+        ));
+
+        app.update();
+        assert!(
+            app.world().get::<AiShipState>(ship).unwrap().is_destroyed,
+            "one gun of four and no engines left, and the ship did not strike"
+        );
     }
 }
 

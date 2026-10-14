@@ -27,7 +27,7 @@ pub struct DetachedSection {
 pub fn check_section_severance(
     mut commands: Commands,
     destroyed_hull: Query<(&HullSegment, &GlobalTransform, &ChildOf), Added<crate::components::HullDestroyed>>,
-    module_query: Query<(Entity, &Module, &GlobalTransform, &ChildOf), Without<DestroyedModule>>,
+    mut module_query: Query<(Entity, &mut Module, &GlobalTransform, &ChildOf), Without<DestroyedModule>>,
     ship_query: Query<(Entity, &Transform, &Velocity), With<Ship>>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
@@ -46,7 +46,7 @@ pub fn check_section_severance(
 
         let ship_center = ship_transform.translation.truncate();
 
-        for (module_entity, module, module_gt, module_parent) in module_query.iter() {
+        for (module_entity, mut module, module_gt, module_parent) in module_query.iter_mut() {
             // Only consider modules that belong to the player's own ship.
             if module_parent.parent() != ship_entity { continue; }
             let module_pos = module_gt.translation().truncate();
@@ -75,9 +75,17 @@ pub fn check_section_severance(
                 let kick = impact_dir * 80.0;
                 let eject_velocity = ship_velocity.0 + kick;
 
-                // Detach the module from the ship
+                // Severed means dead to the ship: nothing aboard it powers,
+                // fires or pushes any more. A shot-off engine stayed active
+                // and kept thrusting the player along for free.
+                module.is_active = false;
+
+                // Detach the module from the ship, IN PLACE. A bare
+                // remove::<ChildOf>() keeps the ship-local Transform, which
+                // as a root is a world position near the origin -- the
+                // section jumped there instead of breaking off where it was.
                 commands.entity(module_entity)
-                    .remove::<ChildOf>()
+                    .remove_parent_in_place()
                     .insert(DetachedSection {
                         has_reactor,
                         has_ammo,
@@ -117,15 +125,17 @@ pub fn move_detached_sections(
     time: Res<Time>,
     mut commands: Commands,
     fx: Res<crate::vfx::effect_textures::EffectTextures>,
-    mut section_query: Query<(Entity, &mut DetachedSection, &mut Transform, &Velocity, &GravityForce)>,
+    mut section_query: Query<(Entity, &mut DetachedSection, &mut Transform, &Velocity)>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     let dt = time.delta_secs();
 
-    for (entity, mut section, mut transform, velocity, gravity) in section_query.iter_mut() {
-        // Move
-        transform.translation.x += (velocity.0.x + gravity.0.x) * dt;
-        transform.translation.y += (velocity.0.y + gravity.0.y) * dt;
+    for (entity, mut section, mut transform, velocity) in section_query.iter_mut() {
+        // Move. Gravity is already in Velocity (apply_gravity_to_velocity
+        // integrates it for everything GravityAffected); adding the raw
+        // acceleration to POSITION here was a second pull in the wrong units.
+        transform.translation.x += velocity.0.x * dt;
+        transform.translation.y += velocity.0.y * dt;
 
         // Tumble
         transform.rotation *= Quat::from_rotation_z(1.5 * dt);

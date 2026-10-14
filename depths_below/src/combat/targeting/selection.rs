@@ -173,6 +173,8 @@ pub fn draw_target_bracket(
     existing_brackets: Query<Entity, With<TargetBracket>>,
     transform_query: Query<&Transform>,
     creature_query: Query<&Creature>,
+    shield_query: Query<&crate::combat::shields::ShipShield>,
+    camera: Query<&Projection, With<crate::camera::MainCamera>>,
 ) {
     // Despawn old brackets
     for entity in existing_brackets.iter() {
@@ -183,7 +185,7 @@ pub fn draw_target_bracket(
     let Ok(transform) = transform_query.get(target) else {
         return;
     };
-    let pos = transform.translation.truncate();
+    let mut pos = transform.translation.truncate();
 
     // Get target size for bracket
     let size = if let Ok(creature) = creature_query.get(target) {
@@ -192,12 +194,24 @@ pub fn draw_target_bracket(
             CreatureType::Stalker => 60.0,
             _ => 30.0,
         }
+    } else if let Ok(shield) = shield_query.get(target) {
+        // A ship is framed by its real extent. A fixed 80-unit box around
+        // the ROOT -- which often sits at one end of the layout -- bracketed
+        // a corner of a battleship and missed the hull entirely. The bubble
+        // is fitted to the live blocks (shields::refresh_shield_extents).
+        pos = shield.world_center(transform);
+        shield.radius * 2.0
     } else {
         80.0 // Ship default
     };
 
     let bracket_size = size + 20.0;
-    let thickness = 2.0;
+    // Stroke keeps its designed on-screen weight at any zoom; at the
+    // framing zoom a 2-unit line is a fraction of a pixel.
+    let thickness = 2.0 * match camera.single() {
+        Ok(Projection::Orthographic(o)) => crate::camera::label_scale(o.scale),
+        _ => 1.0,
+    };
     let arm_length = bracket_size * 0.3;
 
     // Draw 4 corner brackets

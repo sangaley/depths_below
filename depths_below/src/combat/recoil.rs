@@ -60,22 +60,37 @@ pub fn apply_weapon_recoil(
     recoil.torque = 0.0;
 }
 
+/// How much of a launch's kick the player's Recoil Absorbers leave.
+///
+/// Counted on the PLAYER's ship only. Unscoped, every enemy absorber in the
+/// area softened your guns' recoil too.
+fn absorber_reduction(
+    absorbers: &Query<(&Module, &ChildOf), Without<DestroyedModule>>,
+    player_ship: Entity,
+) -> f32 {
+    let count = absorbers.iter()
+        .filter(|(m, parent)| {
+            parent.parent() == player_ship
+                && m.module_type == ModuleType::RecoilAbsorber
+                && m.is_active
+        })
+        .count();
+    1.0 - (count as f32 * 0.25).min(0.75) // Max 75% reduction
+}
+
 /// System: calculate recoil when kinetic projectiles are spawned
 pub fn accumulate_projectile_recoil(
     new_projectiles: Query<(&Projectile, &Velocity, &Transform), Added<Projectile>>,
     _weapon_query: Query<(&Module, &GlobalTransform), With<Weapon>>,
-    ship_query: Query<&Transform, With<Ship>>,
-    recoil_absorber_query: Query<&Module, Without<DestroyedModule>>,
+    ship_query: Query<(Entity, &Transform), With<Ship>>,
+    recoil_absorber_query: Query<(&Module, &ChildOf), Without<DestroyedModule>>,
     mut recoil: ResMut<RecoilAccumulator>,
 ) {
-    let Ok(ship_transform) = ship_query.single() else { return };
+    let Ok((player_ship, ship_transform)) = ship_query.single() else { return };
     let ship_center = ship_transform.translation.truncate();
 
     // Check for recoil absorbers (reduce recoil)
-    let absorber_count = recoil_absorber_query.iter()
-        .filter(|m| m.module_type == ModuleType::RecoilAbsorber && m.is_active)
-        .count();
-    let absorber_reduction = 1.0 - (absorber_count as f32 * 0.25).min(0.75); // Max 75% reduction
+    let absorber_reduction = absorber_reduction(&recoil_absorber_query, player_ship);
 
     for (projectile, proj_velocity, proj_transform) in new_projectiles.iter() {
         // Projectile momentum = damage as proxy for mass × velocity
@@ -105,14 +120,16 @@ pub fn accumulate_projectile_recoil(
 pub fn accumulate_missile_recoil(
     new_missiles: Query<(&MissileProjectile, &Velocity), Added<MissileProjectile>>,
     mut recoil: ResMut<RecoilAccumulator>,
-    recoil_absorber_query: Query<&Module, Without<DestroyedModule>>,
+    recoil_absorber_query: Query<(&Module, &ChildOf), Without<DestroyedModule>>,
+    ship_query: Query<Entity, With<Ship>>,
 ) {
-    let absorber_count = recoil_absorber_query.iter()
-        .filter(|m| m.module_type == ModuleType::RecoilAbsorber && m.is_active)
-        .count();
-    let absorber_reduction = 1.0 - (absorber_count as f32 * 0.25).min(0.75);
+    let Ok(player_ship) = ship_query.single() else { return };
+    let absorber_reduction = absorber_reduction(&recoil_absorber_query, player_ship);
 
     for (missile, _missile_velocity) in new_missiles.iter() {
+        // Our launches only. AI ships fire real missiles through the same
+        // component now, and every one of them used to kick the PLAYER.
+        if missile.owner_ship != Some(player_ship) { continue; }
         // Missile launch recoil is smaller than kinetic (slow launch).
         //
         // Off the EJECT charge and the tube's heading, not off the missile's

@@ -79,6 +79,32 @@ pub fn segment_closest(a: Vec2, b: Vec2, p: Vec2) -> (f32, f32) {
     (a.lerp(b, t).distance(p), t)
 }
 
+/// Where a round's step `a -> b` meets a shield bubble, for the shield test.
+///
+/// A round that crosses the shell this step is judged at the point it
+/// crossed. One already inside at the start of the step (spawned inside, or
+/// let through an uncovered arc) is judged where it ends, as before. `None`
+/// when the step never touches the bubble.
+pub fn shield_contact(a: Vec2, b: Vec2, center: Vec2, radius: f32) -> Option<Vec2> {
+    if a.distance(center) < radius {
+        return (b.distance(center) < radius).then_some(b);
+    }
+    let d = b - a;
+    let len_sq = d.length_squared();
+    if len_sq < 1e-6 {
+        return None;
+    }
+    let f = a - center;
+    let half_b = f.dot(d);
+    let c = f.length_squared() - radius * radius;
+    let disc = half_b * half_b - len_sq * c;
+    if disc < 0.0 {
+        return None;
+    }
+    let s = (-half_b - disc.sqrt()) / len_sq;
+    (0.0..=1.0).contains(&s).then(|| a + d * s)
+}
+
 /// A block set on fire by incendiary rounds — ticks damage until it burns out.
 #[derive(Component)]
 pub struct BlockBurning {
@@ -231,7 +257,7 @@ pub fn fire_weapons_system(
     ), Without<DestroyedModule>>,
     target_transform_query: Query<&Transform, Without<Ship>>,
     target_velocity_query: Query<&Velocity, Without<Ship>>,
-    targeting_computer_query: Query<&Module, Without<DestroyedModule>>,
+    targeting_computer_query: Query<(&Module, &ChildOf), Without<DestroyedModule>>,
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
     mut commands: Commands,
     debug_tuning: Res<crate::debug::DebugTuning>,
@@ -259,9 +285,12 @@ pub fn fire_weapons_system(
         .map(|dir| ship_transform.translation.truncate() + dir * 2000.0)
         .or(cursor_world);
 
-    // Build module position list for adjacency checks
+    // Build module position list for adjacency checks -- OUR modules only.
+    // Grid cells are ship-local, so an enemy's Targeting Computer at the
+    // local cell beside one of our guns used to count as adjacent to it.
     let all_modules: Vec<(IVec2, ModuleType, bool)> = targeting_computer_query.iter()
-        .map(|m| (m.grid_position, m.module_type, m.is_active))
+        .filter(|(_, parent)| parent.parent() == player_ship)
+        .map(|(m, _)| (m.grid_position, m.module_type, m.is_active))
         .collect();
 
     for (entity, module, has_station, staffing, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, customization, tuning, selected_ammo, temp, auto_aim) in weapon_query.iter_mut() {
@@ -556,17 +585,23 @@ pub fn fire_weapons_system(
 // PROJECTILE MOVEMENT — gravity-affected, lifetime-limited
 // ============================================================================
 
-/// Move projectiles, apply gravity, tick lifetime, despawn expired
+/// Move projectiles, tick lifetime, despawn expired.
+///
+/// No gravity here: celestial::gravity::apply_gravity_to_velocity already
+/// integrates GravityForce into Velocity for everything GravityAffected, so
+/// the half-strength term this used to add put rounds at 1.5x the field --
+/// the opposite of the "resist gravity" it was written for. That system
+/// deliberately pulls every body at the same rate. And not requiring
+/// GravityForce is what lets point-defence rounds, which carry none, move
+/// and expire at all: they were sitting where they spawned forever.
 pub fn move_projectiles(
     time: Res<Time>,
     mut commands: Commands,
-    mut proj_query: Query<(Entity, &mut Projectile, &mut Transform, &mut Velocity, &GravityForce)>,
+    mut proj_query: Query<(Entity, &mut Projectile, &mut Transform, &Velocity)>,
 ) {
     let dt = time.delta_secs();
 
-    for (entity, mut proj, mut transform, mut velocity, gravity) in proj_query.iter_mut() {
-        // Apply gravity to velocity
-        velocity.0 += gravity.0 * dt * 0.5; // Projectiles resist gravity more than ships
+    for (entity, mut proj, mut transform, velocity) in proj_query.iter_mut() {
 
         // Remember where the round was before this step. check_projectile_hits
         // runs immediately after this system and sweeps prev_pos -> current,
@@ -662,15 +697,23 @@ pub fn check_projectile_hits(
             if Some(ai_entity) == owner_ship { continue; }
             // Bubble is centered on the blocks' centroid, not the root
             let center = shield.world_center(ai_transform);
-            let dist_to_ship = proj_pos.distance(center);
+            // Distance from the whole STEP, not its end point. A railgun
+            // covers ~150-225 units a frame, so its end point can already be
+            // past the ship's centre (or clear of a thin arm) on the frame it
+            // went through -- and the end-point test missed it.
+            let (dist_to_ship, _) = segment_closest(proj.prev_pos, proj_pos, center);
 
             // Directional shield: only the facing arc intercepts; flank/rear
             // slips past — and so does a phase slug, which is out of phase
-            // with the matter the bubble is built to stop.
+            // with the matter the bubble is built to stop. Judged where the
+            // round crossed the bubble this step: judged at the end point, a
+            // fast round that finished behind the centre read as a hit from
+            // the far side, the arc test failed, and it went through.
             let phased = proj.ammo.is_some_and(|a| a.ignores_shields());
-            if !phased && shield.is_up() && dist_to_ship < shield.radius && shield.covers_arc(proj_pos - center) {
+            let contact = shield_contact(proj.prev_pos, proj_pos, center, shield.radius);
+            if let Some(at) = contact.filter(|at| !phased && shield.is_up() && shield.covers_arc(*at - center)) {
                 shield.absorb(proj.damage);
-                spawn_hit_effect(&mut commands, proj_pos, Color::srgb(0.5, 0.8, 1.0), 14.0);
+                spawn_hit_effect(&mut commands, at, Color::srgb(0.5, 0.8, 1.0), 14.0);
                 commands.entity(proj_entity).despawn();
                 continue 'projectiles;
             }
@@ -1306,6 +1349,35 @@ mod sweep_tests {
         let (dist, t) = segment_closest(p, p, Vec2::new(10.0, 50.0));
         assert!((dist - 30.0).abs() < 1e-4);
         assert_eq!(t, 0.0);
+    }
+
+    /// The reported tunnelling case: a railgun step that starts outside the
+    /// bubble and ENDS past the centre. The end point sits on the far side,
+    /// outside a front-facing arc, so the old end-point test let it through;
+    /// the crossing point is on the near side, inside the arc.
+    #[test]
+    fn a_fast_round_meets_the_shield_where_it_crossed() {
+        let center = Vec2::ZERO;
+        let radius = 200.0;
+        let (prev, cur) = (Vec2::new(-210.0, 0.0), Vec2::new(15.0, 0.0));
+        let at = shield_contact(prev, cur, center, radius).expect("the step crossed the bubble");
+        assert!((at - Vec2::new(-200.0, 0.0)).length() < 1e-3, "entered at {at:?}");
+        // A shield lit toward -x covers the entry, not the end point.
+        let facing = Vec2::NEG_X;
+        assert!(facing.dot((at - center).normalize()) > 0.9);
+        assert!(facing.dot((cur - center).normalize()) < 0.0);
+    }
+
+    /// A step that never reaches the bubble isn't in it, and one that started
+    /// inside is judged where it finishes, as it always was.
+    #[test]
+    fn shield_contact_misses_and_insides() {
+        let r = 100.0;
+        assert_eq!(shield_contact(Vec2::new(-300.0, 150.0), Vec2::new(300.0, 150.0), Vec2::ZERO, r), None);
+        assert_eq!(shield_contact(Vec2::new(-300.0, 0.0), Vec2::new(-150.0, 0.0), Vec2::ZERO, r), None);
+        let inside_end = Vec2::new(10.0, 0.0);
+        assert_eq!(shield_contact(Vec2::new(-10.0, 0.0), inside_end, Vec2::ZERO, r), Some(inside_end));
+        assert_eq!(shield_contact(Vec2::new(-10.0, 0.0), Vec2::new(300.0, 0.0), Vec2::ZERO, r), None);
     }
 
     /// Closest approach is clamped to the segment: a block behind the muzzle or

@@ -119,6 +119,24 @@ impl Default for AiShipState {
     }
 }
 
+/// What an AI ship was BUILT with, counted once at spawn.
+///
+/// Every "how much of X is left" ratio needs the original total, and the
+/// ship cannot be asked for it later: a destroyed block is despawned half a
+/// second after it dies (`ship::damage::tick_pending_removal`), so counting
+/// children only ever counts survivors. A ship that had lost three of four
+/// guns read one alive of one -- 100% -- and never crippled, never withdrew,
+/// and its hull integrity crept back up as dead plates left the tally.
+#[derive(Component, Clone, Copy, Debug, Default, PartialEq)]
+pub struct AiLoadout {
+    /// Weapons-category modules (`ai_ship::combat::is_weapon_module`).
+    pub guns: u32,
+    /// Propulsion-category modules.
+    pub engines: u32,
+    /// Sum of every hull segment's max health.
+    pub hull_max: f32,
+}
+
 /// Current high-level behavior of the AI ship
 #[derive(Component, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AiShipBehavior {

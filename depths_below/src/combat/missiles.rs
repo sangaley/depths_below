@@ -565,13 +565,13 @@ pub fn spawn_missile_trails(
 pub fn move_missiles(
     time: Res<Time>,
     mut commands: Commands,
-    mut missile_query: Query<(Entity, &mut MissileProjectile, &mut Transform, &mut Velocity, &GravityForce)>,
+    mut missile_query: Query<(Entity, &mut MissileProjectile, &mut Transform, &mut Velocity)>,
     target_query: Query<(&Transform, Option<&Velocity>), Without<MissileProjectile>>,
     hulls: Query<(&GlobalTransform, &crate::building::ShipGrid)>,
 ) {
     let dt = time.delta_secs();
 
-    for (entity, mut missile, mut transform, mut velocity, gravity) in missile_query.iter_mut() {
+    for (entity, mut missile, mut transform, mut velocity) in missile_query.iter_mut() {
         let pos = transform.translation.truncate();
         missile.prev_pos = pos;
 
@@ -676,7 +676,10 @@ pub fn move_missiles(
             }
         }
 
-        velocity.0 += gravity.0 * dt;
+        // No gravity term here: celestial::gravity::apply_gravity_to_velocity
+        // already integrates GravityForce into Velocity for everything
+        // GravityAffected. Adding it again pulled missiles down at twice the
+        // field.
 
         transform.translation.x += velocity.0.x * dt;
         transform.translation.y += velocity.0.y * dt;
@@ -774,7 +777,14 @@ fn blast_damage(warhead: f32, d: f32, radius: f32, block: &crate::building::Bloc
 pub fn check_missile_hits(
     mut commands: Commands,
     fx: Res<crate::vfx::effect_textures::EffectTextures>,
-    missile_query: Query<(Entity, &MissileProjectile, &Transform)>,
+    // Without<EmpWarhead>: an EMP round is a delivery vehicle, and its fuse
+    // lives in energy_weapons::emp_detonation. Resolved here it went off as a
+    // 5-damage plain warhead the moment it reached the target's bubble, so
+    // the disable never happened at all.
+    missile_query: Query<
+        (Entity, &MissileProjectile, &Transform),
+        Without<super::energy_weapons::EmpWarhead>,
+    >,
     mut creature_query: Query<(&Transform, &mut Creature), Without<Ship>>,
     creature_grid: Res<crate::spatial::CreatureGrid>,
     mut ai_ship_query: Query<
@@ -792,7 +802,13 @@ pub fn check_missile_hits(
     mut notifications: MessageWriter<ShowNotification>,
     parent_hulls: Query<(&GlobalTransform, &crate::building::ShipGrid)>,
     mut ship_damage_events: MessageWriter<crate::events::ShipDamaged>,
-    player_query: Query<Entity, With<Ship>>,
+    // The player's shield rides along here (a 16th parameter would hit
+    // Bevy's ceiling). Without<AiShip> is what lets this &mut ShipShield sit
+    // beside ai_ship_query's.
+    mut player_query: Query<
+        (Entity, &Transform, Option<&mut crate::combat::shields::ShipShield>),
+        (With<Ship>, Without<crate::ai_ship::components::AiShip>),
+    >,
 ) {
     'missiles: for (missile_entity, missile, missile_transform) in missile_query.iter() {
         // === HULLS ===
@@ -807,11 +823,33 @@ pub fn check_missile_hits(
         //
         // Checked BEFORE arming: the whole point is the ones that never get
         // clear of the tube.
-        let player_ship = player_query.single().ok();
+        let player_ship = player_query.single().ok().map(|(e, _, _)| e);
         let missile_pos_now = missile_transform.translation.truncate();
         for ship in [missile.owner_ship, player_ship].into_iter().flatten() {
             let Ok((ship_gt, grid)) = parent_hulls.get(ship) else { continue };
             let own = missile.owner_ship == Some(ship);
+
+            // An enemy warhead meets your shield before your hull, the same
+            // way an enemy round does (projectiles::projectile_collision).
+            // The bubble stands well clear of the plating, so this is tested
+            // before the cell lookup below -- which only ever fires once the
+            // missile is already inside a block. Without it an enemy missile
+            // flew straight through a live shield into the hull.
+            if !own && Some(ship) == player_ship {
+                if let Ok((_, ship_tf, Some(mut shield))) = player_query.single_mut() {
+                    let center = shield.world_center(ship_tf);
+                    if shield.is_up()
+                        && missile_pos_now.distance(center) < shield.radius
+                        && shield.covers_arc(missile_pos_now - center)
+                    {
+                        shield.absorb(missile.damage);
+                        spawn_explosion(&mut commands, &fx, missile_pos_now, missile.blast_radius * 0.7, Color::srgb(0.5, 0.8, 1.0));
+                        commands.entity(missile_entity).despawn();
+                        continue 'missiles;
+                    }
+                }
+            }
+
             let here = crate::building::world_to_cell(ship_gt, missile_pos_now);
             let cell = IVec2::new(here.x.round() as i32, here.y.round() as i32);
             let Some(hit) = grid.get(cell) else { continue };
@@ -854,8 +892,14 @@ pub fn check_missile_hits(
             }
 
             spawn_explosion(&mut commands, &fx, missile_pos_now, missile.blast_radius, Color::srgb(1.0, 0.45, 0.1));
-            if let Ok((mut module, _)) = ai_module_query.get_mut(hit) {
-                module.health = (module.health - missile.damage).max(0.0);
+            // Own cook-off only. An ENEMY warhead's damage goes through the
+            // ShipDamaged event below, which process_ship_damage applies;
+            // hitting the module here as well charged every enemy missile
+            // that landed on one of your modules twice.
+            if own {
+                if let Ok((mut module, _)) = ai_module_query.get_mut(hit) {
+                    module.health = (module.health - missile.damage).max(0.0);
+                }
             }
 
             if Some(ship) == player_ship {
@@ -865,8 +909,9 @@ pub fn check_missile_hits(
                 ship_damage_events.write(crate::events::ShipDamaged {
                     source: crate::events::DamageSource::Explosion,
                     // Real amount when it is an ENEMY warhead: the player's
-                    // damage pipeline applies it. Zero for our own cook-off,
-                    // which was already applied to the block above.
+                    // damage pipeline applies it, and nothing else does. Zero
+                    // for our own cook-off, which was applied to the block
+                    // above.
                     amount: if own { 0.0 } else { missile.damage },
                     position: Some(missile_pos_now),
                     direction: Some(from),
@@ -1308,6 +1353,90 @@ mod missile_hits_blocks_tests {
             (IVec2::new(6, 0), HullMaterial::Steel),
         ]);
         assert_eq!(health(&app, ids[1]), 100.0, "a block six cells away took damage");
+    }
+
+    /// The player's side of the same function: an enemy warhead sitting on
+    /// one of the player's modules, with the player's shield up or down.
+    /// Returns (app, module, ship).
+    fn enemy_missile_on_player(shield_up: bool) -> (App, Entity, Entity) {
+        let mut app = App::new();
+        app.insert_resource(crate::vfx::effect_textures::EffectTextures::empty());
+        app.init_resource::<crate::spatial::CreatureGrid>();
+        app.add_message::<crate::events::AiShipDamaged>();
+        app.add_message::<crate::events::ShipDamaged>();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, check_missile_hits);
+
+        let mut shield = shield_down();
+        if shield_up {
+            shield.current = 100.0;
+            shield.max = 100.0;
+        }
+        let ship = app.world_mut()
+            .spawn((Ship, Transform::default(), GlobalTransform::default(), shield))
+            .id();
+        let at = crate::building::grid_to_local(IVec2::ZERO);
+        let module = app.world_mut().spawn((
+            Module {
+                module_type: ModuleType::SmallReactor,
+                health: 100.0,
+                max_health: 100.0,
+                power_consumption: 0.0,
+                power_generation: 0.0,
+                is_active: true,
+                grid_position: IVec2::ZERO,
+                size: IVec2::ONE,
+                rotation: Rotation::North,
+            },
+            Transform::from_translation(at.extend(0.0)),
+            GlobalTransform::from_translation(at.extend(0.0)),
+            ChildOf(ship),
+        )).id();
+        app.world_mut().entity_mut(ship).insert(ShipGrid { cells: HashMap::from([(IVec2::ZERO, module)]) });
+
+        // Launched by an enemy ship, so the player's hull is foreign to it.
+        let enemy = app.world_mut().spawn_empty().id();
+        let tube = app.world_mut().spawn(ChildOf(enemy)).id();
+        app.world_mut().spawn((
+            MissileProjectile {
+                damage: 75.0,
+                armed: true,
+                owner: tube,
+                prev_pos: at + Vec2::new(0.0, 40.0),
+                owner_ship: Some(enemy),
+                ..default()
+            },
+            Transform::from_translation(at.extend(0.0)),
+        ));
+
+        app.update();
+        (app, module, ship)
+    }
+
+    fn ship_damage_written(app: &App) -> usize {
+        app.world().resource::<bevy::ecs::message::Messages<crate::events::ShipDamaged>>().len()
+    }
+
+    /// A raised shield stops an enemy missile, exactly as it stops an enemy
+    /// round. It used to be ignored: the warhead flew through the bubble.
+    #[test]
+    fn the_players_shield_stops_an_enemy_missile() {
+        let (app, module, ship) = enemy_missile_on_player(true);
+        assert_eq!(ship_damage_written(&app), 0, "the hull was hit through a live shield");
+        assert_eq!(app.world().get::<Module>(module).unwrap().health, 100.0);
+        assert!(app.world().get::<ShipShield>(ship).unwrap().current < 100.0, "the shield took nothing");
+    }
+
+    /// Shield down: ONE path applies the damage. The module was being hit
+    /// directly here and then again by process_ship_damage off the event.
+    #[test]
+    fn an_enemy_missile_is_charged_once() {
+        let (app, module, _) = enemy_missile_on_player(false);
+        assert_eq!(ship_damage_written(&app), 1, "the impact must reach the damage pipeline");
+        assert_eq!(
+            app.world().get::<Module>(module).unwrap().health, 100.0,
+            "the module was damaged here as well as through ShipDamaged"
+        );
     }
 
     /// Armour still matters. The heaviest plating should survive a hit that

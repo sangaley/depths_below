@@ -44,6 +44,7 @@ pub fn ai_brain_system(
         &mut AiShipDecisionTimer,
         &mut AiShipTarget,
         &Children,
+        Option<&AiLoadout>,
     )>,
     player_ship: Query<(Entity, &Transform, &Children), With<Ship>>,
     player_weapon_query: Query<(&Weapon, &Module), Without<OwnedByAiShip>>,
@@ -53,6 +54,9 @@ pub fn ai_brain_system(
     creature_grid: Res<CreatureGrid>,
     // Ships riding out a reactor breach — see the BERSERK arm below.
     melting_down: Query<Entity, With<ReactorMeltdown>>,
+    // Every module class, for guns_left — the same tally check_ai_cripple
+    // runs, so withdrawing and striking colours read one count.
+    module_query: Query<(&Module, &OwnedByAiShip)>,
 ) {
     // --- Pre-pass: snapshot every living ship's position + "threat value"
     // (block count + 2x active weapon damage — cheap proxies for size and
@@ -64,7 +68,7 @@ pub fn ai_brain_system(
     }
 
     let mut ai_snapshot: Vec<(Entity, Vec2, f32)> = Vec::new();
-    for (entity, transform, _, state, _, _, _, _, children) in ai_ships.iter() {
+    for (entity, transform, _, state, _, _, _, _, children, _) in ai_ships.iter() {
         if state.is_destroyed { continue; }
         let weapon_dmg: f32 = children.iter()
             .filter_map(|c| weapon_query.get(c).ok())
@@ -83,7 +87,7 @@ pub fn ai_brain_system(
         (e, t.translation.truncate(), threat_value(children, weapon_dmg))
     });
 
-    for (entity, transform, ship_type, mut state, mut behavior, mut nav, mut timer, mut ai_target, children) in ai_ships.iter_mut() {
+    for (entity, transform, ship_type, mut state, mut behavior, mut nav, mut timer, mut ai_target, children, loadout) in ai_ships.iter_mut() {
         timer.timer.tick(time.delta());
         if !timer.timer.just_finished() {
             continue;
@@ -133,15 +137,16 @@ pub fn ai_brain_system(
         // disarmed doesn't heroically hold station waiting to be finished —
         // it runs, which is what keeps a won fight from turning into two
         // minutes of chasing a toothless hull around. Catch it or let it go.
+        //
+        // Out of the guns it was BUILT with (AiLoadout): dead modules are
+        // despawned, so counting the survivors read a ship down to its last
+        // gun as fully armed and the withdraw below never tripped. No guns
+        // at all is 0, not "all of them".
         let guns_left = {
-            let mut alive = 0.0_f32;
-            let mut total = 0.0_f32;
-            for child in children.iter() {
-                let Ok((_, module, _)) = weapon_query.get(child) else { continue };
-                total += 1.0;
-                if module.health > 0.0 { alive += 1.0; }
-            }
-            if total > 0.0 { alive / total } else { 1.0 }
+            let (alive, total) = super::combat::subsystem_tally(
+                entity, children, &module_query, super::combat::is_weapon_module,
+            );
+            super::combat::surviving_fraction(alive, total, loadout.map(|l| l.guns))
         };
 
         // Perception

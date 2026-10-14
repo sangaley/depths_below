@@ -423,9 +423,11 @@ pub fn process_detonations(
     fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut commands: Commands,
     time: Res<Time>,
-    mut det_query: Query<(Entity, &mut PendingDetonation)>,
+    // The ship it belongs to and where it is: grid cells are ship-LOCAL, so
+    // the blast can only mean anything on the ship that owns the cell.
+    mut det_query: Query<(Entity, &mut PendingDetonation, Option<&ChildOf>, Option<&GlobalTransform>)>,
     mut module_query: Query<(Entity, &mut Module), Without<DestroyedModule>>,
-    mut hull_query: Query<(Entity, &mut HullSegment), Without<HullDestroyed>>,
+    mut hull_query: Query<(Entity, &mut HullSegment, &ChildOf), Without<HullDestroyed>>,
     occupancy: Res<GridOccupancy>,
     mut explosion_events: MessageWriter<ModuleExploded>,
     mut fire_events: MessageWriter<FireStarted>,
@@ -436,9 +438,9 @@ pub fn process_detonations(
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     // Collect finished detonations first to avoid borrow issues
-    let mut finished: Vec<(Entity, PendingDetonation)> = Vec::new();
+    let mut finished: Vec<(Entity, PendingDetonation, Option<Entity>, Option<Vec2>)> = Vec::new();
 
-    for (entity, mut det) in det_query.iter_mut() {
+    for (entity, mut det, parent, gt) in det_query.iter_mut() {
         det.timer.tick(time.delta());
         if det.timer.is_finished() {
             finished.push((entity, PendingDetonation {
@@ -447,11 +449,11 @@ pub fn process_detonations(
                 blast_damage: det.blast_damage,
                 explosive_type: det.explosive_type,
                 grid_position: det.grid_position,
-            }));
+            }, parent.map(|p| p.parent()), gt.map(|g| g.translation().truncate())));
         }
     }
 
-    for (det_entity, det) in finished {
+    for (det_entity, det, ship, world_pos) in finished {
         // Remove the PendingDetonation component
         commands.entity(det_entity).remove::<PendingDetonation>();
 
@@ -482,8 +484,12 @@ pub fn process_detonations(
                     }
                 }
 
-                // Try to damage hull at this position
-                for (hull_entity, mut hull) in hull_query.iter_mut() {
+                // Try to damage hull at this position -- on THIS ship. Matched
+                // on grid_position alone, the blast also hit every AI ship's
+                // plate that happened to share the local cell, wherever in
+                // the world that ship was.
+                for (hull_entity, mut hull, parent) in hull_query.iter_mut() {
+                    if Some(parent.parent()) != ship { continue; }
                     if hull.grid_position == target_pos {
                         hull.health = (hull.health - damage).max(0.0);
 
@@ -543,10 +549,14 @@ pub fn process_detonations(
         // second, sized blast_radius (in CELLS) x 66 -- up to ~264 units of
         // solid rectangle. blast_radius is cells, so x66 converts to world;
         // /2.2 because spawn_explosion's fireball grows to radius * 2.2.
-        let world_pos = Vec2::new(
+        //
+        // At the module's WORLD position. The grid cell converted to units is
+        // ship-local, so the blast used to draw near the world origin rather
+        // than on the ship that was exploding.
+        let world_pos = world_pos.unwrap_or(Vec2::new(
             det.grid_position.x as f32 * 66.0,
             det.grid_position.y as f32 * 66.0 - 33.0,
-        );
+        ));
         crate::combat::spawn_explosion(
             &mut commands,
             &fx,

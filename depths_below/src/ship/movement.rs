@@ -86,14 +86,19 @@ pub fn ship_movement(
     // ships' staffed engines add thrust to the PLAYER's own ship the moment
     // any AI ship has crew (same class of leak the projectile-ownership and
     // staffing-HUD work already had to guard against elsewhere).
-    engine_query: Query<(&Engine, &Module, Option<&CalculatedStats>, Option<&ModuleEfficiency>), Without<crate::ai_ship::components::OwnedByAiShip>>,
-    mut ship_query: Query<(&mut Transform, &mut Velocity, &mut ShipPhysics), With<Ship>>,
+    //
+    // ChildOf as well: a shot-off engine is no longer an AI block but is no
+    // longer ours either. Without the parent check a severed engine kept
+    // pushing the player from wherever it had drifted to, for free (as
+    // update_fuel_consumption already knew: it never billed for it).
+    engine_query: Query<(&Engine, &Module, Option<&CalculatedStats>, Option<&ModuleEfficiency>, &ChildOf), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    mut ship_query: Query<(Entity, &mut Transform, &mut Velocity, &mut ShipPhysics), With<Ship>>,
     windows_query: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::MainCamera>>,
     debug_tuning: Res<crate::debug::DebugTuning>,
     power_channels: Res<crate::resources::PowerChannels>,
 ) {
-    let Ok((mut transform, mut velocity, mut physics)) = ship_query.single_mut() else {
+    let Ok((player_ship, mut transform, mut velocity, mut physics)) = ship_query.single_mut() else {
         return;
     };
 
@@ -106,8 +111,8 @@ pub fn ship_movement(
     // Calculate total thrust from active engines
     let total_thrust: f32 = engine_query
         .iter()
-        .filter(|(_, module, _, _)| module.is_active)
-        .map(|(engine, module, calculated_stats, eff)| {
+        .filter(|(_, module, _, _, parent)| module.is_active && parent.parent() == player_ship)
+        .map(|(engine, module, calculated_stats, eff, _)| {
             let efficiency = effective_efficiency(module, eff);
             get_engine_thrust(calculated_stats, engine) * efficiency
         })

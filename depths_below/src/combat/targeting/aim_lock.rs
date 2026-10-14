@@ -240,27 +240,37 @@ pub fn draw_aim_lock(
         With<Weapon>,
     >,
     player_root: Query<Entity, With<Ship>>,
+    camera: Query<&Projection, With<crate::camera::MainCamera>>,
 ) {
     for entity in existing.iter() {
         commands.entity(entity).despawn();
     }
     let Some(point) = lock.aim_point() else { return };
 
+    // The whole reticle keeps the on-screen size it was drawn for at the old
+    // fixed zoom. These are world units, and the camera now frames the ship
+    // out to ~5.8x: a 2-unit stroke was a third of a pixel and the lock
+    // simply wasn't visible. Same rule as ZoomInvariantText labels.
+    let s = match camera.single() {
+        Ok(Projection::Orthographic(o)) => crate::camera::label_scale(o.scale),
+        _ => 1.0,
+    };
+
     // Four corner ticks around the block.
-    const HALF: f32 = 22.0;
-    const TICK: f32 = 9.0;
-    const THICK: f32 = 2.0;
+    let half = 22.0 * s;
+    let tick = 9.0 * s;
+    let thick = 2.0 * s;
     let color = Color::srgb(1.0, 0.35, 0.3);
     for (sx, sy) in [(-1.0, 1.0), (1.0, 1.0), (-1.0, -1.0), (1.0, -1.0)] {
-        let corner = point + Vec2::new(sx * HALF, sy * HALF);
+        let corner = point + Vec2::new(sx * half, sy * half);
         commands.spawn((
-            Sprite { color, custom_size: Some(Vec2::new(TICK, THICK)), ..default() },
-            Transform::from_xyz(corner.x - sx * TICK * 0.5, corner.y, 6.0),
+            Sprite { color, custom_size: Some(Vec2::new(tick, thick)), ..default() },
+            Transform::from_xyz(corner.x - sx * tick * 0.5, corner.y, 6.0),
             AimLockMarker,
         ));
         commands.spawn((
-            Sprite { color, custom_size: Some(Vec2::new(THICK, TICK)), ..default() },
-            Transform::from_xyz(corner.x, corner.y - sy * TICK * 0.5, 6.0),
+            Sprite { color, custom_size: Some(Vec2::new(thick, tick)), ..default() },
+            Transform::from_xyz(corner.x, corner.y - sy * tick * 0.5, 6.0),
             AimLockMarker,
         ));
     }
@@ -277,15 +287,15 @@ pub fn draw_aim_lock(
         });
     let Some(frac) = frac else { return };
 
-    const BAR_W: f32 = 44.0;
-    const BAR_H: f32 = 3.0;
-    let bar_y = point.y - HALF - 7.0;
+    let bar_w = 44.0 * s;
+    let bar_h = 3.0 * s;
+    let bar_y = point.y - half - 7.0 * s;
     commands.spawn((
-        Sprite { color: Color::srgba(0.0, 0.0, 0.0, 0.55), custom_size: Some(Vec2::new(BAR_W, BAR_H)), ..default() },
+        Sprite { color: Color::srgba(0.0, 0.0, 0.0, 0.55), custom_size: Some(Vec2::new(bar_w, bar_h)), ..default() },
         Transform::from_xyz(point.x, bar_y, 6.0),
         AimLockMarker,
     ));
-    let fill = BAR_W * frac;
+    let fill = bar_w * frac;
     commands.spawn((
         Sprite {
             color: if frac > 0.5 {
@@ -293,10 +303,10 @@ pub fn draw_aim_lock(
             } else {
                 Color::srgb(1.0, 0.4, 0.25)
             },
-            custom_size: Some(Vec2::new(fill.max(1.0), BAR_H)),
+            custom_size: Some(Vec2::new(fill.max(1.0), bar_h)),
             ..default()
         },
-        Transform::from_xyz(point.x - (BAR_W - fill) * 0.5, bar_y, 6.01),
+        Transform::from_xyz(point.x - (bar_w - fill) * 0.5, bar_y, 6.01),
         AimLockMarker,
     ));
 
@@ -369,11 +379,15 @@ pub fn draw_aim_lock(
         (format!("{degrees:.0}deg"), Color::srgb(0.75, 0.85, 0.8))
     };
 
+    // Scale set at spawn as well as tagged: the label is respawned every
+    // frame, so waiting for keep_world_labels_readable to resize it would
+    // leave it at 1x on any frame that system runs first.
     commands.spawn((
         Text2d::new(label),
         TextFont { font_size: FontSize::Px(13.0), ..default() },
         TextColor(label_color),
-        Transform::from_xyz(point.x, bar_y - 11.0, 6.0),
+        Transform::from_xyz(point.x, bar_y - 11.0 * s, 6.0).with_scale(Vec3::splat(s)),
+        crate::camera::ZoomInvariantText,
         AimLockMarker,
     ));
 }
