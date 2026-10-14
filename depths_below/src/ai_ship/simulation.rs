@@ -242,7 +242,7 @@ const OPEN_HOLDING_RANGE: std::ops::Range<f32> = 250_000.0..450_000.0;
 /// `STATION_PICKET.start` to any station -- the open bearings and the
 /// cluster point both fall at station-like distances from the star.
 fn faction_holdings(system: &crate::celestial::resources::StarSystemDef, rng: &mut impl Rng) -> Vec<Vec2> {
-    let stations: Vec<Vec2> = crate::world::home_base::station_sites(system.id, system.local_center)
+    let stations: Vec<Vec2> = crate::world::home_base::station_sites(system)
         .iter()
         .map(|site| site.pos)
         .collect();
@@ -749,7 +749,7 @@ mod population_tests {
                 system.name,
                 sim.ships.len()
             );
-            for site in crate::world::home_base::station_sites(system.id, system.local_center) {
+            for site in crate::world::home_base::station_sites(system) {
                 for (home, _) in &homes {
                     assert!(
                         home.distance(site.pos) > 25_000.0,
