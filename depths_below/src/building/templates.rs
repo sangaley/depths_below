@@ -24,6 +24,7 @@ pub fn template_input(
     build_state: Res<BuildingState>,
     occupancy: Res<GridOccupancy>,
     currency: ResMut<Currency>,
+    registry: Res<crate::building::ModuleRegistry>,
     mut place_events: MessageWriter<PlaceModuleRequest>,
     mut notifications: MessageWriter<ShowNotification>,
     current_build_state: Res<State<BuildState>>,
@@ -46,7 +47,7 @@ pub fn template_input(
         if let Some(idx) = next {
             let t = &templates[idx];
             notifications.write(ShowNotification {
-                message: format!("Template: {} ({}c) - {}", t.name, t.total_cost, t.description),
+                message: format!("Template: {} ({}c) - {}", t.name, t.cost(&registry), t.description),
                 notification_type: NotificationType::Info,
                 duration: 3.0,
             });
@@ -63,14 +64,15 @@ pub fn template_input(
     if keyboard.just_pressed(KeyCode::Enter) {
         let Some(idx) = template_state.selected_index else { return };
         let template = &templates[idx];
+        let cost = template.cost(&registry);
 
         let origin = build_state.ghost_position;
         let rotation = build_state.rotation;
 
         // Check affordability
-        if currency.credits < template.total_cost {
+        if currency.credits < cost {
             notifications.write(ShowNotification {
-                message: format!("Not enough credits! Need {}c", template.total_cost),
+                message: format!("Not enough credits! Need {}c", cost),
                 notification_type: NotificationType::Warning,
                 duration: 2.0,
             });
@@ -119,7 +121,7 @@ pub fn template_input(
         }
 
         notifications.write(ShowNotification {
-            message: format!("Placed {} (-{}c)", template.name, template.total_cost),
+            message: format!("Placed {} (-{}c)", template.name, cost),
             notification_type: NotificationType::Success,
             duration: 2.0,
         });

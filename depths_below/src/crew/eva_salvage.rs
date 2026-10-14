@@ -727,6 +727,26 @@ pub fn eva_blast_damage(
     }
 }
 
+/// Wires `abort_eva_on_exit` to the end of a flight -- which a pause is not.
+///
+/// ESC pauses by leaving Exploring, so a plain OnExit(Exploring) teleported
+/// the whole detail aboard mid-job every time the player opened the menu.
+/// `State<GameState>` already holds the state being entered while OnExit
+/// runs, so each condition reads where we are going. A pause that ends
+/// anywhere but back in flight (quit to menu, load) recalls them on the way
+/// out of Paused instead.
+pub fn schedule_recall(app: &mut App) {
+    use crate::states::GameState;
+    app.add_systems(
+        OnExit(GameState::Exploring),
+        abort_eva_on_exit.run_if(not(in_state(GameState::Paused))),
+    )
+    .add_systems(
+        OnExit(GameState::Paused),
+        abort_eva_on_exit.run_if(not(in_state(GameState::Exploring))),
+    );
+}
+
 /// Leaving Exploring (docking, game over, menu) instantly boards every
 /// EVA crew member so nobody is left floating in a state we don't simulate.
 pub fn abort_eva_on_exit(
@@ -1005,5 +1025,82 @@ mod out_of_reach_tests {
         let mut app = app(ORDER_RANGE * 3.0);
         app.update();
         assert!(notices(&app).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod pause_recall_tests {
+    use super::*;
+    use crate::states::GameState;
+    use bevy::state::app::StatesPlugin;
+
+    /// One hand out on a wreck, in flight.
+    fn app_with_detail_out() -> (App, Entity) {
+        let mut app = App::new();
+        app.add_plugins(StatesPlugin);
+        app.insert_state(GameState::Exploring);
+        app.init_resource::<Inventory>();
+        app.add_message::<ShowNotification>();
+        schedule_recall(&mut app);
+        app.world_mut().spawn(Ship);
+        let wreck = app.world_mut().spawn_empty().id();
+        let hand = app.world_mut().spawn((
+            CrewMember {
+                name: "Ash".into(),
+                health: 100.0,
+                max_health: 100.0,
+                oxygen: 100.0,
+                morale: 100.0,
+                state: CrewState::Salvaging,
+            },
+            Transform::default(),
+            Sprite::default(),
+            EvaSalvaging {
+                wreck,
+                grab_target: wreck,
+                phase: EvaPhase::Outbound,
+                carrying: None,
+                recalled: false,
+                home_local: Vec3::ZERO,
+                base_color: Color::WHITE,
+            },
+        )).id();
+        app.update();
+        (app, hand)
+    }
+
+    fn go(app: &mut App, state: GameState) {
+        app.world_mut().resource_mut::<NextState<GameState>>().set(state);
+        app.update();
+    }
+
+    fn out(app: &App, hand: Entity) -> bool {
+        app.world().get::<EvaSalvaging>(hand).is_some()
+    }
+
+    #[test]
+    fn pausing_leaves_the_detail_at_work() {
+        let (mut app, hand) = app_with_detail_out();
+        go(&mut app, GameState::Paused);
+        assert!(out(&app, hand), "ESC recalled the salvage detail");
+        go(&mut app, GameState::Exploring);
+        assert!(out(&app, hand), "resuming recalled the salvage detail");
+    }
+
+    #[test]
+    fn docking_recalls_the_detail() {
+        let (mut app, hand) = app_with_detail_out();
+        go(&mut app, GameState::StationDocked);
+        assert!(!out(&app, hand));
+    }
+
+    /// Quit to menu from the pause screen never leaves Exploring again, so
+    /// the recall has to happen on the way out of Paused.
+    #[test]
+    fn quitting_from_the_pause_menu_recalls_the_detail() {
+        let (mut app, hand) = app_with_detail_out();
+        go(&mut app, GameState::Paused);
+        go(&mut app, GameState::MainMenu);
+        assert!(!out(&app, hand));
     }
 }

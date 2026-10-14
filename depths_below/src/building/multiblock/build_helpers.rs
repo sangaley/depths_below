@@ -20,7 +20,21 @@ pub struct WeaponTemplate {
     pub description: &'static str,
     pub core: ModuleType,
     pub blocks: Vec<(ModuleType, IVec2)>, // Offsets from core position
-    pub total_cost: u32,
+}
+
+impl WeaponTemplate {
+    /// What placing it actually charges: each module's registry price.
+    ///
+    /// This was a hand-typed `total_cost` beside each template, which went
+    /// stale the moment the registry was rebalanced -- Basic Cannon read 210c
+    /// and charged 159c. Placement prices every module from the registry, so
+    /// the label has to as well.
+    pub fn cost(&self, registry: &crate::building::ModuleRegistry) -> u32 {
+        std::iter::once(self.core)
+            .chain(self.blocks.iter().map(|(module_type, _)| *module_type))
+            .map(|module_type| registry.get(module_type).cost)
+            .sum()
+    }
 }
 
 // ============================================================================
@@ -176,7 +190,6 @@ pub fn weapon_templates() -> Vec<WeaponTemplate> {
                 (ModuleType::BarrelExtension, IVec2::new(1, 0)),
                 (ModuleType::BarrelExtension, IVec2::new(2, 0)),
             ],
-            total_cost: 150 + 30 + 30,
         },
         WeaponTemplate {
             name: "Long Railgun",
@@ -189,7 +202,6 @@ pub fn weapon_templates() -> Vec<WeaponTemplate> {
                 (ModuleType::BarrelExtension, IVec2::new(5, 0)),
                 (ModuleType::CoolingJacket, IVec2::new(0, 1)),
             ],
-            total_cost: 400 + 30 * 4 + 35,
         },
         WeaponTemplate {
             name: "Gatling Nest",
@@ -200,7 +212,6 @@ pub fn weapon_templates() -> Vec<WeaponTemplate> {
                 (ModuleType::AmmoFeedUnit, IVec2::new(0, 1)),
                 (ModuleType::AmmoFeedUnit, IVec2::new(0, -1)),
             ],
-            total_cost: 100 + 30 + 40 + 40,
         },
         WeaponTemplate {
             name: "Torpedo Battery",
@@ -210,7 +221,6 @@ pub fn weapon_templates() -> Vec<WeaponTemplate> {
                 (ModuleType::WarheadBay, IVec2::new(-1, 0)),
                 (ModuleType::AmmoFeedUnit, IVec2::new(0, 1)),
             ],
-            total_cost: 200 + 60 + 40,
         },
         WeaponTemplate {
             name: "Laser Array",
@@ -221,7 +231,6 @@ pub fn weapon_templates() -> Vec<WeaponTemplate> {
                 (ModuleType::CoolingJacket, IVec2::new(0, 1)),
                 (ModuleType::CoolingJacket, IVec2::new(0, -1)),
             ],
-            total_cost: 200 + 80 + 35 + 35,
         },
     ]
 }

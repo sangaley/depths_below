@@ -163,7 +163,10 @@ pub fn record_rebuild_ghosts(
 pub fn crew_rebuild_system(
     mut commands: Commands,
     time: Res<Time>,
-    crew_query: Query<&CrewMember>,
+    // The player's hands only. AI crew are CrewMembers too, spawned Idle and
+    // never changed, so every enemy crew in the world was rebuilding our hull.
+    crew_query: Query<(Entity, &CrewMember), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    stations: Query<&CrewStation>,
     mut queue: ResMut<RebuildQueue>,
     mut inventory: ResMut<Inventory>,
     mut place_hull_events: MessageWriter<PlaceHullRequest>,
@@ -176,8 +179,13 @@ pub fn crew_rebuild_system(
         return;
     }
 
+    // Idle is not "free": a posted hand keeps CrewState::Idle (posting never
+    // touches the state), so the reactor's operator was rebuilding too. Only
+    // the unposted count.
+    let posted: std::collections::HashSet<Entity> =
+        stations.iter().filter_map(|s| s.assigned_crew).collect();
     let idle_crew = crew_query.iter()
-        .filter(|c| c.state == CrewState::Idle && c.health > 0.0)
+        .filter(|(e, c)| c.state == CrewState::Idle && c.health > 0.0 && !posted.contains(e))
         .count();
     if idle_crew == 0 {
         return;
@@ -265,4 +273,60 @@ pub fn cleanup_built_over_ghosts(
             true
         }
     });
+}
+
+#[cfg(test)]
+mod rebuild_crew_tests {
+    use super::*;
+    use crate::ai_ship::components::OwnedByAiShip;
+    use std::time::Duration;
+
+    fn hand() -> CrewMember {
+        CrewMember {
+            name: "Ash".into(),
+            health: 100.0,
+            max_health: 100.0,
+            oxygen: 100.0,
+            morale: 100.0,
+            state: CrewState::Idle,
+        }
+    }
+
+    /// Only our unposted hands work the ghost: not an enemy's crew, and not
+    /// the operator standing at a post (who still reads as Idle).
+    #[test]
+    fn only_our_free_hands_rebuild() {
+        let mut app = App::new();
+        app.init_resource::<Time>()
+            .init_resource::<Inventory>()
+            .add_message::<PlaceHullRequest>()
+            .add_message::<PlaceModuleRequest>()
+            .add_message::<ShowNotification>()
+            .add_systems(Update, crew_rebuild_system);
+        app.insert_resource(RebuildQueue {
+            ghosts: vec![GhostBlock {
+                grid_position: IVec2::ZERO,
+                kind: GhostKind::Hull { layer: HullLayer::Outer, material: HullMaterial::Steel },
+                cells: vec![IVec2::ZERO],
+                progress: 0.0,
+                work_needed: 100.0,
+                scrap_cost: 0,
+                scrap_paid: true,
+                sprites: Vec::new(),
+            }],
+        });
+
+        let raider = app.world_mut().spawn_empty().id();
+        app.world_mut().spawn(hand());
+        let operator = app.world_mut().spawn(hand()).id();
+        app.world_mut().spawn(CrewStation { priority: 5, assigned_crew: Some(operator), manually_assigned: false });
+        for _ in 0..3 {
+            app.world_mut().spawn((hand(), OwnedByAiShip { root: raider }));
+        }
+
+        app.world_mut().resource_mut::<Time>().advance_by(Duration::from_secs(1));
+        app.update();
+        let progress = app.world().resource::<RebuildQueue>().ghosts[0].progress;
+        assert!((progress - 1.0).abs() < 1e-4, "one free hand should give 1.0 work/s, got {progress}");
+    }
 }

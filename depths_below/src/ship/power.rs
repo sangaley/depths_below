@@ -244,6 +244,13 @@ pub fn update_power_allocation(
 /// "critical" threshold either.
 const REACTOR_RESTART_THRESHOLD: f32 = 0.5;
 
+/// A reactor the heat cutout switched off -- the only kind that restarts by
+/// itself. Without it the restart could not tell a trip from the captain's
+/// own switch, and relit any reactor the player had turned off the moment it
+/// was cool. Same idiom as movement's `FuelStarved`.
+#[derive(Component)]
+pub struct HeatTripped;
+
 /// Manages reactor heat warnings, auto-shutdown, explosion, and restart.
 /// Heat generation and cooling are now handled by the heat network (heat.rs).
 /// Reactor.heat is synced from ModuleTemperature by heat::sync_reactor_heat
@@ -255,20 +262,26 @@ pub fn update_reactor_heat(
     // its reactor back on and announced "Reactor back online - heat
     // dissipated." for a ship we'd just destroyed -- and any enemy reactor
     // running hot raised our heat warnings.
-    mut reactor_query: Query<(&mut Reactor, &mut Module), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    mut commands: Commands,
+    mut reactor_query: Query<
+        (Entity, &mut Reactor, &mut Module, Has<HeatTripped>),
+        Without<crate::ai_ship::components::OwnedByAiShip>,
+    >,
     mut notifications: MessageWriter<ShowNotification>,
     mut warned_70: Local<bool>,
     mut warned_90: Local<bool>,
 ) {
-    for (mut reactor, mut module) in reactor_query.iter_mut() {
+    for (entity, mut reactor, mut module, tripped) in reactor_query.iter_mut() {
         if !module.is_active {
             // Was a permanent lockout until a station "Repair Modules" visit
             // — a heat-only shutdown (reactor still has health) now clears
             // itself once it's cooled down instead of ending the run.
             // Destroyed reactors (health <= 0, e.g. the explosion branch
-            // below) are excluded — those need an actual repair.
-            if module.health > 0.0 && reactor.heat <= reactor.max_heat * REACTOR_RESTART_THRESHOLD {
+            // below) are excluded — those need an actual repair. So is one
+            // the player switched off: only a heat trip is undone here.
+            if tripped && module.health > 0.0 && reactor.heat <= reactor.max_heat * REACTOR_RESTART_THRESHOLD {
                 module.is_active = true;
+                commands.entity(entity).try_remove::<HeatTripped>();
                 notifications.write(ShowNotification {
                     message: "Reactor back online - heat dissipated.".into(),
                     notification_type: NotificationType::Success,
@@ -276,6 +289,11 @@ pub fn update_reactor_heat(
                 });
             }
             continue;
+        }
+        // Running again by some other hand (switched back on, repaired): the
+        // trip is over, and a later switch-off must not be read as one.
+        if tripped {
+            commands.entity(entity).try_remove::<HeatTripped>();
         }
 
         let heat_pct = reactor.heat / reactor.max_heat;
@@ -310,6 +328,7 @@ pub fn update_reactor_heat(
         if heat_pct >= 1.0 {
             if module.is_active {
                 module.is_active = false;
+                commands.entity(entity).try_insert(HeatTripped);
                 notifications.write(ShowNotification {
                     message: "Reactor auto-shutdown! Overheated!".into(),
                     notification_type: NotificationType::Danger,
@@ -407,13 +426,42 @@ mod reactor_scope_tests {
         assert_eq!(app.world().resource::<Messages<ShowNotification>>().iter_current_update_messages().count(), 0);
     }
 
-    /// Our own cooled reactor still restarts.
+    /// Our own cooled reactor still restarts after a heat trip.
     #[test]
     fn our_cooled_reactor_restarts() {
         let mut app = App::new();
         app.add_message::<ShowNotification>();
         app.add_systems(Update, update_reactor_heat);
+        let ours = app.world_mut().spawn((reactor_module(false), HeatTripped)).id();
+        app.update();
+        assert!(app.world().get::<Module>(ours).unwrap().is_active);
+        assert!(app.world().get::<HeatTripped>(ours).is_none(), "trip outlived the restart");
+    }
+
+    /// One the player switched off stays off, however cool it is.
+    #[test]
+    fn a_reactor_switched_off_stays_off() {
+        let mut app = App::new();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, update_reactor_heat);
         let ours = app.world_mut().spawn(reactor_module(false)).id();
+        app.update();
+        assert!(!app.world().get::<Module>(ours).unwrap().is_active, "switch-off didn't stick");
+    }
+
+    /// Overheating trips it, and cooling brings it back.
+    #[test]
+    fn an_overheat_trips_then_recovers() {
+        let mut app = App::new();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, update_reactor_heat);
+        let (mut reactor, module) = reactor_module(true);
+        reactor.heat = 100.0;
+        let ours = app.world_mut().spawn((reactor, module)).id();
+        app.update();
+        assert!(!app.world().get::<Module>(ours).unwrap().is_active);
+        assert!(app.world().get::<HeatTripped>(ours).is_some());
+        app.world_mut().get_mut::<Reactor>(ours).unwrap().heat = 40.0;
         app.update();
         assert!(app.world().get::<Module>(ours).unwrap().is_active);
     }

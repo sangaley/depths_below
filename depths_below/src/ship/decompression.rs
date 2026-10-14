@@ -111,13 +111,20 @@ pub fn update_decompression(
 /// HullSeal modules provide automated breach sealing independent of crew.
 pub fn seal_breach_system(
     time: Res<Time>,
+    ship_query: Query<Entity, With<Ship>>,
     crew_query: Query<(&CrewMember, &CrewRoomLocation)>,
-    repair_bays: Query<(&Module, &RepairSystem), Without<DestroyedModule>>,
-    hull_seals: Query<(&HullSealComp, &Module), Without<DestroyedModule>>,
+    repair_bays: Query<(&Module, &RepairSystem, &ChildOf), Without<DestroyedModule>>,
+    hull_seals: Query<(&HullSealComp, &Module, &ChildOf), Without<DestroyedModule>>,
     room_map: Res<RoomMap>,
     mut air: ResMut<crate::ship::air::AirField>,
 ) {
     let dt = time.delta_secs();
+    // Our seals and bays only. Rooms and the air field are the player's, and
+    // a module's grid_position is local to its own ship -- an enemy RepairBay
+    // at the same cell numbers was speeding up our sealing. (Crew need no
+    // filter: CrewRoomLocation only exists on crew with a Transform, which AI
+    // crew never get.)
+    let Ok(player_ship) = ship_query.single() else { return };
 
     // Build per-room seal power from repairing crew
     let mut room_seal_power: std::collections::HashMap<usize, f32> = std::collections::HashMap::new();
@@ -131,8 +138,8 @@ pub fn seal_breach_system(
     }
 
     // Automated HullSeal modules add seal power to their room
-    for (seal, module) in hull_seals.iter() {
-        if !module.is_active { continue; }
+    for (seal, module, parent) in hull_seals.iter() {
+        if !module.is_active || parent.parent() != player_ship { continue; }
         if let Some(&room_id) = room_map.tile_to_room.get(&module.grid_position) {
             *room_seal_power.entry(room_id).or_insert(0.0) += seal.seal_rate;
         }
@@ -144,7 +151,8 @@ pub fn seal_breach_system(
 
     // Build per-room RepairBay boost
     let mut room_repair_boost: std::collections::HashMap<usize, f32> = std::collections::HashMap::new();
-    for (module, repair_sys) in repair_bays.iter() {
+    for (module, repair_sys, parent) in repair_bays.iter() {
+        if parent.parent() != player_ship { continue; }
         if let Some(&room_id) = room_map.tile_to_room.get(&module.grid_position) {
             let boost = room_repair_boost.entry(room_id).or_insert(1.0);
             *boost += repair_sys.repair_rate * 0.1;

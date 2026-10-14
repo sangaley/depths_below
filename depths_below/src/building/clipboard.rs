@@ -229,13 +229,15 @@ pub fn clipboard_paste(
     mouse: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform), With<Camera>>,
-    ship_query: Query<&GlobalTransform, (With<Ship>, Without<Camera>)>,
+    ship_query: Query<(Entity, &GlobalTransform), (With<Ship>, Without<Camera>)>,
     mut clipboard: ResMut<BuildClipboard>,
     occupancy: Res<GridOccupancy>,
     registry: Res<ModuleRegistry>,
     currency: ResMut<Currency>,
-    module_count: Query<&Module, Without<crate::ai_ship::components::OwnedByAiShip>>,
-    hull_count: Query<(), With<HullSegment>>,
+    // Blocks of OUR ship, by parentage. The hull count was unscoped, so every
+    // AI ship's plating in the world counted against the player's limit.
+    module_count: Query<&ChildOf, With<Module>>,
+    hull_count: Query<&ChildOf, With<HullSegment>>,
     mut place_events: MessageWriter<PlaceModuleRequest>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
@@ -244,7 +246,7 @@ pub fn clipboard_paste(
 
     let Ok(window) = windows.single() else { return };
     let Ok((camera, camera_transform)) = camera_query.single() else { return };
-    let Ok(ship_gt) = ship_query.single() else { return };
+    let Ok((ship, ship_gt)) = ship_query.single() else { return };
     let Some(grid_pos) = cursor_to_ship_grid(window, camera, camera_transform, ship_gt)
     else { return };
 
@@ -263,7 +265,9 @@ pub fn clipboard_paste(
     }
 
     // Block limit — a paste is the easy way to blow straight past it
-    let block_count = module_count.iter().count() + hull_count.iter().count();
+    let block_count = module_count.iter().chain(hull_count.iter())
+        .filter(|parent| parent.parent() == ship)
+        .count();
     if block_count + clipboard.copied.len() > crate::combat::limits::MAX_SHIP_BLOCKS {
         notifications.write(ShowNotification {
             message: format!(

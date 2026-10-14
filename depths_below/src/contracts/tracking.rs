@@ -5,7 +5,7 @@ use crate::components::{CargoHold, Module, ModuleType, Ship};
 use crate::events::*;
 use crate::resources::{Currency, Inventory};
 use crate::world::home_base;
-use super::{ContractObjective, ContractState, ContractStatus, FactionReputation};
+use super::{Contract, ContractObjective, ContractState, ContractStatus, FactionReputation};
 
 // ============================================================================
 // KILL TRACKING
@@ -202,6 +202,7 @@ fn turn_in_active(
     state: &mut ContractState,
     rep: &mut FactionReputation,
     currency: &mut Currency,
+    inventory: &mut Inventory,
     turned_in_events: &mut MessageWriter<ContractTurnedIn>,
     notifications: &mut MessageWriter<ShowNotification>,
 ) {
@@ -209,6 +210,25 @@ fn turn_in_active(
 
     for contract in state.active_contracts.iter_mut() {
         if contract.status != ContractStatus::Completed { continue; }
+
+        // A retrieval is a delivery: the goods leave the hold. "Completed"
+        // only meant the hold held enough at some point in flight -- they may
+        // have been sold or spent since -- so check again now, and send the
+        // contract back to Active if the cargo is no longer there.
+        if !take_delivery(contract, inventory) {
+            if let ContractObjective::RetrieveSalvage { item_type, target_count, .. } = &contract.objective {
+                notifications.write(ShowNotification {
+                    message: format!(
+                        "{}: deliver {} {} to claim it.",
+                        contract.title, target_count, item_type.name()
+                    ),
+                    notification_type: NotificationType::Warning,
+                    duration: 4.0,
+                });
+            }
+            contract.status = ContractStatus::Active;
+            continue;
+        }
 
         // Reward plus the deposit back. The deposit is taken when the job is
         // accepted (contracts/ui.rs), so finishing has to return it or every
@@ -239,15 +259,27 @@ fn turn_in_active(
     state.active_contracts.retain(|c| c.status != ContractStatus::TurnedIn);
 }
 
+/// Removes what a retrieval contract asks for from the hold. True when the
+/// contract can be paid: the items were there and are now gone, or it is not
+/// a retrieval at all.
+fn take_delivery(contract: &mut Contract, inventory: &mut Inventory) -> bool {
+    let ContractObjective::RetrieveSalvage { item_type, target_count, current_count } = &mut contract.objective
+    else { return true };
+    if inventory.remove_item(*item_type, *target_count) { return true; }
+    *current_count = inventory.items.get(item_type).copied().unwrap_or(0);
+    false
+}
+
 /// Docking at Haven always settles up any completed bounties.
 pub fn turn_in_contracts(
     mut state: ResMut<ContractState>,
     mut rep: ResMut<FactionReputation>,
     mut currency: ResMut<Currency>,
+    mut inventory: ResMut<Inventory>,
     mut turned_in_events: MessageWriter<ContractTurnedIn>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    turn_in_active(&mut state, &mut rep, &mut currency, &mut turned_in_events, &mut notifications);
+    turn_in_active(&mut state, &mut rep, &mut currency, &mut inventory, &mut turned_in_events, &mut notifications);
 }
 
 /// Flying near any station (Haven or an outpost) and pressing F claims
@@ -260,6 +292,7 @@ pub fn turn_in_at_station_proximity(
     mut state: ResMut<ContractState>,
     mut rep: ResMut<FactionReputation>,
     mut currency: ResMut<Currency>,
+    mut inventory: ResMut<Inventory>,
     mut turned_in_events: MessageWriter<ContractTurnedIn>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
@@ -275,7 +308,7 @@ pub fn turn_in_at_station_proximity(
     // convenience and must never outrank the press's other meanings.
     if !press.claim() { return; }
 
-    turn_in_active(&mut state, &mut rep, &mut currency, &mut turned_in_events, &mut notifications);
+    turn_in_active(&mut state, &mut rep, &mut currency, &mut inventory, &mut turned_in_events, &mut notifications);
 }
 
 // ============================================================================
@@ -323,4 +356,47 @@ pub fn handle_contract_failure(
 
     state.contracts_failed_total += failed_count;
     state.active_contracts.clear();
+}
+
+#[cfg(test)]
+mod retrieval_delivery_tests {
+    use super::*;
+    use crate::components::ZoneType;
+    use crate::resources::ItemType;
+    use super::super::{ContractType, Faction};
+
+    fn retrieval(target_count: u32) -> Contract {
+        Contract {
+            id: 1,
+            faction: Faction::SalvageGuild,
+            contract_type: ContractType::RetrieveSalvage,
+            title: "Crystals".into(),
+            description: String::new(),
+            objective: ContractObjective::RetrieveSalvage { item_type: ItemType::Crystal, target_count, current_count: target_count },
+            reward: 100,
+            deposit: 0,
+            star_rating: 1,
+            depth_zone: ZoneType::NearOrbit,
+            status: ContractStatus::Completed,
+        }
+    }
+
+    #[test]
+    fn delivering_takes_the_goods_out_of_the_hold() {
+        let mut inv = Inventory::default();
+        inv.add_item(ItemType::Crystal, 5);
+        assert!(take_delivery(&mut retrieval(3), &mut inv));
+        assert_eq!(inv.items.get(&ItemType::Crystal).copied(), Some(2));
+    }
+
+    /// Sold since the tracker ticked it off: no pay, and the count shows why.
+    #[test]
+    fn goods_no_longer_aboard_are_not_paid_for() {
+        let mut inv = Inventory::default();
+        inv.add_item(ItemType::Crystal, 1);
+        let mut contract = retrieval(3);
+        assert!(!take_delivery(&mut contract, &mut inv));
+        assert_eq!(inv.items.get(&ItemType::Crystal).copied(), Some(1));
+        assert!(matches!(contract.objective, ContractObjective::RetrieveSalvage { current_count: 1, .. }));
+    }
 }

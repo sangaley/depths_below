@@ -142,7 +142,6 @@ impl Plugin for CrewPlugin {
                     .chain()
                     .run_if(in_state(GameState::Exploring)),
             )
-            .add_systems(OnExit(GameState::Exploring), eva_salvage::abort_eva_on_exit)
             // Hiring board (H near/at a station) — see hiring.rs
             .init_resource::<hiring::HiringBoardOpen>()
             .init_resource::<hiring::HiringPool>()
@@ -158,6 +157,8 @@ impl Plugin for CrewPlugin {
                     .run_if(in_state(GameState::Exploring)
                         .or_else(in_state(GameState::StationDocked))),
             );
+        // The detail comes home when the flight ends, not when it pauses.
+        eva_salvage::schedule_recall(app);
     }
 }
 
@@ -182,7 +183,12 @@ impl Default for AutoAssignTimer {
 /// doesn't emit ModulePlaced). Berths come from the registry def, not
 /// the entity — the companion component may not be flushed yet in the
 /// frame the placement event fires.
+///
+/// Station refits only. In flight the crew's scrap rebuild re-places a
+/// shot-off quarters through this same event, and filling its bunks then
+/// brought the dead back — crew loss has to stay permanent between docks.
 fn crew_arrive_with_quarters(
+    state: Res<State<GameState>>,
     mut commands: Commands,
     assets: Res<AssetServer>,
     crew_atlases: Res<animation::CrewAtlases>,
@@ -196,6 +202,12 @@ fn crew_arrive_with_quarters(
     mut roster: ResMut<CrewRoster>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
+    // Drained rather than left unread: a reader that skips frames would see
+    // a rebuild from the last frames of the flight on arrival at the dock.
+    if *state.get() != GameState::StationDocked {
+        placed_events.clear();
+        return;
+    }
 
     let Ok(ship) = ship_query.single() else { return };
     for event in placed_events.read() {
@@ -775,8 +787,14 @@ fn update_crew_needs(
     time: Res<Time>,
     depth_state: Res<DepthState>,
     cascade: Res<crate::narrative::CascadeState>,
-    // EVA crew are on suit systems — needs frozen while outside
-    mut crew_query: Query<&mut CrewMember, Without<EvaSalvaging>>,
+    // EVA crew are on suit systems — needs frozen while outside.
+    // The player's crew only: the dread is this run's distance from safety,
+    // and AI crews sharing it drifted into panic late in a run unless the
+    // PLAYER had built a Rec Room -- which no longer reaches them.
+    mut crew_query: Query<
+        &mut CrewMember,
+        (Without<EvaSalvaging>, Without<crate::ai_ship::components::OwnedByAiShip>),
+    >,
 ) {
     for mut crew in crew_query.iter_mut() {
         if crew.health <= 0.0 {
@@ -1085,7 +1103,7 @@ fn crew_repair_system(
     time: Res<Time>,
     ship_query: Query<(Entity, &crate::building::ShipGrid), With<Ship>>,
     crew_query: Query<(&CrewMember, &Transform, &ChildOf)>,
-    repair_bays: Query<(&Module, &RepairSystem), Without<DestroyedModule>>,
+    repair_bays: Query<(&Module, &RepairSystem, &ChildOf), Without<DestroyedModule>>,
     mut hull_query: Query<&mut HullSegment>,
     mut module_query: Query<&mut Module, (Without<DestroyedModule>, Without<RepairSystem>)>,
     room_map: Res<RoomMap>,
@@ -1119,9 +1137,18 @@ fn crew_repair_system(
         }
     }
 
+    // Our bays only. Room ids are the player's, and a bay's grid_position is
+    // local to whichever ship carries it, so an enemy bay at the same cell
+    // numbers was boosting -- and passively mending -- our room.
+    let our_bays: Vec<(&Module, &RepairSystem)> = repair_bays
+        .iter()
+        .filter(|(_, _, parent)| parent.parent() == player_ship)
+        .map(|(module, repair_sys, _)| (module, repair_sys))
+        .collect();
+
     // Build per-room RepairBay boost
     let mut room_repair_boost: std::collections::HashMap<usize, f32> = std::collections::HashMap::new();
-    for (module, repair_sys) in repair_bays.iter() {
+    for &(module, repair_sys) in &our_bays {
         if let Some(&room_id) = room_map.tile_to_room.get(&module.grid_position) {
             let boost = room_repair_boost.entry(room_id).or_insert(0.0);
             *boost += repair_sys.repair_rate;
@@ -1181,7 +1208,7 @@ fn crew_repair_system(
     }
 
     // RepairBay passive module repair (even without crew, repair_rate * dt)
-    for (bay_module, repair_sys) in repair_bays.iter() {
+    for &(bay_module, repair_sys) in &our_bays {
         if let Some(&room_id) = room_map.tile_to_room.get(&bay_module.grid_position) {
             if let Some(room) = room_map.rooms.get(room_id) {
                 for &tile in &room.tiles {
@@ -1336,13 +1363,13 @@ const MEDBAY_HEAL_RATE: f32 = 1.0;
 /// a `Transform` — so AI-ship crew fall out of this for free.
 fn medbay_healing(
     time: Res<Time>,
-    facility_query: Query<(&CrewFacility, &Module), Without<DestroyedModule>>,
+    facility_query: Query<(&CrewFacility, &Module, &ChildOf), Without<DestroyedModule>>,
     room_map: Res<RoomMap>,
-    ships: Query<&GlobalTransform, (With<Ship>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
+    ships: Query<(Entity, &GlobalTransform), (With<Ship>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
     hostiles: Query<&GlobalTransform, With<crate::ai_ship::components::AiShip>>,
     mut crew_query: Query<(&mut CrewMember, &CrewRoomLocation)>,
 ) {
-    let Ok(ship_gt) = ships.single() else { return };
+    let Ok((ship, ship_gt)) = ships.single() else { return };
     // Same definition of "in a fight" that sent them here, so they cannot be
     // walked to the ward by one system and refused treatment by another.
     if walking::under_threat(
@@ -1354,8 +1381,13 @@ fn medbay_healing(
 
     let dt = time.delta_secs();
 
-    for (facility, module) in facility_query.iter() {
+    for (facility, module, parent) in facility_query.iter() {
         if facility.facility_type != FacilityType::MedBay || !module.is_active {
+            continue;
+        }
+        // Ours only: the room lookup below is in the player's room map, so an
+        // enemy ward would otherwise treat whoever stands at its cell numbers.
+        if parent.parent() != ship {
             continue;
         }
 
@@ -1382,68 +1414,102 @@ fn medbay_healing(
     }
 }
 
-/// Active MessHall gives +2 morale/s to all crew (global, passive).
+/// Facility rows for the morale systems: whose ship each one sits on.
+type FacilityRow<'a> = (
+    &'a CrewFacility,
+    &'a Module,
+    &'a ChildOf,
+    Option<&'a crate::ai_ship::components::OwnedByAiShip>,
+);
+
+/// Ships carrying an active, intact facility of this kind. A facility serves
+/// its own ship's crew: the player's by parentage, an AI ship's by
+/// OwnedByAiShip, and anything else (a derelict) nobody. Unscoped, one enemy
+/// mess hall anywhere in the world lifted the player's morale, and the
+/// player's lifted every enemy crew's.
+fn ships_with_facility<'a>(
+    kind: FacilityType,
+    facilities: impl Iterator<Item = FacilityRow<'a>>,
+    player: Option<Entity>,
+) -> std::collections::HashSet<Entity> {
+    facilities
+        .filter(|(f, m, _, _)| f.facility_type == kind && m.is_active && m.health > 0.0)
+        .filter_map(|(_, _, parent, owned)| match owned {
+            Some(owned) => Some(owned.root),
+            None => Some(parent.parent()).filter(|p| Some(*p) == player),
+        })
+        .collect()
+}
+
+/// The ship a crew member belongs to. Not ChildOf: a hand out on EVA is
+/// unparented and still ours.
+fn crew_ship(owned: Option<&crate::ai_ship::components::OwnedByAiShip>, player: Option<Entity>) -> Option<Entity> {
+    owned.map(|o| o.root).or(player)
+}
+
+/// Active MessHall gives +2 morale/s to its ship's crew (passive).
 fn messhall_morale(
     time: Res<Time>,
-    facility_query: Query<(&CrewFacility, &Module)>,
-    mut crew_query: Query<&mut CrewMember>,
+    ship_query: Query<Entity, With<Ship>>,
+    facility_query: Query<FacilityRow>,
+    mut crew_query: Query<(&mut CrewMember, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
 ) {
     let dt = time.delta_secs();
+    let player = ship_query.single().ok();
+    let fed = ships_with_facility(FacilityType::MessHall, facility_query.iter(), player);
 
-    let has_active_messhall = facility_query.iter().any(|(f, m)| {
-        f.facility_type == FacilityType::MessHall && m.is_active && m.health > 0.0
-    });
-
-    if !has_active_messhall {
+    if fed.is_empty() {
         return;
     }
 
-    for mut crew in crew_query.iter_mut() {
-        if crew.health > 0.0 {
+    for (mut crew, owned) in crew_query.iter_mut() {
+        if crew.health > 0.0 && crew_ship(owned, player).is_some_and(|s| fed.contains(&s)) {
             crew.morale = (crew.morale + 2.0 * dt).min(100.0);
         }
     }
 }
 
-/// Active RecRoom prevents crew morale from dropping below 30.
+/// Active RecRoom prevents its ship's crew morale from dropping below 30.
 fn recroom_morale_floor(
-    facility_query: Query<(&CrewFacility, &Module)>,
-    mut crew_query: Query<&mut CrewMember>,
+    ship_query: Query<Entity, With<Ship>>,
+    facility_query: Query<FacilityRow>,
+    mut crew_query: Query<(&mut CrewMember, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
 ) {
-    let has_active_recroom = facility_query.iter().any(|(f, m)| {
-        f.facility_type == FacilityType::RecRoom && m.is_active && m.health > 0.0
-    });
+    let player = ship_query.single().ok();
+    let floored = ships_with_facility(FacilityType::RecRoom, facility_query.iter(), player);
 
-    if !has_active_recroom {
+    if floored.is_empty() {
         return;
     }
 
-    for mut crew in crew_query.iter_mut() {
-        if crew.health > 0.0 && crew.morale < 30.0 {
+    for (mut crew, owned) in crew_query.iter_mut() {
+        if crew.health > 0.0
+            && crew.morale < 30.0
+            && crew_ship(owned, player).is_some_and(|s| floored.contains(&s))
+        {
             crew.morale = 30.0;
         }
     }
 }
 
-/// Active TrainingRoom gives +1 morale/s and raises the panic threshold from 20 to 10.
-/// Trained crew hold it together longer under stress.
+/// Active TrainingRoom gives its ship's crew +1 morale/s and raises the panic
+/// threshold from 20 to 10. Trained crew hold it together longer under stress.
 fn training_room_boost(
     time: Res<Time>,
-    facility_query: Query<(&CrewFacility, &Module)>,
-    mut crew_query: Query<&mut CrewMember>,
+    ship_query: Query<Entity, With<Ship>>,
+    facility_query: Query<FacilityRow>,
+    mut crew_query: Query<(&mut CrewMember, Option<&crate::ai_ship::components::OwnedByAiShip>)>,
 ) {
     let dt = time.delta_secs();
+    let player = ship_query.single().ok();
+    let trained = ships_with_facility(FacilityType::TrainingRoom, facility_query.iter(), player);
 
-    let has_active_training = facility_query.iter().any(|(f, m)| {
-        f.facility_type == FacilityType::TrainingRoom && m.is_active && m.health > 0.0
-    });
-
-    if !has_active_training {
+    if trained.is_empty() {
         return;
     }
 
-    for mut crew in crew_query.iter_mut() {
-        if crew.health > 0.0 {
+    for (mut crew, owned) in crew_query.iter_mut() {
+        if crew.health > 0.0 && crew_ship(owned, player).is_some_and(|s| trained.contains(&s)) {
             // Morale boost (half of MessHall rate)
             crew.morale = (crew.morale + 1.0 * dt).min(100.0);
             // Trained crew resist panic better: recover from panicking at lower morale
@@ -1458,19 +1524,21 @@ fn training_room_boost(
 /// When staffed, RepairBay and HullPatch modules within 3 cells get a repair speed bonus.
 fn engineering_station_boost(
     time: Res<Time>,
-    facility_query: Query<(&CrewFacility, &Module, Option<&ModuleEfficiency>), Without<RepairSystem>>,
-    mut repair_query: Query<(&mut Module, &RepairSystem), Without<DestroyedModule>>,
+    facility_query: Query<(&CrewFacility, &Module, Option<&ModuleEfficiency>, &ChildOf), Without<RepairSystem>>,
+    mut repair_query: Query<(&mut Module, &RepairSystem, &ChildOf), Without<DestroyedModule>>,
 ) {
     let dt = time.delta_secs();
 
-    // Collect active engineering station positions with their efficiency
-    let stations: Vec<(IVec2, f32)> = facility_query.iter()
-        .filter(|(f, m, _)| {
+    // Collect active engineering station positions with their efficiency,
+    // and the ship each sits on: grid positions are ship-local, so "within 3
+    // cells" only means anything between blocks of the same ship.
+    let stations: Vec<(Entity, IVec2, f32)> = facility_query.iter()
+        .filter(|(f, m, _, _)| {
             f.facility_type == FacilityType::EngineeringStation && m.is_active && m.health > 0.0
         })
-        .map(|(_, m, eff)| {
+        .map(|(_, m, eff, parent)| {
             let efficiency = effective_efficiency(m, eff);
-            (m.grid_position, efficiency)
+            (parent.parent(), m.grid_position, efficiency)
         })
         .collect();
 
@@ -1479,10 +1547,11 @@ fn engineering_station_boost(
     }
 
     // Boost nearby repair modules
-    for (mut repair_module, repair_sys) in repair_query.iter_mut() {
+    for (mut repair_module, repair_sys, parent) in repair_query.iter_mut() {
         if !repair_module.is_active { continue; }
 
-        for &(station_pos, efficiency) in &stations {
+        for &(station_ship, station_pos, efficiency) in &stations {
+            if station_ship != parent.parent() { continue; }
             let dist = (repair_module.grid_position - station_pos).as_vec2().length();
             if dist <= 3.0 {
                 // +25% repair rate bonus scaled by efficiency
@@ -2139,5 +2208,66 @@ mod dread_tests {
         for l in [0.0, 0.25, 0.5, 0.75, 1.0] {
             assert!(floor_at(l) >= DREAD_FLOOR_FAR, "level {l} went under the cap");
         }
+    }
+}
+
+#[cfg(test)]
+mod facility_scope_tests {
+    use super::*;
+    use crate::ai_ship::components::OwnedByAiShip;
+
+    fn rec_room() -> (CrewFacility, Module) {
+        (
+            CrewFacility { facility_type: FacilityType::RecRoom },
+            Module {
+                module_type: ModuleType::RecRoom,
+                health: 100.0,
+                max_health: 100.0,
+                power_consumption: 0.0,
+                power_generation: 0.0,
+                is_active: true,
+                grid_position: IVec2::ZERO,
+                size: IVec2::ONE,
+                rotation: Rotation::default(),
+            },
+        )
+    }
+
+    fn low(name: &str) -> CrewMember {
+        CrewMember {
+            name: name.into(),
+            health: 100.0,
+            max_health: 100.0,
+            oxygen: 100.0,
+            morale: 10.0,
+            state: CrewState::Idle,
+        }
+    }
+
+    fn morale(app: &App, e: Entity) -> f32 {
+        app.world().get::<CrewMember>(e).unwrap().morale
+    }
+
+    /// Each ship's Rec Room floors its own crew's morale and nobody else's.
+    #[test]
+    fn a_rec_room_serves_its_own_ship() {
+        let mut app = App::new();
+        app.add_systems(Update, recroom_morale_floor);
+        let ours = app.world_mut().spawn(Ship).id();
+        let raider = app.world_mut().spawn_empty().id();
+        let bare = app.world_mut().spawn_empty().id();
+        app.world_mut().spawn((rec_room(), ChildOf(raider), OwnedByAiShip { root: raider }));
+
+        let mine = app.world_mut().spawn((low("Ash"), ChildOf(ours))).id();
+        let theirs = app.world_mut().spawn((low("Vex"), ChildOf(raider), OwnedByAiShip { root: raider })).id();
+        let other = app.world_mut().spawn((low("Kade"), ChildOf(bare), OwnedByAiShip { root: bare })).id();
+        app.update();
+        assert_eq!(morale(&app, mine), 10.0, "an enemy's rec room lifted our crew");
+        assert_eq!(morale(&app, theirs), 30.0, "their own rec room didn't serve them");
+
+        app.world_mut().spawn((rec_room(), ChildOf(ours)));
+        app.update();
+        assert_eq!(morale(&app, mine), 30.0);
+        assert_eq!(morale(&app, other), 10.0, "our rec room lifted a third ship's crew");
     }
 }

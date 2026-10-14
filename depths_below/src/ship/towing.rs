@@ -282,27 +282,54 @@ fn process_hulk_on_dock(
 
     let mut rng = rand::thread_rng();
     let haul = hulk_yard_value(wreck, &mut rng);
-    let rare = haul
-        .iter()
-        .filter(|i| matches!(i, ItemType::RareAlloy | ItemType::AncientArtifact))
-        .count();
+    let (recovered, rare) = load_haul(&haul, &mut inventory);
+    let lost = haul.len() - recovered;
+    let name = crate::ai_ship::components::faction_display_name(wreck.ship_type);
 
-    for item in &haul {
-        inventory.add_item(*item, 1);
-    }
-
-    notifications.write(ShowNotification {
-        message: format!(
-            "{} hulk broken up: {} units recovered, {} of them rare. Nothing a boarding party could have carried.",
-            crate::ai_ship::components::faction_display_name(wreck.ship_type),
-            haul.len(),
-            rare
-        ),
-        notification_type: NotificationType::Success,
-        duration: 9.0,
-    });
+    // add_item refuses what the hold cannot take, and this used to ignore
+    // that and announce the whole haul as recovered.
+    let (message, notification_type) = if lost == 0 {
+        (
+            format!(
+                "{} hulk broken up: {} units recovered, {} of them rare. Nothing a boarding party could have carried.",
+                name, recovered, rare
+            ),
+            NotificationType::Success,
+        )
+    } else {
+        (
+            format!(
+                "{} hulk broken up: {} units recovered ({} rare), {} lost - the hold is full.",
+                name, recovered, rare, lost
+            ),
+            NotificationType::Warning,
+        )
+    };
+    notifications.write(ShowNotification { message, notification_type, duration: 9.0 });
 
     commands.entity(hulk).try_despawn();
+}
+
+fn is_rare(item: &ItemType) -> bool {
+    matches!(item, ItemType::RareAlloy | ItemType::AncientArtifact)
+}
+
+/// Stows what the hold has room for, rare items first: they are what the tow
+/// was for, so a nearly full hold should turn away the scrap, not them.
+/// Returns (units stowed, rare units stowed).
+fn load_haul(haul: &[ItemType], inventory: &mut Inventory) -> (usize, usize) {
+    let (rare, common): (Vec<ItemType>, Vec<ItemType>) = haul.iter().partition(|i| is_rare(i));
+    let mut recovered = 0;
+    let mut rare_recovered = 0;
+    for item in rare.iter().chain(&common) {
+        if inventory.add_item(*item, 1) {
+            recovered += 1;
+            if is_rare(item) {
+                rare_recovered += 1;
+            }
+        }
+    }
+    (recovered, rare_recovered)
 }
 
 fn release_on_exit(mut tow: ResMut<Towing>) {
@@ -371,6 +398,18 @@ mod tests {
         let mut rng = rand::thread_rng();
         let haul = hulk_yard_value(&hulk(2, 0.05), &mut rng);
         assert!(rare_count(&haul) > 0);
+    }
+
+    /// A full hold turns items away. They must be reported as lost, not as
+    /// recovered, and the rare ones -- the reason for the tow -- go in first.
+    #[test]
+    fn a_full_hold_reports_what_it_turned_away() {
+        let mut inv = Inventory { max_capacity: 10.0, ..Default::default() };
+        let haul = [ItemType::ScrapMetal, ItemType::ScrapMetal, ItemType::RareAlloy];
+        let (recovered, rare) = load_haul(&haul, &mut inv);
+        assert_eq!((recovered, rare), (1, 1), "rare alloy (8) first, then no room for 5-weight scrap");
+        assert_eq!(inv.items.get(&ItemType::RareAlloy).copied(), Some(1));
+        assert_eq!(inv.items.get(&ItemType::ScrapMetal), None);
     }
 
     /// Mass has to actually bite. ship_movement divides force by mass, so this
