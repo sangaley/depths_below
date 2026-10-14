@@ -181,6 +181,9 @@ pub struct Director {
     /// there is no idle crew — without remembering those, Hunt sees the wreck,
     /// diverts to Strip, fails, and bounces straight back forever.
     spent_wrecks: HashSet<Entity>,
+    /// The wreck the last F press was aimed at, so a press the game spent on
+    /// docking instead can write that wreck off.
+    strip_wreck: Option<Entity>,
     /// Grace period after leaving Strip so a bad wreck can't re-trigger it on
     /// the very next frame.
     strip_cooldown: f32,
@@ -347,6 +350,7 @@ impl Plugin for AutoplayPlugin {
             strip_wait: 0.0,
             loot_cooldown: 0.0,
             spent_wrecks: HashSet::new(),
+            strip_wreck: None,
             strip_cooldown: 0.0,
             shot_pending: false,
             shot_retries: 0,
@@ -1015,6 +1019,19 @@ fn director_brain(
 
         Phase::Strip => {
             if !flying {
+                // F docked us instead of sending a detail: inside docking
+                // range the game gives the press to the station unless we're
+                // alongside the wreck AND nearer it. A wreck parked off a
+                // station -- the struck training raider beside Haven -- then
+                // looped the director: launch, see it, press F, dock, trade,
+                // launch, forever. Write it off like a refused dispatch.
+                if d.detail_sent && !d.detail_seen {
+                    if let Some(wreck) = d.strip_wreck.take() {
+                        d.spent_wrecks.insert(wreck);
+                        d.strip_cooldown = 8.0;
+                        d.log("salvage", "F docked instead of dispatching - writing this wreck off");
+                    }
+                }
                 d.go(Phase::Trade);
                 return;
             }
@@ -1057,6 +1074,7 @@ fn director_brain(
                 let vel = vel_c.0;
                 dispatch_salvage(&mut d, &stations, pos, vel, wp, dist);
                 if d.detail_sent {
+                    d.strip_wreck = Some(wreck_entity);
                     d.strip_wait = 0.0;
                     d.log("salvage", "detail dispatched");
                 }

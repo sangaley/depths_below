@@ -652,8 +652,11 @@ pub fn update_base_arrow(
         return;
     };
 
-    let dist = ship_pos.distance(nearest);
-    if dist < 600.0 {
+    // Hidden inside docking range -- the HUD already says "press F to dock"
+    // there, and at the berth itself the arrow pointed at the station you
+    // were moored to. (It was hidden under 600 units, which the berth, a
+    // few km off a 5 km station, never is.)
+    if stations.nearest_in_range(ship_pos).is_some() {
         *vis = Visibility::Hidden;
         return;
     }
