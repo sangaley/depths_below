@@ -74,6 +74,7 @@ pub fn spawn_bounty_arrow(
         Transform::from_xyz(0.0, 0.0, 5.0),
         Visibility::Hidden,
         BountyArrow,
+        crate::camera::ZoomInvariantText,
     )).id();
     let shaft = commands.spawn((
         Sprite { color: Color::srgba(1.0, 0.25, 0.25, 0.85), custom_size: Some(Vec2::new(34.0, 6.0)), ..default() },
@@ -93,7 +94,7 @@ pub fn spawn_bounty_arrow(
 /// Points the arrow from the ship toward the nearest active bounty target;
 /// hidden when there's no active bounty or the target is already close.
 pub fn update_bounty_arrow(
-    ship_query: Query<&Transform, (With<Ship>, Without<BountyArrow>)>,
+    ship_query: Query<(&Transform, Option<&crate::ship::collision::Collider>), (With<Ship>, Without<BountyArrow>)>,
     // Without<AiShip> here isn't just documentation — an arrow entity never
     // is an AiShip, but without this filter Bevy can't statically prove that
     // and panics (B0001) over the &mut Transform here vs the &Transform read
@@ -103,7 +104,7 @@ pub fn update_bounty_arrow(
     sim: Res<WorldSimulation>,
     bounty_ship_query: Query<(&Transform, &BountyTarget), With<AiShip>>,
 ) {
-    let Ok(ship_transform) = ship_query.single() else { return };
+    let Ok((ship_transform, collider)) = ship_query.single() else { return };
     let Ok((mut arrow_transform, mut vis)) = arrow_query.single_mut() else { return };
     let ship_pos = ship_transform.translation.truncate();
 
@@ -126,7 +127,7 @@ pub fn update_bounty_arrow(
     *vis = Visibility::Visible;
 
     let dir = (*nearest - ship_pos).normalize_or_zero();
-    let orbit = ship_pos + dir * 150.0;
+    let orbit = crate::world::home_base::nav_arrow_orbit(ship_transform, collider, dir);
     arrow_transform.translation.x = orbit.x;
     arrow_transform.translation.y = orbit.y;
     arrow_transform.rotation = Quat::from_rotation_z(dir.y.atan2(dir.x));

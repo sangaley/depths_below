@@ -15,7 +15,6 @@ use crate::states::{GameState, BuildState};
 use crate::resources::*;
 use crate::events::*;
 use crate::components::*;
-use crate::camera::MainCamera;
 
 pub struct UiPlugin;
 
@@ -100,7 +99,7 @@ impl Plugin for UiPlugin {
                 Update,
                 offscreen_markers::update_offscreen_markers.run_if(in_state(GameState::Exploring)),
             )
-            .add_systems(OnExit(GameState::Exploring), offscreen_markers::clear_offscreen_markers)
+            .add_systems(OnExit(GameState::Exploring), (offscreen_markers::clear_offscreen_markers, clear_hull_warning_overlay))
             .add_systems(OnEnter(GameState::StationDocked), show_hud)
             .add_systems(OnExit(GameState::MainMenu), despawn_main_menu)
             // Game Over screen
@@ -238,6 +237,14 @@ impl Plugin for UiPlugin {
             // Clean up overlay legend/sprites on state transitions
             .add_systems(OnEnter(GameState::GameOver), (damage_overlay::cleanup_overlay_on_exit, pressure_overlay::cleanup_pressure_overlay_on_exit))
             .add_systems(OnEnter(GameState::MainMenu), (damage_overlay::cleanup_overlay_on_exit, pressure_overlay::cleanup_pressure_overlay_on_exit))
+            .add_systems(OnEnter(GameState::GameOver), windows::framework::close_all_windows)
+            .add_systems(OnEnter(GameState::MainMenu), windows::framework::close_all_windows)
+            .add_systems(OnEnter(GameState::StationDocked), (
+                windows::framework::close_flight_windows,
+                damage_overlay::overlays_off_at_berth,
+                damage_overlay::cleanup_overlay_on_exit,
+                pressure_overlay::cleanup_pressure_overlay_on_exit,
+            ))
             // Crew menu toggle (while exploring)
             .add_systems(
                 Update,
@@ -1760,19 +1767,24 @@ const NOTIFICATION_DEDUP_SECS: f32 = 3.0;
 fn handle_notifications(
     mut commands: Commands,
     mut notification_events: MessageReader<ShowNotification>,
-    container_query: Query<Entity, With<NotificationContainer>>,
-    existing_toasts: Query<(Entity, &Text), With<NotificationToast>>,
+    container_query: Query<(Entity, Option<&Children>), With<NotificationContainer>>,
+    existing_toasts: Query<(), With<NotificationToast>>,
     mut recent_messages: Local<Vec<(String, f32)>>,
     time: Res<Time>,
 ) {
-    let Ok(container) = container_query.single() else { return };
+    let Ok((container, children)) = container_query.single() else { return };
 
     // Clean up expired dedup entries
     let now = time.elapsed_secs();
     recent_messages.retain(|(_, t)| now - *t < NOTIFICATION_DEDUP_SECS);
 
-    // Count existing toasts
-    let mut toast_count = existing_toasts.iter().count();
+    // Live toasts, oldest first (the column's child order). Taking
+    // `existing_toasts.iter().next()` per event evicted the SAME toast over
+    // and over in a same-frame burst -- one missile's worth of "destroyed!"
+    // notices -- so the stack ran on past the cap down the screen.
+    let mut live: std::collections::VecDeque<Entity> = children
+        .map(|c| c.iter().filter(|&e| existing_toasts.contains(e)).collect())
+        .unwrap_or_default();
 
     for event in notification_events.read() {
         // Skip duplicate messages within the dedup window
@@ -1781,10 +1793,9 @@ fn handle_notifications(
         }
 
         // Cap max visible notifications - remove oldest if at limit
-        if toast_count >= MAX_NOTIFICATIONS {
-            if let Some((oldest_entity, _)) = existing_toasts.iter().next() {
-                commands.entity(oldest_entity).despawn();
-                toast_count -= 1;
+        while live.len() >= MAX_NOTIFICATIONS {
+            if let Some(oldest) = live.pop_front() {
+                commands.entity(oldest).despawn();
             }
         }
 
@@ -1811,31 +1822,41 @@ fn handle_notifications(
             ),
         };
         let msg = format!("{}{}", prefix, event.message);
-        commands.spawn((
+        let toast = commands.spawn((
             Text::new(&msg), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(color), Node { margin: UiRect::bottom(Val::Px(theme::ThemeSpacing::XS)),
                 padding: UiRect::new(Val::Px(10.0), Val::Px(10.0), Val::Px(5.0), Val::Px(5.0)),
                 max_width: Val::Px(340.0),
                 ..default() }, BackgroundColor(bg_color),
             NotificationToast { timer: Timer::from_seconds(event.duration, TimerMode::Once) },
-        )).insert(ChildOf(container));
+            ToastBackground(bg_color),
+        )).insert(ChildOf(container)).id();
 
         recent_messages.push((event.message.clone(), now));
-        toast_count += 1;
+        live.push_back(toast);
     }
 }
+
+/// A toast's own background colour, so the fade can scale it from full.
+#[derive(Component)]
+struct ToastBackground(Color);
 
 /// Fades and despawns notification toasts
 fn update_notifications(
     mut commands: Commands,
     time: Res<Time>,
-    mut toast_query: Query<(Entity, &mut NotificationToast, &mut TextColor)>,
+    mut toast_query: Query<(Entity, &mut NotificationToast, &mut TextColor, Option<(&mut BackgroundColor, &ToastBackground)>)>,
 ) {
-    for (entity, mut toast, mut text_color) in toast_query.iter_mut() {
+    for (entity, mut toast, mut text_color, background) in toast_query.iter_mut() {
         toast.timer.tick(time.delta());
         let remaining = toast.timer.remaining_secs() / toast.timer.duration().as_secs_f32();
         if remaining < 0.3 {
             let alpha = remaining / 0.3;
             text_color.0.set_alpha(alpha);
+            // The slab fades with its text; it used to stay solid and the
+            // last moments of every notice were an empty coloured box.
+            if let Some((mut bg, base)) = background {
+                bg.0 = base.0.with_alpha(base.0.alpha() * alpha);
+            }
         }
         if toast.timer.is_finished() {
             commands.entity(entity).despawn();
@@ -2214,7 +2235,12 @@ fn toggle_crew_menu(
     staffing_state: Res<StaffingState>,
     mut open_dropdown: ResMut<OpenDutyDropdown>,
 ) {
-    if !keyboard.just_pressed(KeyCode::KeyC) {
+    // Ctrl/Cmd+C is the build clipboard's copy; it used to pop the roster
+    // open over the yard every time a selection was copied.
+    let modifier = keyboard.any_pressed([
+        KeyCode::ControlLeft, KeyCode::ControlRight, KeyCode::SuperLeft, KeyCode::SuperRight,
+    ]);
+    if !keyboard.just_pressed(KeyCode::KeyC) || modifier {
         return;
     }
 
@@ -3309,6 +3335,7 @@ fn toggle_map_overlay(
     windows: Query<&Window>,
     mut virtual_time: ResMut<Time<Virtual>>,
     mut view_mode: ResMut<MapViewMode>,
+    build_state: Res<State<BuildState>>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyM) {
         return;
@@ -3317,6 +3344,11 @@ fn toggle_map_overlay(
     if let Ok(entity) = existing.single() {
         commands.entity(entity).despawn();
         virtual_time.unpause();
+        return;
+    }
+    // In the yard M cycles hull material. It also opened the full-screen map
+    // over the builder and paused time, every press.
+    if *build_state.get() != BuildState::Inactive {
         return;
     }
 
@@ -3819,8 +3851,12 @@ fn warp_dash_input(
         return;
     }
 
-    if keyboard.just_released(KeyCode::KeyG) {
-        if let Ok((entity, charging)) = charging_query.single() {
+    if let Ok((entity, mut charging)) = charging_query.single_mut() {
+        // Not held means cancelled -- checked as a state, not as the release
+        // edge. This only runs in flight, so a G let go while paused or
+        // docked was never seen, and the charge finished after resuming and
+        // threw the ship across the system with nobody holding the key.
+        if !keyboard.pressed(KeyCode::KeyG) {
             if !charging.charge_timer.is_finished() {
                 commands.entity(entity).remove::<MapWarpCharging>();
                 notifications.write(ShowNotification {
@@ -3829,13 +3865,41 @@ fn warp_dash_input(
                     duration: 2.0,
                 });
             }
+            return;
         }
-        return;
-    }
-
-    if let Ok((_, mut charging)) = charging_query.single_mut() {
         charging.charge_timer.tick(time.delta());
     }
+}
+
+/// Where a dash meant for `target` may actually end: outside every immovable
+/// body, with room for the ship.
+///
+/// The arrival buffer is measured from the clicked point, and a planet is
+/// 10-60k across and a star 40-150k, so clicking one dropped the ship inside
+/// its solid collider -- deep in a gravity well that hammered it with crash
+/// damage every frame while collision dragged it back out. Bodies are
+/// checked when the dash fires, not when it starts charging, because planets
+/// move while it charges.
+fn dash_arrival_clear_of_bodies(target: Vec2, ship_radius: f32, bodies: &[(Vec2, f32)]) -> Vec2 {
+    const MARGIN: f32 = 400.0;
+    let mut point = target;
+    // A few passes settle a point pushed out of one circle into another.
+    for _ in 0..4 {
+        let mut moved = false;
+        for &(centre, radius) in bodies {
+            let clear = radius + ship_radius + MARGIN;
+            let offset = point - centre;
+            if offset.length_squared() < clear * clear {
+                let dir = offset.try_normalize().unwrap_or(Vec2::X);
+                point = centre + dir * clear;
+                moved = true;
+            }
+        }
+        if !moved {
+            break;
+        }
+    }
+    point
 }
 
 /// Completes the jump once the charge finishes: teleport, kill momentum,
@@ -3843,15 +3907,27 @@ fn warp_dash_input(
 fn execute_warp_dash(
     mut commands: Commands,
     fx: Res<crate::vfx::effect_textures::EffectTextures>,
-    mut ship_query: Query<(Entity, &mut Transform, &mut Velocity, &MapWarpCharging), With<Ship>>,
+    mut ship_query: Query<(Entity, &mut Transform, &mut Velocity, &MapWarpCharging, Option<&crate::ship::collision::Collider>), With<Ship>>,
+    bodies: Query<(&GlobalTransform, &crate::ship::collision::Collider), Without<Ship>>,
     mut fuel_state: ResMut<FuelState>,
     mut pending: ResMut<PendingWarpTarget>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    let Ok((entity, mut transform, mut velocity, charging)) = ship_query.single_mut() else { return };
+    let Ok((entity, mut transform, mut velocity, charging, ship_collider)) = ship_query.single_mut() else { return };
     if !charging.charge_timer.is_finished() {
         return;
     }
+
+    let immovable: Vec<(Vec2, f32)> = bodies
+        .iter()
+        .filter(|(_, c)| c.mass.is_infinite())
+        .flat_map(|(gt, c)| {
+            let gt = *gt;
+            c.circles.iter().map(move |&(local, r)| (gt.transform_point(local.extend(0.0)).truncate(), r))
+        })
+        .collect();
+    let ship_radius = ship_collider.map(|c| c.bound_center.length() + c.bound_radius).unwrap_or(1000.0);
+    let arrival = dash_arrival_clear_of_bodies(charging.target_pos, ship_radius, &immovable);
 
     // Both ends of a dash are inside the same loaded system, so unlike an
     // interstellar jump the departure flash is genuinely visible -- it marks
@@ -3862,12 +3938,12 @@ fn execute_warp_dash(
         &mut commands, &fx, from, 150.0, Color::srgb(0.45, 0.70, 1.0),
     );
 
-    transform.translation.x = charging.target_pos.x;
-    transform.translation.y = charging.target_pos.y;
+    transform.translation.x = arrival.x;
+    transform.translation.y = arrival.y;
     velocity.0 = Vec2::ZERO;
 
     crate::vfx::particles::spawn_warp_flash(
-        &mut commands, &fx, charging.target_pos, 150.0, Color::srgb(0.55, 0.78, 1.0),
+        &mut commands, &fx, arrival, 150.0, Color::srgb(0.55, 0.78, 1.0),
     );
     fuel_state.current_fuel = (fuel_state.current_fuel - charging.fuel_cost).max(0.0);
     pending.0 = None;
@@ -4018,6 +4094,8 @@ fn spawn_game_over_screen(
                 row_gap: Val::Px(ThemeSpacing::XXL),
                 ..default()
             }, BackgroundColor(ThemeColors::BG_VOID)),
+        // Above the floating windows and the pause menu (ZIndex 100).
+        ZIndex(200),
         GameOverOverlay,
     )).with_children(|parent| {
         // Title
@@ -4630,7 +4708,7 @@ fn get_docking_services(
     hull_state: &HullState,
     oxygen_state: &OxygenState,
     fuel_state: &FuelState,
-    weapon_query: &Query<(&Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), Without<Creature>>,
+    weapon_query: &Query<(&Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), (Without<Creature>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
     crew_count: usize,
     total_berths: u32,
     inventory: &Inventory,
@@ -4666,7 +4744,9 @@ fn get_docking_services(
             ammo_cost_raw += crate::combat::ammo_types::rearm_price(selected.map(|a| a.0), short);
         }
     }
-    let ammo_cost = ammo_cost_raw as u32;
+    // With the station's ammo discount, as the live row and the charge do --
+    // the menu's first frame showed the undiscounted price.
+    let ammo_cost = (ammo_cost_raw * discounts.ammo) as u32;
 
     let hire_full_cost = ((200 + (crew_count as u32) * 50) as f32 * far) as u32;
     let bio_have = inventory.items.get(&ItemType::BioSample).copied().unwrap_or(0);
@@ -4745,7 +4825,7 @@ fn spawn_docking_menu(
     hull_state: Res<HullState>,
     oxygen_state: Res<OxygenState>,
     fuel_state: Res<FuelState>,
-    weapon_query: Query<(&Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), Without<Creature>>,
+    weapon_query: Query<(&Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), (Without<Creature>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
     crew_query: Query<&CrewMember, Without<crate::ai_ship::components::OwnedByAiShip>>,
     inventory: Res<Inventory>,
     currency: Res<Currency>,
@@ -4877,7 +4957,9 @@ fn spawn_docking_menu(
             for i in group_start..group_end {
                 let service = &services[i];
                 let cursor = if i == 0 { "> " } else { "  " };
-                let cost_str = if service.cost > 0 {
+                // A price on a greyed row read as a charge: "Repair Hull
+                // [1c]" at 0% damage, "Hire Crew [3200c]" with every berth full.
+                let cost_str = if service.cost > 0 && service.available {
                     format!(" [{}c]", service.cost)
                 } else {
                     String::new()
@@ -4921,6 +5003,16 @@ pub const RIGHT_COLUMN_TOP: f32 = 72.0;
 
 /// Gap left between the top bar's lower edge and anything pinned under it.
 const BELOW_TOP_BAR_GAP: f32 = 6.0;
+
+/// The cursor in UI units -- what a `Val::Px` offset means.
+///
+/// `Window::cursor_position` is logical pixels, but every `Val::Px` is
+/// multiplied by `UiScale`, so at any UI scale but 100% a node placed at the
+/// raw cursor drew somewhere else: the crosshair, tooltips, dragged windows
+/// and the radial menu all ran away from the mouse at the Settings' 120%.
+pub fn cursor_in_ui(window: &Window, ui_scale: &bevy::ui::UiScale) -> Option<Vec2> {
+    window.cursor_position().map(|p| p / ui_scale.0.max(0.01))
+}
 
 /// The vitals/nav/resources strip across the top of the HUD.
 #[derive(Component)]
@@ -5016,7 +5108,7 @@ fn docking_menu_input(
     ),
     mut span_query: Query<&mut TextSpan>,
     econ_state: (ResMut<HullState>, ResMut<OxygenState>, ResMut<FuelState>, ResMut<Currency>, ResMut<Inventory>),
-    mut weapon_query: Query<(&mut Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), Without<Creature>>,
+    mut weapon_query: Query<(&mut Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), (Without<Creature>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
     // All three MUST exclude AI ships. Unscoped, the docking menu counted
     // enemy crew into the hire price and the berth check (a live run showed
     // "Recruit crew (25/20 berths)" at 1450c with twenty crew aboard),
@@ -5614,7 +5706,7 @@ fn docking_menu_input(
         let (name, desc, cost, available) = &service_info[idx];
 
         let cursor = if idx == new_idx { "> " } else { "  " };
-        let cost_str = if *cost > 0 { format!(" [{}c]", cost) } else { String::new() };
+        let cost_str = if *cost > 0 && *available { format!(" [{}c]", cost) } else { String::new() };
         let color = if !available {
             Color::srgb(0.4, 0.4, 0.4)
         } else if idx == new_idx {
@@ -5641,39 +5733,71 @@ fn docking_menu_input(
 #[derive(Component)]
 struct HullWarningOverlay;
 
-/// Pulses a red overlay when hull integrity drops below 30%
+/// Pulses a red screen tint when hull integrity drops below 30%.
+///
+/// A UI node, not a world sprite. It used to be a fixed 2560x1440 world
+/// rectangle following the camera, which at the framing zoom (~5.8) covered
+/// about a third of each screen axis: a hard-edged red box in the middle of
+/// the view rather than a tint. It also outlived the flight state -- docking
+/// or dying below 30% left it frozen in the world.
 fn update_hull_warning_overlay(
     mut commands: Commands,
     time: Res<Time>,
     hull_state: Res<HullState>,
-    mut overlay_query: Query<(Entity, &mut Sprite, &mut Transform), (With<HullWarningOverlay>, Without<MainCamera>)>,
-    camera_query: Query<&Transform, (With<MainCamera>, Without<HullWarningOverlay>)>,
+    mut overlay_query: Query<(Entity, &mut BackgroundColor), With<HullWarningOverlay>>,
 ) {
     let critical = hull_state.hull_integrity < 0.3;
 
     if critical {
-        let camera_pos = camera_query.iter().next().map(|t| t.translation).unwrap_or(Vec3::ZERO);
-        if let Ok((_, mut sprite, mut transform)) = overlay_query.single_mut() {
-            // Pulse alpha and follow camera
-            let alpha = 0.1 + 0.05 * (time.elapsed_secs() * 6.0).sin();
-            sprite.color = Color::srgba(1.0, 0.0, 0.0, alpha);
-            transform.translation = Vec3::new(camera_pos.x, camera_pos.y, 10.0);
+        let alpha = 0.1 + 0.05 * (time.elapsed_secs() * 6.0).sin();
+        if let Ok((_, mut bg)) = overlay_query.single_mut() {
+            bg.0 = Color::srgba(1.0, 0.0, 0.0, alpha);
         } else {
-            // Spawn the overlay at camera position
             commands.spawn((
-                (Sprite {
-                        color: Color::srgba(1.0, 0.0, 0.0, 0.1),
-                        custom_size: Some(Vec2::new(2560.0, 1440.0)),
-                        ..default()
-                    }, Transform::from_xyz(camera_pos.x, camera_pos.y, 10.0)),
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    ..default()
+                },
+                BackgroundColor(Color::srgba(1.0, 0.0, 0.0, alpha)),
+                // Under every panel and menu, and never in the way of a click.
+                GlobalZIndex(-10),
+                bevy::picking::Pickable::IGNORE,
                 HullWarningOverlay,
             ));
         }
     } else {
-        // Despawn if hull is healthy
-        for (entity, _, _) in overlay_query.iter() {
+        for (entity, _) in overlay_query.iter() {
             commands.entity(entity).despawn();
         }
+    }
+}
+
+fn clear_hull_warning_overlay(mut commands: Commands, overlay_query: Query<Entity, With<HullWarningOverlay>>) {
+    for entity in &overlay_query {
+        commands.entity(entity).despawn();
+    }
+}
+
+#[cfg(test)]
+mod dash_arrival_tests {
+    use super::*;
+
+    #[test]
+    fn open_space_arrivals_are_left_alone() {
+        let bodies = [(Vec2::new(100_000.0, 0.0), 20_000.0)];
+        assert_eq!(dash_arrival_clear_of_bodies(Vec2::new(0.0, 5_000.0), 1000.0, &bodies), Vec2::new(0.0, 5_000.0));
+    }
+
+    #[test]
+    fn a_dash_into_a_planet_stops_outside_it() {
+        let centre = Vec2::new(100_000.0, 0.0);
+        let bodies = [(centre, 20_000.0)];
+        // Aimed at a point just short of the centre, from the left.
+        let got = dash_arrival_clear_of_bodies(Vec2::new(97_000.0, 0.0), 1000.0, &bodies);
+        assert!(got.distance(centre) >= 20_000.0 + 1000.0, "{got}");
+        assert!(got.x < centre.x, "pushed out on the near side, got {got}");
     }
 }
 

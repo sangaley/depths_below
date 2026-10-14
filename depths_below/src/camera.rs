@@ -192,7 +192,14 @@ fn cone_image() -> Image {
             data[idx] = 235;
             data[idx + 1] = 236;
             data[idx + 2] = 232;
-            data[idx + 3] = (alpha * 255.0).round() as u8;
+            // Dithered. Peaking at 0.13 leaves only ~33 alpha steps across
+            // the whole beam, and stretched over thousands of world units
+            // each step showed as a ring: the haze read as a stack of
+            // concentric bands. A little per-texel noise (about one step,
+            // never lifting a fully transparent texel) breaks them up.
+            let a = alpha * 255.0;
+            let dithered = if a > 0.0 { (a + cone_dither(x, y)).round().clamp(0.0, 255.0) } else { 0.0 };
+            data[idx + 3] = dithered as u8;
         }
     }
 
@@ -203,6 +210,20 @@ fn cone_image() -> Image {
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::default(),
     )
+}
+
+/// Triangular noise in -1..1 (alpha steps) for one cone texel; a fixed hash,
+/// so the beam's grain is the same every run rather than shimmering.
+fn cone_dither(x: u32, y: u32) -> f32 {
+    let hash = |n: u32| {
+        let mut h = n.wrapping_mul(0x9E37_79B1);
+        h ^= h >> 15;
+        h = h.wrapping_mul(0x85EB_CA77);
+        h ^= h >> 13;
+        (h & 0xFFFF) as f32 / 65535.0
+    };
+    let seed = x.wrapping_mul(73_856_093) ^ y.wrapping_mul(19_349_663);
+    hash(seed) + hash(seed ^ 0xA5A5_A5A5) - 1.0
 }
 
 /// Spawns the beam sprite at a fixed 1-world-unit reference size (custom_size
@@ -251,7 +272,13 @@ fn camera_zoom_input(
     for event in scroll_events.read() {
         if over_build_panel { continue; }
         camera_state.user_zoomed = true;
-        let zoom_delta = -event.y * 0.1;
+        // A wheel notch is one Line; a Mac trackpad or Magic Mouse sends
+        // Pixels, 1-50 per event, and at 0.1 per unit one swipe slammed the
+        // camera from one zoom limit to the other.
+        let zoom_delta = match event.unit {
+            bevy::input::mouse::MouseScrollUnit::Line => -event.y * 0.1,
+            bevy::input::mouse::MouseScrollUnit::Pixel => -event.y * 0.004,
+        };
         camera_state.zoom = (camera_state.zoom + zoom_delta)
             .clamp(camera_state.min_zoom, camera_state.max_zoom);
     }
@@ -520,7 +547,12 @@ fn update_depth_vignette(
     depth_state: Res<DepthState>,
     camera_state: Res<CameraState>,
     ship_query: Query<(&Transform, &ShipPhysics), With<Ship>>,
-    light_query: Query<(&ShipLight, &Module)>,
+    // ChildOf so only the player's own lights count: AI floodlights (the
+    // Stellar Preserve carries one) used to widen the player's torch.
+    light_query: Query<(&ShipLight, &Module, &ChildOf)>,
+    // Ancestry, for sprites two levels below the ship (turret barrels,
+    // wedge quads and damage-overlay tiles are children of a module).
+    parents: Query<&ChildOf>,
     windows_query: Query<&Window>,
     cam_query: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     mut sprite_query: Query<
@@ -621,8 +653,8 @@ fn update_depth_vignette(
     }
 
     let light_bonus: f32 = light_query.iter()
-        .filter(|(_, module)| module.is_active)
-        .map(|(light, _)| light.range * light.intensity)
+        .filter(|(_, module, parent)| module.is_active && Some(parent.parent()) == ship_entity)
+        .map(|(light, _, _)| light.range * light.intensity)
         .sum();
 
     // Omnidirectional bubble: always visible regardless of facing, so
@@ -637,14 +669,27 @@ fn update_depth_vignette(
     let cull_range = 16_000.0;
 
     for (mut sprite, global_transform, mut visibility, parent) in sprite_query.iter_mut() {
-        // Never cull ship's own children (hull, modules, crew)
-        if let Some(ship_e) = ship_entity {
-            if let Some(p) = parent {
-                if p.parent() == ship_e {
-                    *visibility = Visibility::Inherited;
-                    continue;
-                }
+        // Never cull or dim anything on the player's own ship (hull, modules,
+        // crew, and what hangs off a module). Only the direct parent used to
+        // be checked, so barrels, wedge plates and damage-overlay tiles were
+        // vignetted as if they were scenery -- the far ones dimmed whenever
+        // the player aimed away from them.
+        if let (Some(ship_e), Some(p)) = (ship_entity, parent) {
+            let on_ship = std::iter::successors(Some(p.parent()), |&e| parents.get(e).ok().map(|c| c.parent()))
+                .take(4)
+                .any(|e| e == ship_e);
+            if on_ship {
+                *visibility = Visibility::Inherited;
+                continue;
             }
+        }
+
+        // A sprite at zero alpha is meant to be invisible: enemy wedge
+        // backings and the AI root body spawn as Color::NONE. Lifting that to
+        // full alpha drew them as solid black squares and a black smear under
+        // every lit enemy. The vignette itself never writes zero.
+        if sprite.color.alpha() == 0.0 {
+            continue;
         }
 
         let world_pos = global_transform.translation().truncate();

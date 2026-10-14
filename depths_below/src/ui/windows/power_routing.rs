@@ -13,7 +13,7 @@ use super::framework::*;
 // update_power_allocation). Opened with U or the "Pwr" flight-toolbar button.
 // ============================================================================
 
-const WINDOW_ID: &str = "power_routing";
+pub(crate) const WINDOW_ID: &str = "power_routing";
 
 /// The draggable track of one channel's slider.
 #[derive(Component)]

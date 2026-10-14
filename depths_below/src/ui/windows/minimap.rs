@@ -104,11 +104,22 @@ pub fn toggle_minimap(
 
     commands.entity(canvas).add_child(ship_dot);
 
-    // Station dots: Haven Station (bright green, larger) + resupply outposts
-    // (dimmer green, smaller). Position is corrected every frame in
-    // update_minimap; the spawn-time value just avoids a one-frame jump at
-    // the map's center.
-    let mut station_dot = |world_pos: Vec2, size: f32, color: Color| {
+    spawn_station_dots(&mut commands, canvas, &stations);
+
+    commands.entity(content).add_child(canvas);
+}
+
+/// Station dots for whichever system is loaded. Haven (index 0) gets the
+/// bigger, brighter dot; every other station is a full station too, just not
+/// home. Position is corrected every frame in update_minimap; the spawn-time
+/// value just avoids a one-frame jump at the map's center.
+fn spawn_station_dots(commands: &mut Commands, canvas: Entity, stations: &SystemStations) {
+    for site in stations.sites.iter() {
+        let (size, color) = if site.index == 0 {
+            (8.0, Color::srgb(0.25, 1.0, 0.35))
+        } else {
+            (6.0, Color::srgb(0.2, 0.85, 0.35))
+        };
         let dot = commands.spawn((
             (Node {
                     position_type: PositionType::Absolute,
@@ -118,23 +129,10 @@ pub fn toggle_minimap(
                     top: Val::Px(MINIMAP_SIZE / 2.0 - size / 2.0),
                     ..default()
                 }, BackgroundColor(color)),
-            MinimapStationDot { world_pos },
+            MinimapStationDot { world_pos: site.pos },
         )).id();
         commands.entity(canvas).add_child(dot);
-    };
-
-    // This system's stations. Haven (index 0) gets the bigger dot; every
-    // other station is a full station too, just not home.
-    for site in stations.sites.iter() {
-        let (size, color) = if site.index == 0 {
-            (8.0, Color::srgb(0.25, 1.0, 0.35))
-        } else {
-            (6.0, Color::srgb(0.2, 0.85, 0.35))
-        };
-        station_dot(site.pos, size, color);
     }
-
-    commands.entity(content).add_child(canvas);
 }
 
 /// Update minimap dots based on ship position and celestial body positions
@@ -143,7 +141,7 @@ pub fn update_minimap(
     ship_query: Query<&Transform, With<Ship>>,
     _body_query: Query<(Entity, &Transform, &CelestialBody)>,
     mut ship_dot_query: Query<&mut Node, (With<MinimapShipDot>, Without<MinimapBodyDot>, Without<MinimapStationDot>, Without<MinimapBountyDot>)>,
-    mut station_dot_query: Query<(&mut Node, &MinimapStationDot)>,
+    mut station_dot_query: Query<(Entity, &mut Node, &MinimapStationDot)>,
     mut bounty_dot_query: Query<(Entity, &mut Node, &MinimapBountyDot), Without<MinimapStationDot>>,
     canvas_query: Query<Entity, With<MinimapCanvas>>,
     minimap_exists: Query<Entity, With<MinimapWindow>>,
@@ -151,9 +149,21 @@ pub fn update_minimap(
     sim: Res<WorldSimulation>,
     bounty_ship_query: Query<(&Transform, &BountyTarget), With<AiShip>>,
     streaming: Res<crate::celestial::resources::SystemStreamingManager>,
+    stations: Res<SystemStations>,
 ) {
     if minimap_exists.is_empty() {
         return;
+    }
+
+    // Dots were made once, when the map opened, so after a jump they still
+    // showed the old system's stations. Rebuild them when the set changes.
+    if stations.is_changed() {
+        if let Ok(canvas) = canvas_query.single() {
+            for (entity, _, _) in station_dot_query.iter() {
+                commands.entity(entity).despawn();
+            }
+            spawn_station_dots(&mut commands, canvas, &stations);
+        }
     }
 
     let Ok(ship_transform) = ship_query.single() else { return };
@@ -175,23 +185,18 @@ pub fn update_minimap(
         };
         let px = (clamped.x / MINIMAP_RANGE) * half;
         let py = -(clamped.y / MINIMAP_RANGE) * half; // flip Y for screen space
-        style.left = Val::Px((half + px).clamp(0.0, MINIMAP_SIZE));
-        style.top = Val::Px((half + py).clamp(0.0, MINIMAP_SIZE));
+        // Centre the dot on its point and keep the whole dot on the canvas;
+        // clamping the top-left corner let edge dots hang off it.
+        let size = match style.width { Val::Px(w) => w, _ => 0.0 };
+        style.left = Val::Px((half + px - size / 2.0).clamp(0.0, MINIMAP_SIZE - size));
+        style.top = Val::Px((half + py - size / 2.0).clamp(0.0, MINIMAP_SIZE - size));
     };
 
-    // Stations are fixed at Haven — only meaningful to show while actually
-    // in Haven's system (see ui::MapSnapshot::in_haven for the same fix on
-    // the full map). Hidden rather than placed-somewhere-wrong everywhere
-    // else, since world_pos is millions of units from any other system's
-    // local space and would otherwise clamp to a meaningless edge position.
-    let in_haven = streaming.loaded_system == Some(0);
-    for (mut style, dot) in station_dot_query.iter_mut() {
-        if in_haven {
-            style.display = Display::Flex;
-            place(&mut style, dot.world_pos);
-        } else {
-            style.display = Display::None;
-        }
+    // Every system has two full stations now, all in the loaded system's
+    // own space (SystemStations follows the loaded system), so they show
+    // wherever you are -- they used to be hidden outside Haven.
+    for (_, mut style, dot) in station_dot_query.iter_mut() {
+        place(&mut style, dot.world_pos);
     }
 
     // Active bounty targets: resolve each one's live position (spawned real

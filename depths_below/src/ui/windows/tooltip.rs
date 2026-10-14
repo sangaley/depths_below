@@ -38,9 +38,10 @@ pub fn tooltip_system(
     hovering_query: Query<(Entity, &Interaction, &Tooltip)>,
     existing_popup: Query<Entity, With<TooltipPopup>>,
     windows: Query<&Window>,
+    ui_scale: Res<bevy::ui::UiScale>,
 ) {
     let cursor_pos = windows.single().ok()
-        .and_then(|w| w.cursor_position())
+        .and_then(|w| crate::ui::cursor_in_ui(w, &ui_scale))
         .unwrap_or(Vec2::ZERO);
 
     // Check for newly hovered tooltip entities
@@ -91,9 +92,10 @@ pub fn tooltip_system(
 pub fn tooltip_position_system(
     mut popup_query: Query<&mut Node, With<TooltipPopup>>,
     windows: Query<&Window>,
+    ui_scale: Res<bevy::ui::UiScale>,
 ) {
     let Some(cursor_pos) = windows.single().ok()
-        .and_then(|w| w.cursor_position())
+        .and_then(|w| crate::ui::cursor_in_ui(w, &ui_scale))
     else {
         return;
     };

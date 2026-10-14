@@ -257,14 +257,11 @@ pub fn despawn_build_ghost(
     query: Query<Entity, With<BuildGhost>>,
     cell_query: Query<Entity, With<BuildGhostCell>>,
     validation_query: Query<Entity, With<BuildValidationText>>,
+    // The hover tooltip is only refreshed while Placing, so leaving with the
+    // cursor on a module stranded the last one in space for good.
+    tooltip_query: Query<Entity, With<ModuleTooltip>>,
 ) {
-    for entity in query.iter() {
-        commands.entity(entity).despawn();
-    }
-    for entity in cell_query.iter() {
-        commands.entity(entity).despawn();
-    }
-    for entity in validation_query.iter() {
+    for entity in query.iter().chain(cell_query.iter()).chain(validation_query.iter()).chain(tooltip_query.iter()) {
         commands.entity(entity).despawn();
     }
 }
@@ -696,11 +693,13 @@ pub fn update_module_tooltip(
     module_query: Query<&Module>,
     registry: Res<ModuleRegistry>,
     mouse: Res<ButtonInput<MouseButton>>,
+    ship_query: Query<Entity, With<Ship>>,
 ) {
     // Despawn old tooltip
     for entity in existing.iter() {
         commands.entity(entity).despawn();
     }
+    let Ok(ship) = ship_query.single() else { return };
 
     // Don't show tooltip while clicking
     if mouse.pressed(MouseButton::Left) || mouse.pressed(MouseButton::Right) {
@@ -732,11 +731,16 @@ pub fn update_module_tooltip(
                 TextFont { font_size: FontSize::Px(13.0), ..default() },
                 TextColor(Color::WHITE),
                 TextLayout::justify(Justify::Center),
+                // Ship-local, like the ghost and grid it labels: placed in
+                // world space it only lined up at a berth near the origin,
+                // and at the framing zoom 13px text needs the label scale.
                 Transform::from_xyz(
                     ghost_pos.x as f32 * 66.0,
                     ghost_pos.y as f32 * 66.0 - 33.0 + 45.0,
                     1.0,
                 ),
+                ChildOf(ship),
+                crate::camera::ZoomInvariantText,
                 ModuleTooltip,
             ));
         }

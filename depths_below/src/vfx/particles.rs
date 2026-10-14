@@ -57,8 +57,12 @@ pub fn spawn_engine_particles(
     time: Res<Time>,
     fx: Res<crate::vfx::effect_textures::EffectTextures>,
 
-    engine_query: Query<(&Engine, &Module, &GlobalTransform), Without<DestroyedModule>>,
-    ship_physics: Query<&ShipPhysics, With<Ship>>,
+    // ChildOf: the throttle and heading below are the PLAYER's, so only the
+    // player's engines may use them. Unscoped, every engine on every loaded
+    // AI ship puffed whenever the player held W, pointed along the player's
+    // heading, and never when the AI itself was manoeuvring.
+    engine_query: Query<(&Engine, &Module, &GlobalTransform, &ChildOf), Without<DestroyedModule>>,
+    ship_physics: Query<(Entity, &ShipPhysics), With<Ship>>,
     mut commands: Commands,
     mut spawn_timer: Local<f32>,
 ) {
@@ -66,13 +70,13 @@ pub fn spawn_engine_particles(
     if *spawn_timer < 0.05 { return; } // 20 particles/sec max per engine
     *spawn_timer = 0.0;
 
-    let Ok(physics) = ship_physics.single() else { return };
+    let Ok((player, physics)) = ship_physics.single() else { return };
     if physics.throttle.abs() < 0.1 { return; } // Not thrusting
 
     let mut rng = rand::thread_rng();
 
-    for (_engine, module, global_transform) in engine_query.iter() {
-        if !module.is_active { continue; }
+    for (_engine, module, global_transform, parent) in engine_query.iter() {
+        if !module.is_active || parent.parent() != player { continue; }
 
         let pos = global_transform.translation().truncate();
         let facing = Vec2::new(physics.rotation.cos(), physics.rotation.sin());

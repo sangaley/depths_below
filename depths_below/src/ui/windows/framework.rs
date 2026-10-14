@@ -214,6 +214,31 @@ pub fn spawn_floating_window(
     content_entity
 }
 
+/// Highest stacking step a dragged window gets above its base ZIndex(10).
+const MAX_WINDOW_Z: u32 = 40;
+
+/// Windows whose keys (N, L, U) only work in flight, so nothing could close
+/// them at a berth: they sat frozen over the station builder.
+const FLIGHT_ONLY_WINDOWS: [&str; 3] = ["minimap", "notif_log", super::power_routing::WINDOW_ID];
+
+/// Close every floating window -- on the game-over screen and the main menu.
+/// They outlived the run: an open minimap drew over "LOST IN SPACE" and came
+/// back in the next expedition.
+pub fn close_all_windows(mut commands: Commands, windows: Query<Entity, With<FloatingWindow>>) {
+    for entity in &windows {
+        commands.entity(entity).try_despawn();
+    }
+}
+
+/// Close the flight-only windows on reaching a berth.
+pub fn close_flight_windows(mut commands: Commands, windows: Query<(Entity, &FloatingWindow)>) {
+    for (entity, window) in &windows {
+        if FLIGHT_ONLY_WINDOWS.contains(&window.id.as_str()) {
+            commands.entity(entity).try_despawn();
+        }
+    }
+}
+
 /// System: handle window dragging via title bar interaction
 pub fn window_drag_system(
     mut windows: Query<(&mut FloatingWindow, &mut Node, &mut ZIndex)>,
@@ -221,9 +246,10 @@ pub fn window_drag_system(
     mouse_button: Res<ButtonInput<MouseButton>>,
     cursor_query: Query<&Window>,
     mut z_counter: ResMut<WindowZCounter>,
+    ui_scale: Res<bevy::ui::UiScale>,
 ) {
     let Some(cursor_pos) = cursor_query.single().ok()
-        .and_then(|w| w.cursor_position())
+        .and_then(|w| crate::ui::cursor_in_ui(w, &ui_scale))
     else {
         return;
     };
@@ -247,8 +273,11 @@ pub fn window_drag_system(
                             cursor_pos.x - current_x,
                             cursor_pos.y - current_y,
                         );
-                        // Bring to front
-                        z_counter.next_z += 1;
+                        // Bring to front. The counter only ever grew, so
+                        // after enough drags a window outranked the pause
+                        // menu (ZIndex 100); it now wraps well below that,
+                        // which costs at worst one drag in the stack order.
+                        z_counter.next_z = z_counter.next_z % MAX_WINDOW_Z + 1;
                         window.z_order = z_counter.next_z;
                         *z_index = ZIndex(10 + z_counter.next_z as i32);
                     }

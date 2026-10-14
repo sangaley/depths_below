@@ -212,9 +212,10 @@ pub fn sync_fire_overlays(
                     custom_size: Some(Vec2::splat(46.0)),
                     ..default()
                 },
-                // Above the module's own sprite (0.2) and its turret barrel
-                // (0.3), below projectiles (0.5). Local to the parent.
-                Transform::from_xyz(0.0, 0.0, 0.25),
+                // Above the module's own sprite and its turret barrel (local
+                // 0.3), below projectiles (0.5). Local to the parent -- the
+                // 0.25 this was set to sat UNDER the barrel it describes.
+                Transform::from_xyz(0.0, 0.0, 0.32),
                 FireOverlay {
                     tick: Timer::from_seconds(0.11, TimerMode::Repeating),
                     frame: 0,

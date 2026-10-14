@@ -600,7 +600,9 @@ pub fn spawn_base_arrow(mut commands: Commands, existing: Query<(), With<BaseArr
     }
 
     let arrow_root = commands
-        .spawn((Transform::from_xyz(0.0, 0.0, 5.0), Visibility::Hidden, BaseArrow))
+        // ZoomInvariantText scales it with the camera: at a fixed 34 world
+        // units it was a ~6px glyph at the framing zoom.
+        .spawn((Transform::from_xyz(0.0, 0.0, 5.0), Visibility::Hidden, BaseArrow, crate::camera::ZoomInvariantText))
         .id();
     let shaft = commands
         .spawn((
@@ -621,14 +623,27 @@ pub fn spawn_base_arrow(mut commands: Commands, existing: Query<(), With<BaseArr
     commands.entity(arrow_root).add_children(&[shaft, head]);
 }
 
+/// Where a nav arrow pointing along `dir` sits: just outside the hull.
+///
+/// It used to orbit 150 units from the ship's root, and the pincer reaches
+/// ~1,000 units from its root -- the arrow was drawn on top of the ship's own
+/// blocks, where nobody could pick it out of the hull art.
+pub fn nav_arrow_orbit(ship: &Transform, collider: Option<&crate::ship::collision::Collider>, dir: Vec2) -> Vec2 {
+    let (centre, radius) = match collider {
+        Some(c) => (ship.transform_point(c.bound_center.extend(0.0)).truncate(), c.bound_radius),
+        None => (ship.translation.truncate(), 150.0),
+    };
+    centre + dir * (radius + 140.0)
+}
+
 /// Point the arrow from the ship toward the nearest station; hidden when
 /// already close to one (or when there's no station at all — blind space).
 pub fn update_base_arrow(
     stations: Res<SystemStations>,
-    ship_query: Query<&Transform, (With<Ship>, Without<BaseArrow>)>,
+    ship_query: Query<(&Transform, Option<&crate::ship::collision::Collider>), (With<Ship>, Without<BaseArrow>)>,
     mut arrow_query: Query<(&mut Transform, &mut Visibility), With<BaseArrow>>,
 ) {
-    let Ok(ship_transform) = ship_query.single() else { return };
+    let Ok((ship_transform, collider)) = ship_query.single() else { return };
     let Ok((mut arrow_transform, mut vis)) = arrow_query.single_mut() else { return };
     let ship_pos = ship_transform.translation.truncate();
 
@@ -645,7 +660,7 @@ pub fn update_base_arrow(
     *vis = Visibility::Visible;
 
     let dir = (nearest - ship_pos).normalize_or_zero();
-    let orbit = ship_pos + dir * 150.0;
+    let orbit = nav_arrow_orbit(ship_transform, collider, dir);
     arrow_transform.translation.x = orbit.x;
     arrow_transform.translation.y = orbit.y;
     arrow_transform.rotation = Quat::from_rotation_z(dir.y.atan2(dir.x));

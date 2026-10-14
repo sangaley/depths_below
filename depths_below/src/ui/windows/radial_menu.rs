@@ -137,9 +137,10 @@ pub fn update_radial_menu(
     windows: Query<&Window>,
     mut menu_query: Query<(&mut RadialMenu, &Children)>,
     mut slice_query: Query<(&RadialSlice, &mut BackgroundColor)>,
+    ui_scale: Res<bevy::ui::UiScale>,
 ) {
     let Some(cursor_pos) = windows.single().ok()
-        .and_then(|w| w.cursor_position())
+        .and_then(|w| crate::ui::cursor_in_ui(w, &ui_scale))
     else { return };
 
     for (mut menu, _children) in menu_query.iter_mut() {
@@ -186,6 +187,7 @@ pub fn spawn_radial_on_right_click(
     // combat::targeting::aim_lock. If the click went to the guns, it isn't
     // ours this frame.
     aim_lock: Res<crate::combat::targeting::AimLock>,
+    ui_scale: Res<bevy::ui::UiScale>,
 ) {
     if !mouse.just_pressed(MouseButton::Right) { return; }
     if aim_lock.click_consumed { return; }
@@ -230,7 +232,9 @@ pub fn spawn_radial_on_right_click(
         }
     }
 
-    spawn_radial_menu(&mut commands, cursor_pos, space_radial_options());
+    // The menu is a UI node, so it is placed (and later hit-tested) in UI
+    // units; the world pick above needs the raw cursor.
+    spawn_radial_menu(&mut commands, cursor_pos / ui_scale.0.max(0.01), space_radial_options());
 }
 
 /// System: close radial menu on left click or escape, execute selected action

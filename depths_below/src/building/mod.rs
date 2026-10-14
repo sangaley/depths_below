@@ -878,7 +878,7 @@ pub fn cursor_to_ship_grid(
 fn update_ghost_preview(
     windows: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
-    ship_query: Query<&GlobalTransform, (With<Ship>, Without<Camera>)>,
+    ship_query: Query<(Entity, &GlobalTransform), (With<Ship>, Without<Camera>)>,
     mut build_state: ResMut<BuildingState>,
     current_state: Res<State<BuildState>>,
     occupancy: Res<GridOccupancy>,
@@ -898,7 +898,8 @@ fn update_ghost_preview(
 
     let Ok(window) = windows.single() else { return };
     let Ok((camera, camera_transform)) = camera_query.single() else { return };
-    let Ok(ship_gt) = ship_query.single() else { return };
+    let Ok((player, ship_gt)) = ship_query.single() else { return };
+    let player_ship = Some(player);
 
     let Some(grid_pos) = cursor_to_ship_grid(window, camera, camera_transform, ship_gt) else {
         // Pointing at nothing. Say so, rather than leaving the ghost sitting
@@ -948,8 +949,11 @@ fn update_ghost_preview(
             BuildSelection::Module(mt) => footprints::footprint_override(mt),
         };
 
-        // Block limit check (250 max)
-        let block_count = module_query.iter().count() + hull_query.iter().count();
+        // Block limit check. Hull counts only the player's own plating: any
+        // ship or wreck parked near the berth used to add its hull to the
+        // tally, refusing placements well under the limit.
+        let player_hull = hull_query.iter().filter(|(_, _, p)| Some(p.parent()) == player_ship).count();
+        let block_count = module_query.iter().count() + player_hull;
         let under_limit = block_count < crate::combat::limits::MAX_SHIP_BLOCKS;
 
         // Check overlap using GridOccupancy (supports multi-cell)
@@ -968,8 +972,7 @@ fn update_ghost_preview(
             false
         });
 
-        let is_first = module_query.iter().count() == 0
-            && hull_query.iter().count() == 0;
+        let is_first = module_query.iter().count() == 0 && player_hull == 0;
 
         // Positional rules for modules
         let position_ok = check_position_rules(

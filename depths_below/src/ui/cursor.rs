@@ -101,6 +101,7 @@ pub fn update_custom_cursor(
     windows_query: Query<&Window>,
     mut cursor_query: Query<&mut Node, With<CustomCursorIcon>>,
     state: Res<State<crate::states::GameState>>,
+    ui_scale: Res<bevy::ui::UiScale>,
 ) {
     let Ok(window) = windows_query.single() else { return };
     let Ok(mut node) = cursor_query.single_mut() else { return };
@@ -113,7 +114,7 @@ pub fn update_custom_cursor(
         return;
     }
 
-    match window.cursor_position() {
+    match super::cursor_in_ui(window, &ui_scale) {
         Some(pos) => {
             node.display = Display::Flex;
             node.left = Val::Px(pos.x - CURSOR_SIZE as f32 / 2.0);

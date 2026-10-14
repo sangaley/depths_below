@@ -120,20 +120,25 @@ pub fn update_offscreen_markers(
         Res<crate::celestial::resources::SystemStreamingManager>,
         Query<(Entity, &Transform, &LogEntry)>,
     ),
+    ui_scale: Res<bevy::ui::UiScale>,
 ) {
     let (Ok((cam_tf, projection)), Some(window), Ok((player, player_tf))) =
         (camera.single(), windows.iter().next(), player.single())
     else {
         return;
     };
+    // World units per UI unit. Markers are UI nodes, and `Val::Px` is
+    // multiplied by UiScale, so at 120% the right- and bottom-edge markers
+    // were pushed off the screen.
+    let ui = ui_scale.0.max(0.01);
     let scale = match projection {
-        Projection::Orthographic(o) => o.scale,
-        _ => 1.0,
+        Projection::Orthographic(o) => o.scale * ui,
+        _ => ui,
     };
     if scale <= 0.0 {
         return;
     }
-    let screen = Vec2::new(window.width(), window.height());
+    let screen = Vec2::new(window.width(), window.height()) / ui;
     let cam = cam_tf.translation.truncate();
     let home = player_tf.translation.truncate();
 
@@ -265,6 +270,7 @@ mod tests {
     fn app() -> App {
         let mut app = App::new();
         app.add_systems(Update, update_offscreen_markers);
+        app.init_resource::<bevy::ui::UiScale>();
         app.init_resource::<crate::narrative::expedition::Expedition>();
         app.init_resource::<crate::celestial::resources::SystemStreamingManager>();
         app.world_mut().spawn(Window::default()); // 1280 x 720
@@ -336,6 +342,7 @@ mod record_marker_tests {
     fn the_next_record_is_marked_in_its_system() {
         let mut app = App::new();
         app.add_systems(Update, update_offscreen_markers);
+        app.init_resource::<bevy::ui::UiScale>();
         app.world_mut().spawn(Window::default());
         app.world_mut().spawn((MainCamera, Transform::default(), Projection::Orthographic(OrthographicProjection::default_2d())));
         app.world_mut().spawn((Ship, Transform::default()));
