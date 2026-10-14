@@ -222,7 +222,7 @@ fn spawn_tutorial_card(mut commands: Commands) {
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                top: Val::Px(46.0),
+                top: Val::Px(crate::ui::RIGHT_COLUMN_TOP),
                 left: Val::Px(0.0),
                 right: Val::Px(0.0),
                 justify_content: JustifyContent::Center,
@@ -231,6 +231,7 @@ fn spawn_tutorial_card(mut commands: Commands) {
             ZIndex(50),
             Visibility::Hidden,
             TutorialRoot,
+            crate::ui::BelowTopBar,
         ))
         .with_children(|wrapper| {
             wrapper

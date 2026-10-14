@@ -69,6 +69,7 @@ impl Plugin for UiPlugin {
                 rebuild_action_toolbar,
                 weapon_rack_visibility,
                 update_weapon_rack.run_if(in_state(GameState::Exploring)),
+                pin_below_top_bar,
             ))
             .add_systems(
                 Update,
@@ -858,7 +859,7 @@ fn setup_ui(mut commands: Commands) {
                 column_gap: Val::Px(ThemeSpacing::XS),
                 align_items: AlignItems::Center,
                 ..default()
-            }, BackgroundColor(ThemeColors::HUD_BG_SOLID))).with_children(|top_bar| {
+            }, BackgroundColor(ThemeColors::HUD_BG_SOLID), HudTopBar)).with_children(|top_bar| {
             // Three scannable clusters: ship vitals (severity meters) · nav
             // (system / depth / noise) · resources (credits / crew / cargo).
             // The nav cluster grows to push resources to the right edge.
@@ -948,6 +949,7 @@ fn setup_ui(mut commands: Commands) {
                 ..default()
             },
             RightColumn,
+            BelowTopBar,
         )).with_children(|column| {
             column.spawn((
                 Node {
@@ -1257,7 +1259,11 @@ fn rack_line(name: &str, weapons: &[RackWeapon]) -> RackLine {
         (format!("{ready}/{} RDY", live.len()), ThemeColors::ACCENT_YELLOW)
     } else {
         let soonest = live.iter().map(|w| w.remaining).fold(f32::INFINITY, f32::min);
-        (format!("{soonest:.1}s"), ThemeColors::ACCENT_ORANGE)
+        // Round up: the last tenth of a reload printed as an orange "0.0s",
+        // which reads as stuck rather than about to fire.
+        // (The epsilon keeps 0.3 from ceiling to 0.4 on f32 noise.)
+        let shown = (soonest * 10.0 - 0.001).ceil().max(1.0) / 10.0;
+        (format!("{shown:.1}s"), ThemeColors::ACCENT_ORANGE)
     };
     RackLine { name: label, frac, ammo, state, state_color }
 }
@@ -4908,8 +4914,45 @@ fn spawn_docking_menu(
 }
 
 /// Top of the right-hand HUD column (contract tracker, then notifications):
-/// just below the top bar.
-pub const RIGHT_COLUMN_TOP: f32 = 48.0;
+/// just below the top bar. Only the first frame's guess -- `pin_below_top_bar`
+/// replaces it with the bar's measured height once layout has run.
+pub const RIGHT_COLUMN_TOP: f32 = 72.0;
+
+/// Gap left between the top bar's lower edge and anything pinned under it.
+const BELOW_TOP_BAR_GAP: f32 = 6.0;
+
+/// The vitals/nav/resources strip across the top of the HUD.
+#[derive(Component)]
+pub struct HudTopBar;
+
+/// An absolutely positioned panel that should sit just under the top bar.
+///
+/// The bar's height is not a constant: its nav cluster stacks a label, a
+/// value and a caption, and it grew to 65px when the caption lines landed.
+/// The right column (pinned at 48) and the training card (at 46) were never
+/// moved, so both covered the bar's bottom line -- the zone name, the gravity
+/// readout -- for as long as either was on screen.
+#[derive(Component)]
+pub struct BelowTopBar;
+
+/// Keeps every `BelowTopBar` panel under the top bar's measured lower edge.
+fn pin_below_top_bar(
+    bar: Query<&ComputedNode, With<HudTopBar>>,
+    mut pinned: Query<&mut Node, With<BelowTopBar>>,
+) {
+    let Ok(bar) = bar.single() else { return };
+    // ComputedNode is physical pixels; Node offsets are logical.
+    let height = bar.size.y * bar.inverse_scale_factor;
+    if height <= 0.0 {
+        return;
+    }
+    let top = Val::Px(height + BELOW_TOP_BAR_GAP);
+    for mut node in &mut pinned {
+        if node.top != top {
+            node.top = top;
+        }
+    }
+}
 
 /// The right-hand column the contract tracker and the notifications stack in.
 #[derive(Component)]
@@ -5989,6 +6032,12 @@ mod weapon_rack_tests {
     fn none_ready_counts_down_to_the_soonest() {
         let line = rack_line("Gatling", &[gun(false, 0.7, true), gun(false, 0.3, true)]);
         assert_eq!(line.state, "0.3s");
+    }
+
+    /// The last sliver of a reload reads 0.1s, never a stuck-looking 0.0s.
+    #[test]
+    fn countdown_never_reads_zero() {
+        assert_eq!(rack_line("Gatling", &[gun(false, 0.02, true)]).state, "0.1s");
     }
 
     /// Dead guns don't count as loaded or ready; a stack of only dead guns is DOWN.

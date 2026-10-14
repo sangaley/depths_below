@@ -33,7 +33,11 @@ pub struct EdgeInsets {
     pub bottom: f32,
 }
 
-pub const INSETS: EdgeInsets = EdgeInsets { left: 34.0, right: 34.0, top: 72.0, bottom: 64.0 };
+/// Top clears the 65px vitals bar by the marker's half-height and a margin;
+/// bottom clears the action toolbar, which stands 30px up and ~45px tall --
+/// at 72/64 a marker's range label sat on the bar's bottom line or on the
+/// Map/Systems buttons.
+pub const INSETS: EdgeInsets = EdgeInsets { left: 34.0, right: 34.0, top: 90.0, bottom: 100.0 };
 
 /// One marker on screen, pointing at `target`.
 #[derive(Component)]
