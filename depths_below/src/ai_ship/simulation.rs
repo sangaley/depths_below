@@ -108,7 +108,15 @@ pub fn init_world_simulation(
     // populated, which directly conflicted with Haven now being a
     // deliberately safe hub. The systems reachable by warp are where the
     // populated universe lives now.
-    ensure_system_population(&mut sim, &galaxy_map, 0);
+    //
+    // The loaded system, not system 0: those are the same on a new run, but
+    // a save made anywhere else used to load into a system nobody populated
+    // (it was neither Haven nor one of its own Warm neighbours) -- empty
+    // until you jumped out and back. None is uncharted space: no one lives
+    // there, only the Warm neighbours around it.
+    if let Some(cur) = streaming.loaded_system {
+        ensure_system_population(&mut sim, &galaxy_map, cur);
+    }
     for warm_id in &streaming.warm_systems {
         ensure_system_population(&mut sim, &galaxy_map, *warm_id);
     }

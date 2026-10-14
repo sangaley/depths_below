@@ -34,28 +34,7 @@ pub fn spawn_starter_ship(
     hull_state.hull_integrity = 1.0;
 
     // Spawn the main ship entity (invisible anchor for movement)
-    let ship = commands.spawn((
-        Transform::from_translation(crate::world::home_base::SPAWN_BERTH.extend(0.0)),
-        // The ship carries no sprite of its own, but its ~120 hull/module
-        // children do. Bevy propagates visibility down the hierarchy, so
-        // without Visibility here every child logs B0004 on spawn (120 warnings
-        // a run) and parent-level visibility can never hide the ship.
-        Visibility::default(),
-        Ship,
-        Velocity(Vec2::ZERO),
-        Depth(0.0),
-        ThrusterState {
-            base_drift: 0.0,
-            current: 0.0,
-        },
-        Health {
-            current: 150.0,
-            max: 150.0,
-        },
-        ShipPhysics::default(),
-        crate::celestial::components::GravityAffected { mass: 5000.0 },
-        crate::celestial::components::GravityForce::default(),
-    )).id();
+    let ship = commands.spawn(ship_root_bundle(crate::world::home_base::SPAWN_BERTH)).id();
 
     // The starter destroyer is design data, not spawn calls — see
     // builtin_starter_design(). designs/starter.json overrides the built-in
@@ -104,6 +83,38 @@ pub fn spawn_starter_ship(
         notification_type: NotificationType::Info,
         duration: 8.0,
     });
+}
+
+/// Everything the player's ship root carries, at rest at `position`.
+///
+/// Shared by a new run (above) and a loaded save (meta.rs), which kept its
+/// own copy: a grey 200x80 placeholder box drawn under the hull and no
+/// GravityAffected/GravityForce, so a ship loaded from the main menu ignored
+/// every star and planet for the rest of the session. Inserted over an
+/// existing root, it also zeroes whatever motion the ship had.
+pub fn ship_root_bundle(position: Vec2) -> impl Bundle {
+    (
+        Transform::from_translation(position.extend(0.0)),
+        // The ship carries no sprite of its own, but its ~120 hull/module
+        // children do. Bevy propagates visibility down the hierarchy, so
+        // without Visibility here every child logs B0004 on spawn (120 warnings
+        // a run) and parent-level visibility can never hide the ship.
+        Visibility::default(),
+        Ship,
+        Velocity(Vec2::ZERO),
+        Depth(0.0),
+        ThrusterState {
+            base_drift: 0.0,
+            current: 0.0,
+        },
+        Health {
+            current: 150.0,
+            max: 150.0,
+        },
+        ShipPhysics::default(),
+        crate::celestial::components::GravityAffected { mass: 5000.0 },
+        crate::celestial::components::GravityForce::default(),
+    )
 }
 
 /// The starter destroyer expressed as design data (Blueprint v2). This is
@@ -556,9 +567,10 @@ pub fn spawn_module(
     // Children inherit the parent's visual_angle, so this is authored once
     // facing north-east and R turns it with the block.
     if is_wedge {
-        // A 1x1 module sprite is 60 units, NOT the 66-unit cell pitch — see
-        // local_w/local_h above. Sizing to the cell overhangs the neighbours.
-        const H: f32 = 30.0;
+        // Half the 1x1 module sprite, which is the full 66-unit cell now (see
+        // local_w/local_h above). This was 30 from when sprites were 60, and
+        // left a 3-unit seam between every wedge and the plates beside it.
+        const H: f32 = 33.0;
         const BANDS: usize = 20;
         let band = (H * 2.0) / BANDS as f32;
         let face = def.color;

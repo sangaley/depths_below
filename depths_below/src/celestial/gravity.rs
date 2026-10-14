@@ -11,18 +11,43 @@ pub const GRAVITY_NOTICE: f32 = 40.0;
 /// Pull at which escaping takes most of your engines: two-thirds of thrust.
 pub const GRAVITY_SEVERE: f32 = 120.0;
 
+/// A well's pull at `distance` from its centre, before the global clamp.
+///
+/// Inside the body it pulls at its surface value. A planet or star well is
+/// `surface_gravity * r²`, so `strength / d²` is tuned AT the surface and
+/// only grows past it: a warp dash that dropped the ship well inside a planet
+/// met many times surface pull, up to the 50,000 u/s² clamp -- hundreds of
+/// times the engines -- instead of the strong-but-survivable value the body
+/// was designed around. (Real gravity falls off toward the centre; holding
+/// the surface value is simpler, and never more than the body was tuned for.)
+///
+/// `body_radius` is the CelestialBody's, 0 for a well without one. Black
+/// holes keep their own ramp: crossing the horizon is meant to end you.
+pub fn well_pull(well: &GravityWell, distance: f32, body_radius: f32) -> f32 {
+    let r = distance.max(body_radius);
+    match well.falloff {
+        GravityFalloff::InverseSquare => well.strength / (r * r),
+        GravityFalloff::InverseLinear => well.strength / r,
+        GravityFalloff::BlackHole => {
+            // Dramatic ramp: gentle at distance, extreme near event horizon
+            let normalized = (distance / well.influence_radius).clamp(0.01, 1.0);
+            well.strength / (normalized * normalized * distance)
+        }
+    }
+}
+
 /// Accumulate gravity forces on all GravityAffected entities from all GravityWells.
 /// Uses influence_radius to skip distant wells.
 pub fn accumulate_gravity(
     config: Res<CelestialConfig>,
-    well_query: Query<(&Transform, &GravityWell), Without<BeingConsumed>>,
+    well_query: Query<(&Transform, &GravityWell, Option<&CelestialBody>), Without<BeingConsumed>>,
     mut affected_query: Query<(&Transform, &GravityAffected, &mut GravityForce)>,
 ) {
     for (affected_transform, _affected, mut gravity_force) in affected_query.iter_mut() {
         let pos = affected_transform.translation.truncate();
         let mut total_force = Vec2::ZERO;
 
-        for (well_transform, well) in well_query.iter() {
+        for (well_transform, well, body) in well_query.iter() {
             let well_pos = well_transform.translation.truncate();
             let delta = well_pos - pos;
             let distance = delta.length();
@@ -33,20 +58,7 @@ pub fn accumulate_gravity(
             }
 
             let direction = delta / distance;
-
-            let force_magnitude = match well.falloff {
-                GravityFalloff::InverseSquare => {
-                    well.strength / (distance * distance)
-                }
-                GravityFalloff::InverseLinear => {
-                    well.strength / distance
-                }
-                GravityFalloff::BlackHole => {
-                    // Dramatic ramp: gentle at distance, extreme near event horizon
-                    let normalized = (distance / well.influence_radius).clamp(0.01, 1.0);
-                    well.strength / (normalized * normalized * distance)
-                }
-            };
+            let force_magnitude = well_pull(well, distance, body.map_or(0.0, |b| b.radius));
 
             let clamped = force_magnitude.min(config.max_gravity_force);
             total_force += direction * clamped;
@@ -220,6 +232,25 @@ mod gravity_tests {
                 "body {i} fell at {v}, not the field's {}", field * 2.0
             );
         }
+    }
+
+    /// Inside a planet the pull is its surface value, not `strength / d²`
+    /// running away toward the clamp. Outside, nothing changes.
+    #[test]
+    fn inside_a_body_the_pull_is_the_surface_pull() {
+        let radius = 30_000.0;
+        let surface = 60.0;
+        let well = GravityWell {
+            strength: surface * radius * radius,
+            influence_radius: radius * 5.0,
+            falloff: GravityFalloff::InverseSquare,
+        };
+        for depth in [0.99, 0.5, 0.1, 0.001] {
+            let pull = well_pull(&well, radius * depth, radius);
+            assert!((pull - surface).abs() < 1e-3, "{:.0}% of the way in: {pull} u/s²", (1.0 - depth) * 100.0);
+        }
+        let outside = well_pull(&well, radius * 2.0, radius);
+        assert!((outside - surface / 4.0).abs() < 1e-3, "two radii out: {outside}");
     }
 
     /// The warning and HUD lines are in u/s², and sit below the starter's

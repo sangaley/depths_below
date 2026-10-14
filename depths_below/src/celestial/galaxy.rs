@@ -560,6 +560,8 @@ pub fn spawn_system_contents(
     def: &StarSystemDef,
     // The expedition records this system holds (narrative::trail::records_in).
     records: &[&'static crate::narrative::logs::LogEntryDef],
+    // Derelict/anomaly slots already stripped here (LootedPois::for_system).
+    looted: &[u32],
 ) -> StarSystemInfo {
     let mut rng = StdRng::seed_from_u64(def.seed);
 
@@ -594,7 +596,7 @@ pub fn spawn_system_contents(
         star_radius: system_info.star_radius,
         planets: &system_info.planet_paths,
     };
-    super::poi::spawn_system_pois(commands, &keep_clear, def.id, Some(station), &planet_positions, &mut rng, records);
+    super::poi::spawn_system_pois(commands, &keep_clear, def.id, Some(station), &planet_positions, &mut rng, records, looted);
 
     system_info
 }
@@ -629,13 +631,14 @@ pub fn load_system(
     galaxy_map: &mut GalaxyMap,
     system_id: u32,
     now: f64,
+    looted: &super::resources::LootedPois,
 ) -> Option<StarSystemInfo> {
     let def = galaxy_map.systems.iter_mut().find(|s| s.id == system_id)?;
     catch_up_system(def, now);
     def.discovery = SystemDiscovery::Visited;
     let def = galaxy_map.systems.iter().find(|s| s.id == system_id)?;
     let records = crate::narrative::trail::records_in(galaxy_map, system_id);
-    Some(spawn_system_contents(commands, asset_server, textures, def, &records))
+    Some(spawn_system_contents(commands, asset_server, textures, def, &records, looted.for_system(system_id)))
 }
 
 #[cfg(test)]
@@ -1058,7 +1061,7 @@ mod placement_tests {
         let info = app
             .world_mut()
             .run_system_once(move |mut commands: Commands, assets: Res<AssetServer>| {
-                spawn_system_contents(&mut commands, &assets, &textures, &def, &records)
+                spawn_system_contents(&mut commands, &assets, &textures, &def, &records, &[])
             })
             .unwrap();
         (app, info)

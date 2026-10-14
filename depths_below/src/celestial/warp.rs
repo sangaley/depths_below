@@ -196,16 +196,19 @@ pub fn execute_warp_jump(
     mut galaxy: ResMut<GalaxyState>,
     mut galaxy_map: ResMut<GalaxyMap>,
     mut streaming: ResMut<SystemStreamingManager>,
-    mut pending: ResMut<PendingGalaxyWarpTarget>,
+    // The galaxy-map target, and the local G-dash target: a point in the
+    // system being left, meaningless in the one arrived at.
+    pending: (ResMut<PendingGalaxyWarpTarget>, ResMut<crate::ui::PendingWarpTarget>),
     celestial_query: Query<(Entity, &StarSystemMember)>,
     mut ship_query: Query<(&mut Transform, &mut Velocity), With<Ship>>,
     mut notifications: MessageWriter<ShowNotification>,
     mut completed_events: MessageWriter<WarpJumpCompleted>,
-    textures: Res<crate::vfx::procedural_textures::CelestialTextures>,
-    asset_server: Res<AssetServer>,
+    spawn_assets: (Res<crate::vfx::procedural_textures::CelestialTextures>, Res<AssetServer>, Res<LootedPois>),
     time: Res<Time>,
     mut sim: ResMut<crate::ai_ship::components::WorldSimulation>,
 ) {
+    let (mut pending, mut dash_target) = pending;
+    let (textures, asset_server, looted) = spawn_assets;
     for event in jump_events.read() {
         let Ok((mut ship_transform, mut ship_velocity)) = ship_query.single_mut() else {
             continue;
@@ -225,7 +228,7 @@ pub fn execute_warp_jump(
         }
 
         let (new_galaxy_pos, arrival_name) = if let Some(new_id) = resolved_system_id {
-            let Some(system_info) = galaxy::load_system(&mut commands, &asset_server, &textures, &mut galaxy_map, new_id, now) else {
+            let Some(system_info) = galaxy::load_system(&mut commands, &asset_server, &textures, &mut galaxy_map, new_id, now, &looted) else {
                 continue;
             };
             let Some(def) = galaxy_map.systems.iter().find(|s| s.id == new_id) else { continue };
@@ -280,6 +283,9 @@ pub fn execute_warp_jump(
         streaming.current_galaxy_pos = new_galaxy_pos;
         streaming.warm_systems = galaxy::nearest_neighbors_to_pos(&galaxy_map, new_galaxy_pos, streaming.loaded_system, galaxy::WARM_NEIGHBOR_COUNT);
         pending.0 = None;
+        // Left set, the next G press dashed toward a point that only meant
+        // something in the old system -- across the new one, or into its sun.
+        dash_target.0 = None;
 
         // First-ever visit populates a system's faction ships; a repeat
         // visit leaves whatever's left (however depleted by earlier combat)

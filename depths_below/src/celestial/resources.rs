@@ -112,6 +112,30 @@ pub enum GalaxyWarpTarget {
 #[derive(Resource, Default)]
 pub struct PendingGalaxyWarpTarget(pub Option<GalaxyWarpTarget>);
 
+/// Derelicts and anomalies already stripped, per system, by their slot in
+/// that system's spawn order (see `poi::PoiSlot`).
+///
+/// A system's entities are despawned on every jump and respawned from its
+/// seed, and the seed rolls every hulk full again -- so without this the same
+/// derelict paid out on every visit. Written the moment something is looted
+/// rather than on unload, and saved with the galaxy
+/// (`resources::SystemSaveData::looted_pois`).
+#[derive(Resource, Default)]
+pub struct LootedPois(pub std::collections::HashMap<u32, Vec<u32>>);
+
+impl LootedPois {
+    pub fn mark(&mut self, system_id: u32, slot: u32) {
+        let slots = self.0.entry(system_id).or_default();
+        if !slots.contains(&slot) {
+            slots.push(slot);
+        }
+    }
+
+    pub fn for_system(&self, system_id: u32) -> &[u32] {
+        self.0.get(&system_id).map(Vec::as_slice).unwrap_or(&[])
+    }
+}
+
 /// Lightweight metadata per star system (bookkeeping, not ECS)
 #[derive(Clone, Debug)]
 pub struct StarSystemInfo {

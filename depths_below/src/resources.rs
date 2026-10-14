@@ -1577,6 +1577,10 @@ pub struct SystemSaveData {
     pub discovery: u8,
     pub last_updated: f64,
     pub resource_fraction_remaining: f32,
+    /// Derelicts/anomalies already stripped here, by spawn slot (see
+    /// celestial::resources::LootedPois). Empty on older saves.
+    #[serde(default)]
+    pub looted_pois: Vec<u32>,
 }
 
 #[derive(Resource, Serialize, Deserialize)]
@@ -1609,6 +1613,22 @@ pub struct SaveData {
     /// Never pruned — see crew::burial. Empty on legacy saves.
     #[serde(default)]
     pub drifting_dead: Vec<crate::crew::burial::DriftingBody>,
+    /// Where in the galaxy the player was, when that was nowhere: set only for
+    /// a save made in uncharted space after a blind jump. `current_system_id`
+    /// can't say that -- it read None as 0, so a save in the void loaded at
+    /// Haven. None on older saves, which then load into `current_system_id`.
+    #[serde(default)]
+    pub uncharted_galaxy_pos: Option<Vec2>,
+    /// Fuel in the tank. None on saves made before it was kept; those load
+    /// with a full tank, which is what loading one from the menu always gave.
+    #[serde(default)]
+    pub fuel: Option<f32>,
+    /// Contract boards and accepted contracts. Empty on older saves.
+    #[serde(default)]
+    pub contracts: crate::contracts::ContractState,
+    /// Standing with the contract factions. The starting standing on older saves.
+    #[serde(default)]
+    pub reputation: crate::contracts::FactionReputation,
 }
 
 impl Default for SaveData {
@@ -1638,6 +1658,10 @@ impl Default for SaveData {
             galaxy_seed: 0,
             galaxy_systems: Vec::new(),
             drifting_dead: Vec::new(),
+            uncharted_galaxy_pos: None,
+            fuel: None,
+            contracts: crate::contracts::ContractState::default(),
+            reputation: crate::contracts::FactionReputation::default(),
         }
     }
 }
@@ -1849,5 +1873,60 @@ mod tests {
                 seen.len()
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod save_tests {
+    use super::*;
+
+    fn with_new_fields() -> SaveData {
+        let mut save = SaveData::default();
+        save.galaxy_seed = 9;
+        save.galaxy_systems = vec![SystemSaveData {
+            id: 4,
+            discovery: 2,
+            last_updated: 12.0,
+            resource_fraction_remaining: 0.5,
+            looted_pois: vec![0, 2],
+        }];
+        save.uncharted_galaxy_pos = Some(Vec2::new(1_200_000.0, -40_000.0));
+        save.fuel = Some(321.0);
+        save.contracts.next_id = 17;
+        save.reputation.navy = 42.0;
+        save
+    }
+
+    /// Everything added to the save comes back out of it.
+    #[test]
+    fn the_new_fields_round_trip() {
+        let json = serde_json::to_string(&with_new_fields()).unwrap();
+        let back: SaveData = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.galaxy_systems[0].looted_pois, vec![0, 2]);
+        assert_eq!(back.uncharted_galaxy_pos, Some(Vec2::new(1_200_000.0, -40_000.0)));
+        assert_eq!(back.fuel, Some(321.0));
+        assert_eq!(back.contracts.next_id, 17);
+        assert_eq!(back.reputation.navy, 42.0);
+    }
+
+    /// A save written before those fields existed still loads, and reads as
+    /// "nothing recorded" rather than as something it never said: in a
+    /// system (not the void), no fuel figure, no contracts, starting standing.
+    #[test]
+    fn a_save_from_before_them_still_loads() {
+        let mut json = serde_json::to_value(with_new_fields()).unwrap();
+        let obj = json.as_object_mut().unwrap();
+        for key in ["uncharted_galaxy_pos", "fuel", "contracts", "reputation"] {
+            assert!(obj.remove(key).is_some(), "{key} is not in the save under that name");
+        }
+        obj["galaxy_systems"][0].as_object_mut().unwrap().remove("looted_pois");
+
+        let old: SaveData = serde_json::from_value(json).unwrap();
+        assert!(old.galaxy_systems[0].looted_pois.is_empty());
+        assert_eq!(old.uncharted_galaxy_pos, None);
+        assert_eq!(old.fuel, None);
+        assert!(old.contracts.active_contracts.is_empty());
+        assert_eq!(old.contracts.next_id, 0);
+        assert_eq!(old.reputation.navy, crate::contracts::FactionReputation::default().navy);
     }
 }

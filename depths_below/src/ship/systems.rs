@@ -217,6 +217,14 @@ pub fn cleanup_game_entities(
     creatures: Query<Entity, With<Creature>>,
     chunks: Query<Entity, With<Chunk>>,
     pois: Query<Entity, With<PointOfInterest>>,
+    // The star system and everyone in it. None of this was cleared, so the
+    // next run -- new or loaded -- started inside the last one's.
+    world: (
+        Query<Entity, With<crate::celestial::components::StarSystemMember>>,
+        Query<Entity, With<crate::ai_ship::components::AiShip>>,
+        ResMut<crate::celestial::resources::GalaxyState>,
+        ResMut<crate::ai_ship::components::WorldSimulation>,
+    ),
     mut chunk_manager: ResMut<ChunkManager>,
     mut roster: ResMut<CrewRoster>,
     mut depth_state: ResMut<DepthState>,
@@ -225,6 +233,7 @@ pub fn cleanup_game_entities(
     mut fuel_state: ResMut<FuelState>,
     mut noise_state: ResMut<NoiseState>,
 ) {
+    let (members, ai_ships, mut galaxy, mut sim) = world;
     // Despawn ship and all children (modules, hull segments, crew)
     for entity in ships.iter() {
         commands.entity(entity).despawn();
@@ -233,6 +242,21 @@ pub fn cleanup_game_entities(
     for entity in creatures.iter() {
         commands.entity(entity).despawn();
     }
+    // Stars, planets, rocks and derelicts. GalaxyState still listing them is
+    // what kept the next run from spawning its own: spawn_initial_system only
+    // spawns into an empty list, so a new expedition flew the old system.
+    for entity in members.iter() {
+        commands.entity(entity).try_despawn();
+    }
+    *galaxy = crate::celestial::resources::GalaxyState::default();
+    // AI ships, wrecks included -- a wreck keeps its AiShip. Before the POI
+    // pass below, which also reaches wrecks (they carry PointOfInterest).
+    // The simulation goes with them: left `initialized`, it never populated
+    // the next run, and its ships still carried the old run's systems.
+    for entity in ai_ships.iter() {
+        commands.entity(entity).try_despawn();
+    }
+    *sim = crate::ai_ship::components::WorldSimulation::default();
     // Despawn chunks (and their children: POIs, decorations)
     for entity in chunks.iter() {
         commands.entity(entity).despawn();
@@ -294,5 +318,44 @@ mod cargo_capacity_tests {
         app.world_mut().spawn((hold(100.0, true), crate::ai_ship::components::OwnedByAiShip { root: raider }));
         app.update();
         assert_eq!(app.world().resource::<Inventory>().max_capacity, 540.0);
+    }
+}
+
+#[cfg(test)]
+mod cleanup_tests {
+    use super::*;
+    use crate::ai_ship::components::{AiShip, WorldSimulation};
+    use crate::celestial::components::StarSystemMember;
+    use crate::celestial::resources::GalaxyState;
+
+    /// Back at the menu, nothing of the last run's world is left for the next
+    /// one to start inside: not its system, not its ships or wrecks, and not
+    /// the records that would stop the next run spawning its own.
+    #[test]
+    fn the_menu_clears_the_last_runs_world() {
+        let mut app = App::new();
+        app.init_resource::<ChunkManager>()
+            .init_resource::<CrewRoster>()
+            .init_resource::<DepthState>()
+            .init_resource::<OxygenState>()
+            .init_resource::<HullState>()
+            .init_resource::<FuelState>()
+            .init_resource::<NoiseState>()
+            .init_resource::<GalaxyState>()
+            .init_resource::<WorldSimulation>()
+            .add_systems(Update, cleanup_game_entities);
+        app.world_mut().resource_mut::<WorldSimulation>().initialized = true;
+        app.world_mut().resource_mut::<GalaxyState>().current_system = 7;
+        let star = app.world_mut().spawn(StarSystemMember { system_id: 7 }).id();
+        let raider = app.world_mut().spawn(AiShip).id();
+        let wreck = app.world_mut().spawn((AiShip, PointOfInterest { poi_type: PoiType::Wreck, discovered: true })).id();
+
+        app.update();
+
+        for (what, e) in [("star", star), ("raider", raider), ("wreck", wreck)] {
+            assert!(app.world().get_entity(e).is_err(), "the {what} survived");
+        }
+        assert!(!app.world().resource::<WorldSimulation>().initialized, "the next run would never be populated");
+        assert_eq!(app.world().resource::<GalaxyState>().current_system, 0);
     }
 }

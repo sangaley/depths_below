@@ -1,8 +1,8 @@
 use bevy::prelude::*;
 use crate::components::*;
 use crate::resources::*;
-use crate::celestial::resources::{GalaxyMap, SystemStreamingManager, SystemDiscovery};
-use crate::celestial::galaxy::{generate_galaxy_map, nearest_neighbors, WARM_NEIGHBOR_COUNT};
+use crate::celestial::resources::{GalaxyMap, GalaxyState, LootedPois, SystemStreamingManager, SystemDiscovery};
+use crate::celestial::galaxy::{generate_galaxy_map, nearest_neighbors, nearest_neighbors_to_pos, WARM_NEIGHBOR_COUNT};
 use crate::events::*;
 use crate::states::GameState;
 
@@ -71,6 +71,20 @@ fn save_unlocks(unlocks: Res<Unlocks>) {
 // SAVE SYSTEM
 // ============================================================================
 
+/// The player's own blocks, for saving. Not an AI ship's: enemy hull, modules
+/// and crew carry the same components as the player's, and hull cells are
+/// recorded from LOCAL transforms -- so an enemy plate at its own (2,3) was
+/// written into the save as the player's (2,3). Autosave runs every two
+/// minutes while exploring, which is exactly when enemies are around.
+///
+/// And not a section shot off the hull: severance unparents it, so its
+/// transform is world-space, and it came back from a load bolted on at
+/// whatever grid cell its world position divided out to.
+type PlayerBlocks = (
+    Without<crate::ai_ship::components::OwnedByAiShip>,
+    Without<crate::combat::severance::DetachedSection>,
+);
+
 /// Get save file path for a given slot
 fn save_path(slot: u32) -> String {
     if slot == AUTO_SAVE_SLOT {
@@ -111,23 +125,23 @@ fn collect_save_data(
     discovered_locations: &DiscoveredLocations,
     world_state: &WorldState,
     ship_query: &Query<&Transform, With<Ship>>,
-    // Every one of these MUST exclude AI ships. Enemy hull, modules and crew
-    // carry the same components as the player's, and hull cells are recorded
-    // from LOCAL transforms — so an enemy plate at its own (2,3) was being
-    // written into the save as the player's (2,3). Autosave runs every two
-    // minutes while exploring, which is exactly when enemies are around.
+    // Every one of these MUST exclude AI ships -- see PlayerBlocks.
     module_query: &Query<(
         &Module,
         Option<&CustomModule>,
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&crate::building::customization::tuning::SelectedAmmo>,
-    ), Without<crate::ai_ship::components::OwnedByAiShip>>,
-    hull_query: &Query<(&HullSegment, &Transform), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    ), PlayerBlocks>,
+    hull_query: &Query<(&HullSegment, &Transform), PlayerBlocks>,
     crew_query: &Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
     current_state: &State<GameState>,
     galaxy_map: &GalaxyMap,
     streaming: &SystemStreamingManager,
     drifting_dead: &crate::crew::burial::DriftingDead,
+    looted: &LootedPois,
+    fuel: &FuelState,
+    contracts: &crate::contracts::ContractState,
+    reputation: &crate::contracts::FactionReputation,
 ) -> SaveData {
     let position = ship_query
         .single()
@@ -224,7 +238,12 @@ fn collect_save_data(
             discovery: s.discovery.as_u8(),
             last_updated: s.last_updated,
             resource_fraction_remaining: s.resource_fraction_remaining,
+            looted_pois: looted.for_system(s.id).to_vec(),
         }).collect(),
+        uncharted_galaxy_pos: streaming.loaded_system.is_none().then_some(streaming.current_galaxy_pos),
+        fuel: Some(fuel.current_fuel),
+        contracts: contracts.clone(),
+        reputation: reputation.clone(),
     }
 }
 
@@ -265,13 +284,18 @@ fn handle_save_request(
     unlocks: Res<Unlocks>,
     discovered_locations: Res<DiscoveredLocations>,
     // Bundled to stay under Bevy's 16-param cap: local world seed + galaxy state
-    // + the drifting dead. This system is AT the cap; anything else new has to
-    // join a tuple too.
+    // + the drifting dead, and the run state that isn't the ship (fuel,
+    // contracts, standing). This system is AT the cap; anything else new has
+    // to join a tuple too.
     world_galaxy: (
         Res<WorldState>,
         Res<GalaxyMap>,
         Res<SystemStreamingManager>,
         Res<crate::crew::burial::DriftingDead>,
+        Res<LootedPois>,
+        Res<FuelState>,
+        Res<crate::contracts::ContractState>,
+        Res<crate::contracts::FactionReputation>,
     ),
     current_state: Res<State<GameState>>,
     ship_query: Query<&Transform, With<Ship>>,
@@ -280,11 +304,11 @@ fn handle_save_request(
         Option<&CustomModule>,
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&crate::building::customization::tuning::SelectedAmmo>,
-    ), Without<crate::ai_ship::components::OwnedByAiShip>>,
-    hull_query: Query<(&HullSegment, &Transform), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    ), PlayerBlocks>,
+    hull_query: Query<(&HullSegment, &Transform), PlayerBlocks>,
     crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
 ) {
-    let (world_state, galaxy_map, streaming, drifting_dead) = &world_galaxy;
+    let (world_state, galaxy_map, streaming, drifting_dead, looted, fuel, contracts, reputation) = &world_galaxy;
     for event in save_events.read() {
         let save_data = collect_save_data(
             event.slot,
@@ -304,6 +328,10 @@ fn handle_save_request(
             galaxy_map,
             streaming,
             drifting_dead,
+            looted,
+            fuel,
+            contracts,
+            reputation,
         );
 
         // Tier 3 customization is saved via customization_params field
@@ -391,8 +419,14 @@ fn apply_pending_load(
     mut unlocks: ResMut<Unlocks>,
     mut discovered_locations: ResMut<DiscoveredLocations>,
     mut world_state: ResMut<WorldState>,
+    run: (
+        ResMut<FuelState>,
+        ResMut<crate::contracts::ContractState>,
+        ResMut<crate::contracts::FactionReputation>,
+    ),
     mut commands: Commands,
 ) {
+    let (mut fuel, mut contracts, mut reputation) = run;
     let Some((slot, save)) = pending.0.take() else { return };
 
     // ---- Restore resources ----
@@ -405,6 +439,12 @@ fn apply_pending_load(
     *discovered_locations = save.discovered_locations.clone();
     world_state.seed = save.world_seed;
     hull_state.hull_integrity = save.slot_info.hull_integrity;
+    // None of these were saved. A load from the menu came back with a full
+    // tank (cleanup refills it) and an in-game one kept whatever was in it;
+    // either way the contracts and standing were the session's, not the save's.
+    fuel.current_fuel = save.fuel.unwrap_or(fuel.max_fuel).clamp(0.0, fuel.max_fuel);
+    *contracts = save.contracts.clone();
+    *reputation = save.reputation.clone();
 
     // Store save data in a resource for entity rebuild (handled in phase 3)
     commands.insert_resource(PendingEntityRebuild {
@@ -438,7 +478,25 @@ fn rebuild_entities_from_save(
     mut galaxy_map: ResMut<GalaxyMap>,
     mut streaming: ResMut<SystemStreamingManager>,
     mut drifting_dead: ResMut<crate::crew::burial::DriftingDead>,
+    // The spawned star system and its population. AT Bevy's 16-param cap:
+    // anything new joins one of these tuples.
+    world: (
+        ResMut<GalaxyState>,
+        ResMut<LootedPois>,
+        ResMut<crate::ai_ship::components::WorldSimulation>,
+        Res<crate::vfx::procedural_textures::CelestialTextures>,
+        Res<Time>,
+        Query<Entity, With<crate::celestial::components::StarSystemMember>>,
+    ),
+    // State the old ship was in the middle of, that the loaded one is not.
+    flight: (
+        ResMut<crate::ship::rebuild::RebuildQueue>,
+        ResMut<crate::ship::towing::Towing>,
+        ResMut<crate::ui::PendingWarpTarget>,
+    ),
 ) {
+    let (mut galaxy, mut looted, mut sim, textures, time, members) = world;
+    let (mut rebuild_queue, mut towing, mut dash_target) = flight;
     let Some(save) = pending.save_data.take() else { return };
     let slot = pending.slot;
 
@@ -454,35 +512,50 @@ fn rebuild_entities_from_save(
     }
 
     // ---- Respawn ship at saved position ----
+    // The same root a new run gets (ship::ship_root_bundle). Over an existing
+    // root it also zeroes the old ship's motion: only the Transform used to be
+    // replaced, so a quick-load mid-burn arrived still moving, spinning and
+    // throttled up.
+    let root = crate::ship::ship_root_bundle(save.position);
     let ship_entity = if let Ok(existing) = ship_query.single() {
-        commands.entity(existing).insert(
-            Transform::from_xyz(save.position.x, save.position.y, 0.0)
-        );
+        commands
+            .entity(existing)
+            .insert(root)
+            // A jump or dash charging when F9 was pressed is the old ship's.
+            .remove::<(crate::celestial::components::WarpCharging, crate::ui::MapWarpCharging)>();
         existing
     } else {
-        commands.spawn((
-            (Sprite {
-                    color: Color::srgb(0.3, 0.3, 0.5),
-                    custom_size: Some(Vec2::new(200.0, 80.0)),
-                    ..default()
-                }, Transform::from_xyz(save.position.x, save.position.y, 0.0)),
-            Ship,
-            Velocity(Vec2::ZERO),
-            Depth(save.current_depth),
-            ThrusterState { base_drift: 0.0, current: 0.0 },
-            Health { current: 100.0, max: 100.0 },
-            ShipPhysics::default(),
-        )).id()
+        commands.spawn(root).id()
     };
+    commands.entity(ship_entity).insert(Depth(save.current_depth));
+    *towing = default();
+    dash_target.0 = None;
+    // Ghosts are the old ship's missing blocks; left queued, crew rebuilt
+    // them onto the loaded one. Their outline sprites hang off the root,
+    // which survives the load, so they go explicitly.
+    for ghost in rebuild_queue.ghosts.drain(..) {
+        for sprite in ghost.sprites {
+            commands.entity(sprite).try_despawn();
+        }
+    }
 
     // ---- Respawn hull segments ----
     for hull_data in &save.hull_segments {
         let hull_texture = asset_server.load(
             crate::sprite_map::hull_layer_sprite_path(hull_data.material, hull_data.hull_layer)
         );
+        // Same tint per layer as blueprint::spawn_ship_from_design and
+        // building::process_hull_placement, so a loaded hull matches a built one.
+        let color = match hull_data.hull_layer {
+            HullLayer::Outer | HullLayer::Hallway => Color::WHITE,
+            HullLayer::Inner => Color::srgb(0.9, 0.9, 0.9),
+            HullLayer::Void => Color::srgb(0.5, 0.5, 0.6),
+            HullLayer::BulkheadDoor => Color::srgb(0.9, 0.8, 0.7),
+        };
         commands.spawn((
             (Sprite {
                     image: hull_texture,
+                    color,
                     // Full cell, matching blueprint.rs -- a loaded save used to
                     // come back with the old 2-unit gap between every plate.
                     custom_size: Some(Vec2::new(66.0, 66.0)),
@@ -492,6 +565,11 @@ fn rebuild_entities_from_save(
                     hull_data.grid_position.y as f32 * 66.0 - 33.0,
                     0.1,
                 )),
+            // Every other hull spawn carries these two. Without Block a plate
+            // resolved as armour thickness 0 for the rest of the session, and
+            // without the base colour damage tinting had nothing to darken from.
+            BaseSpriteColor(color),
+            crate::building::Block::hull(hull_data.grid_position, hull_data.material),
             BaseHullStats {
                 max_health: hull_data.max_health,
                 radiation_shielding: hull_data.radiation_shielding,
@@ -581,21 +659,71 @@ fn rebuild_entities_from_save(
     // galaxy_seed == 0 → leave the freshly-generated galaxy alone.
     if save.galaxy_seed != 0 {
         *galaxy_map = generate_galaxy_map(save.galaxy_seed);
+        looted.0.clear();
         for sd in &save.galaxy_systems {
             if let Some(sys) = galaxy_map.systems.iter_mut().find(|s| s.id == sd.id) {
                 sys.discovery = SystemDiscovery::from_u8(sd.discovery);
                 sys.last_updated = sd.last_updated;
                 sys.resource_fraction_remaining = sd.resource_fraction_remaining;
             }
+            for &poi_slot in &sd.looted_pois {
+                looted.mark(sd.id, poi_slot);
+            }
         }
-        let cur = save.current_system_id;
-        streaming.loaded_system = Some(cur);
-        streaming.current_galaxy_pos = galaxy_map.systems.iter()
-            .find(|s| s.id == cur)
-            .map(|s| s.galaxy_pos)
-            .unwrap_or(Vec2::ZERO);
-        streaming.warm_systems = nearest_neighbors(&galaxy_map, cur, WARM_NEIGHBOR_COUNT);
-        info!("Galaxy restored: seed={}, current system={}, {} systems", save.galaxy_seed, cur, galaxy_map.systems.len());
+        if let Some(pos) = save.uncharted_galaxy_pos {
+            // Saved after a blind jump into empty space: no system is Hot.
+            streaming.loaded_system = None;
+            streaming.current_galaxy_pos = pos;
+            streaming.warm_systems = nearest_neighbors_to_pos(&galaxy_map, pos, None, WARM_NEIGHBOR_COUNT);
+        } else {
+            let cur = save.current_system_id;
+            streaming.loaded_system = Some(cur);
+            streaming.current_galaxy_pos = galaxy_map.systems.iter()
+                .find(|s| s.id == cur)
+                .map(|s| s.galaxy_pos)
+                .unwrap_or(Vec2::ZERO);
+            streaming.warm_systems = nearest_neighbors(&galaxy_map, cur, WARM_NEIGHBOR_COUNT);
+        }
+
+        // ---- The star system itself ----
+        // This used to stop at pointing the streaming manager at the saved
+        // system. Nothing despawned what was there or spawned what should be:
+        // an in-game load kept the current system's bodies around a ship now
+        // somewhere else, and a load from the menu got Haven whatever the
+        // save said. Clear every system, then arrive in the saved one the way
+        // a warp does.
+        for entity in members.iter() {
+            commands.entity(entity).try_despawn();
+        }
+        // The list only, not galaxy_time: that is the orbital clock.
+        galaxy.systems.clear();
+        if let Some(cur) = streaming.loaded_system {
+            let now = time.elapsed_secs_f64();
+            if let Some(info) = crate::celestial::galaxy::load_system(
+                &mut commands, &asset_server, &textures, &mut galaxy_map, cur, now, &looted,
+            ) {
+                galaxy.current_system = cur;
+                galaxy.next_system_id = cur + 1;
+                galaxy.systems.push(info);
+                galaxy.total_bodies = 1;
+            }
+        }
+        // ...and its people. A running simulation populates the saved system
+        // and its neighbours now (a no-op for any already populated). One not
+        // yet started -- a load from the menu -- is left to
+        // init_world_simulation, which does the same on entering Exploring.
+        if sim.initialized {
+            if let Some(cur) = streaming.loaded_system {
+                crate::ai_ship::simulation::ensure_system_population(&mut sim, &galaxy_map, cur);
+            }
+            for warm_id in streaming.warm_systems.clone() {
+                crate::ai_ship::simulation::ensure_system_population(&mut sim, &galaxy_map, warm_id);
+            }
+        }
+        info!(
+            "Galaxy restored: seed={}, current system={:?}, {} systems",
+            save.galaxy_seed, streaming.loaded_system, galaxy_map.systems.len()
+        );
     }
 
     // ---- Set game state ----
@@ -691,7 +819,13 @@ pub fn reset_for_new_game(
     mut finale: ResMut<crate::narrative::FinaleFound>,
     mut galaxy: ResMut<crate::celestial::resources::GalaxyMap>,
     mut streaming: ResMut<crate::celestial::resources::SystemStreamingManager>,
+    world: (
+        ResMut<GalaxyState>,
+        ResMut<crate::ai_ship::components::WorldSimulation>,
+        ResMut<LootedPois>,
+    ),
 ) {
+    let (mut spawned, mut sim, mut looted) = world;
     if requests.read().next().is_none() {
         return;
     }
@@ -714,6 +848,15 @@ pub fn reset_for_new_game(
     // what makes the next launch roll a fresh one.
     galaxy.systems.clear();
     *streaming = crate::celestial::resources::SystemStreamingManager::default();
+    // The spawned side of the galaxy and its population. Their entities are
+    // already gone (ship::cleanup_game_entities, on entering the menu); these
+    // are the records that would otherwise make the next run skip spawning
+    // its own -- spawn_initial_system only fills an empty GalaxyState, and an
+    // `initialized` simulation never populates again.
+    *spawned = GalaxyState::default();
+    *sim = crate::ai_ship::components::WorldSimulation::default();
+    // Derelicts stripped last run are full again in a new galaxy.
+    *looted = LootedPois::default();
 
     info!("new expedition: previous run cleared");
 }

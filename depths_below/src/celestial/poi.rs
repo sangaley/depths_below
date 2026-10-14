@@ -57,6 +57,13 @@ pub struct SpacePoi {
     pub loot_value: u32,
 }
 
+/// Which lootable this is in its system's spawn order: derelicts first, then
+/// the anomaly. The spawn order is fixed by the system's seed, so the same
+/// hulk gets the same slot on every visit -- which is what lets
+/// `LootedPois` remember it was stripped once its entity is long gone.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PoiSlot(pub u32);
+
 /// Component for mineable asteroids
 #[derive(Component)]
 pub struct MineableResource {
@@ -219,6 +226,8 @@ pub fn spawn_system_pois(
     // The expedition records this system holds, in reading order (see
     // narrative::trail). Each goes on a derelict of its own.
     records: &[&'static crate::narrative::logs::LogEntryDef],
+    // Slots already stripped on an earlier visit (LootedPois::for_system).
+    looted: &[u32],
 ) {
     let system_center = keep_clear.center;
     // Derelict ships (1-3 per system, and at least one per record held)
@@ -251,11 +260,12 @@ pub fn spawn_system_pois(
                 }, Transform::from_xyz(pos.x, pos.y, -0.3)),
             SpacePoi {
                 poi_type: SpacePoiType::DerelictShip,
-                looted: false,
+                looted: looted.contains(&(i as u32)),
                 discovered: false,
                 name: format!("{} derelict", super::galaxy::system_name(system_id)),
                 loot_value: rng.gen_range(50..200),
             },
+            PoiSlot(i as u32),
             StarSystemMember { system_id },
         )).id();
         // The record this derelict holds, if the trail put one here. (The
@@ -283,15 +293,18 @@ pub fn spawn_system_pois(
         let dist = rng.gen_range(50_000.0..100_000.0);
         let pos = keep_clear.settle(system_center + Vec2::from_angle(angle) * (keep_clear.floor() + dist));
 
+        // After every derelict's slot, so it never shares one.
+        let slot = derelict_count as u32;
         let poi = commands.spawn((
             (Sprite {
                     color: Color::srgba(0.5, 0.3, 0.8, 0.6),
                     custom_size: Some(Vec2::splat(300.0)),
                     ..default()
                 }, Transform::from_xyz(pos.x, pos.y, -0.3)),
+            PoiSlot(slot),
             SpacePoi {
                 poi_type: SpacePoiType::Anomaly,
-                looted: false,
+                looted: looted.contains(&slot),
                 discovered: false,
                 name: format!("{} anomaly", super::galaxy::system_name(system_id)),
                 loot_value: rng.gen_range(100..500),
@@ -450,8 +463,9 @@ pub fn loot_prompt_system(
 /// Loot derelict ships when close
 pub fn loot_derelict_system(
     ship_query: Query<&Transform, With<Ship>>,
-    mut poi_query: Query<(&Transform, &mut SpacePoi), Without<Ship>>,
+    mut poi_query: Query<(&Transform, &mut SpacePoi, Option<&PoiSlot>, Option<&StarSystemMember>), Without<Ship>>,
     mut currency: ResMut<Currency>,
+    mut looted: ResMut<super::resources::LootedPois>,
     mut notifications: MessageWriter<ShowNotification>,
     keyboard: Res<ButtonInput<KeyCode>>,
 ) {
@@ -460,11 +474,15 @@ pub fn loot_derelict_system(
     let Ok(ship_transform) = ship_query.single() else { return };
     let ship_pos = ship_transform.translation.truncate();
 
-    for (poi_transform, mut poi) in poi_query.iter_mut() {
+    for (poi_transform, mut poi, slot, member) in poi_query.iter_mut() {
         if !lootable(&poi) { continue; }
         if ship_pos.distance(poi_transform.translation.truncate()) > LOOT_RANGE { continue; }
 
         poi.looted = true;
+        // The flag dies with the entity on the next jump; this outlives it.
+        if let (Some(slot), Some(member)) = (slot, member) {
+            looted.mark(member.system_id, slot.0);
+        }
         currency.credits += poi.loot_value;
         notifications.write(ShowNotification {
             message: format!("Looted {}! +{}c", poi.name, poi.loot_value),
@@ -512,5 +530,67 @@ mod loot_prompt_tests {
         app.world_mut().spawn((Transform::from_xyz(5000.0, 0.0, 0.0), poi(SpacePoiType::DerelictShip, false)));
         app.update();
         assert!(prompts(&app).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod loot_memory_tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use rand::SeedableRng;
+    use crate::celestial::resources::LootedPois;
+
+    const SYSTEM: u32 = 3;
+
+    /// One system's points of interest as `spawn_system_pois` lays them out
+    /// from a fixed seed, as (slot, looted).
+    fn spawn(looted: Vec<u32>) -> Vec<(u32, bool)> {
+        let mut world = World::new();
+        world
+            .run_system_once(move |mut commands: Commands| {
+                let keep_clear = KeepClear { center: Vec2::ZERO, star_radius: 40_000.0, planets: &[] };
+                let mut rng = rand::rngs::StdRng::seed_from_u64(7);
+                spawn_system_pois(&mut commands, &keep_clear, SYSTEM, None, &[], &mut rng, &[], &looted);
+            })
+            .unwrap();
+        let mut q = world.query::<(&PoiSlot, &SpacePoi)>();
+        let mut out: Vec<(u32, bool)> = q.iter(&world).map(|(slot, poi)| (slot.0, poi.looted)).collect();
+        out.sort();
+        out
+    }
+
+    /// Strip a derelict, leave the system (its entities go), come back (they
+    /// respawn from the seed): it is still stripped, and nothing else is.
+    #[test]
+    fn a_stripped_derelict_stays_stripped_on_the_next_visit() {
+        let first = spawn(Vec::new());
+        assert!(first.iter().all(|(_, looted)| !looted), "a fresh system came up already stripped");
+        let (slot, _) = first[0];
+
+        let mut app = App::new();
+        app.add_message::<ShowNotification>()
+            .init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<Currency>()
+            .init_resource::<LootedPois>()
+            .add_systems(Update, loot_derelict_system);
+        app.world_mut().spawn((Ship, Transform::default()));
+        app.world_mut().spawn((
+            Transform::from_xyz(500.0, 0.0, 0.0),
+            SpacePoi { poi_type: SpacePoiType::DerelictShip, looted: false, discovered: true, name: "x".into(), loot_value: 100 },
+            PoiSlot(slot),
+            StarSystemMember { system_id: SYSTEM },
+        ));
+        app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::KeyE);
+        app.update();
+
+        let looted = app.world().resource::<LootedPois>().for_system(SYSTEM).to_vec();
+        assert_eq!(looted, vec![slot]);
+        assert!(app.world().resource::<LootedPois>().for_system(SYSTEM + 1).is_empty());
+
+        let again = spawn(looted);
+        assert_eq!(again.len(), first.len(), "the respawn laid the system out differently");
+        for (s, is_looted) in again {
+            assert_eq!(is_looted, s == slot, "slot {s} came back looted={is_looted}");
+        }
     }
 }
