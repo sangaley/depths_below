@@ -1385,7 +1385,7 @@ fn head_for_dock(
     stations: &SystemStations,
     pos: Vec2,
     crew_out: bool,
-    wreck_near: Option<f32>,
+    wreck_near: Option<(f32, Vec2)>,
 ) -> bool {
     let Some(site) = stations.sites.iter().min_by(|a, b| {
         pos.distance(a.pos)
@@ -1410,13 +1410,24 @@ fn head_for_dock(
     // `wreck_near` is root to root and the game measures to the wreck's
     // nearest block, so allow a margin on "alongside".
     let alongside = crate::crew::eva_salvage::ALONGSIDE + 1_000.0;
-    let standoff = match wreck_near {
-        Some(w) if w < alongside => 300.0,
-        _ => crate::celestial::warp::STATION_ARRIVAL_STANDOFF,
-    };
-    let approach = site.pos + (pos - site.pos).normalize_or(Vec2::X) * (site.radius() + standoff);
-    fly_to(d, pos, approach, pos.distance(approach), 150.0);
-    let station_wins = wreck_near.is_none_or(|w| w > alongside || edge < w);
+    let station_wins = wreck_near.is_none_or(|(w, _)| w > alongside || edge < w);
+    match wreck_near {
+        // A wreck alongside takes the press: back off it until it isn't.
+        // This used to close to 300 off the station's radius instead, to get
+        // nearer the station than the wreck -- but along a docking arm that
+        // point is inside the arm, and the director rammed Haven's arm tip at
+        // full thrust until the tank was dry.
+        Some((w, wreck_pos)) if !station_wins && dist < site.dock_range() * 0.8 => {
+            let away = pos + (pos - wreck_pos).normalize_or(Vec2::X) * (alongside - w + 800.0);
+            fly_to(d, pos, away, pos.distance(away), 150.0);
+        }
+        _ => {
+            let approach = site.pos
+                + (pos - site.pos).normalize_or(Vec2::X)
+                    * (site.radius() + crate::celestial::warp::STATION_ARRIVAL_STANDOFF);
+            fly_to(d, pos, approach, pos.distance(approach), 150.0);
+        }
+    }
 
     // Only inside the real docking radius, and on a slow beat so we aren't
     // mashing a key that means something else the moment we drift out.
@@ -1518,8 +1529,8 @@ fn salvageable(w: &World1, d: &Director, pos: Vec2) -> Option<(f32, Vec2, Entity
 
 /// Distance to the nearest wreck of any kind -- stripped or not, since the
 /// game still sends a detail to a gutted hulk with plating left on it.
-fn nearest_wreck(w: &World1, pos: Vec2) -> Option<f32> {
-    nearest(w.wrecks.iter().map(|(_, t, _)| t.translation.truncate()), pos).map(|(dist, _)| dist)
+fn nearest_wreck(w: &World1, pos: Vec2) -> Option<(f32, Vec2)> {
+    nearest(w.wrecks.iter().map(|(_, t, _)| t.translation.truncate()), pos)
 }
 
 fn loot_nearby(w: &World1, pos: Vec2) -> Option<(f32, Vec2)> {
