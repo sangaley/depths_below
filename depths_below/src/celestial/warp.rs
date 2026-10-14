@@ -306,14 +306,11 @@ pub fn execute_warp_jump(
         // jump opened in an engagement you didn't choose, with no chance to
         // sell a hold of salvage or repair first. Finding the fight is a
         // short flight; being dropped into one isn't a decision.
-        if let Some(new_id) = streaming.loaded_system {
-            let local_center = galaxy_map
-                .systems
-                .iter()
-                .find(|s| s.id == new_id)
-                .map(|s| s.local_center)
-                .unwrap_or(galaxy::HAVEN_LOCAL_CENTER);
-            if let Some(site) = crate::world::home_base::station_sites(new_id, local_center).first() {
+        let arrived_in = streaming
+            .loaded_system
+            .and_then(|id| galaxy_map.systems.iter().find(|s| s.id == id));
+        if let Some(def) = arrived_in {
+            if let Some(site) = crate::world::home_base::station_sites(def).first() {
                 // Off to one side rather than on top of the structure.
                 let a = rand::random::<f32>() * std::f32::consts::TAU;
                 let arrival = site.pos + Vec2::new(a.cos(), a.sin()) * (site.radius() + STATION_ARRIVAL_STANDOFF);
@@ -380,9 +377,11 @@ mod arrival_tests {
     /// fallback path is genuinely only for uncharted space.
     #[test]
     fn every_system_has_somewhere_to_arrive() {
-        for id in [0u32, 1, 7, 42, 300] {
-            let sites = crate::world::home_base::station_sites(id, Vec2::ZERO);
-            assert!(!sites.is_empty(), "system {id} has no station to warp to");
+        for seed in [1u64, 42, 7_777] {
+            for def in &galaxy::generate_galaxy_map(seed).systems {
+                let sites = crate::world::home_base::station_sites(def);
+                assert!(!sites.is_empty(), "seed {seed}: {} has no station to warp to", def.name);
+            }
         }
     }
 }

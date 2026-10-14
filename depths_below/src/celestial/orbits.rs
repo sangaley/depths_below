@@ -52,7 +52,7 @@ const PATH_SAMPLES: usize = 1024;
 /// The tube a planet sweeps: every point of its elliptical orbit, `radius`
 /// either side. Planets are solid and go all the way round every few
 /// minutes, so anything placed in the tube is eventually run over.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlanetPath {
     pub semi_major_axis: f32,
     pub eccentricity: f32,
@@ -72,6 +72,21 @@ impl PlanetPath {
             .map(|on_path| on_path.distance(offset))
             .fold(f32::INFINITY, f32::min);
         nearest - self.radius
+    }
+
+    /// Whether the planet's surface always passes at least `margin` from
+    /// `offset` (measured from the star).
+    ///
+    /// Same answer as `clearance(offset) >= margin`, but most points a placer
+    /// tries are nowhere near a given path, and those are settled without
+    /// walking it: the path never leaves the ring between perihelion and
+    /// aphelion, so a point well outside that ring is clear outright.
+    pub fn clears(&self, offset: Vec2, margin: f32) -> bool {
+        let from_star = offset.length();
+        let perihelion = self.semi_major_axis * (1.0 - self.eccentricity);
+        let aphelion = self.semi_major_axis * (1.0 + self.eccentricity);
+        let nearest_possible = (perihelion - from_star).max(from_star - aphelion);
+        nearest_possible - self.radius >= margin || self.clearance(offset) >= margin
     }
 
     /// The furthest the planet's surface ever gets from the star.

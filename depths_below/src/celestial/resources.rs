@@ -124,16 +124,13 @@ pub struct StarSystemInfo {
     /// enormous (40k-150k by class), so anything placed in the system has to
     /// be placed outside it -- see `galaxy::belt_radii`.
     pub star_radius: f32,
-    /// Each planet as `(orbit_distance, radius)`, innermost first.
+    /// Each planet's whole path, innermost first, eccentricity included.
     ///
-    /// The radius matters as much as the orbit: planets are solid and now run
-    /// up to 60,000 across the radius, so anything placed "between two
-    /// orbits" using centres alone can land inside one of them.
-    pub planet_bands: Vec<(f32, f32)>,
-    /// Each planet's whole path, eccentricity included. `planet_bands`
-    /// treats orbits as circles; at eccentricity up to 0.3 a planet strays
-    /// up to 30% either side of that circle, which is what anything placed
-    /// to stay out of its way has to allow for (see `poi::KeepClear`).
+    /// Not `(orbit, radius)` circles, which is what this used to publish: at
+    /// eccentricity up to 0.3 a planet strays up to 30% either side of that
+    /// circle, and the asteroid field placed against the circles had 89 rocks
+    /// on a planet's real path in the seed-42 galaxy. Anything placed to stay
+    /// out of a planet's way measures against this (see `poi::KeepClear`).
     pub planet_paths: Vec<super::orbits::PlanetPath>,
 }
 
