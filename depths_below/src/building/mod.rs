@@ -1188,6 +1188,9 @@ fn handle_module_placement(
     symmetry_state: Res<symmetry::SymmetryState>,
     occupancy: Res<GridOccupancy>,
     mut last_painted: Local<Option<IVec2>>,
+    registry: Res<ModuleRegistry>,
+    currency: Res<Currency>,
+    module_query: Query<&Module, Without<crate::ai_ship::components::OwnedByAiShip>>,
 ) {
     if *current_state.get() != BuildState::Placing {
         return;
@@ -1227,14 +1230,22 @@ fn handle_module_placement(
                 });
                 // Symmetry: mirror hull placement
                 if symmetry_state.enabled {
-                    let mirror_pos = symmetry::mirror_position(pos);
-                    if mirror_pos != pos && !occupancy.cells.contains_key(&mirror_pos) {
-                        place_hull_events.write(PlaceHullRequest {
-                            layer,
-                            material: build_state.hull_material,
-                            grid_position: mirror_pos,
-                            free: false,
-                        });
+                    let cost = build_state.hull_material.cost();
+                    let selection = build_state.current_selection();
+                    if let Some((mirror_pos, _)) = symmetry::valid_mirror(
+                        pos, IVec2::ONE, rot, None, &occupancy,
+                        |p| check_position_rules(&selection, p, &module_query),
+                    ) {
+                        // Both copies have to be affordable, or only the
+                        // original goes down.
+                        if currency.credits >= cost * 2 {
+                            place_hull_events.write(PlaceHullRequest {
+                                layer,
+                                material: build_state.hull_material,
+                                grid_position: mirror_pos,
+                                free: false,
+                            });
+                        }
                     }
                 }
             }
@@ -1248,11 +1259,21 @@ fn handle_module_placement(
             extras: None,
                     free: false,
                 });
-                // Symmetry: mirror module placement
+                // Symmetry: mirror module placement. The copy gets the same
+                // checks the ghost gave the original -- free footprint,
+                // touching the hull, position rules, both affordable -- it
+                // used to skip all of them.
                 if symmetry_state.enabled {
-                    let mirror_pos = symmetry::mirror_position(pos);
-                    let mirror_rot = symmetry::mirror_rotation(rot);
-                    if mirror_pos != pos && !occupancy.cells.contains_key(&mirror_pos) {
+                    let def = registry.get(module_type);
+                    let footprint = footprints::footprint_override(module_type);
+                    let selection = build_state.current_selection();
+                    let mirror = symmetry::valid_mirror(
+                        pos, def.size, rot, footprint, &occupancy,
+                        |p| check_position_rules(&selection, p, &module_query),
+                    );
+                    if let Some((mirror_pos, mirror_rot)) =
+                        mirror.filter(|_| currency.credits >= def.cost * 2)
+                    {
                         place_module_events.write(PlaceModuleRequest {
                             module_type,
                             grid_position: mirror_pos,
@@ -1348,6 +1369,21 @@ fn process_hull_placement(
         let grid_pos = event.grid_position;
         let material = event.material;
 
+        // Refuse a paid block the player can't cover. The ghost already turns
+        // red when it's unaffordable, but two requests can arrive in one
+        // frame (symmetry sends a mirror copy) and both were validated
+        // against the same balance: the second spawned for whatever was left,
+        // saturating at 0c, while the history recorded full price -- so undo
+        // refunded money that was never paid.
+        if !event.free && currency.credits < material.cost() {
+            notifications.write(ShowNotification {
+                message: format!("Not enough credits ({}c needed)", material.cost()),
+                notification_type: NotificationType::Warning,
+                duration: 1.5,
+            });
+            continue;
+        }
+
         // Tint by layer type for visual distinction
         let color = match event.layer {
             HullLayer::Outer => Color::WHITE,
@@ -1430,6 +1466,19 @@ fn process_module_placement(
     let Ok(ship) = ship_query.single() else { return };
 
     for event in events.read() {
+        // Same guard as hull placement: never spawn a paid module on credit.
+        if !event.free {
+            let cost = registry.get(event.module_type).cost;
+            if currency.credits < cost {
+                notifications.write(ShowNotification {
+                    message: format!("Not enough credits ({}c needed)", cost),
+                    notification_type: NotificationType::Warning,
+                    duration: 1.5,
+                });
+                continue;
+            }
+        }
+
         // Check if this is a custom module
         let entity = if let (Some(custom_name), Some(subcomponents)) = (&event.custom_name, &event.subcomponents) {
             // Spawn custom module with ship-components
