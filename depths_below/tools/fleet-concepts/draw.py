@@ -34,9 +34,14 @@ LEGEND = {
     "d": "EmergencyBulkhead", "D": "DroneBay", "y": "RepairBay", "l": "Floodlight",
     "o": "DockingPort", "h": "DockingHub", "t": "TractorBeam", "X": "SalvageArm",
     "u": "AirlockChamber", "q": "OfficerQuarters", "w": "WellnessHub", "V": "CryoStorage",
+    "P": "PlasmaCaster", "Z": "CreatureContainment", "Y": "SpecimenVault", "J": "SignalBuoy",
+    "I": "ThermalImager", "*": "ClusterRocket", "^": "GuidedMissile", "&": "MiningDrill",
+    "~": "StealthCoating", "?": "PassiveRadar", "!": "ResearchLab", "$": "ReinforcedVault",
+    "%": "AdvancedRepairBay", "@": "AICombatCore", "+": "EmergencyForceField", "=": "SignalJammer",
 }
 AIMED = {"Cannon", "Gatling", "Railgun", "HeavyMissile", "Laser", "PointDefenseDrone", "IonDisruptor",
-         "EMPPulse", "Coilgun", "Floodlight", "TractorBeam", "SalvageArm", "DockingPort"}
+         "EMPPulse", "Coilgun", "Floodlight", "TractorBeam", "SalvageArm", "DockingPort",
+         "PlasmaCaster", "ClusterRocket", "GuidedMissile", "MiningDrill"}
 ENGINES = {"StandardEngine", "LargeEngine"}
 DIRS = {"North": (0, 1), "South": (0, -1), "East": (1, 0), "West": (-1, 0)}
 N4 = ((0, 1), (0, -1), (-1, 0), (1, 0))
@@ -130,7 +135,7 @@ class Canvas:
         for c, ch in self.cells.items():
             if ch in LEGEND:
                 by_letter.setdefault(ch, set()).add(c)
-            elif ch not in "#./":
+            elif ch not in "#./":   # every other character is in LEGEND
                 errors.append(f"unknown cell '{ch}' at {c}")
         for ch, cells in by_letter.items():
             kind = LEGEND[ch]

@@ -77,7 +77,8 @@ POSTS = {  # crew stations (go ON the nav map as posts)
     "Railgun", "Coilgun", "Laser", "PlasmaCaster", "IonDisruptor", "HeavyMissile",
     "GuidedMissile", "ClusterRocket", "BasicQuarters", "Barracks", "OfficerQuarters",
     "MedBay", "SurgicalBay", "GalleyMess", "MessHall", "RadarArray", "OxygenScrubber",
-    "RepairBay", "SalvageArm", "TractorBeam", "EMPPulse",
+    "RepairBay", "SalvageArm", "TractorBeam", "EMPPulse", "PlasmaCaster", "MiningDrill",
+    "ResearchLab", "CreatureContainment", "AdvancedRepairBay", "AICombatCore",
 }
 
 
