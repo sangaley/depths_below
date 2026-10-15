@@ -913,6 +913,56 @@ pub fn ai_chain_reactions(
     }
 }
 
+/// Seconds an AI ship must go without anything to shoot at before its
+/// magazines are full again.
+pub const AI_RESTOCK_QUIET: f32 = 30.0;
+
+/// AI ships refill their magazines between fights.
+///
+/// They never dock, so with ammo actually burning a ship that emptied its
+/// guns in one fight would sit silent for the rest of the run, and drawing
+/// a patrol's fire until it went dry would be the safe way to beat every
+/// ship in a system. Within a fight a magazine is still a magazine -- outlast
+/// it and the guns stop -- but half a minute with nothing in range and the
+/// ship has restocked from its own holds.
+pub fn ai_restock_between_fights(
+    time: Res<Time>,
+    ships: Query<(Entity, &GlobalTransform, Option<&AiShipTarget>, &Children), (With<AiShip>, Without<AiShipWreck>)>,
+    mut weapons: Query<&mut Weapon, Without<DestroyedModule>>,
+    mut quiet: Local<bevy::platform::collections::HashMap<Entity, f32>>,
+) {
+    let dt = time.delta_secs();
+    let mut alive = bevy::platform::collections::HashSet::new();
+    for (ship, gt, target, children) in &ships {
+        alive.insert(ship);
+        let reach = children
+            .iter()
+            .filter_map(|c| weapons.get(c).ok())
+            .map(|w| w.range)
+            .fold(0.0f32, f32::max);
+        let engaged = target.is_some_and(|t| {
+            t.entity.is_some() && t.position.distance(gt.translation().truncate()) <= reach * 1.2
+        });
+        let timer = quiet.entry(ship).or_insert(0.0);
+        if engaged {
+            *timer = 0.0;
+            continue;
+        }
+        *timer += dt;
+        if *timer < AI_RESTOCK_QUIET {
+            continue;
+        }
+        for child in children.iter() {
+            if let Ok(mut weapon) = weapons.get_mut(child) {
+                if weapon.ammo < weapon.max_ammo {
+                    weapon.ammo = weapon.max_ammo;
+                }
+            }
+        }
+    }
+    quiet.retain(|ship, _| alive.contains(ship));
+}
+
 /// Crews that keep watching their rounds skip off you eventually stop firing
 /// the round that skips.
 ///

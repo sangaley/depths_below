@@ -1260,13 +1260,20 @@ fn rack_line(name: &str, weapons: &[RackWeapon]) -> RackLine {
     } else {
         format!("{}/{}", live.iter().map(|w| w.ammo).sum::<u32>(), live.iter().map(|w| w.max).sum::<u32>())
     };
-    let ready = live.iter().filter(|w| w.ready).count();
+    // A dry gun has finished its cooldown and still can't fire. With ammo
+    // burning, READY over an empty magazine sent captains into fights with
+    // nothing to shoot.
+    let has_rounds = |w: &RackWeapon| w.max >= 999 || w.ammo > 0;
+    if !live.iter().any(|w| has_rounds(w)) {
+        return RackLine { name: label, frac: 0.0, ammo, state: "EMPTY".into(), state_color: ThemeColors::STATUS_DANGER };
+    }
+    let ready = live.iter().filter(|w| w.ready && has_rounds(w)).count();
     let (state, state_color) = if ready == live.len() {
         ("READY".to_string(), ThemeColors::ACCENT_GREEN)
     } else if ready > 0 {
         (format!("{ready}/{} RDY", live.len()), ThemeColors::ACCENT_YELLOW)
     } else {
-        let soonest = live.iter().map(|w| w.remaining).fold(f32::INFINITY, f32::min);
+        let soonest = live.iter().filter(|w| has_rounds(w)).map(|w| w.remaining).fold(f32::INFINITY, f32::min);
         // Round up: the last tenth of a reload printed as an orange "0.0s",
         // which reads as stuck rather than about to fire.
         // (The epsilon keeps 0.3 from ceiling to 0.4 on f32 noise.)
@@ -4704,11 +4711,110 @@ fn distance_price_multiplier_for(
         .unwrap_or(1.0)
 }
 
+/// One of the player's guns, as the rearm service sees it.
+#[derive(Clone, Copy)]
+struct RackAmmo {
+    entity: Entity,
+    ammo: u32,
+    max: u32,
+    loaded: Option<crate::combat::ammo_types::KineticAmmoType>,
+    kind: ModuleType,
+}
+
+impl RackAmmo {
+    /// Rounds short of a full magazine. Power-fed guns have no magazine to buy.
+    fn short(&self) -> u32 {
+        if self.max >= crate::combat::ammo_types::POWER_FED_AMMO { 0 } else { self.max.saturating_sub(self.ammo) }
+    }
+    /// What one round for this gun costs here, its load and the station's
+    /// discount included.
+    fn round_cost(&self, discount: f32) -> f32 {
+        crate::combat::ammo_types::rearm_price(self.kind, self.loaded, 1) * discount
+    }
+}
+
+/// Rounds missing across the rack, and what refilling them all costs.
+fn rearm_bill(rack: &[RackAmmo], discount: f32) -> (u32, u32) {
+    let rounds = rack.iter().map(RackAmmo::short).sum();
+    let cost: f32 = rack.iter().map(|w| w.short() as f32 * w.round_cost(discount)).sum();
+    (rounds, cost.ceil() as u32)
+}
+
+/// What pressing Rearm will do.
+#[derive(Debug, Default, PartialEq)]
+struct RearmPlan {
+    /// Rounds missing in total.
+    wanted: u32,
+    /// Rounds that will go in.
+    loaded: u32,
+    crates_used: u32,
+    from_crates: u32,
+    cost: u32,
+    /// Rounds per gun.
+    fills: Vec<(Entity, u32)>,
+    /// Cheapest round on the rack, for the "can't afford" message.
+    cheapest_round: f32,
+}
+
+/// Crates first, each worth 10 rounds and spent on the dearest rounds
+/// (a crate is worth more against antimatter than against brass, which is
+/// the right way round); then credits, spread across every gun in proportion
+/// so a short wallet tops up the whole battery rather than one gun.
+///
+/// The service used to be all or nothing: below the full bill you got
+/// "Not enough credits" and not a single round, which with ammo actually
+/// burning would strand a broke captain with empty guns at a station that
+/// sells shells.
+fn plan_rearm(rack: &[RackAmmo], discount: f32, crates: u32, credits: u32) -> RearmPlan {
+    const ROUNDS_PER_CRATE: u32 = 10;
+    let mut need: Vec<(Entity, u32, f32)> = rack
+        .iter()
+        .filter(|w| w.short() > 0)
+        .map(|w| (w.entity, w.short(), w.round_cost(discount)))
+        .collect();
+    let wanted: u32 = need.iter().map(|n| n.1).sum();
+    let cheapest_round = need.iter().map(|n| n.2).fold(f32::INFINITY, f32::min);
+    let mut plan = RearmPlan { wanted, cheapest_round, ..default() };
+    if wanted == 0 {
+        return plan;
+    }
+    let mut fills: std::collections::HashMap<Entity, u32> = std::collections::HashMap::new();
+
+    // Crates, dearest rounds first.
+    need.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+    plan.crates_used = wanted.div_ceil(ROUNDS_PER_CRATE).min(crates);
+    let mut crate_rounds = (plan.crates_used * ROUNDS_PER_CRATE).min(wanted);
+    plan.from_crates = crate_rounds;
+    for (entity, short, _) in need.iter_mut() {
+        let take = crate_rounds.min(*short);
+        *short -= take;
+        crate_rounds -= take;
+        *fills.entry(*entity).or_default() += take;
+    }
+
+    // Credits for the rest, the same fraction of every gun's shortfall.
+    let bill: f32 = need.iter().map(|(_, short, price)| *short as f32 * price).sum();
+    if bill > 0.0 {
+        let share = (credits as f32 / bill).min(1.0);
+        let mut spent = 0.0f32;
+        for (entity, short, price) in &need {
+            let rounds = if share >= 1.0 { *short } else { (*short as f32 * share).floor() as u32 };
+            spent += rounds as f32 * price;
+            *fills.entry(*entity).or_default() += rounds;
+        }
+        plan.cost = (spent.ceil() as u32).min(credits);
+    }
+
+    plan.fills = fills.into_iter().filter(|(_, r)| *r > 0).collect();
+    plan.loaded = plan.fills.iter().map(|f| f.1).sum();
+    plan
+}
+
 fn get_docking_services(
     hull_state: &HullState,
     oxygen_state: &OxygenState,
     fuel_state: &FuelState,
-    weapon_query: &Query<(&Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), (Without<Creature>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
+    weapon_query: &Query<(Entity, &Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>, &Module), (Without<Creature>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
     crew_count: usize,
     total_berths: u32,
     inventory: &Inventory,
@@ -4732,21 +4838,14 @@ fn get_docking_services(
     let o2_missing = oxygen_state.max_oxygen - oxygen_state.current_oxygen;
     let o2_cost = (o2_missing * 2.0) as u32;
 
-    // Count weapons that need ammo, and price each gun's refill by what it
-    // has loaded — a railgun full of antimatter costs multiples of the same
-    // railgun full of AP (combat::ammo_types::rearm_price).
-    let mut ammo_needed = 0u32;
-    let mut ammo_cost_raw = 0.0f32;
-    for (weapon, selected) in weapon_query.iter() {
-        if weapon.ammo < weapon.max_ammo {
-            let short = weapon.max_ammo - weapon.ammo;
-            ammo_needed += short;
-            ammo_cost_raw += crate::combat::ammo_types::rearm_price(selected.map(|a| a.0), short);
-        }
-    }
-    // With the station's ammo discount, as the live row and the charge do --
-    // the menu's first frame showed the undiscounted price.
-    let ammo_cost = (ammo_cost_raw * discounts.ammo) as u32;
+    // Count weapons that need ammo, and price each gun's refill by the gun and
+    // what it has loaded -- a railgun full of antimatter costs multiples of
+    // the same railgun full of AP (combat::ammo_types::rearm_price).
+    let rack: Vec<RackAmmo> = weapon_query
+        .iter()
+        .map(|(entity, w, sel, module)| RackAmmo { entity, ammo: w.ammo, max: w.max_ammo, loaded: sel.map(|a| a.0), kind: module.module_type })
+        .collect();
+    let (ammo_needed, ammo_cost) = rearm_bill(&rack, discounts.ammo);
 
     let hire_full_cost = ((200 + (crew_count as u32) * 50) as f32 * far) as u32;
     let bio_have = inventory.items.get(&ItemType::BioSample).copied().unwrap_or(0);
@@ -4825,7 +4924,7 @@ fn spawn_docking_menu(
     hull_state: Res<HullState>,
     oxygen_state: Res<OxygenState>,
     fuel_state: Res<FuelState>,
-    weapon_query: Query<(&Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), (Without<Creature>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
+    weapon_query: Query<(Entity, &Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>, &Module), (Without<Creature>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
     crew_query: Query<&CrewMember, Without<crate::ai_ship::components::OwnedByAiShip>>,
     inventory: Res<Inventory>,
     currency: Res<Currency>,
@@ -5108,7 +5207,7 @@ fn docking_menu_input(
     ),
     mut span_query: Query<&mut TextSpan>,
     econ_state: (ResMut<HullState>, ResMut<OxygenState>, ResMut<FuelState>, ResMut<Currency>, ResMut<Inventory>),
-    mut weapon_query: Query<(&mut Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), (Without<Creature>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
+    mut weapon_query: Query<(Entity, &mut Weapon, Option<&crate::building::customization::tuning::SelectedAmmo>), (Without<Creature>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
     // All three MUST exclude AI ships. Unscoped, the docking menu counted
     // enemy crew into the hire price and the berth check (a live run showed
     // "Recruit crew (25/20 berths)" at 1450c with twenty crew aboard),
@@ -5193,8 +5292,11 @@ fn docking_menu_input(
 
     if keyboard.just_pressed(KeyCode::Enter) {
         let crew_count = crew_query.iter().count();
-        let weapon_read_query_hack: Vec<_> = weapon_query.iter()
-            .map(|(w, sel)| (w.ammo, w.max_ammo, sel.map(|a| a.0)))
+        let weapon_read_query_hack: Vec<RackAmmo> = weapon_query.iter()
+            .filter_map(|(entity, w, sel)| {
+                let kind = module_query.get(entity).ok()?.module_type;
+                Some(RackAmmo { entity, ammo: w.ammo, max: w.max_ammo, loaded: sel.map(|a| a.0), kind })
+            })
             .collect();
 
         match selection.0 {
@@ -5356,65 +5458,55 @@ fn docking_menu_input(
                 }
             }
             3 => {
-                // Rearm Weapons - AmmoCrates provide 10 rounds each (free), rest costs credits
-                let mut ammo_needed = 0u32;
-                let mut full_price = 0.0f32;
-                for &(ammo, max_ammo, loaded) in &weapon_read_query_hack {
-                    if ammo < max_ammo {
-                        let short = max_ammo - ammo;
-                        ammo_needed += short;
-                        full_price += crate::combat::ammo_types::rearm_price(loaded, short);
-                    }
-                }
-                if ammo_needed == 0 {
+                // Rearm Weapons: AmmoCrates first (10 rounds each, free), then
+                // credits for as much of the rest as the wallet covers.
+                let plan = plan_rearm(
+                    &weapon_read_query_hack,
+                    discounts.ammo,
+                    inventory.items.get(&ItemType::AmmoCrate).copied().unwrap_or(0),
+                    currency.credits,
+                );
+                if plan.wanted == 0 {
                     notifications.write(ShowNotification {
                         message: "All weapons fully loaded".into(),
                         notification_type: NotificationType::Info,
                         duration: 2.0,
                     });
+                } else if plan.loaded == 0 {
+                    notifications.write(ShowNotification {
+                        message: format!("Not enough credits to rearm (rounds from {:.1}c)", plan.cheapest_round),
+                        notification_type: NotificationType::Warning,
+                        duration: 2.5,
+                    });
                 } else {
-                    // Use AmmoCrates first (each crate = 10 rounds)
-                    let ammo_crates = inventory.items.get(&ItemType::AmmoCrate).copied().unwrap_or(0);
-                    let crates_needed = ((ammo_needed as f32 / 10.0).ceil() as u32).min(ammo_crates);
-                    let ammo_from_crates = (crates_needed * 10).min(ammo_needed);
-                    if crates_needed > 0 {
-                        inventory.remove_item(ItemType::AmmoCrate, crates_needed);
+                    if plan.crates_used > 0 {
+                        inventory.remove_item(ItemType::AmmoCrate, plan.crates_used);
                         notifications.write(ShowNotification {
-                            message: format!("Used {} AmmoCrates (+{} rounds)", crates_needed, ammo_from_crates),
+                            message: format!("Used {} AmmoCrates (+{} rounds)", plan.crates_used, plan.from_crates),
                             notification_type: NotificationType::Info,
                             duration: 2.0,
                         });
                     }
-
-                    let remaining_ammo = ammo_needed - ammo_from_crates;
-                    // Crates supply ROUNDS, not credits, so they knock the
-                    // same fraction off the bill as off the count. A crate is
-                    // therefore worth more against a magazine of antimatter
-                    // than against one of AP, which is the right way round.
-                    let unpaid = remaining_ammo as f32 / ammo_needed as f32;
-                    let cost = (full_price * unpaid * discounts.ammo) as u32;
-                    if remaining_ammo > 0 && currency.credits < cost {
-                        notifications.write(ShowNotification {
-                            message: format!("Not enough credits for full rearm (need {}c)", cost),
-                            notification_type: NotificationType::Warning,
-                            duration: 2.0,
-                        });
-                    } else {
-                        currency.credits -= cost;
-                        for (mut weapon, _) in weapon_query.iter_mut() {
+                    currency.credits -= plan.cost;
+                    for (entity, mut weapon, _) in weapon_query.iter_mut() {
+                        if weapon.max_ammo >= crate::combat::ammo_types::POWER_FED_AMMO {
+                            // Power-fed: topped up free, never on the bill.
                             weapon.ammo = weapon.max_ammo;
+                        } else if let Some(&(_, rounds)) = plan.fills.iter().find(|(e, _)| *e == entity) {
+                            weapon.ammo = (weapon.ammo + rounds).min(weapon.max_ammo);
                         }
-                        let msg = if cost > 0 {
-                            format!("Weapons rearmed! {} rounds (-{}c)", ammo_needed, cost)
-                        } else {
-                            format!("Weapons rearmed from AmmoCrates! {} rounds", ammo_needed)
-                        };
-                        notifications.write(ShowNotification {
-                            message: msg,
-                            notification_type: NotificationType::Success,
-                            duration: 3.0,
-                        });
                     }
+                    let (message, kind) = if plan.loaded < plan.wanted {
+                        (
+                            format!("Partly rearmed: {} of {} rounds (-{}c) - credits ran out", plan.loaded, plan.wanted, plan.cost),
+                            NotificationType::Warning,
+                        )
+                    } else if plan.cost > 0 {
+                        (format!("Weapons rearmed! {} rounds (-{}c)", plan.loaded, plan.cost), NotificationType::Success)
+                    } else {
+                        (format!("Weapons rearmed from AmmoCrates! {} rounds", plan.loaded), NotificationType::Success)
+                    };
+                    notifications.write(ShowNotification { message, notification_type: kind, duration: 3.0 });
                     changed = true;
                 }
             }
@@ -5634,8 +5726,11 @@ fn docking_menu_input(
 
     // Rebuild menu text to reflect updated state
     let crew_count = crew_query.iter().count();
-    let weapon_data: Vec<_> = weapon_query.iter()
-        .map(|(w, sel)| (w.ammo, w.max_ammo, sel.map(|a| a.0)))
+    let weapon_data: Vec<RackAmmo> = weapon_query.iter()
+        .filter_map(|(entity, w, sel)| {
+            let kind = module_query.get(entity).ok()?.module_type;
+            Some(RackAmmo { entity, ammo: w.ammo, max: w.max_ammo, loaded: sel.map(|a| a.0), kind })
+        })
         .collect();
 
     let hull_damage = 1.0 - hull_state.hull_integrity;
@@ -5645,16 +5740,7 @@ fn docking_menu_input(
     let hull_repair_cost = hull_repair_full_cost.saturating_sub(scrap_usable * 50);
     let o2_missing = oxygen_state.max_oxygen - oxygen_state.current_oxygen;
     let o2_cost = (o2_missing * 2.0) as u32;
-    let mut ammo_needed = 0u32;
-    let mut ammo_cost_raw = 0.0f32;
-    for &(ammo, max_ammo, loaded) in &weapon_data {
-        if ammo < max_ammo {
-            let short = max_ammo - ammo;
-            ammo_needed += short;
-            ammo_cost_raw += crate::combat::ammo_types::rearm_price(loaded, short);
-        }
-    }
-    let ammo_cost = (ammo_cost_raw * discounts.ammo) as u32;
+    let (ammo_needed, ammo_cost) = rearm_bill(&weapon_data, discounts.ammo);
     let hire_full_cost = ((200 + (crew_count as u32) * 50) as f32 * far) as u32;
     let bio_have = inventory.items.get(&ItemType::BioSample).copied().unwrap_or(0);
     let bio_usable = (hire_full_cost / 60).min(bio_have);
@@ -5777,6 +5863,65 @@ fn update_hull_warning_overlay(
 fn clear_hull_warning_overlay(mut commands: Commands, overlay_query: Query<Entity, With<HullWarningOverlay>>) {
     for entity in &overlay_query {
         commands.entity(entity).despawn();
+    }
+}
+
+#[cfg(test)]
+mod rearm_tests {
+    use super::*;
+
+    fn gun(n: u32, kind: ModuleType, ammo: u32, max: u32) -> RackAmmo {
+        RackAmmo { entity: Entity::from_raw_u32(n).unwrap(), ammo, max, loaded: None, kind }
+    }
+
+    fn starter_empty() -> Vec<RackAmmo> {
+        vec![
+            gun(1, ModuleType::Cannon, 0, 30),
+            gun(2, ModuleType::Gatling, 0, 300),
+            gun(3, ModuleType::HeavyMissile, 0, 12),
+            gun(4, ModuleType::Laser, 0, 999),
+        ]
+    }
+
+    #[test]
+    fn power_fed_guns_are_never_on_the_bill() {
+        let (rounds, _) = rearm_bill(&[gun(4, ModuleType::Laser, 0, 999)], 1.0);
+        assert_eq!(rounds, 0);
+    }
+
+    #[test]
+    fn a_full_wallet_fills_everything() {
+        let rack = starter_empty();
+        let (rounds, cost) = rearm_bill(&rack, 1.0);
+        let plan = plan_rearm(&rack, 1.0, 0, 10_000);
+        assert_eq!((plan.wanted, plan.loaded, plan.cost), (rounds, rounds, cost));
+    }
+
+    /// Short of the bill you still get rounds -- in every gun, not one --
+    /// and are never charged more than you have.
+    #[test]
+    fn a_short_wallet_buys_a_partial_rearm() {
+        let rack = starter_empty();
+        let (_, cost) = rearm_bill(&rack, 1.0);
+        let plan = plan_rearm(&rack, 1.0, 0, cost / 2);
+        assert!(plan.loaded > 0 && plan.loaded < plan.wanted, "{plan:?}");
+        assert!(plan.cost <= cost / 2, "{plan:?}");
+        assert_eq!(plan.fills.len(), 3, "every gun gets some: {plan:?}");
+    }
+
+    #[test]
+    fn crates_go_to_the_dearest_rounds_first() {
+        let rack = vec![gun(1, ModuleType::Gatling, 0, 300), gun(2, ModuleType::Railgun, 5, 15)];
+        let plan = plan_rearm(&rack, 1.0, 1, 0);
+        assert_eq!(plan.from_crates, 10);
+        assert_eq!(plan.fills, vec![(Entity::from_raw_u32(2).unwrap(), 10)]);
+        assert_eq!(plan.cost, 0);
+    }
+
+    #[test]
+    fn broke_and_no_crates_loads_nothing() {
+        let plan = plan_rearm(&starter_empty(), 1.0, 0, 0);
+        assert_eq!((plan.loaded, plan.cost), (0, 0));
     }
 }
 
@@ -6157,6 +6302,15 @@ mod weapon_rack_tests {
     fn none_ready_counts_down_to_the_soonest() {
         let line = rack_line("Gatling", &[gun(false, 0.7, true), gun(false, 0.3, true)]);
         assert_eq!(line.state, "0.3s");
+    }
+
+    /// A dry magazine is EMPTY, not READY, and a half-dry stack can't all fire.
+    #[test]
+    fn dry_guns_are_not_ready() {
+        let dry = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 0, max: 30, alive: true };
+        assert_eq!(rack_line("Cannon", &[dry]).state, "EMPTY");
+        let dry = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 0, max: 30, alive: true };
+        assert_eq!(rack_line("Cannon", &[gun(true, 0.0, true), dry]).state, "1/2 RDY");
     }
 
     /// The last sliver of a reload reads 0.1s, never a stuck-looking 0.0s.

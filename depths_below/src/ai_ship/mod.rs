@@ -52,6 +52,7 @@ impl Plugin for AiShipPlugin {
                         // changes what the guns are loading. After firing, so a
                         // switch lands on the next volley rather than mid-burst.
                         combat::ai_adapt_ammo.after(combat::ai_weapon_fire_system),
+                        combat::ai_restock_between_fights.after(combat::ai_weapon_fire_system),
                     ),
                     combat::ai_distress_system,
                     combat::process_ai_ship_damage_system,

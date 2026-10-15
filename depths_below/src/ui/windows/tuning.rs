@@ -216,8 +216,8 @@ fn spawn_tuning_window(
                     // from being a straight upgrade, so it belongs on the
                     // button rather than buried in the docking bill.
                     detail: Some(format!(
-                        "{:.0}c/round  -  {:.0}% weight  -  {:.0}% muzzle vel",
-                        crate::combat::ammo_types::rearm_price(Some(ammo), 1),
+                        "{:.2}c/round  -  {:.0}% weight  -  {:.0}% muzzle vel",
+                        crate::combat::ammo_types::rearm_price(module_type, Some(ammo), 1),
                         ammo.weight_mult() * 100.0,
                         ammo.velocity_mult() * 100.0,
                     )),

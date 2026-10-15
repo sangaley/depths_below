@@ -669,6 +669,17 @@ pub fn update_base_arrow(
     arrow_transform.rotation = Quat::from_rotation_z(dir.y.atan2(dir.x));
 }
 
+/// What docking puts back in a magazine for free: a quarter of it, so a
+/// broke captain can still fight their way to the next station. Power-fed
+/// guns (no real magazine) are simply full.
+pub fn dock_ammo_reserve(max_ammo: u32) -> u32 {
+    if max_ammo >= crate::combat::ammo_types::POWER_FED_AMMO {
+        max_ammo
+    } else {
+        max_ammo.div_ceil(4)
+    }
+}
+
 /// Fly within range of any station and press F to dock: the ship parks at
 /// that station's berth, momentum dies, supplies top up and the game enters
 /// StationDocked — build mode, shop, bounty board, hiring, everywhere.
@@ -753,15 +764,30 @@ pub fn station_docking(
         if topped_up {
             fuel_state.current_fuel = DOCK_FUEL_RESERVE.min(fuel_state.max_fuel);
         }
+        // Ammo the same way. Magazines used to fill to the brim on every
+        // arrival, which with ammo burning made the Rearm service something
+        // nobody ever needed. Every gun gets back a reserve -- enough to fight
+        // your way to the next station -- and the rest is bought.
+        let mut rearmed = false;
         for (mut weapon, parent) in weapon_query.iter_mut() {
-            if parent.parent() == ship_entity {
-                weapon.ammo = weapon.max_ammo;
+            if parent.parent() != ship_entity {
+                continue;
+            }
+            let reserve = dock_ammo_reserve(weapon.max_ammo);
+            if weapon.ammo < reserve {
+                weapon.ammo = reserve;
+                rearmed = true;
             }
         }
 
         // Say what docking actually gave: "fuel resupplied" on every arrival
         // read as a full tank, then the shop asked for credits to fill it.
-        let resupplied = if topped_up { "O2 and reserve fuel" } else { "O2" };
+        let resupplied = match (topped_up, rearmed) {
+            (true, true) => "O2, reserve fuel and reserve ammo",
+            (true, false) => "O2 and reserve fuel",
+            (false, true) => "O2 and reserve ammo",
+            (false, false) => "O2",
+        };
         notifications.write(ShowNotification {
             message: format!(
                 "Docked at {} - {resupplied} resupplied. B: build | U: shop | J: jobs | Enter: launch",

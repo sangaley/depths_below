@@ -27,8 +27,12 @@ pub mod limits;
 pub mod impact;
 
 /// Dev switch: no weapon consumes ammunition while true (player and AI).
-/// Ammo economy comes back when the combat loop is tuned.
-pub const INFINITE_AMMO: bool = true;
+///
+/// Off since 2026-10-14. Rounds are priced per gun (ammo_types::round_price),
+/// a short wallet buys a partial rearm, and AI ships restock between fights
+/// (ai_ship::combat::ai_restock_between_fights). Flip it back on to isolate
+/// something that ammo starvation would muddy.
+pub const INFINITE_AMMO: bool = false;
 
 /// Floating damage number that drifts upward and fades out
 #[derive(Component)]

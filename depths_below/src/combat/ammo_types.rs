@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use crate::components::ModuleType;
 
 // ============================================================================
 // KINETIC AMMO TYPES
@@ -489,27 +490,72 @@ impl LoadedMagazine {
     }
 }
 
-/// Baseline rearm price for one round, in credits — what the docking menu
-/// has always charged per round, and what a weapon with no ammo profile
-/// (lasers, missiles, an untuned gun) still charges.
+/// Fallback price of one round, for a weapon the registry gives no magazine
+/// (power-fed guns, anything unregistered).
+///
+/// This was once the price of EVERY round of every gun, flat. That was
+/// harmless only while `INFINITE_AMMO` hid it: a gatling round cost the same
+/// as a railgun slug, so the starter's four gatlings alone burned 120c a
+/// second and a full rearm from empty came to ~6,700c against 750c to start.
 pub const BASE_ROUND_PRICE: f32 = 5.0;
 
-/// What a station charges to put `rounds` of this type back in the magazine.
+/// What one full magazine of plain AP costs, as a share of the gun's own shop
+/// price. The single knob for the whole ammo economy.
 ///
-/// Priced off `cost_per_round` and normalised so AP costs exactly the old
-/// flat rate: everything is quoted relative to the cheap solid shot. This is
-/// the only brake on the exotic rounds — antimatter out-damages the whole
-/// table and would simply be the correct answer every time if a magazine of
-/// it cost the same as brass.
-pub fn rearm_price(ammo: Option<KineticAmmoType>, rounds: u32) -> f32 {
-    let per_round = match ammo {
-        Some(a) => {
-            let ap = KineticAmmoType::AP.cost_per_round() as f32;
-            BASE_ROUND_PRICE * a.cost_per_round() as f32 / ap
-        }
-        None => BASE_ROUND_PRICE,
+/// At 0.4 a round costs what the gun says it should: a gatling round 0.1c, a
+/// cannon shell 1.5c, a heavy missile 5c, a railgun slug 8c. Refilling the
+/// starter's whole battery from empty is ~420c; a hard thirty-second fight
+/// with every gun on it is ~270c -- felt against a 400-900c bounty, not
+/// ruinous.
+pub const MAGAZINE_SHARE: f32 = 0.4;
+
+/// At or above this a "magazine" is the stand-in for a power-fed gun (lasers,
+/// plasma), not rounds anyone buys. The weapon rack reads it the same way.
+pub const POWER_FED_AMMO: u32 = 999;
+
+/// Station price of one AP round for this gun: its shop price times
+/// `MAGAZINE_SHARE`, spread over its stock magazine. The stock size, not the
+/// live `max_ammo`, so enlarging a magazine doesn't make its rounds cheaper.
+pub fn round_price(weapon: ModuleType) -> f32 {
+    use std::collections::HashMap;
+    use std::sync::OnceLock;
+    // The registry is built once at startup and never mutated, so its prices
+    // can be read off a private copy instead of threading the resource
+    // through every system that quotes a rearm.
+    static PRICES: OnceLock<HashMap<ModuleType, f32>> = OnceLock::new();
+    PRICES
+        .get_or_init(|| {
+            crate::building::registry::build_registry()
+                .defs
+                .iter()
+                .filter_map(|(kind, def)| match def.companion {
+                    crate::building::registry::CompanionData::Weapon { ammo, .. }
+                        if ammo > 0 && ammo < POWER_FED_AMMO =>
+                    {
+                        Some((*kind, def.cost as f32 * MAGAZINE_SHARE / ammo as f32))
+                    }
+                    _ => None,
+                })
+                .collect()
+        })
+        .get(&weapon)
+        .copied()
+        .unwrap_or(BASE_ROUND_PRICE)
+}
+
+/// What a station charges to put `rounds` back in this gun's magazine.
+///
+/// The gun sets the base (`round_price`), the loaded type scales it by its
+/// `cost_per_round` relative to AP. That multiplier is the only brake on the
+/// exotic rounds -- antimatter out-damages the whole table and would simply
+/// be the correct answer every time if a magazine of it cost the same as
+/// brass.
+pub fn rearm_price(weapon: ModuleType, ammo: Option<KineticAmmoType>, rounds: u32) -> f32 {
+    let type_mult = match ammo {
+        Some(a) => a.cost_per_round() as f32 / KineticAmmoType::AP.cost_per_round() as f32,
+        None => 1.0,
     };
-    per_round * rounds as f32
+    round_price(weapon) * type_mult * rounds as f32
 }
 
 /// Default magazine configs for common loadouts
@@ -764,25 +810,49 @@ mod spall_tests {
         }
     }
 
-    /// AP rearms at exactly the flat rate the docking menu charged before
-    /// ammo types had prices, so adding the exotics didn't quietly reprice
-    /// everyone's ordinary resupply.
+    /// A full magazine of AP costs MAGAZINE_SHARE of the gun, whatever the gun.
     #[test]
-    fn ap_rearms_at_the_old_flat_rate() {
-        assert_eq!(rearm_price(Some(KineticAmmoType::AP), 20), BASE_ROUND_PRICE * 20.0);
-        assert_eq!(rearm_price(None, 20), BASE_ROUND_PRICE * 20.0);
+    fn a_magazine_costs_a_share_of_its_gun() {
+        let registry = crate::building::registry::build_registry();
+        for weapon in [ModuleType::Gatling, ModuleType::Cannon, ModuleType::Railgun, ModuleType::HeavyMissile] {
+            let def = registry.get(weapon);
+            let crate::building::registry::CompanionData::Weapon { ammo, .. } = def.companion else {
+                panic!("{weapon:?} has no magazine");
+            };
+            let magazine = rearm_price(weapon, Some(KineticAmmoType::AP), ammo);
+            let want = def.cost as f32 * MAGAZINE_SHARE;
+            assert!((magazine - want).abs() < 0.01, "{weapon:?}: {magazine} vs {want}");
+        }
     }
 
-    /// A magazine of exotics has to hurt to buy — that's the entire brake on
-    /// rounds that otherwise dominate the table. Loading antimatter should
-    /// cost more than repairing a wrecked hull (500c).
+    /// The flat rate charged a gatling round like a railgun slug.
+    #[test]
+    fn a_bigger_gun_has_dearer_rounds() {
+        assert!(round_price(ModuleType::Railgun) > round_price(ModuleType::Cannon));
+        assert!(round_price(ModuleType::Cannon) > round_price(ModuleType::Gatling));
+        assert_eq!(rearm_price(ModuleType::Cannon, None, 20), rearm_price(ModuleType::Cannon, Some(KineticAmmoType::AP), 20));
+    }
+
+    /// Rearming the starter's battery from empty stays a fraction of what the
+    /// run starts with, so a dry magazine is a bill, not a dead end.
+    #[test]
+    fn rearming_the_starter_from_empty_is_affordable() {
+        let full = rearm_price(ModuleType::Cannon, None, 4 * 30)
+            + rearm_price(ModuleType::Gatling, None, 4 * 300)
+            + rearm_price(ModuleType::HeavyMissile, None, 2 * 12);
+        assert!(full > 200.0 && full < 750.0, "starter rearm {full}c");
+    }
+
+    /// A magazine of exotics has to hurt to buy -- that's the entire brake on
+    /// rounds that otherwise dominate the table.
     #[test]
     fn an_exotic_magazine_costs_real_money() {
-        let ap = rearm_price(Some(KineticAmmoType::AP), 20);
+        let ap = rearm_price(ModuleType::Cannon, Some(KineticAmmoType::AP), 30);
         for ammo in KineticAmmoType::ALL.iter().filter(|a| a.is_exotic()) {
-            assert!(rearm_price(Some(*ammo), 20) > ap * 2.0, "{ammo:?} rearm is too cheap");
+            assert!(rearm_price(ModuleType::Cannon, Some(*ammo), 30) > ap * 2.0, "{ammo:?} rearm is too cheap");
         }
-        assert!(rearm_price(Some(KineticAmmoType::Antimatter), 20) > 500.0);
+        // A cannon magazine of antimatter costs more than the cannon.
+        assert!(rearm_price(ModuleType::Cannon, Some(KineticAmmoType::Antimatter), 30) > 113.0);
     }
 
     /// The serialized identifiers are a data contract, not decoration:
