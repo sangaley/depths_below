@@ -102,6 +102,8 @@ const WARP_FUEL_RESERVE: f32 = 250.0;
 /// A refused jump (no destination, too close, drive busy) never spawns the
 /// charge component. Give up holding G after this and fly it the slow way.
 const WARP_GIVE_UP: f32 = 3.0;
+/// A wreck this close to one already written off counts as that wreck.
+const SPENT_SPOT_RADIUS: f32 = 600.0;
 /// Minimum gap between screenshots, so a chatty phase can't fill the disk.
 const SHOT_COOLDOWN: f32 = 3.0;
 /// Hard cap on saved frames. At one every few seconds a two-hour run can write
@@ -181,9 +183,15 @@ pub struct Director {
     /// there is no idle crew — without remembering those, Hunt sees the wreck,
     /// diverts to Strip, fails, and bounces straight back forever.
     spent_wrecks: HashSet<Entity>,
+    /// Where the written-off wrecks were. Chunk-layer wrecks (Haven's approach
+    /// is full of them) despawn and respawn as new entities when their chunk
+    /// reloads, so the entity set forgot them and the director looped:
+    /// launch, see the "new" wreck, press F, dock, trade, launch.
+    spent_spots: Vec<Vec2>,
     /// The wreck the last F press was aimed at, so a press the game spent on
     /// docking instead can write that wreck off.
     strip_wreck: Option<Entity>,
+    strip_spot: Option<Vec2>,
     /// Grace period after leaving Strip so a bad wreck can't re-trigger it on
     /// the very next frame.
     strip_cooldown: f32,
@@ -350,7 +358,9 @@ impl Plugin for AutoplayPlugin {
             strip_wait: 0.0,
             loot_cooldown: 0.0,
             spent_wrecks: HashSet::new(),
+            spent_spots: Vec::new(),
             strip_wreck: None,
+            strip_spot: None,
             strip_cooldown: 0.0,
             shot_pending: false,
             shot_retries: 0,
@@ -1028,6 +1038,8 @@ fn director_brain(
                 if d.detail_sent && !d.detail_seen {
                     if let Some(wreck) = d.strip_wreck.take() {
                         d.spent_wrecks.insert(wreck);
+                        let spot = d.strip_spot.take();
+                        d.spent_spots.extend(spot);
                         d.strip_cooldown = 8.0;
                         d.log("salvage", "F docked instead of dispatching - writing this wreck off");
                     }
@@ -1075,6 +1087,7 @@ fn director_brain(
                 dispatch_salvage(&mut d, &stations, pos, vel, wp, dist);
                 if d.detail_sent {
                     d.strip_wreck = Some(wreck_entity);
+                    d.strip_spot = Some(wp);
                     d.strip_wait = 0.0;
                     d.log("salvage", "detail dispatched");
                 }
@@ -1099,6 +1112,7 @@ fn director_brain(
                     // wreck was already stripped. Write it off so Hunt doesn't
                     // send us straight back to it.
                     d.spent_wrecks.insert(wreck_entity);
+                    d.spent_spots.push(wp);
                     d.strip_cooldown = 8.0;
                     d.log("salvage", "no detail launched - writing this wreck off");
                     d.go(Phase::Hunt);
@@ -1107,6 +1121,7 @@ fn director_brain(
 
                 if d.strip_wait > SALVAGE_TIMEOUT {
                     d.spent_wrecks.insert(wreck_entity);
+                    d.spent_spots.push(wp);
                     d.strip_cooldown = 8.0;
                     d.log("salvage", "timed out on this wreck");
                     d.go(Phase::Hunt);
@@ -1516,7 +1531,12 @@ fn nearest(points: impl Iterator<Item = Vec2>, from: Vec2) -> Option<(f32, Vec2)
 fn salvageable(w: &World1, d: &Director, pos: Vec2) -> Option<(f32, Vec2, Entity)> {
     w.wrecks
         .iter()
-        .filter(|(e, _, wreck)| wreck.loot_remaining > 0 && !d.spent_wrecks.contains(e))
+        .filter(|(e, t, wreck)| {
+            let p = t.translation.truncate();
+            wreck.loot_remaining > 0
+                && !d.spent_wrecks.contains(e)
+                && !d.spent_spots.iter().any(|s| s.distance(p) < SPENT_SPOT_RADIUS)
+        })
         .map(|(e, t, _)| {
             let p = t.translation.truncate();
             (pos.distance(p), p, e)
