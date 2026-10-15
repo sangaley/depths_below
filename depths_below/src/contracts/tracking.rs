@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::ai_ship::components::WorldSimulation;
+use crate::ai_ship::components::{SimBehavior, WorldSimulation};
 use crate::components::{CargoHold, Module, ModuleType, Ship};
 use crate::events::*;
 use crate::resources::{Currency, Inventory};
@@ -358,6 +358,142 @@ pub fn handle_contract_failure(
     state.active_contracts.clear();
 }
 
+// ============================================================================
+// BOUNTIES RESTORED FROM A SAVE
+// ============================================================================
+
+/// Points every bounty restored from a save at a ship that exists.
+///
+/// A save keeps the contracts but not the simulation their targets live in.
+/// A load from the menu starts a fresh `WorldSimulation`, so a bounty's
+/// `target_id` named a ship nobody carried: it could never be killed and
+/// never complete, and an accepted one had already taken its deposit.
+///
+/// Re-tagged rather than refunded. As far as the player can tell a bounty is
+/// on "a vessel of that faction" -- they never saw which hull -- and the
+/// faction is still out there: the loaded system and its neighbours are
+/// populated from the same galaxy. So each open bounty goes on a ship of its
+/// faction in the active systems, picked the way a board picks one
+/// (`tag_bounty_target`), under a fresh id and at the reward it was accepted
+/// for. A tag that still names a living ship of the right faction stays put:
+/// that is an in-game load, where the simulation survived.
+///
+/// Only when no ship of that faction is around is a contract dropped.
+/// Accepted ones are returned, for the caller to refund and announce; offers
+/// on the boards just go, since nothing was paid for them.
+pub fn reattach_restored_bounties(
+    state: &mut ContractState,
+    sim: &mut WorldSimulation,
+    active_systems: &[u32],
+    rng: &mut impl rand::Rng,
+) -> Vec<Contract> {
+    let restored_ids = state.active_contracts.iter()
+        .chain(state.available_by_station.iter().flatten())
+        .filter_map(|c| match c.objective {
+            ContractObjective::DestroyShip { target_id, .. } => Some(target_id),
+            _ => None,
+        });
+    // Every id the save handed out is spent, finished bounties' included.
+    if let Some(highest) = restored_ids.max() {
+        sim.reserve_bounty_ids_through(highest);
+    }
+
+    let open = state.active_contracts.iter()
+        .chain(state.available_by_station.iter().flatten())
+        .filter_map(|c| match c.objective {
+            ContractObjective::DestroyShip { ship_type, target_id, destroyed: false } => Some((ship_type, target_id)),
+            _ => None,
+        });
+    let kept: std::collections::HashSet<u32> = open
+        .filter(|&(faction, id)| sim.ships.iter().any(|s| {
+            s.bounty_id == Some(id) && s.faction == faction && s.behavior != SimBehavior::Dead
+        }))
+        .map(|(_, id)| id)
+        .collect();
+
+    // Free every other tag, or a lone boss still carrying one from before the
+    // load could never carry the bounty restored onto it. Not on a ship in
+    // view: its live entity carries the tag too (BountyTarget), and
+    // sync_simulation_entities finds its record by it when it leaves range.
+    for ship in sim.ships.iter_mut().filter(|s| !s.spawned) {
+        if ship.bounty_id.is_some_and(|id| !kept.contains(&id)) {
+            ship.bounty_id = None;
+        }
+    }
+
+    let mut retag = |contract: &mut Contract| -> bool {
+        let ContractObjective::DestroyShip { ship_type, target_id, destroyed } = &mut contract.objective
+        else { return true };
+        if *destroyed || kept.contains(target_id) {
+            return true;
+        }
+        match sim.tag_bounty_target(*ship_type, active_systems, rng) {
+            Some((id, _distance)) => {
+                *target_id = id;
+                true
+            }
+            None => false,
+        }
+    };
+
+    // Accepted bounties first: they are paid for, and a lone boss can only
+    // carry one tag.
+    let mut lost = Vec::new();
+    let mut i = 0;
+    while i < state.active_contracts.len() {
+        if retag(&mut state.active_contracts[i]) {
+            i += 1;
+        } else {
+            lost.push(state.active_contracts.remove(i));
+        }
+    }
+    for board in state.available_by_station.iter_mut() {
+        board.retain_mut(|c| retag(c));
+    }
+    lost
+}
+
+/// Runs `reattach_restored_bounties` once after each load, as soon as there is
+/// a simulation to tag in. An in-game load still has one; a load from the menu
+/// waits for init_world_simulation, which runs on entering Exploring -- so a
+/// save made at a berth loads docked and gets its targets at launch.
+pub fn reattach_bounties_after_load(
+    mut loaded: MessageReader<GameLoaded>,
+    mut pending: Local<bool>,
+    mut state: ResMut<ContractState>,
+    mut sim: ResMut<WorldSimulation>,
+    streaming: Res<crate::celestial::resources::SystemStreamingManager>,
+    mut currency: ResMut<Currency>,
+    mut notifications: MessageWriter<ShowNotification>,
+) {
+    if loaded.read().filter(|e| e.success).count() > 0 {
+        *pending = true;
+    }
+    if !*pending || !sim.initialized {
+        return;
+    }
+    *pending = false;
+
+    let active_systems: Vec<u32> = streaming.loaded_system.into_iter()
+        .chain(streaming.warm_systems.iter().copied())
+        .collect();
+    let lost = reattach_restored_bounties(&mut state, &mut sim, &active_systems, &mut rand::thread_rng());
+    for contract in lost {
+        // Taken on accept (contracts/ui.rs); nothing was hunted, so it goes back.
+        currency.credits += contract.deposit;
+        let refund = if contract.deposit > 0 {
+            format!(" {}c deposit returned.", contract.deposit)
+        } else {
+            String::new()
+        };
+        notifications.write(ShowNotification {
+            message: format!("{}: the target is gone. Contract void.{}", contract.title, refund),
+            notification_type: NotificationType::Warning,
+            duration: 5.0,
+        });
+    }
+}
+
 #[cfg(test)]
 mod retrieval_delivery_tests {
     use super::*;
@@ -398,5 +534,175 @@ mod retrieval_delivery_tests {
         assert!(!take_delivery(&mut contract, &mut inv));
         assert_eq!(inv.items.get(&ItemType::Crystal).copied(), Some(1));
         assert!(matches!(contract.objective, ContractObjective::RetrieveSalvage { current_count: 1, .. }));
+    }
+}
+
+#[cfg(test)]
+mod bounty_restore_tests {
+    use super::*;
+    use crate::ai_ship::components::{AiShipType, SimulatedShip};
+    use crate::celestial::resources::SystemStreamingManager;
+    use crate::components::ZoneType;
+    use crate::resources::SaveData;
+    use super::super::{ContractType, Faction};
+    use rand::SeedableRng;
+
+    /// The system the save was made in.
+    const HERE: u32 = 5;
+
+    fn bounty(target_id: u32, ship_type: AiShipType, status: ContractStatus) -> Contract {
+        Contract {
+            id: target_id + 100,
+            faction: Faction::Navy,
+            contract_type: ContractType::DestroyShip,
+            title: format!("Bounty: {ship_type:?} vessel"),
+            description: String::new(),
+            objective: ContractObjective::DestroyShip { ship_type, target_id, destroyed: false },
+            reward: 900,
+            deposit: 225,
+            star_rating: 3,
+            depth_zone: ZoneType::NearOrbit,
+            status,
+        }
+    }
+
+    /// Contracts as a load brings them back: through the save file's JSON.
+    fn restored(active: Vec<Contract>, board: Vec<Contract>) -> ContractState {
+        let mut save = SaveData::default();
+        save.contracts.active_contracts = active;
+        *save.contracts.board_mut(0) = board;
+        let json = serde_json::to_string(&save).unwrap();
+        serde_json::from_str::<SaveData>(&json).unwrap().contracts
+    }
+
+    /// The simulation a load from the menu starts: freshly populated, no tags.
+    fn fresh_sim(ships: &[(u32, AiShipType)]) -> WorldSimulation {
+        let mut sim = WorldSimulation::default();
+        sim.initialized = true;
+        for &(system, faction) in ships {
+            let at = Vec2::new(40_000.0, 0.0);
+            sim.ships.push(SimulatedShip::patrolling(system, faction, at, at, 15_000.0, 90.0));
+        }
+        sim
+    }
+
+    fn target_of(contract: &Contract) -> u32 {
+        match contract.objective {
+            ContractObjective::DestroyShip { target_id, .. } => target_id,
+            _ => panic!("{} is not a bounty", contract.title),
+        }
+    }
+
+    fn rng() -> rand::rngs::StdRng {
+        rand::rngs::StdRng::seed_from_u64(7)
+    }
+
+    /// The report: a bounty accepted before saving could never be completed
+    /// after loading it from the menu, because its target went with the
+    /// simulation. Now a ship of its faction carries it, and killing that
+    /// ship pays.
+    #[test]
+    fn a_restored_bounty_can_still_be_completed() {
+        let mut state = restored(vec![bounty(3, AiShipType::GildedThrone, ContractStatus::Active)], vec![]);
+        let mut sim = fresh_sim(&[(HERE, AiShipType::TheSilence), (HERE, AiShipType::GildedThrone)]);
+        let lost = reattach_restored_bounties(&mut state, &mut sim, &[HERE], &mut rng());
+        assert!(lost.is_empty());
+
+        let id = target_of(&state.active_contracts[0]);
+        let carrier = sim.ships.iter()
+            .find(|s| s.bounty_id == Some(id))
+            .expect("no ship carries the restored bounty");
+        assert_eq!(carrier.faction, AiShipType::GildedThrone);
+
+        // The tag rides onto the hull when it spawns (sync_simulation_entities)
+        // and back out when it dies; this is the dying half.
+        let mut app = App::new();
+        app.add_message::<AiShipDestroyed>();
+        app.add_message::<ContractCompleted>();
+        app.add_message::<ShowNotification>();
+        app.insert_resource(state);
+        app.add_systems(Update, (track_destroy_ship_contracts, check_contract_completion).chain());
+        app.world_mut().write_message(AiShipDestroyed {
+            entity: Entity::PLACEHOLDER,
+            ship_type: carrier.faction,
+            position: carrier.position,
+            bounty_id: carrier.bounty_id,
+            cause: ShipDeathCause::Struck,
+        });
+        app.update();
+        assert_eq!(
+            app.world().resource::<ContractState>().active_contracts[0].status,
+            ContractStatus::Completed
+        );
+    }
+
+    /// A fresh simulation counts bounty ids from 1 again. The first bounty
+    /// posted after a load must not share an id with a restored one, or one
+    /// kill would pay out both.
+    #[test]
+    fn new_bounties_never_reuse_a_restored_id() {
+        let mut state = restored(
+            vec![bounty(1, AiShipType::GildedThrone, ContractStatus::Active)],
+            vec![bounty(2, AiShipType::GildedThrone, ContractStatus::Available)],
+        );
+        let mut sim = fresh_sim(&[(HERE, AiShipType::GildedThrone); 4]);
+        reattach_restored_bounties(&mut state, &mut sim, &[HERE], &mut rng());
+
+        let held: Vec<u32> = state.active_contracts.iter()
+            .chain(state.available_by_station.iter().flatten())
+            .map(target_of)
+            .collect();
+        assert_eq!(held.len(), 2, "a bounty was dropped with ships to spare");
+        let (posted, _) = sim.tag_bounty_target(AiShipType::GildedThrone, &[HERE], &mut rng()).unwrap();
+        assert!(
+            posted > 2 && !held.contains(&posted),
+            "the next bounty got id {posted}, already used by the save (1, 2) or a restored contract {held:?}"
+        );
+    }
+
+    /// Saved after leaving the only system the target's faction holds: there
+    /// is nothing of it to hunt from here. The contract is voided and the
+    /// deposit it took comes back; the board offer just goes.
+    #[test]
+    fn a_bounty_with_nothing_to_hunt_is_voided_and_refunded() {
+        let mut app = App::new();
+        app.add_message::<GameLoaded>();
+        app.add_message::<ShowNotification>();
+        app.insert_resource(restored(
+            vec![bounty(3, AiShipType::Shepherd, ContractStatus::Active)],
+            vec![bounty(4, AiShipType::Shepherd, ContractStatus::Available)],
+        ));
+        app.insert_resource(fresh_sim(&[(HERE, AiShipType::TheSilence), (HERE + 1, AiShipType::Shepherd)]));
+        app.insert_resource(SystemStreamingManager { loaded_system: Some(HERE), ..default() });
+        app.init_resource::<Currency>();
+        app.add_systems(Update, reattach_bounties_after_load);
+        let before = app.world().resource::<Currency>().credits;
+
+        app.world_mut().write_message(GameLoaded { slot: 0, success: true });
+        app.update();
+
+        let state = app.world().resource::<ContractState>();
+        assert!(state.active_contracts.is_empty(), "a bounty with no ship to hunt is still on the books");
+        assert!(state.available_by_station.iter().all(|b| b.is_empty()));
+        assert_eq!(app.world().resource::<Currency>().credits, before + 225);
+    }
+
+    /// An in-game load keeps the running simulation. A tag that still names a
+    /// living ship of the bounty's faction is the same hunt and stays; one no
+    /// restored contract names is freed, or a lone boss would stay locked to
+    /// a bounty nobody holds.
+    #[test]
+    fn an_in_game_load_keeps_live_tags_and_frees_the_rest() {
+        let mut state = restored(vec![bounty(3, AiShipType::GildedThrone, ContractStatus::Active)], vec![]);
+        let mut sim = fresh_sim(&[(HERE, AiShipType::GildedThrone), (HERE, AiShipType::Shepherd)]);
+        sim.ships[0].bounty_id = Some(3);
+        // Tagged by a board posted after the save, which the load threw away.
+        sim.ships[1].bounty_id = Some(9);
+        sim.reserve_bounty_ids_through(9);
+
+        reattach_restored_bounties(&mut state, &mut sim, &[HERE], &mut rng());
+        assert_eq!(target_of(&state.active_contracts[0]), 3);
+        assert_eq!(sim.ships[0].bounty_id, Some(3));
+        assert_eq!(sim.ships[1].bounty_id, None);
     }
 }

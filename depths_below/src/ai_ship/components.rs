@@ -389,6 +389,16 @@ impl WorldSimulation {
         Some((id, ship.position.length()))
     }
 
+    /// No tag handed out from here on reuses `bounty_id` or any id below it.
+    ///
+    /// For bounties restored from a save: their ids came from the simulation
+    /// that was running then, and a fresh one counts from 1 again, so the
+    /// first bounty posted after a load could carry an old contract's id --
+    /// and one kill would pay out both.
+    pub fn reserve_bounty_ids_through(&mut self, bounty_id: u32) {
+        self.next_bounty_id = self.next_bounty_id.max(bounty_id.saturating_add(1));
+    }
+
     /// Current position of a tagged bounty target, if it's still tracked
     /// (i.e. hasn't been despawned/reset). Used for the live map marker.
     pub fn bounty_position(&self, bounty_id: u32) -> Option<Vec2> {

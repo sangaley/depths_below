@@ -282,6 +282,9 @@ impl Plugin for ContractsPlugin {
                 bounty_nav::update_bounty_markers,
             ).run_if(in_state(GameState::Exploring)))
             // Failure on game over
-            .add_systems(OnEnter(GameState::GameOver), tracking::handle_contract_failure);
+            .add_systems(OnEnter(GameState::GameOver), tracking::handle_contract_failure)
+            // Ungated: a load from the menu lands docked or exploring, and
+            // the system waits until there is a simulation to tag in.
+            .add_systems(Update, tracking::reattach_bounties_after_load);
     }
 }
