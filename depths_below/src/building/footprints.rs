@@ -73,9 +73,16 @@ mod tests {
         };
 
         check("builtin starter", &crate::ship::builtin_starter_design());
+        // Faction class designs live one folder deeper, designs/factions/<slug>/.
+        let class_dirs: Vec<_> = std::fs::read_dir("designs/factions")
+            .expect("designs/factions/")
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.is_dir())
+            .collect();
         let mut files: Vec<_> = std::fs::read_dir("designs")
             .expect("designs/")
             .chain(std::fs::read_dir("designs/factions").expect("designs/factions/"))
+            .chain(class_dirs.iter().flat_map(|d| std::fs::read_dir(d).expect("class folder")))
             .filter_map(|e| e.ok().map(|e| e.path()))
             .filter(|p| p.extension().is_some_and(|x| x == "json"))
             .filter(|p| !p.to_string_lossy().contains("starter_pre_"))

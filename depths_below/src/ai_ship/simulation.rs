@@ -65,12 +65,29 @@ pub fn init_world_simulation(
                 Some("TerranHegemony") => AiShipType::TerranHegemony,
                 Some("GildedThrone") => AiShipType::GildedThrone,
                 Some("RecursiveKingdom") => AiShipType::RecursiveKingdom,
+                Some("EternalHegemony") => AiShipType::EternalHegemony,
+                Some("Shepherd") => AiShipType::Shepherd,
                 _ => AiShipType::BrokenChoir,
             };
-            sim.ships.push(SimulatedShip::patrolling(
+            let mut dummy = SimulatedShip::patrolling(
                 0, faction, Vec2::new(500.0, 0.0), Vec2::new(500.0, 0.0), 2000.0, 0.0,
-            ));
-            info!("MOVETEST: single non-shooting {:?} dummy spawned at (500, 0) for damage-model testing", faction);
+            );
+            // DEPTHS_MOVETEST_ENEMY_CLASS=<key> picks a roster class (ai_ship::roster),
+            // e.g. "bulwark"; unset flies the faction's original design.
+            if let Ok(key) = std::env::var("DEPTHS_MOVETEST_ENEMY_CLASS") {
+                dummy.class = super::roster::find(faction, &key).map(|c| c.key);
+                if dummy.class.is_none() {
+                    warn!("MOVETEST: {:?} has no class {:?}", faction, key);
+                }
+                // Classes run up to a hundred cells long; at 500 units one
+                // would be born inside the player's own hull and be thrown
+                // out of frame by the collision push.
+                dummy.position = Vec2::new(3200.0, 0.0);
+                dummy.home_zone = dummy.position;
+                dummy.destination = dummy.position;
+            }
+            info!("MOVETEST: single non-shooting {:?} {:?} dummy spawned at (500, 0) for damage-model testing", faction, dummy.class);
+            sim.add(dummy);
         }
 
         // TEMP [AI_VS_AI_DIAGNOSTIC]: spawns a tight cluster of guaranteed
@@ -172,6 +189,8 @@ fn spawn_system_faction_population(sim: &mut WorldSimulation, system: &crate::ce
     // cluster point keeping the largest share.
     let holdings = faction_holdings(system, &mut rng);
     let count = system_ship_count(template.ship_count, system.danger_tier);
+    // How many of each capped role this system already holds.
+    let mut held: Vec<(super::roster::ClassRole, usize)> = Vec::new();
     // Fixed shares, not a roll per element: with packs of up to five, a roll
     // could still put fourteen of eighteen ships in one holding.
     for (&home, quota) in holdings.iter().zip(holding_quotas(count, holdings.len())) {
@@ -210,7 +229,18 @@ fn spawn_system_faction_population(sim: &mut WorldSimulation, system: &crate::ce
                     cruise * rng.gen_range(0.92..1.08),
                 );
                 ship.destination = destination;
-                sim.ships.push(ship);
+                let class = super::roster::roll(faction, &mut rng, |c| {
+                    let n = held.iter().find(|(r, _)| *r == c.role).map_or(0, |(_, n)| *n);
+                    n < c.role.per_system_cap()
+                });
+                if let Some(c) = class {
+                    match held.iter_mut().find(|(r, _)| *r == c.role) {
+                        Some((_, n)) => *n += 1,
+                        None => held.push((c.role, 1)),
+                    }
+                }
+                ship.class = class.map(|c| c.key);
+                sim.add(ship);
             }
             placed += size;
         }
@@ -556,7 +586,7 @@ pub fn sync_simulation_entities(
     registry: Res<ModuleRegistry>,
     asset_server: Res<AssetServer>,
     ship_query: Query<&Transform, With<Ship>>,
-    ai_ships: Query<(Entity, &Transform, &AiShipType, &AiShipState, Option<&BountyTarget>, Has<SimSettled>), With<AiShip>>,
+    ai_ships: Query<(Entity, &Transform, &AiShipType, &AiShipState, Option<&BountyTarget>, Has<SimSettled>, Option<&SimShipId>), With<AiShip>>,
 ) {
     let Ok(player_transform) = ship_query.single() else { return };
     let player_pos = player_transform.translation.truncate();
@@ -574,7 +604,7 @@ pub fn sync_simulation_entities(
     // Living hulls only. Wrecks keep their AiShip component, and counting
     // them meant a system where the player had won a few fights could never
     // spawn another ship -- including a bounty target sitting 1.5 km away.
-    let live = ai_ships.iter().filter(|(_, _, _, state, _, _)| !state.is_destroyed).count();
+    let live = ai_ships.iter().filter(|(_, _, _, state, _, _, _)| !state.is_destroyed).count();
     if live < MAX_LIVE_AI_HULLS {
         let mut candidates: Vec<(usize, f32)> = sim
             .ships
@@ -588,8 +618,9 @@ pub fn sync_simulation_entities(
 
         for (index, _) in candidates.into_iter().take(MAX_LIVE_AI_HULLS - live) {
             let Some(sim_ship) = sim.ships.get_mut(index) else { continue };
-            let root = spawner::spawn_ai_ship(
+            let root = spawner::spawn_ai_ship_class(
                 sim_ship.faction,
+                sim_ship.class,
                 sim_ship.position,
                 &mut commands,
                 &registry,
@@ -597,6 +628,9 @@ pub fn sync_simulation_entities(
             );
             if let Some(id) = sim_ship.bounty_id {
                 commands.entity(root).insert(BountyTarget(id));
+            }
+            if sim_ship.id != 0 {
+                commands.entity(root).insert(SimShipId(sim_ship.id));
             }
             sim_ship.spawned = true;
         }
@@ -609,7 +643,7 @@ pub fn sync_simulation_entities(
     // "dead" entry — so the player can fly away and come back later to
     // actually scavenge the hull they shot up, instead of it vanishing the
     // moment they're out of range.
-    for (entity, transform, ship_type, state, bounty, settled) in ai_ships.iter() {
+    for (entity, transform, ship_type, state, bounty, settled, sim_id) in ai_ships.iter() {
         // Bounty-tagged ships are matched back to their exact sim entry by
         // id — the faction-only match below is ambiguous whenever more than
         // one ship of the same faction is spawned at once, which would risk
@@ -624,7 +658,9 @@ pub fn sync_simulation_entities(
             // Without a bounty id, the nearest spawned ship of its faction is
             // the best guess at which entry it was.
             let wreck_at = transform.translation.truncate();
-            let sim_ship = if let Some(bounty) = bounty {
+            let sim_ship = if let Some(id) = sim_id {
+                sim.ships.iter_mut().find(|s| s.id == id.0)
+            } else if let Some(bounty) = bounty {
                 sim.ships.iter_mut().find(|s| s.bounty_id == Some(bounty.0))
             } else {
                 sim.ships
@@ -647,7 +683,9 @@ pub fn sync_simulation_entities(
         if dist > DESPAWN_DISTANCE {
             commands.entity(entity).despawn();
 
-            let sim_ship = if let Some(bounty) = bounty {
+            let sim_ship = if let Some(id) = sim_id {
+                sim.ships.iter_mut().find(|s| s.id == id.0)
+            } else if let Some(bounty) = bounty {
                 sim.ships.iter_mut().find(|s| s.bounty_id == Some(bounty.0))
             } else {
                 sim.ships.iter_mut().find(|s| s.spawned && s.faction == *ship_type)

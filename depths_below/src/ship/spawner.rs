@@ -366,7 +366,16 @@ pub(crate) fn lay_hallways(
     hull_cells: &mut [crate::building::blueprint::BlueprintHullCell],
     modules: &[crate::building::blueprint::BlueprintModule],
 ) {
-    let registry = crate::building::registry::build_registry();
+    lay_hallways_with(&crate::building::registry::build_registry(), hull_cells, modules);
+}
+
+/// As `lay_hallways`, with a registry the caller already has. Building one
+/// per call is the whole module table; an AI spawn has one to hand.
+pub(crate) fn lay_hallways_with(
+    registry: &crate::building::registry::ModuleRegistry,
+    hull_cells: &mut [crate::building::blueprint::BlueprintHullCell],
+    modules: &[crate::building::blueprint::BlueprintModule],
+) {
     let occupied: std::collections::HashSet<IVec2> = modules
         .iter()
         .flat_map(|m| {

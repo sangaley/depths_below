@@ -280,6 +280,15 @@ pub struct SimulatedShip {
     /// a lane of traffic has fast and slow movers in it instead of a rank of
     /// identical dots.
     pub cruise: f32,
+    /// Which hull from the faction's roster (ai_ship::roster) this ship is;
+    /// None flies the faction's original design. Rolled once when the system
+    /// is populated and kept for the ship's life, so the frigate you lost
+    /// track of is still a frigate when you find it again.
+    pub class: Option<&'static str>,
+    /// Stable identity, so a spawned ship finds its own entry again when it
+    /// despawns or dies. 0 = not issued (test and debug ships), which falls
+    /// back to the old nearest-of-the-same-faction guess.
+    pub id: u32,
 }
 
 impl SimulatedShip {
@@ -307,9 +316,19 @@ impl SimulatedShip {
             bounty_id: None,
             destination: position,
             cruise,
+            class: None,
+            id: 0,
         }
     }
 }
+
+/// The roster class an AI ship was spawned as (see ai_ship::roster).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct AiShipClass(pub &'static str);
+
+/// Ties a spawned AI ship back to its SimulatedShip entry by `id`.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct SimShipId(pub u32);
 
 /// Attached to an AI ship's root entity when it was spawned from a
 /// bounty-tagged SimulatedShip. Read by ai_ship::combat when the ship dies
@@ -335,6 +354,7 @@ pub struct WorldSimulation {
     pub tick_timer: Timer,
     pub initialized: bool,
     next_bounty_id: u32,
+    next_ship_id: u32,
 }
 
 impl Default for WorldSimulation {
@@ -344,11 +364,19 @@ impl Default for WorldSimulation {
             tick_timer: Timer::from_seconds(2.0, TimerMode::Repeating),
             initialized: false,
             next_bounty_id: 1,
+            next_ship_id: 1,
         }
     }
 }
 
 impl WorldSimulation {
+    /// Add a ship, issuing it an id.
+    pub fn add(&mut self, mut ship: SimulatedShip) {
+        ship.id = self.next_ship_id;
+        self.next_ship_id += 1;
+        self.ships.push(ship);
+    }
+
     /// Picks a random living, untagged ship belonging to `faction` and tags
     /// it as a bounty target. Returns (bounty_id, spawn distance from origin)
     /// so the contract can use the target's real position for its reward and

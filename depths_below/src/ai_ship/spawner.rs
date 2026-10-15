@@ -10,11 +10,40 @@ use crate::ship::spawn_module;
 
 use super::components::*;
 use super::layouts;
+use super::roster;
 
 /// Faction designs, loaded once per run. designs/factions/<slug>.json wins;
 /// missing files are converted from the built-in layouts and self-exported
 /// so every faction ship exists as editable JSON after the first encounter.
 static DESIGN_CACHE: OnceLock<Mutex<HashMap<AiShipType, Blueprint>>> = OnceLock::new();
+
+/// Class designs (designs/factions/<slug>/<key>.json), loaded once per run.
+/// `None` records a class whose file is missing, so it is reported once and
+/// then quietly flies the faction's original design.
+static CLASS_CACHE: OnceLock<Mutex<HashMap<(AiShipType, &'static str), Option<Blueprint>>>> = OnceLock::new();
+
+/// The design for one class of a faction, or its original design when the
+/// class is None or its file can't be read. Never writes a file: a class that
+/// fails to load is a mistake to fix, not something to paper over on disk.
+fn class_design(ship_type: AiShipType, class: Option<&'static str>) -> Blueprint {
+    let Some(key) = class else { return faction_design(ship_type) };
+    let cache = CLASS_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let loaded = {
+        let mut cache = cache.lock().unwrap();
+        cache
+            .entry((ship_type, key))
+            .or_insert_with(|| {
+                let path = format!("designs/factions/{}/{}.json", layouts::design_slug(ship_type), key);
+                let design = blueprint::load_design_file(&path);
+                if design.is_none() {
+                    warn!("Ship class {} could not be loaded; flying the faction's original design", path);
+                }
+                design
+            })
+            .clone()
+    };
+    loaded.unwrap_or_else(|| faction_design(ship_type))
+}
 
 /// A copy of the player's own ship, held aside for the one enemy that is meant
 /// to be built from it.
@@ -123,7 +152,7 @@ fn ship_tint(ship_type: AiShipType) -> Color {
     }
 }
 
-/// Spawns a complete AI ship at the given position.
+/// Spawns a complete AI ship of a class picked from the faction's roster.
 /// Returns the root entity.
 pub fn spawn_ai_ship(
     ship_type: AiShipType,
@@ -132,7 +161,31 @@ pub fn spawn_ai_ship(
     registry: &ModuleRegistry,
     asset_server: &AssetServer,
 ) -> Entity {
-    spawn_ai_ship_with_design(ship_type, position, commands, registry, asset_server, None)
+    let class = roster::roll(ship_type, &mut rand::thread_rng(), |_| true).map(|c| c.key);
+    spawn_ai_ship_class(ship_type, class, position, commands, registry, asset_server)
+}
+
+/// Spawns one ship of a given class (None = the faction's original design).
+pub fn spawn_ai_ship_class(
+    ship_type: AiShipType,
+    class: Option<&'static str>,
+    position: Vec2,
+    commands: &mut Commands,
+    registry: &ModuleRegistry,
+    asset_server: &AssetServer,
+) -> Entity {
+    let root = spawn_ai_ship_with_design(
+        ship_type,
+        position,
+        commands,
+        registry,
+        asset_server,
+        Some(class_design(ship_type, class)),
+    );
+    if let Some(key) = class {
+        commands.entity(root).insert(AiShipClass(key));
+    }
+    root
 }
 
 /// As `spawn_ai_ship`, but optionally wearing a design that is not this
@@ -245,7 +298,7 @@ pub fn spawn_ai_ship_with_design(
     // applies to every source of a hull: the authored layouts, the exported
     // files, and a mirror design wearing the player's own ship.
     let mut hull_cells = design.hull_cells.clone();
-    crate::ship::lay_hallways(&mut hull_cells, &design.modules);
+    crate::ship::lay_hallways_with(registry, &mut hull_cells, &design.modules);
 
     // Spawn hull segments as children
     let hull_max = spawn_ai_hull(commands, asset_server, root, &hull_cells, health_mult);

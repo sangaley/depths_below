@@ -11,6 +11,7 @@ pub mod simulation;
 mod crew;
 pub mod interior;
 mod power;
+pub mod roster;
 
 use bevy::prelude::*;
 
