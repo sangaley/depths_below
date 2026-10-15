@@ -1295,6 +1295,8 @@ fn update_weapon_rack(
     mut texts: Query<(&mut Text, &mut TextColor), With<WeaponRackDynText>>,
     mut bars: Query<(&mut Node, &mut BackgroundColor), With<WeaponRackBarFill>>,
     mut commands: Commands,
+    mut notifications: MessageWriter<ShowNotification>,
+    mut dry: Local<HashSet<(u8, &'static str)>>,
 ) {
     use theme::*;
     let Ok(root) = rack_root.single() else { return };
@@ -1325,6 +1327,22 @@ fn update_weapon_rack(
     }
     let lines: Vec<((u8, &'static str), RackLine)> =
         stacks.iter().map(|(key, ws)| (*key, rack_line(key.1, ws))).collect();
+
+    // Say it once when a stack runs dry. The rack turns red, but mid-fight
+    // nobody is reading the lower right corner -- the guns just go quiet.
+    for (key, line) in &lines {
+        if line.state == "EMPTY" {
+            if dry.insert(*key) {
+                notifications.write(ShowNotification {
+                    message: format!("{} out of ammo - rearm at a station", line.name),
+                    notification_type: NotificationType::Warning,
+                    duration: 4.0,
+                });
+            }
+        } else {
+            dry.remove(key);
+        }
+    }
 
     // Update existing rows; despawn rows whose stack is gone.
     let mut have: HashSet<(u8, &'static str)> = HashSet::new();
