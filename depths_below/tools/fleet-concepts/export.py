@@ -25,4 +25,21 @@ for const, body in re.findall(r"const (\w+): &\[ShipClass\] = &\[(.*?)\];", src,
         d.pop("_checks", None)
         json.dump(d, open(b, "w"), indent=1)
         copied += 1
-print(f"exported {copied} classes")
+# Stations and their gun platforms (src/diplomacy/stations.rs PLANS).
+ENUM = {"TerranHegemony": "terran_hegemony", "EternalHegemony": "eternal_hegemony",
+        "GildedThrone": "gilded_throne", "BrokenChoir": "broken_choir",
+        "SynthesisCollective": "synthesis_collective", "CorpseStars": "corpse_stars",
+        "StellarPreserve": "stellar_preserve", "TheSilence": "the_silence", "Shepherd": "shepherd",
+        "RecursiveKingdom": "recursive_kingdom"}
+stations = open(os.path.join(ROOT, "src/diplomacy/stations.rs")).read()
+for enum, key, platform in re.findall(r'\(AiShipType::(\w+), plan\("(\w+)", "[^"]*", (?:Some\("(\w+)"\)|None)', stations):
+    for k in filter(None, (key, platform)):
+        slug = ENUM[enum]
+        a = os.path.join(HERE, "concepts", slug, f"{k}.json")
+        b = os.path.join(ROOT, "designs", "factions", slug, f"{k}.json")
+        if not os.path.exists(a):
+            sys.exit(f"missing concept {a}")
+        d = json.load(open(a)); d.pop("_checks", None)
+        json.dump(d, open(b, "w"), indent=1)
+        copied += 1
+print(f"exported {copied} designs")

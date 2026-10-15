@@ -664,7 +664,11 @@ impl Plugin for CapturePlugin {
             info!("DEPTHS_KEYS: {} scripted presses", events.len());
             app.insert_resource(ScriptedKeys { events, ..default() }).add_systems(
                 PreUpdate,
-                play_scripted_keys.after(bevy::input::InputSystems),
+                // Before the F token is armed from the keyboard, or a
+                // scripted F lands a frame the docking handlers never see.
+                play_scripted_keys
+                    .after(bevy::input::InputSystems)
+                    .before(crate::resources::refresh_interact_press),
             );
         }
         if std::env::var("DEPTHS_OFFSCREEN").ok().as_deref() == Some("1") {

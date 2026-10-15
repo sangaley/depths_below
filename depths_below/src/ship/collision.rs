@@ -382,7 +382,7 @@ pub fn refresh_ship_colliders(
         Or<(Added<crate::components::HullDestroyed>, Added<crate::components::DestroyedModule>)>,
     >,
     ships: Query<
-        (Entity, Option<&ShipPhysics>, Option<&Children>),
+        (Entity, Option<&ShipPhysics>, Option<&Children>, Has<crate::diplomacy::FactionStation>),
         Or<(With<Ship>, With<AiShip>)>,
     >,
     // Destroyed-but-not-yet-despawned blocks (0.5s PendingRemoval window)
@@ -401,7 +401,7 @@ pub fn refresh_ship_colliders(
         targets.insert(parent.parent());
     }
     for target in targets {
-        let Ok((entity, physics, children)) = ships.get(target) else { continue };
+        let Ok((entity, physics, children, anchored)) = ships.get(target) else { continue };
         let points: Vec<Vec2> = children
             .map(|children| {
                 children
@@ -411,9 +411,12 @@ pub fn refresh_ship_colliders(
                     .collect()
             })
             .unwrap_or_default();
-        let mass = physics
-            .map(|p| p.mass)
-            .unwrap_or((points.len() as f32 * BLOCK_MASS).max(100.0));
+        // A faction station is anchored to its planet: nothing shoves it.
+        let mass = if anchored {
+            f32::INFINITY
+        } else {
+            physics.map(|p| p.mass).unwrap_or((points.len() as f32 * BLOCK_MASS).max(100.0))
+        };
         commands.entity(entity).try_insert(fit_ship_collider(&points, mass));
     }
 }

@@ -586,7 +586,12 @@ pub fn sync_simulation_entities(
     registry: Res<ModuleRegistry>,
     asset_server: Res<AssetServer>,
     ship_query: Query<&Transform, With<Ship>>,
-    ai_ships: Query<(Entity, &Transform, &AiShipType, &AiShipState, Option<&BountyTarget>, Has<SimSettled>, Option<&SimShipId>), With<AiShip>>,
+    // Faction stations live outside the simulation (diplomacy::stations):
+    // they neither use the hull budget nor despawn with distance here.
+    ai_ships: Query<
+        (Entity, &Transform, &AiShipType, &AiShipState, Option<&BountyTarget>, Has<SimSettled>, Option<&SimShipId>),
+        (With<AiShip>, Without<crate::diplomacy::FactionStation>),
+    >,
 ) {
     let Ok(player_transform) = ship_query.single() else { return };
     let player_pos = player_transform.translation.truncate();

@@ -4961,7 +4961,7 @@ fn spawn_docking_menu(
     let station_idx = ship_query.single().ok()
         .and_then(|t| stations.nearest_index(t.translation.truncate()))
         .unwrap_or(0);
-    let far = distance_price_multiplier_for(station_idx, &galaxy);
+    let far = distance_price_multiplier_for(station_idx, &galaxy) * market.service_multiplier();
     let services = get_docking_services(&hull_state, &oxygen_state, &fuel_state, &weapon_query, crew_count, staffing_state.total_berths, &inventory, station_idx, &market, far);
 
     commands.spawn((
@@ -4980,9 +4980,15 @@ fn spawn_docking_menu(
         let s_type = crate::world::station_types::station_type(station_idx);
         // "HAVEN STATION - SHIPYARD", but "VESPER TRADE HUB" rather than
         // "VESPER TRADE HUB - TRADE HUB": most names already end in the type.
-        let name = crate::world::home_base::station_display_name(station_idx);
+        let name = market.dock_terms.as_ref().map_or_else(
+            || crate::world::home_base::station_display_name(station_idx),
+            |t| t.name.clone(),
+        );
         let kind = crate::world::station_types::station_type_name(s_type);
-        let title = if name.ends_with(kind) {
+        let title = if let Some(terms) = &market.dock_terms {
+            // A faction station: what matters is what they think of you.
+            format!("{} - {}", name.to_uppercase(), terms.standing.to_uppercase())
+        } else if name.ends_with(kind) {
             name.to_uppercase()
         } else {
             format!("{} - {}", name.to_uppercase(), kind.to_uppercase())
@@ -4997,6 +5003,12 @@ fn spawn_docking_menu(
             crate::world::station_types::station_type(station_idx),
         );
         let mut perks = Vec::new();
+        if let Some(terms) = &market.dock_terms {
+            perks.push(format!(
+                "Your standing: {} - you pay x{:.2}, they pay you x{:.2}",
+                terms.standing, terms.buy, terms.sell
+            ));
+        }
         if discounts.fuel < 1.0 { perks.push(format!("Fuel -{:.0}%", (1.0 - discounts.fuel) * 100.0)); }
         if discounts.hull_repair < 1.0 { perks.push(format!("Repairs -{:.0}%", (1.0 - discounts.hull_repair) * 100.0)); }
         if discounts.ammo < 1.0 { perks.push(format!("Ammo -{:.0}%", (1.0 - discounts.ammo) * 100.0)); }
@@ -5269,7 +5281,7 @@ fn docking_menu_input(
     // get_docking_services / the refresh block below. That now includes the
     // distance multiplier: quote one price and charge another and the menu is
     // lying, which is worse than it being cheap.
-    let far = distance_price_multiplier_for(station_idx, &galaxy);
+    let far = distance_price_multiplier_for(station_idx, &galaxy) * market.service_multiplier();
     let discounts = crate::world::station_types::service_discounts(
         crate::world::station_types::station_type(station_idx),
     );

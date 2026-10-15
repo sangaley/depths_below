@@ -58,6 +58,10 @@ pub fn ai_brain_system(
     // runs, so withdrawing and striking colours read one count.
     module_query: Query<(&Module, &OwnedByAiShip)>,
     standing: Res<crate::diplomacy::FactionStanding>,
+    // Faction stations hold fire for their own rule, and reach: a hull
+    // kilometres across has guns in range long before its centre is.
+    stations: Query<(), With<crate::diplomacy::FactionStation>>,
+    reach: Query<&crate::combat::shields::ShipShield>,
 ) {
     // --- Pre-pass: snapshot every living ship's position + "threat value"
     // (block count + 2x active weapon damage — cheap proxies for size and
@@ -69,7 +73,11 @@ pub fn ai_brain_system(
     }
 
     let mut ai_snapshot: Vec<(Entity, Vec2, f32)> = Vec::new();
-    for (entity, transform, _, state, _, _, _, _, children, _) in ai_ships.iter() {
+    let mut ai_factions: Vec<(Entity, AiShipType)> = Vec::new();
+    for (entity, transform, ship_type, state, _, _, _, _, children, _) in ai_ships.iter() {
+        if !state.is_destroyed {
+            ai_factions.push((entity, *ship_type));
+        }
         if state.is_destroyed { continue; }
         let weapon_dmg: f32 = children.iter()
             .filter_map(|c| weapon_query.get(c).ok())
@@ -140,6 +148,37 @@ pub fn ai_brain_system(
             .map(|(weapon, _, _)| weapon.range)
             .fold(0.0_f32, f32::max);
         let engage_range = if max_weapon_range > 0.0 { max_weapon_range * 1.05 } else { 4400.0 };
+        // Guns ride the hull, so a big hull reaches further than its centre.
+        let engage_range = engage_range + reach.get(entity).map_or(0.0, |s| s.radius * 0.8);
+
+        // A faction station doesn't patrol, flee or ram: it fires on whatever
+        // its faction is at war with, and on you if its faction counts you
+        // Hostile or you've fired on it (player_snapshot is already gated).
+        if stations.contains(entity) {
+            let hostile = |e: Entity| {
+                ai_factions.iter().find(|(f, _)| *f == e).is_some_and(|(_, t)| {
+                    crate::ai_ship::components::factions_hostile(*ship_type, *t)
+                })
+            };
+            let target = player_snapshot
+                .iter()
+                .map(|&(e, p, _)| (e, p))
+                .chain(ai_snapshot.iter().filter(|(e, _, _)| *e != entity && hostile(*e)).map(|&(e, p, _)| (e, p)))
+                .filter(|(_, p)| pos.distance(*p) < engage_range)
+                .min_by(|(_, a), (_, b)| pos.distance(*a).total_cmp(&pos.distance(*b)));
+            match target {
+                Some((e, p)) => {
+                    *behavior = AiShipBehavior::Engaging;
+                    ai_target.entity = Some(e);
+                    ai_target.position = p;
+                }
+                None => {
+                    *behavior = AiShipBehavior::Idle;
+                    ai_target.entity = None;
+                }
+            }
+            continue;
+        }
 
         // How much of the battery is still shooting. A ship that has been
         // disarmed doesn't heroically hold station waiting to be finished —

@@ -18,6 +18,7 @@ use bevy::prelude::*;
 use crate::states::{GameState, SpatialSet};
 
 use components::*;
+pub use layouts::design_slug;
 
 pub struct AiShipPlugin;
 

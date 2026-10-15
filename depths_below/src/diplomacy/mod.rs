@@ -24,6 +24,7 @@ use crate::components::Ship;
 use crate::events::{AiShipDamaged, AiShipDestroyed};
 use crate::states::GameState;
 
+pub mod stations;
 pub mod ui;
 
 /// Every faction with an opinion of you, in the order the window lists them.
@@ -200,7 +201,10 @@ impl FactionStanding {
 }
 
 /// What a kill costs with the victim's faction, by what kind of hull it was.
-fn kill_penalty(role: Option<ClassRole>, station: bool) -> f32 {
+fn kill_penalty(role: Option<ClassRole>, station: bool, platform: bool) -> f32 {
+    if platform {
+        return 15.0;
+    }
     if station {
         return 50.0;
     }
@@ -222,7 +226,7 @@ pub struct FactionStation;
 /// with every faction at war with it.
 fn standing_from_kills(
     mut deaths: MessageReader<AiShipDestroyed>,
-    victims: Query<(&AiShipState, Option<&AiShipClass>, Has<FactionStation>)>,
+    victims: Query<(&AiShipState, Option<&AiShipClass>, Has<FactionStation>, Has<stations::StationPlatform>)>,
     player: Query<Entity, With<Ship>>,
     mut standing: ResMut<FactionStanding>,
 ) {
@@ -231,17 +235,21 @@ fn standing_from_kills(
         return;
     };
     for death in deaths.read() {
-        let Ok((state, class, station)) = victims.get(death.entity) else { continue };
+        let Ok((state, class, station, platform)) = victims.get(death.entity) else { continue };
         if state.last_attacker != Some(player) {
             continue;
         }
         let victim = death.ship_type;
         let role = class.and_then(|c| roster::find(victim, c.0)).map(|c| c.role);
-        let what = class
-            .and_then(|c| roster::find(victim, c.0))
-            .map_or("a ship", |c| c.name);
+        let what = if platform {
+            "gun platform"
+        } else if station {
+            stations::station_plan(victim).map_or("station", |p| p.name)
+        } else {
+            class.and_then(|c| roster::find(victim, c.0)).map_or("ship", |c| c.name)
+        };
         let name = crate::ai_ship::components::faction_display_name(victim);
-        standing.change(victim, -kill_penalty(role, station), format!("You destroyed their {what}"));
+        standing.change(victim, -kill_penalty(role, station, platform), format!("You destroyed their {what}"));
         for &other in FACTIONS.iter() {
             if other != victim && factions_hostile(other, victim) {
                 standing.change(other, 3.0, format!("You destroyed a {name} {what}"));
@@ -282,6 +290,27 @@ fn standing_from_hits(
     }
 }
 
+/// DEPTHS_STANDING=<faction>:<value>[,<faction>:<value>...] sets standing at
+/// the start of a run, for testing (e.g. "TerranHegemony:-80" to be shot at).
+fn standing_from_env(mut standing: ResMut<FactionStanding>, mut done: Local<bool>) {
+    if *done {
+        return;
+    }
+    *done = true;
+    let Ok(spec) = std::env::var("DEPTHS_STANDING") else { return };
+    for part in spec.split(',') {
+        let Some((name, value)) = part.split_once(':') else { continue };
+        let Some(&faction) = FACTIONS.iter().find(|f| format!("{f:?}") == name.trim()) else {
+            warn!("DEPTHS_STANDING: no faction called {name:?}");
+            continue;
+        };
+        if let Ok(v) = value.trim().parse::<f32>() {
+            let now = standing.value(faction);
+            standing.change(faction, v - now, "DEPTHS_STANDING");
+        }
+    }
+}
+
 pub struct DiplomacyPlugin;
 
 impl Plugin for DiplomacyPlugin {
@@ -289,9 +318,9 @@ impl Plugin for DiplomacyPlugin {
         app.init_resource::<FactionStanding>()
             .add_systems(
                 Update,
-                (standing_from_kills, standing_from_hits).run_if(in_state(GameState::Exploring)),
+                (standing_from_env, standing_from_kills, standing_from_hits).run_if(in_state(GameState::Exploring)),
             )
-            .add_plugins(ui::DiplomacyUiPlugin);
+            .add_plugins((ui::DiplomacyUiPlugin, stations::FactionStationPlugin));
     }
 }
 

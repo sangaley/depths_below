@@ -540,15 +540,37 @@ pub struct MarketEvents {
     pub active: Vec<MarketEvent>,
     /// Seconds until the next shortage roll.
     pub next_roll: f32,
+    /// Docked at a faction station: its name and the terms your standing
+    /// gets you (diplomacy::stations). None at an ordinary station.
+    pub dock_terms: Option<DockTerms>,
+}
+
+/// What a faction station charges you, from your standing with it.
+#[derive(Clone, Debug)]
+pub struct DockTerms {
+    pub faction: crate::ai_ship::components::AiShipType,
+    pub name: String,
+    /// Your standing with them, as the diplomacy window names it.
+    pub standing: &'static str,
+    /// Multiplies what you pay: goods and services.
+    pub buy: f32,
+    /// Multiplies what they pay you for cargo.
+    pub sell: f32,
 }
 
 impl Default for MarketEvents {
     fn default() -> Self {
-        Self { active: Vec::new(), next_roll: 120.0 }
+        Self { active: Vec::new(), next_roll: 120.0, dock_terms: None }
     }
 }
 
 impl MarketEvents {
+    /// What services cost at the station you're docked at, on top of its
+    /// own discounts: your standing's terms at a faction station, else 1.
+    pub fn service_multiplier(&self) -> f32 {
+        self.dock_terms.as_ref().map_or(1.0, |t| t.buy)
+    }
+
     pub fn multiplier(&self, station_idx: usize, item: ItemType) -> f32 {
         self.active
             .iter()
@@ -560,9 +582,13 @@ impl MarketEvents {
 
 /// Sell price including any active shortage at this station.
 pub fn live_item_price(events: &MarketEvents, station_idx: usize, item: ItemType) -> u32 {
-    ((station_item_price(station_idx, item) as f32) * events.multiplier(station_idx, item))
-        .round()
-        .max(1.0) as u32
+    let terms = events.dock_terms.as_ref().map_or(1.0, |t| t.sell);
+    (shelf_price(events, station_idx, item) * terms).round().max(1.0) as u32
+}
+
+/// The station's own sell price with any shortage, before your terms.
+fn shelf_price(events: &MarketEvents, station_idx: usize, item: ItemType) -> f32 {
+    (station_item_price(station_idx, item) as f32) * events.multiplier(station_idx, item)
 }
 
 /// Per-unit BUY price at a station: 1.5x its (live) sell price. The
@@ -572,8 +598,12 @@ pub fn live_item_price(events: &MarketEvents, station_idx: usize, item: ItemType
 /// Shortages raise the local buy price too: scarce goods cost more
 /// everywhere they're scarce.
 pub fn live_item_buy_price(events: &MarketEvents, station_idx: usize, item: ItemType) -> u32 {
-    let sell = live_item_price(events, station_idx, item);
-    (sell * 3 / 2).max(sell + 2)
+    let sell = shelf_price(events, station_idx, item).round().max(1.0) as u32;
+    let base = (sell * 3 / 2).max(sell + 2);
+    let terms = events.dock_terms.as_ref().map_or(1.0, |t| t.buy);
+    // Never below what they'd pay you for it, or buy-and-resell at one
+    // counter would print money on good terms.
+    ((base as f32 * terms).round() as u32).max(live_item_price(events, station_idx, item) + 1)
 }
 
 #[derive(Resource, Serialize, Deserialize, Clone)]

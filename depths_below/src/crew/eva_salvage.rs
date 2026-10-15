@@ -137,6 +137,10 @@ pub fn order_salvage_detail(
         (With<Suited>, Without<crate::ai_ship::components::OwnedByAiShip>),
     >,
     mut notifications: MessageWriter<ShowNotification>,
+    faction_stations: Query<
+        (&GlobalTransform, &crate::diplomacy::stations::StationAnchor),
+        With<crate::diplomacy::stations::StationCore>,
+    >,
 ) {
     if !press.pending() {
         return;
@@ -222,6 +226,13 @@ pub fn order_salvage_detail(
         // nowhere near.
         let edge = (ship_pos.distance(site.pos) - site.radius()).max(0.0);
         if station_takes_the_press(edge, wreck_dist) {
+            return;
+        }
+    }
+    // The same courtesy to a faction station you're beside.
+    for (gt, anchor) in faction_stations.iter() {
+        let edge = (ship_pos.distance(gt.translation().truncate()) - anchor.extent).max(0.0);
+        if edge < crate::diplomacy::stations::DOCK_MARGIN && station_takes_the_press(edge, wreck_dist) {
             return;
         }
     }

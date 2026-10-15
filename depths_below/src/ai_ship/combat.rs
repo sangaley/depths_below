@@ -225,13 +225,16 @@ pub fn ai_weapon_fire_system(
                 continue;
             }
 
-            // Only fire if the target is within weapon range
-            if dist_to_target > weapon.range {
+            // Each gun shoots from where it actually is...
+            let muzzle = weapon_gt.translation().truncate();
+
+            // ...and is in range from there. Measured from the ship's centre
+            // this was the same thing on a small hull, but a capital or a
+            // station is kilometres across, and its outer batteries sat
+            // silent with the enemy well inside their reach.
+            if dist_to_target.min(muzzle.distance(centroid)) > weapon.range {
                 continue;
             }
-
-            // Each gun shoots from where it actually is.
-            let muzzle = weapon_gt.translation().truncate();
 
             // ...and only if its mount can bear. The player's guns have always
             // been held to this (is_in_firing_arc in new_projectiles); the AI
@@ -686,15 +689,18 @@ fn is_engine_module(module: &Module) -> bool {
 /// the game (wreck.rs scores loot by how intact the hull still is).
 pub fn check_ai_cripple(
     mut ai_ships: Query<
-        (Entity, &Transform, &AiShipType, &Children, &mut AiShipState, Option<&BountyTarget>, Option<&AiLoadout>),
+        (Entity, &Transform, &AiShipType, &Children, &mut AiShipState, Option<&BountyTarget>, Option<&AiLoadout>, Has<crate::diplomacy::FactionStation>),
         (With<AiShip>, Without<ReactorMeltdown>),
     >,
     module_query: Query<(&Module, &OwnedByAiShip)>,
     mut destroyed_events: MessageWriter<AiShipDestroyed>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    for (entity, transform, ship_type, children, mut state, bounty, loadout) in ai_ships.iter_mut() {
+    for (entity, transform, ship_type, children, mut state, bounty, loadout, station) in ai_ships.iter_mut() {
         if state.is_destroyed { continue; }
+        // A station has no engines by design, and an unarmed one (the
+        // Silence's Monastery) no guns: neither has anything to strike.
+        if station && loadout.is_none_or(|l| l.guns == 0) { continue; }
 
         let (guns_alive, guns_total) = subsystem_tally(entity, children, &module_query, is_weapon_module);
         let (engines_alive, engines_total) = subsystem_tally(entity, children, &module_query, is_engine_module);
