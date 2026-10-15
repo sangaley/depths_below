@@ -88,34 +88,56 @@ def _stamp_out(c, template, cx, cy, side):
 
 
 def warden_tug():
-    """Scout. A round little hull behind one long tractor boom: it goes out
-    alone, catches one creature and tows it home."""
+    """Scout. A seed pod with an empty one held out in front of it on a short
+    boom: the front pod is a hollow octagon, open at the bow, its inner walls
+    lined with tractor beams. It goes out alone, draws one creature into the
+    open pod and holds it there; the containment cell waits in the boom
+    behind it."""
     c = Canvas("sp_warden_tug", "Steel")
-    c.rows(-12, 5, """
-   #######/
-  #.Q.O.Q.##/
- #.Y.....Y..#/
-E.R.b.ZZ..M..#/
-E.....d...BB.##########/
-E.M.......BB.H.........t
+    c.rows(-11, 6, """
+               #######/
+              #.......#/
+  ##g##      #...#t#...#/
+ #Q.O.M#    #...#   #...#
+E.R.b.m.#   #..#     #..#
+E.f.BB.H.###..#      #t#/
+E.M.BB..ZZ....t
 """)
     return c.mirror().build()
 
 
 def herd_keeper():
-    """Frigate. Four seed pods on a soft spine, two tractor booms at the bow,
-    a gatling on each stern quarter to cover the run home."""
+    """Frigate. A leader and its herd. A big round head pod, plated at the
+    prow and fitted with tractor beams, tows two curving tether arms that
+    bend further outward the further aft they trail; seed pods hang off each
+    tether like a herd strung out behind its keeper, and a gatling and an
+    engine sit at each tether's tip to cover the run home."""
     c = Canvas("sp_herd_keeper", "Steel")
-    c.rows(-26 + 9, 11, POD_PEN)
-    c.rows(-26 + 21, 11, POD_LAB)
-    c.rows(-26, 5, """
-                                #####/
-                               #.s.s.######/
-          ###.###     ###.### #............t
-  E#g#####Q.O.m.M#####Q.Y.Y.M#.y....A.#####/
- E.R..b.d.KK...Q..d.....BB....d......#/
-E.......................BB.H........M#
-""")
+    # The tether arm: 3-wide runs, each a row higher and shorter than the
+    # last, so the arm bends outward more and more as it trails aft.
+    runs = [(-3, 3), (-8, -2), (-12, -7), (-15, -11), (-18, -14), (-20, -17), (-22, -19)]
+    for k, (x0, x1) in enumerate(runs):
+        c.R(x0, x1, 2 + k, 4 + k)
+    hull = set(c.cells)
+    top, bottom = iter("QOfQcmbQO"), iter("bkfckb")
+    for k, (x0, x1) in enumerate(runs):
+        c.R(x0 + 1, x1, 3 + k, 3 + k, ".")
+        for x in range(x0 + 1, x1 + 1):
+            if x % 2 == 0 and x < -3:
+                if (x, 5 + k) not in hull:
+                    c.cells[(x, 4 + k)] = next(top, "#")
+                if (x, 1 + k) not in hull:
+                    c.cells[(x, 2 + k)] = next(bottom, "#")
+    c.P(-22, 9, "E").P(-21, 10, "g")
+    c.P(5, 6, "#####/")
+    c.P(4, 5, "#Q.A.Q#/")
+    c.P(3, 4, "#.......#/")
+    c.P(2, 3, "#m.O.M.s.y#/")
+    c.P(1, 2, "#.R.b.Q.O.T.t")
+    c.P(1, 1, "E.LL.BB.H...#")
+    c.P(1, 0, "E....BB...M.t")
+    c.rows(-8, 13, POD_SEED)
+    c.rows(-19, 16, POD_PEN)
     return c.mirror().build()
 
 
@@ -229,9 +251,9 @@ def sanctuary():
 
 CONCEPTS = [
     ("warden_tug", warden_tug, "Warden Tug", "Scout",
-     "A round little hull behind one long tractor boom. It goes out alone, catches one creature and tows it home."),
+     "A seed pod holding an empty one out in front on a short boom: a hollow pod open at the bow, its walls lined with tractor beams. It catches one creature and carries it home inside."),
     ("herd_keeper", herd_keeper, "Herd-keeper", "Frigate",
-     "Four seed pods on a soft spine and two tractor booms at the bow. Its only guns cover the stern."),
+     "A leader and its herd: a round, plated head pod tows two tethers that curve outward as they trail aft, seed pods strung along them like a herd behind its keeper."),
     ("seed_ark", seed_ark, "Seed Ark", "Capital: ark",
      "A walled garden in the middle of a long ark, the bridge among the planters. Six seed pods and a fan of three tractor booms."),
     ("net_weaver", net_weaver, "Net-weaver", "Experimental: herder",
@@ -239,3 +261,10 @@ CONCEPTS = [
     ("sanctuary", sanctuary, "Sanctuary", "Station",
      "A ring habitat round an open pen, four tractor booms reaching in to hold what lives there; containment pods hang outside like seeds."),
 ]
+
+
+# Sent back for rework; redrawn since.
+REVISED = {
+    "warden_tug": "Redrawn: a seed-pod body holding an open, tractor-lined catching pod out on a boom, with containment in between.",
+    "herd_keeper": "Redrawn: a leader head with two curving tether arms, seed pods trailing off them like a herd.",
+}
