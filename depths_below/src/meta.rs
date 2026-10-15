@@ -142,6 +142,7 @@ fn collect_save_data(
     fuel: &FuelState,
     contracts: &crate::contracts::ContractState,
     reputation: &crate::contracts::FactionReputation,
+    standing: &crate::diplomacy::FactionStanding,
 ) -> SaveData {
     let position = ship_query
         .single()
@@ -244,6 +245,7 @@ fn collect_save_data(
         fuel: Some(fuel.current_fuel),
         contracts: contracts.clone(),
         reputation: reputation.clone(),
+        standing: Some(standing.clone()),
     }
 }
 
@@ -296,6 +298,7 @@ fn handle_save_request(
         Res<FuelState>,
         Res<crate::contracts::ContractState>,
         Res<crate::contracts::FactionReputation>,
+        Res<crate::diplomacy::FactionStanding>,
     ),
     current_state: Res<State<GameState>>,
     ship_query: Query<&Transform, With<Ship>>,
@@ -308,7 +311,7 @@ fn handle_save_request(
     hull_query: Query<(&HullSegment, &Transform), PlayerBlocks>,
     crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
 ) {
-    let (world_state, galaxy_map, streaming, drifting_dead, looted, fuel, contracts, reputation) = &world_galaxy;
+    let (world_state, galaxy_map, streaming, drifting_dead, looted, fuel, contracts, reputation, standing) = &world_galaxy;
     for event in save_events.read() {
         let save_data = collect_save_data(
             event.slot,
@@ -332,6 +335,7 @@ fn handle_save_request(
             fuel,
             contracts,
             reputation,
+            standing,
         );
 
         // Tier 3 customization is saved via customization_params field
@@ -423,10 +427,11 @@ fn apply_pending_load(
         ResMut<FuelState>,
         ResMut<crate::contracts::ContractState>,
         ResMut<crate::contracts::FactionReputation>,
+        ResMut<crate::diplomacy::FactionStanding>,
     ),
     mut commands: Commands,
 ) {
-    let (mut fuel, mut contracts, mut reputation) = run;
+    let (mut fuel, mut contracts, mut reputation, mut standing) = run;
     let Some((slot, save)) = pending.0.take() else { return };
 
     // ---- Restore resources ----
@@ -445,6 +450,7 @@ fn apply_pending_load(
     fuel.current_fuel = save.fuel.unwrap_or(fuel.max_fuel).clamp(0.0, fuel.max_fuel);
     *contracts = save.contracts.clone();
     *reputation = save.reputation.clone();
+    *standing = save.standing.clone().unwrap_or_default();
 
     // Store save data in a resource for entity rebuild (handled in phase 3)
     commands.insert_resource(PendingEntityRebuild {
@@ -813,6 +819,7 @@ pub fn reset_for_new_game(
     mut statistics: ResMut<Statistics>,
     mut contracts: ResMut<crate::contracts::ContractState>,
     mut reputation: ResMut<crate::contracts::FactionReputation>,
+    mut standing: ResMut<crate::diplomacy::FactionStanding>,
     mut victory: ResMut<VictoryState>,
     mut death_cause: ResMut<DeathCause>,
     mut dead: ResMut<crate::crew::burial::DriftingDead>,
@@ -836,6 +843,7 @@ pub fn reset_for_new_game(
     *statistics = Statistics::default();
     *contracts = crate::contracts::ContractState::default();
     *reputation = crate::contracts::FactionReputation::default();
+    *standing = crate::diplomacy::FactionStanding::default();
     *victory = VictoryState::default();
     *death_cause = DeathCause::default();
     // The dead are permanent within a run, on purpose. They are not permanent

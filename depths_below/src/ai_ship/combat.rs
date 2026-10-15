@@ -74,7 +74,7 @@ pub fn ai_weapon_fire_system(
         // so every AI shot resolved as unspecialised regardless.
         Option<&crate::building::customization::tuning::SelectedAmmo>,
     )>,
-    player_query: Query<&Transform, With<Ship>>,
+    player_query: Query<(Entity, &Transform), With<Ship>>,
     target_transform_query: Query<&Transform>,
     // Ship hit detection (combat/projectiles.rs) centers on the shield's
     // world_center — the blocks' centroid, not the root, since the root is
@@ -88,6 +88,7 @@ pub fn ai_weapon_fire_system(
     // Target velocity, for lead prediction. Player and AI ships both carry it.
     velocity_query: Query<&Velocity>,
     mut fired_events: MessageWriter<WeaponFired>,
+    standing: Res<crate::diplomacy::FactionStanding>,
 ) {
     // DEPTHS_MOVETEST_ENEMY spawns a target dummy that's shot-free by
     // default (for testing movement/damage-model in isolation). Set
@@ -98,7 +99,7 @@ pub fn ai_weapon_fire_system(
         return;
     }
 
-    let player_pos = player_query.single().ok().map(|t| t.translation.truncate());
+    let player = player_query.single().ok();
 
     for (ai_entity, ai_transform, ship_type, behavior, mut ai_target, children, ai_power, state) in ai_ships.iter_mut() {
         if !ship_may_fire(behavior, state) {
@@ -113,6 +114,19 @@ pub fn ai_weapon_fire_system(
         if ai_power.is_some_and(|p| p.power_balance < 0.0) {
             continue;
         }
+
+        // Standing: a faction that isn't Hostile holds fire on you unless you
+        // shot first (the brain applies the same rule when picking targets;
+        // this also covers the no-target fallback below).
+        let may_shoot_player = player.is_some_and(|(p, _)| {
+            standing.attacks_player(*ship_type) || state.last_attacker == Some(p)
+        });
+        if !may_shoot_player && ai_target.entity.is_some() && ai_target.entity == player.map(|(p, _)| p) {
+            continue;
+        }
+        let player_pos = player
+            .filter(|_| may_shoot_player)
+            .map(|(_, t)| t.translation.truncate());
 
         // Centre-of-mass of whoever the brain picked, re-read fresh every
         // frame. Falls back to the last-known snapshot (target despawned

@@ -28,13 +28,16 @@ pub struct RadarBlip {
 #[derive(Component)]
 pub struct RadarShipDot(pub Entity);
 
-/// Radar dot color by disposition toward the player.
-/// Red = hostile, white = neutral. Blue (ally) is reserved — the game has no
-/// player-allied ships yet. The Silence is the one faction that never attacks.
-fn radar_ship_color(faction: AiShipType) -> Color {
-    match faction {
-        AiShipType::TheSilence => Color::srgb(0.90, 0.90, 0.95), // neutral
-        _ => Color::srgb(1.0, 0.25, 0.25),                     // hostile
+/// Radar dot color by your standing with the ship's faction (see diplomacy):
+/// red hostile, orange unfriendly, white neutral, green friendly, blue allied.
+fn radar_ship_color(tier: crate::diplomacy::StandingTier) -> Color {
+    use crate::diplomacy::StandingTier::*;
+    match tier {
+        Hostile => Color::srgb(1.0, 0.25, 0.25),
+        Unfriendly => Color::srgb(0.95, 0.55, 0.20),
+        Neutral => Color::srgb(0.90, 0.90, 0.95),
+        Friendly => Color::srgb(0.35, 0.85, 0.50),
+        Allied => Color::srgb(0.35, 0.65, 1.0),
     }
 }
 
@@ -184,6 +187,7 @@ pub fn update_radar(
     camera_query: Query<&Projection, With<MainCamera>>,
     stations: Res<SystemStations>,
     mut commands: Commands,
+    standing: Res<crate::diplomacy::FactionStanding>,
 ) {
     if !sweep_state.display_visible {
         return;
@@ -410,7 +414,7 @@ pub fn update_radar(
         let radar_y = radar_half - (offset.y / radar_range) * radar_half;
         desired.insert(
             ai_entity,
-            (radar_x, radar_y, radar_ship_color(*ai_ship_type), radar_ship_size(*ai_ship_type)),
+            (radar_x, radar_y, radar_ship_color(standing.tier(*ai_ship_type)), radar_ship_size(*ai_ship_type)),
         );
     }
     // Move existing dots to their ship's current spot; drop dots whose ship left

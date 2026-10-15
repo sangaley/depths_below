@@ -1629,6 +1629,10 @@ pub struct SaveData {
     /// Standing with the contract factions. The starting standing on older saves.
     #[serde(default)]
     pub reputation: crate::contracts::FactionReputation,
+    /// Your standing with each AI faction (diplomacy). None on older saves,
+    /// which load with the lore's starting standing.
+    #[serde(default)]
+    pub standing: Option<crate::diplomacy::FactionStanding>,
 }
 
 impl Default for SaveData {
@@ -1662,6 +1666,7 @@ impl Default for SaveData {
             fuel: None,
             contracts: crate::contracts::ContractState::default(),
             reputation: crate::contracts::FactionReputation::default(),
+            standing: None,
         }
     }
 }
@@ -1916,7 +1921,7 @@ mod save_tests {
     fn a_save_from_before_them_still_loads() {
         let mut json = serde_json::to_value(with_new_fields()).unwrap();
         let obj = json.as_object_mut().unwrap();
-        for key in ["uncharted_galaxy_pos", "fuel", "contracts", "reputation"] {
+        for key in ["uncharted_galaxy_pos", "fuel", "contracts", "reputation", "standing"] {
             assert!(obj.remove(key).is_some(), "{key} is not in the save under that name");
         }
         obj["galaxy_systems"][0].as_object_mut().unwrap().remove("looted_pois");

@@ -57,6 +57,7 @@ pub fn ai_brain_system(
     // Every module class, for guns_left — the same tally check_ai_cripple
     // runs, so withdrawing and striking colours read one count.
     module_query: Query<(&Module, &OwnedByAiShip)>,
+    standing: Res<crate::diplomacy::FactionStanding>,
 ) {
     // --- Pre-pass: snapshot every living ship's position + "threat value"
     // (block count + 2x active weapon damage — cheap proxies for size and
@@ -99,6 +100,13 @@ pub fn ai_brain_system(
             *behavior = AiShipBehavior::Dead;
             continue;
         }
+
+        // Your standing decides who comes for you: only a faction that counts
+        // you Hostile treats you as a target. A ship you've fired on fires
+        // back whatever its faction thinks of you.
+        let player_snapshot = player_snapshot.filter(|(player, _, _)| {
+            standing.attacks_player(*ship_type) || state.last_attacker == Some(*player)
+        });
 
         let pos = transform.translation.truncate();
 
