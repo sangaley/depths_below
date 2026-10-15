@@ -4,14 +4,6 @@
   {
    "grid_pos": [
     -25,
-    -3
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -25,
     -2
    ],
    "layer": "Outer",
@@ -45,14 +37,6 @@
    "grid_pos": [
     -25,
     2
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -25,
-    3
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -268,14 +252,6 @@
   {
    "grid_pos": [
     -20,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -20,
     -6
    ],
    "layer": "Outer",
@@ -373,14 +349,6 @@
    "grid_pos": [
     -20,
     6
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -20,
-    7
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -748,14 +716,6 @@
   {
    "grid_pos": [
     -16,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
     -6
    ],
    "layer": "Outer",
@@ -853,14 +813,6 @@
    "grid_pos": [
     -16,
     6
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    7
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -908,14 +860,6 @@
   {
    "grid_pos": [
     -14,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
     -6
    ],
    "layer": "Outer",
@@ -1013,14 +957,6 @@
    "grid_pos": [
     -14,
     6
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    7
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -1388,14 +1324,6 @@
   {
    "grid_pos": [
     -10,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -10,
     -6
    ],
    "layer": "Outer",
@@ -1493,14 +1421,6 @@
    "grid_pos": [
     -10,
     6
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -10,
-    7
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -1548,14 +1468,6 @@
   {
    "grid_pos": [
     -8,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -8,
     -6
    ],
    "layer": "Outer",
@@ -1653,14 +1565,6 @@
    "grid_pos": [
     -8,
     6
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -8,
-    7
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -2028,14 +1932,6 @@
   {
    "grid_pos": [
     -4,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
     -6
    ],
    "layer": "Outer",
@@ -2133,14 +2029,6 @@
    "grid_pos": [
     -4,
     6
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
-    7
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -2188,14 +2076,6 @@
   {
    "grid_pos": [
     -2,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
     -6
    ],
    "layer": "Outer",
@@ -2293,14 +2173,6 @@
    "grid_pos": [
     -2,
     6
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    7
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -2668,14 +2540,6 @@
   {
    "grid_pos": [
     2,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
     -6
    ],
    "layer": "Outer",
@@ -2773,14 +2637,6 @@
    "grid_pos": [
     2,
     6
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    7
    ],
    "layer": "Outer",
    "material": "Titanium"

@@ -40,12 +40,13 @@ FACTION = {
 def lancer():
     """Scout. An arrowhead with an engine pod each side: fast, light, all sensor."""
     c = Canvas("th_lancer")
-    c.rows(-10, 4, """
-####
-E.f.###g##/
+    c.rows(-10, 5, """
+ ##/
+ #####/
+ E..###g##/
 E.R.Q.M.s.###/
 #.b....H.A.T.#g#/
-E.c.d....M..z...n
+ E.d.....M..z...n
 """)
     return c.mirror().build()
 
@@ -54,10 +55,10 @@ def warden():
     """Corvette. One pair of sponsons. About the Pincer's size: your peer."""
     c = Canvas("th_warden")
     c.rows(-14, 6, """
-          #g#g#
-####      #.a.#
-E..#      #...#/
-E...######O...Q#g##/
+           g#g/
+ ##       #.a.#/
+E..#     #.....#/
+E...#####O....Qmg##/
   E..R.b.M...GG..s.##/
   E..c.KK.m..GG.BB.A.###/
   E..R..d.......BBM..z..n
@@ -70,10 +71,10 @@ def bulwark():
     line ship."""
     c = Canvas("th_bulwark")
     c.rows(-20, 7, """
-          #n#n#     #n#n#
-N#####    #.a.#     #.a.#
-N....#    #...#/    #...#/
-####..###gO...m##g##Q...Q##g##/
+           n#n/      n#n/
+ ####     #.a.#/    #.a.#/
+N....#   #.....#/  #.....#/
+N###..###O.....m#g#Q.....Q#g##/
     E.LLb.KK.QOM..GG.a.aT.s.A.##/
     E......d......GG....d.......##/
     E.R.bc.KK.mO.y....BB.a.a.s.rr.##/
@@ -183,11 +184,11 @@ def hauler():
     between every pod so each container reads as its own block."""
     c = Canvas("th_convoy_hauler")
     c.rows(-25, 7, """
-     ##### ##### ##### #####
+      ###   ###   ###   ###
      #CC.# #CC.# #CC.# #CC.#
      #CC.# #CC.# #CC.# #CC.#
      #kk.# #kk.# #kk.# #kk.#       ######/
-#### #...# #...# #...# #...#       #Q.O.s##/
+ ### #...# #...# #...# #...#       #Q.O.s##/
 E.R.#.....#.....#.....#.....#######.M.KKO.f#/
 E.b.....................d...........Q...BB.p#/
 E.M.UU.UU.UU.UU.UU.UU.UU.UU.UU.UU.......BB...g
@@ -250,6 +251,14 @@ def bastion():
             c.cells[(x, y)] = "B"
     return c.build()
 
+
+# Approved with the note "keep it but it look too rectangular"; reshaped since.
+REVISED = {
+    "lancer": "Swept fins at the stern and a stepped tail, so it reads as a dart.",
+    "warden": "Gun sponson now a raked diamond with plated front facets; rounded engine pods.",
+    "bulwark": "Both sponson pairs raked into diamonds with plated fronts; rounded engine pods.",
+    "hauler": "Containers have clipped corners, the tug's engine block is chamfered.",
+}
 
 CONCEPTS = [
     ("lancer", lancer, "Lancer", "Scout",

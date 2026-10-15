@@ -6,9 +6,7 @@ import build, cards, lineup
 HERE = os.path.dirname(os.path.abspath(__file__))
 PINCER_HULL = 210
 
-UPCOMING = ["Eternal Hegemony", "Gilded Throne", "Merchant Princes of the Void", "Recursive Kingdom",
-            "Broken Choir", "Synthesis Collective", "Corpse Stars", "Stellar Preserve", "The Silence",
-            "The Shepherd"]
+UPCOMING = []
 
 def weapons_line(w):
     names = {"Cannon": "cannon", "Gatling": "gatling", "Railgun": "railgun", "HeavyMissile": "missile",
@@ -37,13 +35,14 @@ def main(mods):
                 "mods": st["modules"], "plates": st["plates"], "w": st["w"], "h": st["h"],
                 "weapons": weapons_line(st["weapons"]), "engines": st["engines"],
                 "reactors": st["reactors"], "shields": st["shields"], "ok": not checks,
+                "revised": getattr(mod, "REVISED", {}).get(key, ""),
             })
         lu = f"img/{slug}/_lineup.png"
         order = [os.path.join(HERE, "concepts", slug, f"{k}.json") for k, *_ in mod.CONCEPTS]
         lineup.lineup(slug, px=6, order=order, out=os.path.join(HERE, "site", lu), width=1500)
         files[lu] = os.path.join("site", lu)
         factions.append({**mod.FACTION, "items": items, "lineup": lu})
-    data = json.dumps({"factions": factions, "upcoming": UPCOMING[len(factions) - 1:]})
+    data = json.dumps({"factions": factions, "upcoming": UPCOMING})
     tpl = open(os.path.join(HERE, "page.html")).read()
     open(os.path.join(HERE, "site", "fleet-concepts.html"), "w").write(tpl.replace("/*DATA*/null", data))
     json.dump(files, open(os.path.join(HERE, "site", "files.json"), "w"), indent=1)
