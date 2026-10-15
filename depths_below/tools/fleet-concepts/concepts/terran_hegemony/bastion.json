@@ -3,199 +3,7 @@
  "hull_cells": [
   {
    "grid_pos": [
-    -22,
-    -16
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -22,
-    16
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -21,
-    -17
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -21,
-    -16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -21,
-    -15
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -21,
-    15
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -21,
-    16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -21,
-    17
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -20,
-    -18
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -20,
-    -17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -20,
-    -16
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -20,
-    -15
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -20,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -20,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -20,
-    15
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -20,
-    16
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -20,
-    17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -20,
-    18
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -19,
-    -19
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -19,
-    -18
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -19,
-    -17
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -19,
-    -16
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -19,
-    -15
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -19,
-    -14
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -19,
+    -18,
     -13
    ],
    "layer": "Outer",
@@ -203,7 +11,7 @@
   },
   {
    "grid_pos": [
-    -19,
+    -18,
     13
    ],
    "layer": "Outer",
@@ -211,111 +19,15 @@
   },
   {
    "grid_pos": [
-    -19,
-    14
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -19,
-    15
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -19,
-    16
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -19,
-    17
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -19,
-    18
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -19,
-    19
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -18,
-    -20
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -18,
-    -19
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -18,
-    -18
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -18,
-    -17
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -18,
-    -16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -18,
-    -15
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -18,
+    -17,
     -14
    ],
-   "layer": "Hallway",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    -18,
+    -17,
     -13
    ],
    "layer": "Hallway",
@@ -323,7 +35,7 @@
   },
   {
    "grid_pos": [
-    -18,
+    -17,
     -12
    ],
    "layer": "Outer",
@@ -331,7 +43,7 @@
   },
   {
    "grid_pos": [
-    -18,
+    -17,
     12
    ],
    "layer": "Outer",
@@ -339,7 +51,7 @@
   },
   {
    "grid_pos": [
-    -18,
+    -17,
     13
    ],
    "layer": "Hallway",
@@ -347,127 +59,31 @@
   },
   {
    "grid_pos": [
-    -18,
+    -17,
     14
    ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -18,
-    15
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -18,
-    16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -18,
-    17
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -18,
-    18
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -18,
-    19
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -18,
-    20
-   ],
    "layer": "Outer",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    -17,
-    -21
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -17,
-    -20
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -17,
-    -19
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -17,
-    -18
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -17,
-    -17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -17,
-    -16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -17,
+    -16,
     -15
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    -17,
+    -16,
     -14
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    -17,
+    -16,
     -13
    ],
    "layer": "Hallway",
@@ -475,7 +91,7 @@
   },
   {
    "grid_pos": [
-    -17,
+    -16,
     -12
    ],
    "layer": "Hallway",
@@ -483,7 +99,7 @@
   },
   {
    "grid_pos": [
-    -17,
+    -16,
     -11
    ],
    "layer": "Outer",
@@ -491,7 +107,7 @@
   },
   {
    "grid_pos": [
-    -17,
+    -16,
     11
    ],
    "layer": "Outer",
@@ -499,7 +115,7 @@
   },
   {
    "grid_pos": [
-    -17,
+    -16,
     12
    ],
    "layer": "Hallway",
@@ -507,7 +123,7 @@
   },
   {
    "grid_pos": [
-    -17,
+    -16,
     13
    ],
    "layer": "Hallway",
@@ -515,135 +131,39 @@
   },
   {
    "grid_pos": [
-    -17,
+    -16,
     14
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    -17,
+    -16,
     15
    ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -17,
-    16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -17,
-    17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -17,
-    18
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -17,
-    19
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -17,
-    20
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -17,
-    21
-   ],
    "layer": "Outer",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    -16,
-    -22
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    -21
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    -20
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    -19
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    -18
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    -17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
+    -15,
     -16
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    -16,
+    -15,
     -15
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    -16,
+    -15,
     -14
    ],
    "layer": "Inner",
@@ -651,23 +171,23 @@
   },
   {
    "grid_pos": [
-    -16,
+    -15,
     -13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    -12
    ],
    "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    -16,
+    -15,
+    -12
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -15,
     -11
    ],
    "layer": "Hallway",
@@ -675,7 +195,7 @@
   },
   {
    "grid_pos": [
-    -16,
+    -15,
     -10
    ],
    "layer": "Outer",
@@ -683,7 +203,7 @@
   },
   {
    "grid_pos": [
-    -16,
+    -15,
     10
    ],
    "layer": "Outer",
@@ -691,194 +211,10 @@
   },
   {
    "grid_pos": [
-    -16,
-    11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    12
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    14
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    15
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    18
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    19
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    20
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    21
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -16,
-    22
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -15,
-    -21
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -15,
-    -20
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -15,
-    -19
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -15,
-    -18
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -15,
-    -17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -15,
-    -16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -15,
-    -15
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -15,
-    -14
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -15,
-    -13
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -15,
-    -12
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -15,
-    -11
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
     -15,
     11
    ],
-   "layer": "Outer",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -886,7 +222,7 @@
     -15,
     12
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -910,7 +246,7 @@
     -15,
     15
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -918,71 +254,7 @@
     -15,
     16
    ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -15,
-    17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -15,
-    18
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -15,
-    19
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -15,
-    20
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -15,
-    21
-   ],
    "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    -20
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    -19
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    -18
-   ],
-   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -990,7 +262,7 @@
     -14,
     -17
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -998,7 +270,7 @@
     -14,
     -16
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -1014,7 +286,7 @@
     -14,
     -14
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -1022,7 +294,7 @@
     -14,
     -13
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -1038,7 +310,7 @@
     -14,
     -11
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -1046,149 +318,13 @@
     -14,
     -10
    ],
-   "layer": "Outer",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
     -14,
     -9
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    -8
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    -6
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    -5
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    -4
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    -3
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    -2
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    -1
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    0
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    1
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    2
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    3
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    4
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    5
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    6
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    8
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -1206,7 +342,7 @@
     -14,
     10
    ],
-   "layer": "Outer",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -1214,7 +350,7 @@
     -14,
     11
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -1222,7 +358,7 @@
     -14,
     12
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -1230,7 +366,7 @@
     -14,
     13
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -1238,7 +374,7 @@
     -14,
     14
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -1254,45 +390,13 @@
     -14,
     16
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
     -14,
     17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    18
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    19
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -14,
-    20
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    -19
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -1302,7 +406,7 @@
     -13,
     -18
    ],
-   "layer": "Hallway",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1318,7 +422,7 @@
     -13,
     -16
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -1334,7 +438,7 @@
     -13,
     -14
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -1374,7 +478,7 @@
     -13,
     -9
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -1382,127 +486,7 @@
     -13,
     -8
    ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    -7
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    -6
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    -5
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    -4
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    -3
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    -2
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    -1
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    0
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    1
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    2
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    3
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    4
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    5
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    6
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    7
-   ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1510,7 +494,7 @@
     -13,
     8
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1518,7 +502,7 @@
     -13,
     9
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -1558,7 +542,7 @@
     -13,
     14
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -1574,7 +558,7 @@
     -13,
     16
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -1590,22 +574,6 @@
     -13,
     18
    ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -13,
-    19
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -12,
-    -18
-   ],
    "layer": "Outer",
    "material": "Titanium"
   },
@@ -1614,7 +582,7 @@
     -12,
     -17
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1630,7 +598,7 @@
     -12,
     -15
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -1678,7 +646,7 @@
     -12,
     -9
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -1686,7 +654,7 @@
     -12,
     -8
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -1694,7 +662,7 @@
     -12,
     -7
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1702,7 +670,7 @@
     -12,
     -6
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1710,7 +678,7 @@
     -12,
     -5
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1718,7 +686,7 @@
     -12,
     -4
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1726,7 +694,7 @@
     -12,
     -3
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1734,7 +702,7 @@
     -12,
     -2
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1742,7 +710,7 @@
     -12,
     -1
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1750,7 +718,7 @@
     -12,
     0
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1758,7 +726,7 @@
     -12,
     1
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1766,7 +734,7 @@
     -12,
     2
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1774,7 +742,7 @@
     -12,
     3
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1782,7 +750,7 @@
     -12,
     4
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1790,7 +758,7 @@
     -12,
     5
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1798,7 +766,7 @@
     -12,
     6
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1806,7 +774,7 @@
     -12,
     7
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1822,7 +790,7 @@
     -12,
     9
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -1886,22 +854,6 @@
     -12,
     17
    ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -12,
-    18
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -11,
-    -17
-   ],
    "layer": "Outer",
    "material": "Titanium"
   },
@@ -1910,7 +862,7 @@
     -11,
     -16
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -1918,7 +870,7 @@
     -11,
     -15
    ],
-   "layer": "Outer",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -1926,7 +878,7 @@
     -11,
     -14
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -1942,7 +894,7 @@
     -11,
     -12
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -1966,7 +918,7 @@
     -11,
     -9
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -1974,7 +926,7 @@
     -11,
     -8
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -1982,7 +934,7 @@
     -11,
     -7
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -1990,7 +942,7 @@
     -11,
     -6
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -1998,7 +950,7 @@
     -11,
     -5
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2006,7 +958,7 @@
     -11,
     -4
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2014,7 +966,7 @@
     -11,
     -3
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2022,7 +974,7 @@
     -11,
     -2
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2030,7 +982,7 @@
     -11,
     -1
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2038,7 +990,7 @@
     -11,
     0
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2046,7 +998,7 @@
     -11,
     1
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2054,7 +1006,7 @@
     -11,
     2
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2062,7 +1014,7 @@
     -11,
     3
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2070,7 +1022,7 @@
     -11,
     4
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2078,7 +1030,7 @@
     -11,
     5
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2086,7 +1038,7 @@
     -11,
     6
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2094,7 +1046,7 @@
     -11,
     7
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2102,7 +1054,7 @@
     -11,
     8
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2110,7 +1062,7 @@
     -11,
     9
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2126,7 +1078,7 @@
     -11,
     11
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2142,7 +1094,7 @@
     -11,
     13
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2158,7 +1110,7 @@
     -11,
     15
    ],
-   "layer": "Outer",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2166,21 +1118,13 @@
     -11,
     16
    ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -11,
-    17
-   ],
    "layer": "Outer",
    "material": "Titanium"
   },
   {
    "grid_pos": [
     -10,
-    -16
+    -15
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -2190,7 +1134,7 @@
     -10,
     -14
    ],
-   "layer": "Outer",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2198,7 +1142,7 @@
     -10,
     -13
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2206,7 +1150,7 @@
     -10,
     -12
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2214,7 +1158,7 @@
     -10,
     -11
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2230,7 +1174,7 @@
     -10,
     -9
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2238,7 +1182,7 @@
     -10,
     -8
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2246,7 +1190,7 @@
     -10,
     -7
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2254,7 +1198,7 @@
     -10,
     -6
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2262,7 +1206,7 @@
     -10,
     -5
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2270,7 +1214,7 @@
     -10,
     -4
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2278,7 +1222,7 @@
     -10,
     -3
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2286,7 +1230,7 @@
     -10,
     -2
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2294,7 +1238,7 @@
     -10,
     -1
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2310,7 +1254,7 @@
     -10,
     1
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2318,7 +1262,7 @@
     -10,
     2
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2326,7 +1270,7 @@
     -10,
     3
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2334,7 +1278,7 @@
     -10,
     4
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2342,7 +1286,7 @@
     -10,
     5
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2350,7 +1294,7 @@
     -10,
     6
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2358,7 +1302,7 @@
     -10,
     7
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2366,7 +1310,7 @@
     -10,
     8
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2374,7 +1318,7 @@
     -10,
     9
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2390,7 +1334,7 @@
     -10,
     11
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2398,7 +1342,7 @@
     -10,
     12
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2406,7 +1350,7 @@
     -10,
     13
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2414,13 +1358,13 @@
     -10,
     14
    ],
-   "layer": "Outer",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
     -10,
-    16
+    15
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -2438,7 +1382,7 @@
     -9,
     -13
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2446,7 +1390,7 @@
     -9,
     -12
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2454,7 +1398,7 @@
     -9,
     -11
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2462,7 +1406,7 @@
     -9,
     -10
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2470,7 +1414,7 @@
     -9,
     -9
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2510,7 +1454,7 @@
     -9,
     -4
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2574,7 +1518,7 @@
     -9,
     4
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2614,7 +1558,7 @@
     -9,
     9
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2622,7 +1566,7 @@
     -9,
     10
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2630,7 +1574,7 @@
     -9,
     11
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2638,7 +1582,7 @@
     -9,
     12
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2646,7 +1590,7 @@
     -9,
     13
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2660,17 +1604,9 @@
   {
    "grid_pos": [
     -8,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -8,
     -13
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -2686,7 +1622,7 @@
     -8,
     -11
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2694,7 +1630,7 @@
     -8,
     -10
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2710,7 +1646,7 @@
     -8,
     -8
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2718,7 +1654,7 @@
     -8,
     -7
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2726,7 +1662,7 @@
     -8,
     -6
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2734,7 +1670,7 @@
     -8,
     -5
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2750,7 +1686,7 @@
     -8,
     -3
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2758,7 +1694,7 @@
     -8,
     -2
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2766,7 +1702,7 @@
     -8,
     -1
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2782,7 +1718,7 @@
     -8,
     1
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2790,7 +1726,7 @@
     -8,
     2
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2798,7 +1734,7 @@
     -8,
     3
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2814,7 +1750,7 @@
     -8,
     5
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2822,7 +1758,7 @@
     -8,
     6
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2830,7 +1766,7 @@
     -8,
     7
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2838,7 +1774,7 @@
     -8,
     8
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2854,7 +1790,7 @@
     -8,
     10
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2862,7 +1798,7 @@
     -8,
     11
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2870,7 +1806,7 @@
     -8,
     12
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2878,31 +1814,7 @@
     -8,
     13
    ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -8,
-    14
-   ],
    "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -7,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -7,
-    -13
-   ],
-   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2910,7 +1822,7 @@
     -7,
     -12
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -2918,7 +1830,7 @@
     -7,
     -11
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2926,7 +1838,7 @@
     -7,
     -10
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2942,7 +1854,7 @@
     -7,
     -8
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2958,7 +1870,7 @@
     -7,
     -6
    ],
-   "layer": "Outer",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2966,7 +1878,7 @@
     -7,
     -5
    ],
-   "layer": "Outer",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2974,7 +1886,7 @@
     -7,
     -4
    ],
-   "layer": "Outer",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2982,7 +1894,7 @@
     -7,
     -3
    ],
-   "layer": "Outer",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -2990,7 +1902,7 @@
     -7,
     -2
    ],
-   "layer": "Outer",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -2998,7 +1910,7 @@
     -7,
     -1
    ],
-   "layer": "Outer",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -3006,7 +1918,7 @@
     -7,
     0
    ],
-   "layer": "Outer",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -3014,7 +1926,7 @@
     -7,
     1
    ],
-   "layer": "Outer",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -3022,7 +1934,7 @@
     -7,
     2
    ],
-   "layer": "Outer",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -3030,7 +1942,7 @@
     -7,
     3
    ],
-   "layer": "Outer",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -3038,7 +1950,7 @@
     -7,
     4
    ],
-   "layer": "Outer",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -3046,7 +1958,7 @@
     -7,
     5
    ],
-   "layer": "Outer",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -3054,21 +1966,13 @@
     -7,
     6
    ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -7,
-    7
-   ],
    "layer": "Inner",
    "material": "Titanium"
   },
   {
    "grid_pos": [
     -7,
-    8
+    7
    ],
    "layer": "Inner",
    "material": "Titanium"
@@ -3076,6 +1980,14 @@
   {
    "grid_pos": [
     -7,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -7,
     9
    ],
    "layer": "Inner",
@@ -3086,157 +1998,53 @@
     -7,
     10
    ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -7,
-    11
-   ],
    "layer": "Inner",
    "material": "Titanium"
   },
   {
    "grid_pos": [
     -7,
-    12
+    11
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
     -7,
-    13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -7,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -6,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -6,
-    -13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -6,
-    -12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -6,
-    -11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -6,
-    -10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -6,
-    -9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -6,
-    -8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -6,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -6,
-    7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -6,
-    8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -6,
-    9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -6,
-    10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -6,
-    11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -6,
     12
    ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -6,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -6,
+    -11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -6,
+    -10
+   ],
    "layer": "Inner",
    "material": "Titanium"
   },
   {
    "grid_pos": [
     -6,
-    13
+    -9
    ],
    "layer": "Inner",
    "material": "Titanium"
@@ -3244,190 +2052,6 @@
   {
    "grid_pos": [
     -6,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -5,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -5,
-    -13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -5,
-    -12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -5,
-    -11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -5,
-    -10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -5,
-    -9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -5,
-    -8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -5,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -5,
-    7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -5,
-    8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -5,
-    9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -5,
-    10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -5,
-    11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -5,
-    12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -5,
-    13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -5,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
-    -13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
-    -12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
-    -11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
-    -10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
-    -9
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
     -8
    ],
    "layer": "Hallway",
@@ -3435,1415 +2059,7 @@
   },
   {
    "grid_pos": [
-    -4,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
-    7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
-    8
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
-    9
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
-    10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
-    11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
-    12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
-    13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -4,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -3,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -3,
-    -13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -3,
-    -12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -3,
-    -11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -3,
-    -10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -3,
-    -9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -3,
-    -8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -3,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -3,
-    7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -3,
-    8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -3,
-    9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -3,
-    10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -3,
-    11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -3,
-    12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -3,
-    13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -3,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    -13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    -12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    -11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    -10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    -9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    -8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -2,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -1,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -1,
-    -13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -1,
-    -12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -1,
-    -11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -1,
-    -10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -1,
-    -9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -1,
-    -8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -1,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -1,
-    7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -1,
-    8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -1,
-    9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -1,
-    10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -1,
-    11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -1,
-    12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -1,
-    13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    -1,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    0,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    0,
-    -13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    0,
-    -12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    0,
-    -11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    0,
-    -10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    0,
-    -9
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    0,
-    -8
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    0,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    0,
-    7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    0,
-    8
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    0,
-    9
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    0,
-    10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    0,
-    11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    0,
-    12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    0,
-    13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    0,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    1,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    1,
-    -13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    1,
-    -12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    1,
-    -11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    1,
-    -10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    1,
-    -9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    1,
-    -8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    1,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    1,
-    7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    1,
-    8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    1,
-    9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    1,
-    10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    1,
-    11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    1,
-    12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    1,
-    13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    1,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    -13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    -12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    -11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    -10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    -9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    -8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    2,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    3,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    3,
-    -13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    3,
-    -12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    3,
-    -11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    3,
-    -10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    3,
-    -9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    3,
-    -8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    3,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    3,
-    7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    3,
-    8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    3,
-    9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    3,
-    10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    3,
-    11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    3,
-    12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    3,
-    13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    3,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    4,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    4,
-    -13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    4,
-    -12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    4,
-    -11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    4,
-    -10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    4,
-    -9
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    4,
-    -8
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    4,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    4,
-    7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    4,
-    8
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    4,
-    9
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    4,
-    10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    4,
-    11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    4,
-    12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    4,
-    13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    4,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    5,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    5,
-    -13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    5,
-    -12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    5,
-    -11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    5,
-    -10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    5,
-    -9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    5,
-    -8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    5,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    5,
-    7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    5,
-    8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    5,
-    9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    5,
-    10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    5,
-    11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    5,
-    12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    5,
-    13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    5,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    6,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    6,
-    -13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    6,
-    -12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    6,
-    -11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    6,
-    -10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    6,
-    -9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    6,
-    -8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    6,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    6,
-    7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    6,
-    8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    6,
-    9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    6,
-    10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    6,
-    11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    6,
-    12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    6,
-    13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    6,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    7,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    7,
-    -13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    7,
-    -12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    7,
-    -11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    7,
-    -10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    7,
-    -9
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    7,
-    -8
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    7,
+    -6,
     -7
    ],
    "layer": "Inner",
@@ -4851,15 +2067,15 @@
   },
   {
    "grid_pos": [
-    7,
+    -6,
     -6
    ],
-   "layer": "Outer",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    7,
+    -6,
     -5
    ],
    "layer": "Outer",
@@ -4867,7 +2083,7 @@
   },
   {
    "grid_pos": [
-    7,
+    -6,
     -4
    ],
    "layer": "Outer",
@@ -4875,7 +2091,7 @@
   },
   {
    "grid_pos": [
-    7,
+    -6,
     -3
    ],
    "layer": "Outer",
@@ -4883,7 +2099,7 @@
   },
   {
    "grid_pos": [
-    7,
+    -6,
     -2
    ],
    "layer": "Outer",
@@ -4891,7 +2107,7 @@
   },
   {
    "grid_pos": [
-    7,
+    -6,
     -1
    ],
    "layer": "Outer",
@@ -4899,7 +2115,7 @@
   },
   {
    "grid_pos": [
-    7,
+    -6,
     0
    ],
    "layer": "Outer",
@@ -4907,7 +2123,7 @@
   },
   {
    "grid_pos": [
-    7,
+    -6,
     1
    ],
    "layer": "Outer",
@@ -4915,7 +2131,7 @@
   },
   {
    "grid_pos": [
-    7,
+    -6,
     2
    ],
    "layer": "Outer",
@@ -4923,7 +2139,7 @@
   },
   {
    "grid_pos": [
-    7,
+    -6,
     3
    ],
    "layer": "Outer",
@@ -4931,7 +2147,7 @@
   },
   {
    "grid_pos": [
-    7,
+    -6,
     4
    ],
    "layer": "Outer",
@@ -4939,7 +2155,7 @@
   },
   {
    "grid_pos": [
-    7,
+    -6,
     5
    ],
    "layer": "Outer",
@@ -4947,10 +2163,1642 @@
   },
   {
    "grid_pos": [
-    7,
+    -6,
+    6
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -6,
+    7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -6,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -6,
+    9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -6,
+    10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -6,
+    11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -6,
+    12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -5,
     6
    ],
    "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -5,
+    7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -5,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -5,
+    9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -5,
+    10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -5,
+    11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -5,
+    12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -7
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -4,
+    6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -4,
+    7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -4,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -4,
+    9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -4,
+    10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -4,
+    11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -4,
+    12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -3,
+    6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -3,
+    7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -3,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -3,
+    9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -3,
+    10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -3,
+    11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -3,
+    12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -2,
+    6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -2,
+    7
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -2,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -2,
+    9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -2,
+    10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -2,
+    11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -2,
+    12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -1,
+    6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -1,
+    7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -1,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -1,
+    9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -1,
+    10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -1,
+    11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    -1,
+    12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    0,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    0,
+    -11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    0,
+    -10
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    0,
+    -9
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    0,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    0,
+    -7
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    0,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    0,
+    6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    0,
+    7
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    0,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    0,
+    9
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    0,
+    10
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    0,
+    11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    0,
+    12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    1,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    1,
+    -11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    1,
+    -10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    1,
+    -9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    1,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    1,
+    -7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    1,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    1,
+    6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    1,
+    7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    1,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    1,
+    9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    1,
+    10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    1,
+    11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    1,
+    12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    2,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    2,
+    -11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    2,
+    -10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    2,
+    -9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    2,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    2,
+    -7
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    2,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    2,
+    6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    2,
+    7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    2,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    2,
+    9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    2,
+    10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    2,
+    11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    2,
+    12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    3,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    3,
+    -11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    3,
+    -10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    3,
+    -9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    3,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    3,
+    -7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    3,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    3,
+    6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    3,
+    7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    3,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    3,
+    9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    3,
+    10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    3,
+    11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    3,
+    12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    4,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    4,
+    -11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    4,
+    -10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    4,
+    -9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    4,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    4,
+    -7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    4,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    4,
+    6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    4,
+    7
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    4,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    4,
+    9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    4,
+    10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    4,
+    11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    4,
+    12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    5,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    5,
+    -11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    5,
+    -10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    5,
+    -9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    5,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    5,
+    -7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    5,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    5,
+    6
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    5,
+    7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    5,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    5,
+    9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    5,
+    10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    5,
+    11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    5,
+    12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    -11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    -10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    -9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    -7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    -6
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    -5
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    0
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    1
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    2
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    3
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    4
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    5
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    6
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    6,
+    12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    -11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    -10
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    -9
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    -7
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    -6
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    -5
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    -3
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    -2
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    1
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    3
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    4
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    5
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    7,
+    6
+   ],
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -4966,7 +3814,7 @@
     7,
     8
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -4982,7 +3830,7 @@
     7,
     10
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -4990,37 +3838,13 @@
     7,
     11
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
     7,
     12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    7,
-    13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    7,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    8,
-    -14
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -5030,7 +3854,7 @@
     8,
     -13
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -5038,7 +3862,7 @@
     8,
     -12
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5046,7 +3870,7 @@
     8,
     -11
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5054,7 +3878,7 @@
     8,
     -10
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -5070,7 +3894,7 @@
     8,
     -8
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5078,7 +3902,7 @@
     8,
     -7
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5086,7 +3910,7 @@
     8,
     -6
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5094,7 +3918,7 @@
     8,
     -5
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5110,7 +3934,7 @@
     8,
     -3
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5118,7 +3942,7 @@
     8,
     -2
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5126,7 +3950,7 @@
     8,
     -1
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5142,7 +3966,7 @@
     8,
     1
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5150,7 +3974,7 @@
     8,
     2
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5158,7 +3982,7 @@
     8,
     3
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5174,7 +3998,7 @@
     8,
     5
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5182,7 +4006,7 @@
     8,
     6
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5190,7 +4014,7 @@
     8,
     7
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5198,7 +4022,7 @@
     8,
     8
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5214,7 +4038,7 @@
     8,
     10
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -5222,7 +4046,7 @@
     8,
     11
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5237,14 +4061,6 @@
    "grid_pos": [
     8,
     13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    8,
-    14
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -5262,7 +4078,7 @@
     9,
     -13
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5270,7 +4086,7 @@
     9,
     -12
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5278,7 +4094,7 @@
     9,
     -11
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5286,7 +4102,7 @@
     9,
     -10
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -5294,7 +4110,7 @@
     9,
     -9
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5334,7 +4150,7 @@
     9,
     -4
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -5398,7 +4214,7 @@
     9,
     4
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -5438,7 +4254,7 @@
     9,
     9
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5446,7 +4262,7 @@
     9,
     10
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -5454,7 +4270,7 @@
     9,
     11
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5462,7 +4278,7 @@
     9,
     12
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5470,7 +4286,7 @@
     9,
     13
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -5484,270 +4300,6 @@
   {
    "grid_pos": [
     10,
-    -16
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    -13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    -12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    -11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    -10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    -9
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    -8
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    -7
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    -6
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    -5
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    -4
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    -3
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    -2
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    -1
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    0
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    1
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    2
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    3
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    4
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    5
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    6
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    7
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    8
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    9
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    10
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    13
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    10,
-    16
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    11,
-    -17
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    11,
-    -16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    11,
     -15
    ],
    "layer": "Outer",
@@ -5755,39 +4307,39 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     -14
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    11,
+    10,
     -13
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    11,
+    10,
     -12
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    11,
+    10,
     -11
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    11,
+    10,
     -10
    ],
    "layer": "Hallway",
@@ -5795,7 +4347,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     -9
    ],
    "layer": "Inner",
@@ -5803,7 +4355,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     -8
    ],
    "layer": "Inner",
@@ -5811,7 +4363,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     -7
    ],
    "layer": "Inner",
@@ -5819,7 +4371,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     -6
    ],
    "layer": "Inner",
@@ -5827,7 +4379,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     -5
    ],
    "layer": "Inner",
@@ -5835,7 +4387,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     -4
    ],
    "layer": "Inner",
@@ -5843,7 +4395,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     -3
    ],
    "layer": "Inner",
@@ -5851,7 +4403,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     -2
    ],
    "layer": "Inner",
@@ -5859,7 +4411,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     -1
    ],
    "layer": "Inner",
@@ -5867,15 +4419,15 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     0
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    11,
+    10,
     1
    ],
    "layer": "Inner",
@@ -5883,7 +4435,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     2
    ],
    "layer": "Inner",
@@ -5891,7 +4443,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     3
    ],
    "layer": "Inner",
@@ -5899,7 +4451,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     4
    ],
    "layer": "Inner",
@@ -5907,7 +4459,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     5
    ],
    "layer": "Inner",
@@ -5915,7 +4467,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     6
    ],
    "layer": "Inner",
@@ -5923,7 +4475,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     7
    ],
    "layer": "Inner",
@@ -5931,7 +4483,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     8
    ],
    "layer": "Inner",
@@ -5939,7 +4491,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     9
    ],
    "layer": "Inner",
@@ -5947,7 +4499,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     10
    ],
    "layer": "Hallway",
@@ -5955,7 +4507,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     11
    ],
    "layer": "Hallway",
@@ -5963,7 +4515,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     12
    ],
    "layer": "Hallway",
@@ -5971,7 +4523,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     13
    ],
    "layer": "Hallway",
@@ -5979,7 +4531,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     14
    ],
    "layer": "Hallway",
@@ -5987,7 +4539,7 @@
   },
   {
    "grid_pos": [
-    11,
+    10,
     15
    ],
    "layer": "Outer",
@@ -5996,7 +4548,23 @@
   {
    "grid_pos": [
     11,
-    16
+    -16
+   ],
+   "layer": "Outer",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    -15
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    -14
    ],
    "layer": "Inner",
    "material": "Titanium"
@@ -6004,15 +4572,239 @@
   {
    "grid_pos": [
     11,
-    17
+    -13
    ],
-   "layer": "Outer",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    12,
-    -18
+    11,
+    -12
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    -11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    -10
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    -9
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    -7
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    -6
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    -5
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    -3
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    3
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    5
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    6
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    7
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    9
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    10
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    11
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    12
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    13
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    14
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    15
+   ],
+   "layer": "Hallway",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    11,
+    16
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -6022,7 +4814,7 @@
     12,
     -17
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6038,7 +4830,7 @@
     12,
     -15
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -6046,7 +4838,7 @@
     12,
     -14
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -6054,7 +4846,7 @@
     12,
     -13
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -6062,7 +4854,7 @@
     12,
     -12
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -6070,7 +4862,7 @@
     12,
     -11
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -6086,7 +4878,7 @@
     12,
     -9
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -6102,7 +4894,7 @@
     12,
     -7
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6110,7 +4902,7 @@
     12,
     -6
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6118,7 +4910,7 @@
     12,
     -5
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6126,7 +4918,7 @@
     12,
     -4
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6134,7 +4926,7 @@
     12,
     -3
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6142,7 +4934,7 @@
     12,
     -2
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6150,7 +4942,7 @@
     12,
     -1
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6158,7 +4950,7 @@
     12,
     0
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6166,7 +4958,7 @@
     12,
     1
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6174,7 +4966,7 @@
     12,
     2
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6182,7 +4974,7 @@
     12,
     3
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6190,7 +4982,7 @@
     12,
     4
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6198,7 +4990,7 @@
     12,
     5
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6206,7 +4998,7 @@
     12,
     6
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6214,7 +5006,7 @@
     12,
     7
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6222,7 +5014,7 @@
     12,
     8
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -6230,7 +5022,7 @@
     12,
     9
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -6238,7 +5030,7 @@
     12,
     10
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -6246,7 +5038,7 @@
     12,
     11
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -6278,7 +5070,7 @@
     12,
     15
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -6294,22 +5086,6 @@
     12,
     17
    ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    12,
-    18
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    -19
-   ],
    "layer": "Outer",
    "material": "Titanium"
   },
@@ -6318,7 +5094,7 @@
     13,
     -18
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6374,7 +5150,7 @@
     13,
     -11
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -6382,7 +5158,7 @@
     13,
     -10
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -6390,7 +5166,7 @@
     13,
     -9
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -6398,127 +5174,7 @@
     13,
     -8
    ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    -7
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    -6
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    -5
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    -4
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    -3
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    -2
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    -1
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    0
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    1
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    2
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    3
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    4
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    5
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    6
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    7
-   ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6526,7 +5182,7 @@
     13,
     8
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6534,7 +5190,7 @@
     13,
     9
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -6542,7 +5198,7 @@
     13,
     10
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -6606,39 +5262,7 @@
     13,
     18
    ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    13,
-    19
-   ],
    "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    -20
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    -19
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    -18
-   ],
-   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -6646,7 +5270,7 @@
     14,
     -17
    ],
-   "layer": "Hallway",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6654,7 +5278,7 @@
     14,
     -16
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -6662,7 +5286,7 @@
     14,
     -15
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -6670,7 +5294,7 @@
     14,
     -14
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -6702,149 +5326,13 @@
     14,
     -10
    ],
-   "layer": "Outer",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
     14,
     -9
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    -8
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    -7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    -6
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    -5
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    -4
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    -3
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    -2
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    -1
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    0
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    1
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    2
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    3
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    4
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    5
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    6
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    7
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    8
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -6862,7 +5350,7 @@
     14,
     10
    ],
-   "layer": "Outer",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -6870,7 +5358,7 @@
     14,
     11
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -6894,7 +5382,7 @@
     14,
     14
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -6902,7 +5390,7 @@
     14,
     15
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -6910,7 +5398,7 @@
     14,
     16
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -6918,71 +5406,7 @@
     14,
     17
    ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    18
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    19
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    14,
-    20
-   ],
    "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    15,
-    -21
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    15,
-    -20
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    15,
-    -19
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    15,
-    -18
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    15,
-    -17
-   ],
-   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -6990,7 +5414,7 @@
     15,
     -16
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
@@ -6998,7 +5422,7 @@
     15,
     -15
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
@@ -7006,7 +5430,7 @@
     15,
     -14
    ],
-   "layer": "Hallway",
+   "layer": "Inner",
    "material": "Titanium"
   },
   {
@@ -7030,196 +5454,12 @@
     15,
     -11
    ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    15,
-    11
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    15,
-    12
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    15,
-    13
-   ],
    "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
     15,
-    14
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    15,
-    15
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    15,
-    16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    15,
-    17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    15,
-    18
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    15,
-    19
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    15,
-    20
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    15,
-    21
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    -22
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    -21
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    -20
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    -19
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    -18
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    -17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    -16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    -15
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    -14
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    -13
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    -12
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    -11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
     -10
    ],
    "layer": "Outer",
@@ -7227,7 +5467,7 @@
   },
   {
    "grid_pos": [
-    16,
+    15,
     10
    ],
    "layer": "Outer",
@@ -7235,23 +5475,23 @@
   },
   {
    "grid_pos": [
-    16,
+    15,
     11
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    12
    ],
    "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    16,
+    15,
+    12
+   ],
+   "layer": "Inner",
+   "material": "Titanium"
+  },
+  {
+   "grid_pos": [
+    15,
     13
    ],
    "layer": "Hallway",
@@ -7259,7 +5499,7 @@
   },
   {
    "grid_pos": [
-    16,
+    15,
     14
    ],
    "layer": "Inner",
@@ -7267,135 +5507,39 @@
   },
   {
    "grid_pos": [
-    16,
+    15,
     15
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    16,
+    15,
     16
    ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    18
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    19
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    20
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    21
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    16,
-    22
-   ],
    "layer": "Outer",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    17,
-    -21
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    17,
-    -20
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    17,
-    -19
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    17,
-    -18
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    17,
-    -17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    17,
-    -16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    17,
+    16,
     -15
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    17,
+    16,
     -14
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    17,
+    16,
     -13
    ],
    "layer": "Hallway",
@@ -7403,15 +5547,15 @@
   },
   {
    "grid_pos": [
-    17,
+    16,
     -12
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    17,
+    16,
     -11
    ],
    "layer": "Outer",
@@ -7419,7 +5563,7 @@
   },
   {
    "grid_pos": [
-    17,
+    16,
     11
    ],
    "layer": "Outer",
@@ -7427,15 +5571,15 @@
   },
   {
    "grid_pos": [
-    17,
+    16,
     12
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    17,
+    16,
     13
    ],
    "layer": "Hallway",
@@ -7443,127 +5587,31 @@
   },
   {
    "grid_pos": [
-    17,
+    16,
     14
    ],
-   "layer": "Inner",
+   "layer": "Hallway",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    17,
+    16,
     15
    ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    17,
-    16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    17,
-    17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    17,
-    18
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    17,
-    19
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    17,
-    20
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    17,
-    21
-   ],
    "layer": "Outer",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    18,
-    -20
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    18,
-    -19
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    18,
-    -18
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    18,
-    -17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    18,
-    -16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    18,
-    -15
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    18,
+    17,
     -14
    ],
-   "layer": "Hallway",
+   "layer": "Outer",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    18,
+    17,
     -13
    ],
    "layer": "Hallway",
@@ -7571,7 +5619,7 @@
   },
   {
    "grid_pos": [
-    18,
+    17,
     -12
    ],
    "layer": "Outer",
@@ -7579,7 +5627,7 @@
   },
   {
    "grid_pos": [
-    18,
+    17,
     12
    ],
    "layer": "Outer",
@@ -7587,7 +5635,7 @@
   },
   {
    "grid_pos": [
-    18,
+    17,
     13
    ],
    "layer": "Hallway",
@@ -7595,111 +5643,15 @@
   },
   {
    "grid_pos": [
-    18,
+    17,
     14
    ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    18,
-    15
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    18,
-    16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    18,
-    17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    18,
-    18
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    18,
-    19
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    18,
-    20
-   ],
    "layer": "Outer",
    "material": "Titanium"
   },
   {
    "grid_pos": [
-    19,
-    -19
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    19,
-    -18
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    19,
-    -17
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    19,
-    -16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    19,
-    -15
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    19,
-    -14
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    19,
+    18,
     -13
    ],
    "layer": "Outer",
@@ -7707,200 +5659,8 @@
   },
   {
    "grid_pos": [
-    19,
+    18,
     13
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    19,
-    14
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    19,
-    15
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    19,
-    16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    19,
-    17
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    19,
-    18
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    19,
-    19
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    20,
-    -18
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    20,
-    -17
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    20,
-    -16
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    20,
-    -15
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    20,
-    -14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    20,
-    14
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    20,
-    15
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    20,
-    16
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    20,
-    17
-   ],
-   "layer": "Hallway",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    20,
-    18
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    21,
-    -17
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    21,
-    -16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    21,
-    -15
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    21,
-    15
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    21,
-    16
-   ],
-   "layer": "Inner",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    21,
-    17
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    22,
-    -16
-   ],
-   "layer": "Outer",
-   "material": "Titanium"
-  },
-  {
-   "grid_pos": [
-    22,
-    16
    ],
    "layer": "Outer",
    "material": "Titanium"
@@ -7910,119 +5670,7 @@
   {
    "module_type": "Gatling",
    "grid_pos": [
-    -15,
-    -11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    -11,
-    -15
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    11,
-    15
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    15,
-    11
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    -4,
-    7
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    -4,
-    -7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    7,
-    -4
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    -7,
-    -4
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    0,
-    7
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    0,
-    -7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    7,
-    0
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    -7,
-    0
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    4,
-    7
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    4,
-    -7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    7,
+    -12,
     4
    ],
    "rotation": "West"
@@ -8030,3460 +5678,2044 @@
   {
    "module_type": "Gatling",
    "grid_pos": [
-    -7,
-    4
+    4,
+    -6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    -4,
+    -12
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    12,
+    7
    ],
    "rotation": "East"
   },
   {
-   "module_type": "FusionReactor",
+   "module_type": "Gatling",
    "grid_pos": [
-    -13,
+    7,
+    -12
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    -5,
+    -6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    6,
+    -5
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    -12,
+    -7
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    4,
+    12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    6,
+    -2
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    6,
+    4
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    -2,
+    -6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    -4,
+    6
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    12,
+    -4
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    -3,
+    12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    8,
+    12
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    -12,
+    8
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    12,
+    -8
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    -6,
+    -4
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    -6,
+    2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    -6,
+    5
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    3,
+    -12
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    -12,
+    -3
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    12,
+    3
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    2,
+    6
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    5,
+    6
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    -8,
+    -12
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Gatling",
+   "grid_pos": [
+    -7,
+    12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "DockingPort",
+   "grid_pos": [
+    -6,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "DockingPort",
+   "grid_pos": [
+    0,
+    6
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "DockingPort",
+   "grid_pos": [
+    0,
+    -6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "DockingPort",
+   "grid_pos": [
+    6,
+    0
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -9,
+    4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -9,
     1
    ],
    "rotation": "North"
   },
   {
-   "module_type": "FusionReactor",
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    1,
+    7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    2,
+    7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -4,
+    -9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -7,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -7,
+    2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -1,
+    -9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    9,
+    -4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    1,
+    9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    7,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    7,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    9,
+    -6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -6,
+    -9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -9,
+    6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -2,
+    -7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -1,
+    -7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    9,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    6,
+    9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MedBay",
+   "grid_pos": [
+    -9,
+    7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MedBay",
+   "grid_pos": [
+    7,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MedBay",
+   "grid_pos": [
+    9,
+    -7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MedBay",
+   "grid_pos": [
+    3,
+    7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MedBay",
+   "grid_pos": [
+    -7,
+    -9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MedBay",
+   "grid_pos": [
+    7,
+    9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MedBay",
+   "grid_pos": [
+    -3,
+    -7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MedBay",
+   "grid_pos": [
+    -7,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "RepairBay",
+   "grid_pos": [
+    -7,
+    5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "RepairBay",
+   "grid_pos": [
+    -5,
+    -7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "RepairBay",
+   "grid_pos": [
+    5,
+    7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "RepairBay",
+   "grid_pos": [
+    8,
+    9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "RepairBay",
+   "grid_pos": [
+    9,
+    -8
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "RepairBay",
+   "grid_pos": [
+    -8,
+    -9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "RepairBay",
+   "grid_pos": [
+    7,
+    -5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "RepairBay",
+   "grid_pos": [
+    -9,
+    8
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    -5,
+    -9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    7,
+    -6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    6,
+    7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    -7,
+    6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    9,
+    -5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    5,
+    9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    -6,
+    -7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    -9,
+    5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MemoryCore",
+   "grid_pos": [
+    7,
+    -7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MemoryCore",
+   "grid_pos": [
+    -7,
+    7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MemoryCore",
+   "grid_pos": [
+    7,
+    7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MemoryCore",
+   "grid_pos": [
+    -7,
+    -7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -14,
+    -15
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    7,
+    -9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    8,
+    -9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -11,
+    14
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -5,
+    9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -4,
+    9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -6,
+    7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    9,
+    4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    9,
+    5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -9,
+    -8
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -9,
+    -7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    1,
+    -9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -15,
+    14
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    9,
+    7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    9,
+    8
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -9,
+    -5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -9,
+    -4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -15,
+    -14
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -14,
+    15
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
    "grid_pos": [
     11,
+    14
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    6,
+    -7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -12,
+    -15
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    12,
+    -15
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -11,
+    -14
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    14,
+    -15
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    15,
+    14
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    4,
+    -9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    5,
+    -9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -12,
+    15
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    11,
+    -14
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    12,
+    15
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    9,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    14,
+    15
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -9,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -14,
+    11
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    15,
+    -14
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -15,
+    -12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -8,
+    9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -7,
+    9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -11,
+    -12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    7,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    7,
+    6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -15,
+    12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    3,
+    -7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -1,
+    9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    12,
+    11
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -12,
+    11
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -14,
+    -11
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -11,
+    12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    14,
+    11
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    11,
+    -12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -3,
+    7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    15,
+    -12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -7,
     -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    11,
+    12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -7,
+    -6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -12,
+    -11
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    12,
+    -11
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    15,
+    12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    14,
+    -11
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Barracks",
+   "grid_pos": [
+    7,
+    5
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Barracks",
+   "grid_pos": [
+    -7,
+    -4
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Barracks",
+   "grid_pos": [
+    -5,
+    7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Barracks",
+   "grid_pos": [
+    9,
+    -2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Barracks",
+   "grid_pos": [
+    -3,
+    -9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Barracks",
+   "grid_pos": [
+    4,
+    -7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Barracks",
+   "grid_pos": [
+    -9,
+    3
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "TargetingComputer",
+   "grid_pos": [
+    7,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TargetingComputer",
+   "grid_pos": [
+    -7,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TargetingComputer",
+   "grid_pos": [
+    -1,
+    7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TargetingComputer",
+   "grid_pos": [
+    9,
+    6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TargetingComputer",
+   "grid_pos": [
+    -9,
+    -6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TargetingComputer",
+   "grid_pos": [
+    6,
+    -9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TargetingComputer",
+   "grid_pos": [
+    -6,
+    9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TargetingComputer",
+   "grid_pos": [
+    1,
+    -7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "EmergencyBulkhead",
+   "grid_pos": [
+    -3,
+    8
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "EmergencyBulkhead",
+   "grid_pos": [
+    -8,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "EmergencyBulkhead",
+   "grid_pos": [
+    8,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "EmergencyBulkhead",
+   "grid_pos": [
+    4,
+    8
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "EmergencyBulkhead",
+   "grid_pos": [
+    8,
+    -4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "EmergencyBulkhead",
+   "grid_pos": [
+    3,
+    -8
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "EmergencyBulkhead",
+   "grid_pos": [
+    -8,
+    4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "EmergencyBulkhead",
+   "grid_pos": [
+    -4,
+    -8
    ],
    "rotation": "North"
   },
   {
    "module_type": "BridgeWing",
    "grid_pos": [
-    1,
-    13
+    2,
+    9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LargeCargo",
+   "grid_pos": [
+    -9,
+    -2
    ],
    "rotation": "East"
   },
   {
-   "module_type": "ShieldEmitter",
-   "grid_pos": [
-    -9,
-    9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "ShieldEmitter",
+   "module_type": "LargeCargo",
    "grid_pos": [
     9,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "ShieldEmitter",
-   "grid_pos": [
-    9,
-    9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "ShieldEmitter",
-   "grid_pos": [
-    -9,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MemoryCore",
-   "grid_pos": [
-    -12,
-    -3
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MemoryCore",
-   "grid_pos": [
-    12,
     3
    ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MemoryCore",
-   "grid_pos": [
-    -3,
-    12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MemoryCore",
-   "grid_pos": [
-    3,
-    -12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -16,
-    21
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    16,
-    21
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -17,
-    20
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -15,
-    20
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    15,
-    20
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    17,
-    20
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -18,
-    19
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    14,
-    19
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    -19,
-    18
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -16,
-    18
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    13,
-    18
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    16,
-    18
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    17,
-    18
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -20,
-    17
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    -17,
-    17
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    -16,
-    17
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -15,
-    17
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -14,
-    17
-   ],
    "rotation": "East"
   },
   {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    12,
-    17
-   ],
-   "rotation": "North"
-  },
-  {
    "module_type": "LargeCargo",
-   "grid_pos": [
-    15,
-    17
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    17,
-    17
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -21,
-    16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BulkCargoHold",
-   "grid_pos": [
-    -18,
-    16
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -16,
-    16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    -15,
-    16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    -13,
-    16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -11,
-    16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    11,
-    16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    14,
-    16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    15,
-    16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    17,
-    16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    19,
-    16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    21,
-    16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -16,
-    15
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    -15,
-    15
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    -14,
-    15
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -12,
-    15
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    15,
-    15
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    17,
-    15
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    18,
-    15
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    20,
-    15
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -17,
-    14
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -16,
-    14
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -15,
-    14
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    -12,
-    14
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    -11,
-    14
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    12,
-    14
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    13,
-    14
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    16,
-    14
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    17,
-    14
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -16,
-    13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -13,
-    13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BulkCargoHold",
-   "grid_pos": [
-    -12,
-    13
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -10,
-    13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -9,
-    13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -7,
-    13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -5,
-    13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -3,
-    13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -1,
-    13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    3,
-    13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    5,
-    13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    6,
-    13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BulkCargoHold",
-   "grid_pos": [
-    7,
-    13
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    9,
-    13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    10,
-    13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    12,
-    13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    14,
-    13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    -13,
-    12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -10,
-    12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -8,
-    12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    -6,
-    12
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -5,
-    12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -4,
-    12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -2,
-    12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -1,
-    12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    3,
-    12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    4,
-    12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    5,
-    12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    9,
-    12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    12,
-    12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    14,
-    12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    17,
-    12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -16,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -12,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    -11,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    -10,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -9,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -8,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    -5,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -4,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    -2,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    0,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    3,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    4,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    5,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    6,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    7,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    8,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    10,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    16,
-    11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    12,
-    10
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -13,
-    9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BulkCargoHold",
-   "grid_pos": [
-    -12,
-    9
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -8,
-    9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    -7,
-    9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    -6,
-    9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -5,
-    9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -3,
-    9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    -1,
-    9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    1,
-    9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    3,
-    9
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    5,
-    9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BulkCargoHold",
-   "grid_pos": [
-    6,
-    9
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    8,
-    9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    11,
-    9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    12,
-    9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    13,
-    9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -13,
-    8
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    -9,
-    8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -8,
-    8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    -6,
-    8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -3,
-    8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -2,
-    8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -1,
-    8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    1,
-    8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
    "grid_pos": [
     2,
-    8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    5,
-    8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    8,
-    8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    11,
-    8
+    -9
    ],
    "rotation": "North"
   },
   {
    "module_type": "LargeCargo",
-   "grid_pos": [
-    12,
-    8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    -12,
-    7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -9,
-    7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -8,
-    7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -7,
-    7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    7,
-    7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    9,
-    7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    11,
-    7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    12,
-    7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -13,
-    6
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -11,
-    6
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    -9,
-    6
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    8,
-    6
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    9,
-    6
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    11,
-    6
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    12,
-    6
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -13,
-    5
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -9,
-    5
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    -8,
-    5
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    8,
-    5
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    9,
-    5
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    11,
-    5
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    13,
-    5
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -13,
-    4
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -12,
-    4
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    -11,
-    4
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    11,
-    4
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    12,
-    4
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    13,
-    4
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    -9,
-    3
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -8,
-    3
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    8,
-    3
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    11,
-    3
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -9,
-    2
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    8,
-    2
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    9,
-    2
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    11,
-    2
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    12,
-    2
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    13,
-    2
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    -9,
-    1
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -8,
-    1
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    8,
-    1
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    11,
-    1
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    12,
-    1
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -13,
-    0
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    -12,
-    0
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    -11,
-    0
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    11,
-    0
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    12,
-    0
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -13,
-    -1
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -11,
-    -1
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    -9,
-    -1
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    8,
-    -1
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    9,
-    -1
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -13,
-    -2
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -12,
-    -2
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    -9,
-    -2
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -8,
-    -2
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    8,
-    -2
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -13,
-    -3
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -11,
-    -3
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    -9,
-    -3
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    8,
-    -3
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    9,
-    -3
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -12,
-    -4
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    11,
-    -4
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    12,
-    -4
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    13,
-    -4
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -13,
-    -5
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    -11,
-    -5
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -9,
-    -5
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    8,
-    -5
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    11,
-    -5
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BulkCargoHold",
-   "grid_pos": [
-    12,
-    -5
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -13,
-    -6
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -12,
-    -6
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    -9,
-    -6
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -8,
-    -6
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    8,
-    -6
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    11,
-    -6
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -13,
-    -7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    -11,
-    -7
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -9,
-    -7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BulkCargoHold",
-   "grid_pos": [
-    -8,
-    -7
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    7,
-    -7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    8,
-    -7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    11,
-    -7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    12,
-    -7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    13,
-    -7
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -13,
-    -8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -9,
-    -8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    -6,
-    -8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
    "grid_pos": [
     -3,
-    -8
+    9
    ],
    "rotation": "North"
-  },
-  {
-   "module_type": "BulkCargoHold",
-   "grid_pos": [
-    -2,
-    -8
-   ],
-   "rotation": "East"
   },
   {
    "module_type": "BatteryBank",
    "grid_pos": [
-    1,
-    -8
+    -10,
+    1
    ],
    "rotation": "North"
   },
   {
-   "module_type": "DroneBay",
+   "module_type": "BatteryBank",
    "grid_pos": [
-    2,
-    -8
+    -10,
+    7
    ],
    "rotation": "North"
   },
   {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    5,
-    -8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    6,
-    -8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    7,
-    -8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
+   "module_type": "BatteryBank",
    "grid_pos": [
     9,
-    -8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    11,
-    -8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    -13,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -11,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -8,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -7,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    -6,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    -5,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -3,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    1,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    3,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    5,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    7,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    11,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    12,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    13,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    13,
     -10
    ],
    "rotation": "North"
   },
   {
-   "module_type": "OxygenScrubber",
+   "module_type": "BatteryBank",
    "grid_pos": [
-    -12,
-    -11
+    10,
+    5
    ],
    "rotation": "North"
   },
   {
-   "module_type": "MedBay",
+   "module_type": "BatteryBank",
    "grid_pos": [
     -10,
-    -11
+    -5
    ],
    "rotation": "North"
   },
   {
-   "module_type": "DroneBay",
+   "module_type": "BatteryBank",
    "grid_pos": [
     -9,
-    -11
+    10
    ],
    "rotation": "North"
   },
   {
-   "module_type": "RepairBay",
+   "module_type": "BatteryBank",
    "grid_pos": [
     -7,
-    -11
+    -10
    ],
    "rotation": "North"
   },
   {
-   "module_type": "LargeCargo",
+   "module_type": "BatteryBank",
    "grid_pos": [
-    -6,
-    -11
+    5,
+    -10
    ],
    "rotation": "North"
   },
   {
-   "module_type": "Barracks",
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    10,
+    9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    -10,
+    -9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    -5,
+    10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    10,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    7,
+    10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    10,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
    "grid_pos": [
     -4,
-    -11
+    -10
    ],
    "rotation": "North"
   },
   {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -2,
-    -11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BulkCargoHold",
+   "module_type": "BatteryBank",
    "grid_pos": [
     -1,
-    -11
+    10
    ],
-   "rotation": "East"
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    -1,
+    -10
+   ],
+   "rotation": "North"
   },
   {
    "module_type": "BatteryBank",
    "grid_pos": [
     1,
-    -11
+    10
    ],
    "rotation": "North"
   },
   {
-   "module_type": "MessHall",
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    10,
+    -7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    1,
+    -10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    10,
+    -4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    -10,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    -10,
+    4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CoolingPump",
    "grid_pos": [
     2,
-    -11
+    -10
    ],
    "rotation": "North"
   },
   {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    3,
-    -11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    4,
-    -11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
+   "module_type": "CoolingPump",
    "grid_pos": [
     5,
-    -11
+    10
    ],
    "rotation": "North"
   },
   {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    7,
-    -11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    8,
-    -11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    10,
-    -11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    13,
-    -11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    14,
-    -11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    16,
-    -11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    -14,
-    -12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    -13,
-    -12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -12,
-    -12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -10,
-    -12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -8,
-    -12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
+   "module_type": "CoolingPump",
    "grid_pos": [
     -6,
-    -12
+    10
    ],
    "rotation": "North"
   },
   {
-   "module_type": "Barracks",
+   "module_type": "CoolingPump",
+   "grid_pos": [
+    10,
+    6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CoolingPump",
+   "grid_pos": [
+    -10,
+    2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CoolingPump",
+   "grid_pos": [
+    -10,
+    5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CoolingPump",
+   "grid_pos": [
+    6,
+    -10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CoolingPump",
+   "grid_pos": [
+    -10,
+    8
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CoolingPump",
+   "grid_pos": [
+    10,
+    -8
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CoolingPump",
+   "grid_pos": [
+    10,
+    -5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CoolingPump",
+   "grid_pos": [
+    -10,
+    -6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CoolingPump",
+   "grid_pos": [
+    10,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CoolingPump",
+   "grid_pos": [
+    -5,
+    -10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CoolingPump",
+   "grid_pos": [
+    -8,
+    -10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CoolingPump",
+   "grid_pos": [
+    8,
+    10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CoolingPump",
+   "grid_pos": [
+    -10,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CoolingPump",
+   "grid_pos": [
+    -2,
+    10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CoolingPump",
+   "grid_pos": [
+    -2,
+    -10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CoolingPump",
+   "grid_pos": [
+    10,
+    2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "FuelTank",
+   "grid_pos": [
+    9,
+    10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "FuelTank",
+   "grid_pos": [
+    10,
+    -6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "FuelTank",
+   "grid_pos": [
+    -10,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "FuelTank",
+   "grid_pos": [
+    -10,
+    9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "FuelTank",
+   "grid_pos": [
+    10,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "FuelTank",
+   "grid_pos": [
+    -3,
+    -10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "FuelTank",
+   "grid_pos": [
+    -10,
+    6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "FuelTank",
+   "grid_pos": [
+    -9,
+    -10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "FuelTank",
+   "grid_pos": [
+    10,
+    -9
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "FuelTank",
+   "grid_pos": [
+    6,
+    10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "FuelTank",
+   "grid_pos": [
+    -6,
+    -10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LargeReactor",
+   "grid_pos": [
+    10,
+    8
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LargeReactor",
+   "grid_pos": [
+    -8,
+    10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LargeReactor",
+   "grid_pos": [
+    -10,
+    -7
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LargeReactor",
+   "grid_pos": [
+    3,
+    -10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LargeReactor",
+   "grid_pos": [
+    -10,
+    -3
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LargeReactor",
+   "grid_pos": [
+    10,
+    4
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LargeReactor",
    "grid_pos": [
     -4,
-    -12
+    10
    ],
    "rotation": "North"
   },
   {
-   "module_type": "AmmoBay",
+   "module_type": "LargeReactor",
+   "grid_pos": [
+    7,
+    -10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Cannon",
+   "grid_pos": [
+    6,
+    12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Cannon",
+   "grid_pos": [
+    12,
+    1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Cannon",
    "grid_pos": [
     -2,
     -12
    ],
-   "rotation": "North"
+   "rotation": "South"
   },
   {
-   "module_type": "BulkCargoHold",
+   "module_type": "Cannon",
+   "grid_pos": [
+    -12,
+    2
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "Cannon",
    "grid_pos": [
     1,
     -12
    ],
-   "rotation": "East"
+   "rotation": "South"
   },
   {
-   "module_type": "BatteryBank",
+   "module_type": "Cannon",
    "grid_pos": [
-    4,
-    -12
+    -5,
+    12
    ],
    "rotation": "North"
   },
   {
-   "module_type": "DroneBay",
+   "module_type": "Cannon",
+   "grid_pos": [
+    -1,
+    12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Cannon",
+   "grid_pos": [
+    12,
+    5
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Cannon",
+   "grid_pos": [
+    12,
+    -6
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Cannon",
+   "grid_pos": [
+    -6,
+    -12
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "Cannon",
+   "grid_pos": [
+    -12,
+    6
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "Cannon",
    "grid_pos": [
     5,
     -12
    ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    7,
-    -12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    8,
-    -12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    9,
-    -12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    11,
-    -12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    13,
-    -12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    15,
-    -12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    17,
-    -12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -16,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -13,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    -12,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    -10,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -9,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -8,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -6,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -4,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -2,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -1,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    0,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    3,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    4,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    6,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    8,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    9,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    11,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    13,
-    -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    -17,
-    -14
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -15,
-    -14
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -12,
-    -14
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    11,
-    -14
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    13,
-    -14
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    16,
-    -14
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    17,
-    -14
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -18,
-    -15
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    -16,
-    -15
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -15,
-    -15
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Barracks",
-   "grid_pos": [
-    15,
-    -15
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    17,
-    -15
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    18,
-    -15
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -21,
-    -16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    -18,
-    -16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    -17,
-    -16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -16,
-    -16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -15,
-    -16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    -13,
-    -16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -11,
-    -16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    11,
-    -16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    14,
-    -16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BulkCargoHold",
-   "grid_pos": [
-    15,
-    -16
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    17,
-    -16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    18,
-    -16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    21,
-    -16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -20,
-    -17
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "DroneBay",
-   "grid_pos": [
-    -17,
-    -17
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "LargeCargo",
-   "grid_pos": [
-    -15,
-    -17
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -12,
-    -17
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    12,
-    -17
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    17,
-    -17
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    18,
-    -17
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    20,
-    -17
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    -19,
-    -18
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    -16,
-    -18
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -15,
-    -18
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    13,
-    -18
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    16,
-    -18
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    17,
-    -18
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    -18,
-    -19
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    14,
-    -19
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -17,
-    -20
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BatteryBank",
-   "grid_pos": [
-    -15,
-    -20
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MessHall",
-   "grid_pos": [
-    15,
-    -20
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    17,
-    -20
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -16,
-    -21
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    16,
-    -21
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -22,
-    -17
-   ],
    "rotation": "South"
   },
   {
-   "module_type": "AngledArmorPlate",
+   "module_type": "Cannon",
    "grid_pos": [
-    -22,
-    -15
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -22,
-    15
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -22,
-    17
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -21,
-    -18
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -21,
-    -14
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -21,
-    14
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -21,
-    18
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -20,
-    -19
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -20,
-    -13
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -20,
-    13
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -20,
-    19
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -19,
-    -20
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -19,
-    -12
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -19,
+    2,
     12
    ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -19,
-    20
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -18,
-    -21
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -18,
-    -11
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -18,
-    11
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -18,
-    21
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -17,
-    -22
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -17,
-    -10
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -17,
-    10
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -17,
-    22
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -15,
-    -22
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -15,
-    22
-   ],
    "rotation": "North"
   },
   {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -14,
-    -21
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -14,
-    21
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -13,
-    -20
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -13,
-    20
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AngledArmorPlate",
+   "module_type": "Cannon",
    "grid_pos": [
     -12,
-    -19
+    -5
    ],
-   "rotation": "East"
+   "rotation": "West"
   },
   {
-   "module_type": "AngledArmorPlate",
+   "module_type": "Cannon",
    "grid_pos": [
     -12,
-    19
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -11,
-    -18
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -11,
-    18
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -10,
-    -17
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    -10,
-    17
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    10,
-    -17
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    10,
-    17
+    -1
    ],
    "rotation": "West"
   },
   {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    11,
-    -18
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    11,
-    18
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
+   "module_type": "Cannon",
    "grid_pos": [
     12,
-    -19
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    12,
-    19
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    13,
-    -20
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    13,
-    20
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    14,
-    -21
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    14,
-    21
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    15,
-    -22
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    15,
-    22
-   ],
-   "rotation": "West"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    17,
-    -22
+    -2
    ],
    "rotation": "East"
   },
   {
-   "module_type": "AngledArmorPlate",
+   "module_type": "FusionReactor",
    "grid_pos": [
-    17,
-    -10
+    -14,
+    -14
    ],
    "rotation": "North"
   },
   {
-   "module_type": "AngledArmorPlate",
+   "module_type": "FusionReactor",
    "grid_pos": [
-    17,
-    10
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    17,
-    22
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    18,
-    -21
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    18,
-    -11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    18,
-    11
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    18,
-    21
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    19,
-    -20
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    19,
-    -12
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    19,
+    -14,
     12
    ],
-   "rotation": "East"
+   "rotation": "North"
   },
   {
-   "module_type": "AngledArmorPlate",
+   "module_type": "FusionReactor",
    "grid_pos": [
-    19,
-    20
+    12,
+    12
    ],
    "rotation": "North"
   },
   {
-   "module_type": "AngledArmorPlate",
+   "module_type": "FusionReactor",
    "grid_pos": [
-    20,
-    -19
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    20,
-    -13
+    12,
+    -14
    ],
    "rotation": "North"
   },
   {
-   "module_type": "AngledArmorPlate",
+   "module_type": "HeavyMissile",
    "grid_pos": [
-    20,
+    13,
+    -18
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "HeavyMissile",
+   "grid_pos": [
+    -13,
+    -18
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "HeavyMissile",
+   "grid_pos": [
+    18,
     13
    ],
    "rotation": "East"
   },
   {
-   "module_type": "AngledArmorPlate",
+   "module_type": "HeavyMissile",
    "grid_pos": [
-    20,
-    19
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    21,
-    -18
+    18,
+    -13
    ],
    "rotation": "East"
   },
   {
-   "module_type": "AngledArmorPlate",
+   "module_type": "HeavyMissile",
    "grid_pos": [
-    21,
-    -14
+    -18,
+    13
    ],
-   "rotation": "North"
+   "rotation": "West"
   },
   {
-   "module_type": "AngledArmorPlate",
+   "module_type": "HeavyMissile",
    "grid_pos": [
-    21,
-    14
+    -18,
+    -13
    ],
-   "rotation": "East"
+   "rotation": "West"
   },
   {
-   "module_type": "AngledArmorPlate",
+   "module_type": "HeavyMissile",
    "grid_pos": [
-    21,
+    13,
     18
    ],
    "rotation": "North"
   },
   {
-   "module_type": "AngledArmorPlate",
+   "module_type": "HeavyMissile",
    "grid_pos": [
-    22,
-    -17
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    22,
-    -15
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    22,
-    15
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "AngledArmorPlate",
-   "grid_pos": [
-    22,
-    17
+    -13,
+    18
    ],
    "rotation": "North"
   }
  ],
- "created_at": "fleet-concepts",
+ "created_at": "fleet-concepts (hand-drawn)",
  "version": 2
 }
