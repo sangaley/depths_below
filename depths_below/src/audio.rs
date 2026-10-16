@@ -482,17 +482,26 @@ fn stop_menu_loop(mut commands: Commands, loops: Query<Entity, With<MenuLoopAudi
     }
 }
 
+/// The master volume (and mute) as a factor. Bevy applies GlobalVolume only
+/// when a sound starts; the loops below set their own volume every frame,
+/// which used to replace it -- so Mute silenced one-shots while the engine,
+/// ambient and dread loops played on. Every live set_volume multiplies by this.
+fn master(global: &GlobalVolume) -> f32 {
+    global.volume.to_linear()
+}
+
 fn fade_in_loops(
     time: Res<Time>,
     mut commands: Commands,
     mut fading: Query<(Entity, &mut AudioFadeIn, &mut AudioSink)>,
+    global: Res<GlobalVolume>,
 ) {
     for (entity, mut fade, mut sink) in fading.iter_mut() {
         fade.elapsed += time.delta_secs();
         let t = (fade.elapsed / fade.seconds).clamp(0.0, 1.0);
         // Ease in, so the first second is nearly silent rather than a ramp
         // the ear can follow.
-        sink.set_volume(Volume::Linear(fade.target * t * t));
+        sink.set_volume(Volume::Linear(fade.target * t * t * master(&global)));
         if t >= 1.0 {
             commands.entity(entity).remove::<AudioFadeIn>();
         }
@@ -601,12 +610,13 @@ fn dread_volume(
     settings: Res<GameSettings>,
     cascade: Res<crate::narrative::CascadeState>,
     mut layers: Query<(&mut AudioSink, &DreadLoopAudio)>,
+    global: Res<GlobalVolume>,
 ) {
     let level = cascade.level.clamp(0.0, 1.0);
     for (mut sink, layer) in layers.iter_mut() {
         let span = (layer.peak - layer.from).max(0.001);
         let ramp = ((level - layer.from) / span).clamp(0.0, 1.0);
-        let target = ramp * layer.ceiling * settings.music_volume;
+        let target = ramp * layer.ceiling * settings.music_volume * master(&global);
         let current = sink.volume().to_linear();
         let eased = current + (target - current) * (time.delta_secs() * 0.6).min(1.0);
         sink.set_volume(Volume::Linear(eased));
@@ -617,12 +627,13 @@ fn dread_volume(
 fn update_ambient_volume(
     settings: Res<GameSettings>,
     mut sink_query: Query<&mut AudioSink, With<AmbientLoopAudio>>,
+    global: Res<GlobalVolume>,
 ) {
-    if !settings.is_changed() {
+    if !settings.is_changed() && !global.is_changed() {
         return;
     }
     if let Ok(mut sink) = sink_query.single_mut() {
-        sink.set_volume(Volume::Linear(AMBIENT_VOL * settings.music_volume));
+        sink.set_volume(Volume::Linear(AMBIENT_VOL * settings.music_volume * master(&global)));
     }
 }
 
@@ -652,6 +663,7 @@ fn engine_loop_volume(
     mut sink_query: Query<&mut AudioSink, With<EngineLoopAudio>>,
     time: Res<Time>,
     mut current: Local<f32>,
+    global: Res<GlobalVolume>,
 ) {
     let Ok(mut sink) = sink_query.single_mut() else { return };
     let throttle = ship_query.single().map(|p| p.throttle.abs()).unwrap_or(0.0);
@@ -663,7 +675,7 @@ fn engine_loop_volume(
     let target = intensity.clamp(0.0, 1.0) * ENGINE_MAX_VOL * settings.sfx_volume;
     let rate = if target > *current { 6.0 } else { 2.5 };
     *current += (target - *current) * (rate * time.delta_secs()).min(1.0);
-    sink.set_volume(Volume::Linear(*current));
+    sink.set_volume(Volume::Linear(*current * master(&global)));
 }
 
 // ============================================================================

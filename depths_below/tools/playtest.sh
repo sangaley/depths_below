@@ -47,12 +47,13 @@ disown "$WAKE" 2>/dev/null || true
 sleep 3
 
 echo "[playtest] running '$LABEL' for ${SECS}s"
+# DEPTHS_MUTE=1: playtests run silent; pass DEPTHS_MUTE=0 after it to hear one.
 # caffeinate -di: without it the display sleeps during a long session and the
 # render target stops producing content -- every captured frame comes back
 # solid black and looks exactly like a rendering regression. It is not.
 # `env` is required: caffeinate treats the first token as its command, so
 # inline VAR=value assignments would be swallowed.
-caffeinate -di env DEPTHS_SKIP_MENU=1 DEPTHS_SHOTS=6 DEPTHS_OFFSCREEN=1 DEPTHS_SHOTS_DIR="$OUT" "$@" \
+caffeinate -di env DEPTHS_MUTE=1 DEPTHS_SKIP_MENU=1 DEPTHS_SHOTS=6 DEPTHS_OFFSCREEN=1 DEPTHS_SHOTS_DIR="$OUT" "$@" \
   cargo run >"$LOG" 2>&1 &
 RUNNER=$!
 disown "$RUNNER" 2>/dev/null || true   # keep job control quiet on kill
