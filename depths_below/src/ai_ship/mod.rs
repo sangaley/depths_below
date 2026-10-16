@@ -24,6 +24,7 @@ pub struct AiShipPlugin;
 
 impl Plugin for AiShipPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(Last, clear_ships_left_by_load);
         app
             .init_resource::<WorldSimulation>()
             .init_resource::<scavenger::ScavengerWaves>()
@@ -35,7 +36,7 @@ impl Plugin for AiShipPlugin {
                 Update,
                 (
                     simulation::tick_world_simulation,
-                    simulation::sync_simulation_entities,
+                    (simulation::sync_simulation_entities, simulation::apply_spawn_integrity).chain(),
                     // spawn_raider_waves removed — was periodically teleporting a
                     // hostile wing in right next to the player regardless of
                     // location, which was most of what made fights feel
@@ -95,5 +96,17 @@ impl Plugin for AiShipPlugin {
                 )
                     .run_if(in_state(GameState::Exploring)),
             );
+    }
+}
+
+/// Despawn the AI ships a load left behind (see `LeftByLoad`) once the
+/// messages that might still name them have run out.
+fn clear_ships_left_by_load(mut commands: Commands, mut ships: Query<(Entity, &mut LeftByLoad)>) {
+    for (ship, mut left) in ships.iter_mut() {
+        if left.frames == 0 {
+            commands.entity(ship).try_despawn();
+        } else {
+            left.frames -= 1;
+        }
     }
 }

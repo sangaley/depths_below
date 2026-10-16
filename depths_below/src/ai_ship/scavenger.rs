@@ -72,16 +72,20 @@ pub fn schedule_scavenger_waves(
 
 /// When a wave's clock runs out and the carcass still has meat on it,
 /// the vultures arrive at the edge and burn inward.
+///
+/// They join the world simulation rather than appearing as bare entities:
+/// the block budget decides when they materialise, they keep their damage if
+/// you drive them off and come back, and a save remembers them.
 pub fn spawn_scavenger_waves(
     time: Res<Time>,
-    mut commands: Commands,
     mut waves: ResMut<ScavengerWaves>,
     wreck_query: Query<&Wreck>,
-    registry: Res<crate::building::ModuleRegistry>,
-    asset_server: Res<AssetServer>,
+    mut sim: ResMut<super::components::WorldSimulation>,
+    streaming: Res<crate::celestial::resources::SystemStreamingManager>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     let mut rng = rand::thread_rng();
+    let system_id = streaming.loaded_system.unwrap_or(0);
     waves.pending.retain_mut(|wave| {
         wave.timer.tick(time.delta());
         if !wave.timer.is_finished() {
@@ -96,15 +100,20 @@ pub fn spawn_scavenger_waves(
             + Vec2::new(angle.cos(), angle.sin()) * rng.gen_range(SPAWN_DIST_MIN..SPAWN_DIST_MAX);
         for i in 0..wave.ships {
             let jitter = Vec2::new(rng.gen_range(-120.0..120.0), rng.gen_range(-120.0..120.0));
-            // Spawned "at" the wreck position so their patrol waypoints
-            // ring the carcass; the wreck-chasing brain does the rest.
-            super::spawner::spawn_ai_ship(
+            let at = base + jitter + Vec2::Y * (i as f32 * 40.0);
+            // Home is the carcass: their patrol rings it and, once built,
+            // the wreck-chasing brain does the rest.
+            let mut ship = super::components::SimulatedShip::patrolling(
+                system_id,
                 AiShipType::RecursiveKingdom,
-                base + jitter + Vec2::Y * (i as f32 * 40.0),
-                &mut commands,
-                &registry,
-                &asset_server,
+                at,
+                wave.position,
+                1_500.0,
+                120.0,
             );
+            ship.destination = wave.position;
+            ship.class = super::roster::roll(AiShipType::RecursiveKingdom, &mut rng, |_| true).map(|c| c.key);
+            sim.add(ship);
         }
         notifications.write(ShowNotification {
             message: "Scavenger swarm inbound - they smell the wreck!".into(),

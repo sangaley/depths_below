@@ -242,8 +242,25 @@ pub struct AiShipWreck {
 // WORLD SIMULATION - Off-screen faction tracking
 // ============================================================================
 
+/// What a ship lost before it went off-screen: the blocks shot away (by
+/// grid position, hull cells and module anchors) and its hull integrity.
+/// It comes back with the same holes. Blocks only scratched heal; blocks
+/// gone stay gone.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Wounds {
+    pub hull: Vec<IVec2>,
+    pub modules: Vec<IVec2>,
+    pub integrity: f32,
+}
+
+impl Wounds {
+    pub fn is_empty(&self) -> bool {
+        self.hull.is_empty() && self.modules.is_empty()
+    }
+}
+
 /// A simulated (off-screen) AI ship tracked by position only
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct SimulatedShip {
     /// Which star system this ship belongs to — gates whether
     /// tick_world_simulation actually ticks it (Hot/Warm systems only, see
@@ -289,6 +306,66 @@ pub struct SimulatedShip {
     /// despawns or dies. 0 = not issued (test and debug ships), which falls
     /// back to the old nearest-of-the-same-faction guess.
     pub id: u32,
+    /// Damage it carried off-screen; restored when it spawns again.
+    pub wounds: Option<Wounds>,
+}
+
+/// A SimulatedShip as a save holds it. The class key is a `&'static str`
+/// from a roster in the game and a plain string on disk, interned back on
+/// load (a key no roster has any more flies the faction's original design).
+#[derive(Deserialize)]
+struct SavedShip {
+    system_id: u32,
+    faction: AiShipType,
+    position: Vec2,
+    velocity: Vec2,
+    health: f32,
+    fuel: f32,
+    behavior: SimBehavior,
+    home_zone: Vec2,
+    patrol_radius: f32,
+    #[serde(default)]
+    bounty_id: Option<u32>,
+    destination: Vec2,
+    cruise: f32,
+    #[serde(default)]
+    class: Option<String>,
+    #[serde(default)]
+    id: u32,
+    #[serde(default)]
+    wounds: Option<Wounds>,
+}
+
+impl<'de> Deserialize<'de> for SimulatedShip {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        SavedShip::deserialize(d).map(Into::into)
+    }
+}
+
+impl From<SavedShip> for SimulatedShip {
+    fn from(s: SavedShip) -> Self {
+        SimulatedShip {
+            system_id: s.system_id,
+            faction: s.faction,
+            position: s.position,
+            velocity: s.velocity,
+            health: s.health,
+            fuel: s.fuel,
+            behavior: match s.behavior {
+                SimBehavior::Fighting(_) => SimBehavior::Patrolling,
+                b => b,
+            },
+            home_zone: s.home_zone,
+            patrol_radius: s.patrol_radius,
+            spawned: false,
+            bounty_id: s.bounty_id,
+            destination: s.destination,
+            cruise: s.cruise,
+            class: s.class.as_deref().and_then(crate::ai_ship::roster::intern),
+            id: s.id,
+            wounds: s.wounds,
+        }
+    }
 }
 
 impl SimulatedShip {
@@ -318,6 +395,7 @@ impl SimulatedShip {
             cruise,
             class: None,
             id: 0,
+            wounds: None,
         }
     }
 }
@@ -330,13 +408,49 @@ pub struct AiShipClass(pub &'static str);
 #[derive(Component, Clone, Copy, Debug)]
 pub struct SimShipId(pub u32);
 
+/// The hull integrity a wounded ship comes back with, applied once on its
+/// first frame (AiShipState is only recomputed when it next takes a hit).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct SpawnIntegrity(pub f32);
+
+/// An AI ship from the world a load is leaving. It is hidden and moved far
+/// out of everything at once, and despawned a few frames later: messages
+/// that name it (damage, collisions) live for two frames, and a system acting
+/// on one after the ship was gone was a crash.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct LeftByLoad {
+    pub frames: u8,
+}
+
+/// The story's doppelganger: wears the player's design, so it is never folded
+/// into the simulation as an ordinary ship of its faction.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct MirrorShip;
+
+/// Everything about the off-screen world that goes into a save.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct SavedWorld {
+    pub ships: Vec<SimulatedShip>,
+    pub next_ship_id: u32,
+    pub next_bounty_id: u32,
+}
+
+impl SavedWorld {
+    fn snapshot_ships(&self) -> Vec<SimulatedShip> {
+        self.ships.iter().cloned().map(|mut s| {
+            s.spawned = false;
+            s
+        }).collect()
+    }
+}
+
 /// Attached to an AI ship's root entity when it was spawned from a
 /// bounty-tagged SimulatedShip. Read by ai_ship::combat when the ship dies
 /// to populate AiShipDestroyed::bounty_id.
 #[derive(Component, Clone, Copy)]
 pub struct BountyTarget(pub u32);
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum SimBehavior {
     Roaming,
     Fighting(usize), // index of opponent in sim list
@@ -370,6 +484,38 @@ impl Default for WorldSimulation {
 }
 
 impl WorldSimulation {
+    /// The world as it stands, for a save. Nothing is mid-spawn in a save:
+    /// every ship is written as off-screen, where it will be found again.
+    pub fn snapshot(&self) -> SavedWorld {
+        SavedWorld {
+            ships: self
+                .ships
+                .iter()
+                .cloned()
+                .map(|mut s| {
+                    s.spawned = false;
+                    if matches!(s.behavior, SimBehavior::Fighting(_)) {
+                        s.behavior = SimBehavior::Patrolling;
+                    }
+                    s
+                })
+                .collect(),
+            next_ship_id: self.next_ship_id,
+            next_bounty_id: self.next_bounty_id,
+        }
+    }
+
+    /// Put a saved world back. Marks the simulation started, so it isn't
+    /// rolled again on entering Exploring.
+    pub fn restore(&mut self, saved: &SavedWorld) {
+        self.ships = saved.snapshot_ships();
+        let max_id = self.ships.iter().map(|s| s.id).max().unwrap_or(0);
+        self.next_ship_id = saved.next_ship_id.max(max_id + 1);
+        let max_bounty = self.ships.iter().filter_map(|s| s.bounty_id).max().unwrap_or(0);
+        self.next_bounty_id = saved.next_bounty_id.max(max_bounty + 1);
+        self.initialized = true;
+    }
+
     /// Add a ship, issuing it an id.
     pub fn add(&mut self, mut ship: SimulatedShip) {
         ship.id = self.next_ship_id;
@@ -699,3 +845,56 @@ pub struct AiGunneryLog {
 
 /// Ricochets against one target before the crew changes ammunition.
 pub const RICOCHETS_BEFORE_SWITCH: u32 = 4;
+
+#[cfg(test)]
+mod saved_world_tests {
+    use super::*;
+
+    fn ship(id: u32, class: Option<&'static str>) -> SimulatedShip {
+        let mut s = SimulatedShip::patrolling(3, AiShipType::TerranHegemony, Vec2::new(10.0, 20.0), Vec2::ZERO, 5000.0, 90.0);
+        s.id = id;
+        s.class = class;
+        s
+    }
+
+    /// A save keeps every ship's class, damage and fate, and its class comes
+    /// back as the roster's own key.
+    #[test]
+    fn a_world_survives_a_save() {
+        let mut sim = WorldSimulation::default();
+        let mut a = ship(0, Some("bulwark"));
+        a.wounds = Some(Wounds { hull: vec![IVec2::new(1, 2)], modules: vec![], integrity: 0.4 });
+        a.spawned = true;
+        a.behavior = SimBehavior::Fighting(7);
+        sim.add(a);
+        let mut dead = ship(0, None);
+        dead.behavior = SimBehavior::Dead;
+        sim.add(dead);
+
+        let json = serde_json::to_string(&sim.snapshot()).unwrap();
+        let saved: SavedWorld = serde_json::from_str(&json).unwrap();
+        let mut back = WorldSimulation::default();
+        back.restore(&saved);
+
+        assert!(back.initialized);
+        assert_eq!(back.ships.len(), 2);
+        let a = &back.ships[0];
+        assert_eq!(a.class, crate::ai_ship::roster::intern("bulwark"));
+        assert!(!a.spawned, "nothing is on screen in a fresh load");
+        assert_eq!(a.behavior, SimBehavior::Patrolling, "a fight's opponent index means nothing after a load");
+        assert_eq!(a.wounds.as_ref().unwrap().integrity, 0.4);
+        assert_eq!(back.ships[1].behavior, SimBehavior::Dead);
+        // New ships keep counting from where the save left off.
+        back.add(ship(0, None));
+        assert!(back.ships[2].id > back.ships[1].id);
+    }
+
+    /// A class no roster has any more flies its faction's original design
+    /// rather than failing the whole load.
+    #[test]
+    fn an_unknown_class_loads_as_the_original_design() {
+        let json = serde_json::to_string(&ship(1, Some("bulwark"))).unwrap().replace("bulwark", "retired_hull");
+        let back: SimulatedShip = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.class, None);
+    }
+}

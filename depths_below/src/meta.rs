@@ -36,6 +36,7 @@ impl Plugin for MetaPlugin {
             .add_systems(Update, apply_pending_load)
             .add_systems(Update, rebuild_entities_from_save)
             .add_systems(Update, apply_module_health_overrides)
+            .add_systems(Last, despawn_at_frame_end)
             .add_systems(
                 Update,
                 auto_save_system.run_if(
@@ -143,6 +144,8 @@ fn collect_save_data(
     contracts: &crate::contracts::ContractState,
     reputation: &crate::contracts::FactionReputation,
     standing: &crate::diplomacy::FactionStanding,
+    sim: &crate::ai_ship::components::WorldSimulation,
+    stations: &crate::diplomacy::stations::FactionStations,
 ) -> SaveData {
     let position = ship_query
         .single()
@@ -246,6 +249,8 @@ fn collect_save_data(
         contracts: contracts.clone(),
         reputation: reputation.clone(),
         standing: Some(standing.clone()),
+        world: sim.initialized.then(|| sim.snapshot()),
+        destroyed_stations: stations.destroyed.clone(),
     }
 }
 
@@ -299,6 +304,8 @@ fn handle_save_request(
         Res<crate::contracts::ContractState>,
         Res<crate::contracts::FactionReputation>,
         Res<crate::diplomacy::FactionStanding>,
+        Res<crate::ai_ship::components::WorldSimulation>,
+        Res<crate::diplomacy::stations::FactionStations>,
     ),
     current_state: Res<State<GameState>>,
     ship_query: Query<&Transform, With<Ship>>,
@@ -311,7 +318,7 @@ fn handle_save_request(
     hull_query: Query<(&HullSegment, &Transform), PlayerBlocks>,
     crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
 ) {
-    let (world_state, galaxy_map, streaming, drifting_dead, looted, fuel, contracts, reputation, standing) = &world_galaxy;
+    let (world_state, galaxy_map, streaming, drifting_dead, looted, fuel, contracts, reputation, standing, sim, faction_stations) = &world_galaxy;
     for event in save_events.read() {
         let save_data = collect_save_data(
             event.slot,
@@ -336,6 +343,8 @@ fn handle_save_request(
             contracts,
             reputation,
             standing,
+            sim,
+            faction_stations,
         );
 
         // Tier 3 customization is saved via customization_params field
@@ -493,6 +502,8 @@ fn rebuild_entities_from_save(
         Res<crate::vfx::procedural_textures::CelestialTextures>,
         Res<Time>,
         Query<Entity, With<crate::celestial::components::StarSystemMember>>,
+        Query<Entity, With<crate::ai_ship::components::AiShip>>,
+        ResMut<crate::diplomacy::stations::FactionStations>,
     ),
     // State the old ship was in the middle of, that the loaded one is not.
     flight: (
@@ -501,20 +512,18 @@ fn rebuild_entities_from_save(
         ResMut<crate::ui::PendingWarpTarget>,
     ),
 ) {
-    let (mut galaxy, mut looted, mut sim, textures, time, members) = world;
+    let (mut galaxy, mut looted, mut sim, textures, time, members, ai_ships, mut faction_stations) = world;
     let (mut rebuild_queue, mut towing, mut dash_target) = flight;
     let Some(save) = pending.save_data.take() else { return };
     let slot = pending.slot;
 
     // ---- Despawn existing ship entities ----
-    for entity in module_entities.iter() {
-        commands.entity(entity).despawn();
-    }
-    for entity in hull_entities.iter() {
-        commands.entity(entity).despawn();
-    }
-    for entity in crew_entities.iter() {
-        commands.entity(entity).despawn();
+    // Hidden now, gone at the end of the frame (despawn_at_frame_end).
+    // Despawned here, mid-frame, any system that had already queued a
+    // command for one of them this frame crashed the load; which ones did
+    // depended on scheduling order, so it came and went as systems were added.
+    for entity in module_entities.iter().chain(hull_entities.iter()).chain(crew_entities.iter()) {
+        commands.entity(entity).try_insert((DespawnAtFrameEnd, Visibility::Hidden));
     }
 
     // ---- Respawn ship at saved position ----
@@ -714,7 +723,28 @@ fn rebuild_entities_from_save(
                 galaxy.total_bodies = 1;
             }
         }
-        // ...and its people. A running simulation populates the saved system
+        // ...and its people, as the save left them: every fleet where it was,
+        // as hurt as it was, the dead still dead. The ships on screen now
+        // belong to the world being left; they go, and the saved ones
+        // materialise from the restored simulation. An older save without a
+        // world keeps the running one.
+        if let Some(world) = &save.world {
+            // Tagged, not despawned here: every other system this frame may
+            // already hold a command for these ships, and a despawn in the
+            // middle of the frame turned those into crashes. They go at the
+            // end of the frame (ai_ship::clear_ships_left_by_load).
+            for ship in ai_ships.iter() {
+                commands.entity(ship).try_insert((
+                    crate::ai_ship::components::LeftByLoad { frames: 3 },
+                    Visibility::Hidden,
+                    Transform::from_xyz(1.0e8, 1.0e8, 0.0),
+                ));
+            }
+            sim.restore(world);
+            faction_stations.live = None;
+            faction_stations.destroyed = save.destroyed_stations.clone();
+        }
+        // A running simulation populates the saved system
         // and its neighbours now (a no-op for any already populated). One not
         // yet started -- a load from the menu -- is left to
         // init_world_simulation, which does the same on entering Exploring.
@@ -830,9 +860,10 @@ pub fn reset_for_new_game(
         ResMut<GalaxyState>,
         ResMut<crate::ai_ship::components::WorldSimulation>,
         ResMut<LootedPois>,
+        ResMut<crate::diplomacy::stations::FactionStations>,
     ),
 ) {
-    let (mut spawned, mut sim, mut looted) = world;
+    let (mut spawned, mut sim, mut looted, mut faction_stations) = world;
     if requests.read().next().is_none() {
         return;
     }
@@ -863,8 +894,20 @@ pub fn reset_for_new_game(
     // `initialized` simulation never populates again.
     *spawned = GalaxyState::default();
     *sim = crate::ai_ship::components::WorldSimulation::default();
+    *faction_stations = crate::diplomacy::stations::FactionStations::default();
     // Derelicts stripped last run are full again in a new galaxy.
     *looted = LootedPois::default();
 
     info!("new expedition: previous run cleared");
+}
+
+/// Left behind by a load: hidden at once, despawned in `Last`, after every
+/// system has applied what it queued this frame.
+#[derive(Component)]
+pub struct DespawnAtFrameEnd;
+
+pub fn despawn_at_frame_end(mut commands: Commands, doomed: Query<Entity, With<DespawnAtFrameEnd>>) {
+    for entity in doomed.iter() {
+        commands.entity(entity).try_despawn();
+    }
 }

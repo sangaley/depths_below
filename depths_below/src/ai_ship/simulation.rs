@@ -13,13 +13,17 @@ use super::spawner;
 /// before the player is even in its weapon range, instead of after.
 const RENDER_DISTANCE: f32 = 10_000.0;
 
-/// How many AI hulls may exist as real entities at once.
+/// How many AI blocks (hull cells + modules) may exist as real entities at once.
 ///
-/// Each one is a full ship — hull cells, modules, decking, crew — so this is
-/// a frame-time budget, not a gameplay limit: everything past it stays in the
-/// simulation, still moving and still fighting, and materialises as soon as a
-/// slot frees. Nearest to the player wins the slot.
-const MAX_LIVE_AI_HULLS: usize = 8;
+/// A frame-time budget, not a gameplay limit: everything past it stays in the
+/// simulation, still moving and still fighting, and materialises as soon as
+/// room frees. Nearest to the player first.
+///
+/// It counted ships (8) when every ship was about a hundred blocks. Classes
+/// now run from a 70-block skiff to a 2,300-block boss, so a ship count was
+/// either a thin swarm or a frame-rate cliff. 6,000 is about what eight of the
+/// old mid-size hulls cost, and holds a whole swarm or a few capitals.
+const MAX_LIVE_AI_BLOCKS: usize = 6_000;
 /// Distance at which spawned entities get converted back to simulation. Was
 /// 3500 — well inside the new ~8,160 max standoff distance, so a ship
 /// holding a long-range fight would get yanked back to an abstract
@@ -317,7 +321,7 @@ fn clear_of_stations(mut pos: Vec2, stations: &[Vec2]) -> Vec2 {
 ///
 /// Roughly double what it was (2.2x, 6-40): spread over a system's holdings,
 /// that left a whole system with seven or eight hostiles on the map, and the
-/// playtester wanted more. Only MAX_LIVE_AI_HULLS are ever full entities at
+/// playtester wanted more. Only MAX_LIVE_AI_BLOCKS worth are ever full entities at
 /// once, so the rest cost a position update each.
 pub fn system_ship_count(template_count: usize, danger_tier: f32) -> usize {
     let scale = 1.0 + (danger_tier / 100.0).clamp(0.0, 2.0);
@@ -585,123 +589,204 @@ pub fn sync_simulation_entities(
     mut sim: ResMut<WorldSimulation>,
     registry: Res<ModuleRegistry>,
     asset_server: Res<AssetServer>,
+    streaming: Res<crate::celestial::resources::SystemStreamingManager>,
     ship_query: Query<&Transform, With<Ship>>,
     // Faction stations live outside the simulation (diplomacy::stations):
-    // they neither use the hull budget nor despawn with distance here.
+    // they neither use the block budget nor despawn with distance here.
     ai_ships: Query<
-        (Entity, &Transform, &AiShipType, &AiShipState, Option<&BountyTarget>, Has<SimSettled>, Option<&SimShipId>),
-        (With<AiShip>, Without<crate::diplomacy::FactionStation>),
+        (
+            Entity,
+            &Transform,
+            &AiShipType,
+            &AiShipState,
+            Option<&BountyTarget>,
+            Has<SimSettled>,
+            Option<&SimShipId>,
+            (Option<&AiShipClass>, Has<MirrorShip>, Option<&Children>),
+        ),
+        (With<AiShip>, Without<crate::diplomacy::FactionStation>, Without<LeftByLoad>),
+    >,
+    blocks: Query<
+        (Option<&crate::components::HullSegment>, Option<&crate::components::Module>),
+        (
+            Or<(With<crate::components::HullSegment>, With<crate::components::Module>)>,
+            Without<crate::components::HullDestroyed>,
+            Without<crate::components::DestroyedModule>,
+        ),
     >,
 ) {
     let Ok(player_transform) = ship_query.single() else { return };
     let player_pos = player_transform.translation.truncate();
+    let block_count = |children: Option<&Children>| {
+        children.map_or(0, |c| c.iter().filter(|e| blocks.contains(*e)).count())
+    };
 
-    // Spawn ships that entered render distance, NEAREST FIRST and only up to
-    // the budget.
-    //
-    // An AI ship is not a sprite: it is a hull, its modules, its decking and
-    // its crew, the same as the player's. A dozen inside the bubble at once is
-    // thousands of entities. The population was small enough that this never
-    // came up; now that a system can field forty, the bubble needs a ceiling
-    // or a busy system turns into a slideshow the moment you fly into the
-    // middle of it. The rest stay simulated and keep moving — they are still
-    // there, still fighting each other, just not built yet.
-    // Living hulls only. Wrecks keep their AiShip component, and counting
-    // them meant a system where the player had won a few fights could never
-    // spawn another ship -- including a bounty target sitting 1.5 km away.
-    let live = ai_ships.iter().filter(|(_, _, _, state, _, _, _)| !state.is_destroyed).count();
-    if live < MAX_LIVE_AI_HULLS {
-        let mut candidates: Vec<(usize, f32)> = sim
-            .ships
-            .iter()
-            .enumerate()
-            .filter(|(_, s)| !s.spawned && s.behavior != SimBehavior::Dead)
-            .map(|(i, s)| (i, s.position.distance(player_pos)))
-            .filter(|(_, d)| *d < RENDER_DISTANCE)
-            .collect();
-        candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        for (index, _) in candidates.into_iter().take(MAX_LIVE_AI_HULLS - live) {
-            let Some(sim_ship) = sim.ships.get_mut(index) else { continue };
-            let root = spawner::spawn_ai_ship_class(
-                sim_ship.faction,
-                sim_ship.class,
-                sim_ship.position,
-                &mut commands,
-                &registry,
-                &asset_server,
-            );
-            if let Some(id) = sim_ship.bounty_id {
-                commands.entity(root).insert(BountyTarget(id));
-            }
-            if sim_ship.id != 0 {
-                commands.entity(root).insert(SimShipId(sim_ship.id));
-            }
-            sim_ship.spawned = true;
+    // Spawn ships that entered render distance, nearest first, while the
+    // block budget allows. Living hulls only: a wreck's blocks are a pile of
+    // salvage, not a ship the frame has to fly and fight.
+    let mut live_blocks: usize = ai_ships
+        .iter()
+        .filter(|(_, _, _, state, ..)| !state.is_destroyed)
+        .map(|(.., (_, _, children))| block_count(children))
+        .sum();
+    let any_live = ai_ships.iter().any(|(_, _, _, state, ..)| !state.is_destroyed);
+    let mut candidates: Vec<(usize, f32)> = sim
+        .ships
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| !s.spawned && s.behavior != SimBehavior::Dead)
+        .map(|(i, s)| (i, s.position.distance(player_pos)))
+        .filter(|(_, d)| *d < RENDER_DISTANCE)
+        .collect();
+    candidates.sort_by(|a, b| a.1.total_cmp(&b.1));
+    let mut spawned_any = any_live;
+    for (index, _) in candidates {
+        let Some(sim_ship) = sim.ships.get_mut(index) else { continue };
+        let lost = sim_ship.wounds.as_ref().map_or(0, |w| w.hull.len() + w.modules.len());
+        let cost = super::spawner::design_blocks(sim_ship.faction, sim_ship.class).saturating_sub(lost);
+        // Nearest first; one that doesn't fit waits rather than letting a
+        // farther, smaller ship jump the queue. The first ship always fits,
+        // or a boss bigger than the budget could never appear.
+        if spawned_any && live_blocks + cost > MAX_LIVE_AI_BLOCKS {
+            break;
         }
+        let root = spawner::spawn_ai_ship_wounded(
+            sim_ship.faction,
+            sim_ship.class,
+            sim_ship.wounds.as_ref(),
+            sim_ship.position,
+            &mut commands,
+            &registry,
+            &asset_server,
+        );
+        if let Some(id) = sim_ship.bounty_id {
+            commands.entity(root).insert(BountyTarget(id));
+        }
+        if sim_ship.id != 0 {
+            commands.entity(root).insert(SimShipId(sim_ship.id));
+        }
+        sim_ship.spawned = true;
+        live_blocks += cost;
+        spawned_any = true;
     }
 
-    // Despawn LIVE ships that left render distance, convert back to
-    // simulation. Destroyed ships are deliberately excluded from this: they
-    // become real, permanent wrecks (see ai_ship::wreck::ai_ship_death_system)
-    // instead of being despawned and replaced with an abstract simulated
-    // "dead" entry — so the player can fly away and come back later to
-    // actually scavenge the hull they shot up, instead of it vanishing the
-    // moment they're out of range.
-    for (entity, transform, ship_type, state, bounty, settled, sim_id) in ai_ships.iter() {
-        // Bounty-tagged ships are matched back to their exact sim entry by
-        // id — the faction-only match below is ambiguous whenever more than
-        // one ship of the same faction is spawned at once, which would risk
-        // flagging the wrong sim ship (possibly the actual bounty target) as
-        // dead/despawned.
+    // Live ships that left render distance go back into the simulation;
+    // destroyed ones settle their entry once and stay as real wrecks.
+    for (entity, transform, ship_type, state, bounty, settled, sim_id, (class, mirror, children)) in ai_ships.iter() {
+        // Which entry is this ship? By its id, then its bounty tag. A ship
+        // with neither (a debug spawn, the tutorial's raider) has no entry,
+        // and must not claim a stranger's: the old "first of its faction"
+        // guess swapped ships' records whenever two were on screen.
+        let entry = |sim: &mut WorldSimulation| -> Option<usize> {
+            if let Some(id) = sim_id {
+                sim.ships.iter().position(|s| s.id == id.0)
+            } else if let Some(bounty) = bounty {
+                sim.ships.iter().position(|s| s.bounty_id == Some(bounty.0))
+            } else {
+                None
+            }
+        };
+
         if state.is_destroyed {
             if settled {
                 continue;
             }
-            // One-time sim bookkeeping so this faction slot frees up for
-            // future spawns — doesn't touch the real (now-wreck) entity.
-            // Without a bounty id, the nearest spawned ship of its faction is
-            // the best guess at which entry it was.
-            let wreck_at = transform.translation.truncate();
-            let sim_ship = if let Some(id) = sim_id {
-                sim.ships.iter_mut().find(|s| s.id == id.0)
-            } else if let Some(bounty) = bounty {
-                sim.ships.iter_mut().find(|s| s.bounty_id == Some(bounty.0))
-            } else {
-                sim.ships
-                    .iter_mut()
-                    .filter(|s| s.spawned && s.faction == *ship_type)
-                    .min_by(|a, b| a.position.distance(wreck_at).total_cmp(&b.position.distance(wreck_at)))
-            };
-            if let Some(sim_ship) = sim_ship {
-                sim_ship.behavior = SimBehavior::Dead;
-                sim_ship.health = 0.0;
-                sim_ship.spawned = false;
+            if let Some(i) = entry(&mut sim) {
+                let ship = &mut sim.ships[i];
+                ship.behavior = SimBehavior::Dead;
+                ship.health = 0.0;
+                ship.spawned = false;
+                ship.wounds = None;
             }
             commands.entity(entity).try_insert(SimSettled);
             continue;
         }
 
         let pos = transform.translation.truncate();
-        let dist = pos.distance(player_pos);
+        if pos.distance(player_pos) <= DESPAWN_DISTANCE {
+            continue;
+        }
+        // The doppelganger wears the player's design; it is not a ship of its
+        // faction to file away, and it does not come back.
+        // try_: a load clears every live AI ship the same frame, and a second
+        // despawn of the same entity is a crash.
+        if mirror {
+            commands.entity(entity).try_despawn();
+            continue;
+        }
+        let class_key = class.map(|c| c.0);
+        let wounds = wounds_of(*ship_type, class_key, state.hull_integrity, children, &blocks);
+        commands.entity(entity).try_despawn();
 
-        if dist > DESPAWN_DISTANCE {
-            commands.entity(entity).despawn();
-
-            let sim_ship = if let Some(id) = sim_id {
-                sim.ships.iter_mut().find(|s| s.id == id.0)
-            } else if let Some(bounty) = bounty {
-                sim.ships.iter_mut().find(|s| s.bounty_id == Some(bounty.0))
-            } else {
-                sim.ships.iter_mut().find(|s| s.spawned && s.faction == *ship_type)
-            };
-            if let Some(sim_ship) = sim_ship {
-                sim_ship.position = pos;
-                sim_ship.health = state.hull_integrity;
-                sim_ship.spawned = false;
-                sim_ship.behavior = SimBehavior::Patrolling;
+        match entry(&mut sim) {
+            Some(i) => {
+                let ship = &mut sim.ships[i];
+                ship.position = pos;
+                ship.health = state.hull_integrity;
+                ship.spawned = false;
+                ship.behavior = SimBehavior::Patrolling;
+                ship.wounds = wounds;
+            }
+            None => {
+                // Adopt it: a stray ship becomes an ordinary member of the
+                // system it is in, damage and all, and is there when you
+                // come back.
+                let system_id = streaming.loaded_system.unwrap_or(0);
+                let mut ship = SimulatedShip::patrolling(system_id, *ship_type, pos, pos, 6_000.0, 80.0);
+                ship.class = class_key;
+                ship.health = state.hull_integrity;
+                ship.wounds = wounds;
+                sim.add(ship);
             }
         }
+    }
+}
+
+/// What a live ship has lost against the design it was built from: the hull
+/// cells and module anchors no longer there. None for an unhurt ship.
+fn wounds_of(
+    faction: AiShipType,
+    class: Option<&'static str>,
+    integrity: f32,
+    children: Option<&Children>,
+    blocks: &Query<
+        (Option<&crate::components::HullSegment>, Option<&crate::components::Module>),
+        (
+            Or<(With<crate::components::HullSegment>, With<crate::components::Module>)>,
+            Without<crate::components::HullDestroyed>,
+            Without<crate::components::DestroyedModule>,
+        ),
+    >,
+) -> Option<Wounds> {
+    let mut hull = std::collections::HashSet::new();
+    let mut modules = std::collections::HashSet::new();
+    for child in children.into_iter().flat_map(|c| c.iter()) {
+        if let Ok((h, m)) = blocks.get(child) {
+            if let Some(h) = h {
+                hull.insert(h.grid_position);
+            }
+            if let Some(m) = m {
+                modules.insert(m.grid_position);
+            }
+        }
+    }
+    let built = super::spawner::built_design(faction, class);
+    let wounds = Wounds {
+        hull: built.hull_cells.iter().map(|c| c.grid_pos).filter(|p| !hull.contains(p)).collect(),
+        modules: built.modules.iter().map(|m| m.grid_pos).filter(|p| !modules.contains(p)).collect(),
+        integrity,
+    };
+    (!wounds.is_empty() || integrity < 0.999).then_some(wounds)
+}
+
+/// A wounded ship's integrity, set on its first frame back.
+pub fn apply_spawn_integrity(
+    mut commands: Commands,
+    mut ships: Query<(Entity, &mut AiShipState, &SpawnIntegrity)>,
+) {
+    for (entity, mut state, integrity) in ships.iter_mut() {
+        state.hull_integrity = integrity.0;
+        commands.entity(entity).remove::<SpawnIntegrity>();
     }
 }
 
@@ -868,6 +953,7 @@ mod wreck_bookkeeping_tests {
         app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()));
         app.insert_resource(crate::building::registry::build_registry());
         app.init_resource::<WorldSimulation>();
+        app.init_resource::<crate::celestial::resources::SystemStreamingManager>();
         app.add_systems(Update, sync_simulation_entities);
         app.world_mut().spawn((Ship, Transform::default()));
         app
@@ -879,22 +965,23 @@ mod wreck_bookkeeping_tests {
         s
     }
 
-    /// One wreck marks one simulated ship dead, once -- not a living ship of
-    /// the same faction every frame after.
+    fn add_spawned(app: &mut App, x: f32) -> u32 {
+        let mut sim = app.world_mut().resource_mut::<WorldSimulation>();
+        let mut ship = SimulatedShip::patrolling(0, AiShipType::RecursiveKingdom, Vec2::new(x, 0.0), Vec2::ZERO, 500.0, 100.0);
+        ship.spawned = true;
+        sim.add(ship);
+        sim.ships.last().unwrap().id
+    }
+
+    /// One wreck marks its own simulated ship dead, once -- not a living ship
+    /// of the same faction every frame after.
     #[test]
     fn a_wreck_settles_one_entry_once() {
         let mut app = app();
-        {
-            let mut sim = app.world_mut().resource_mut::<WorldSimulation>();
-            for x in [100.0, 3_000.0] {
-                let mut ship = SimulatedShip::patrolling(0, AiShipType::RecursiveKingdom, Vec2::new(x, 0.0), Vec2::ZERO, 500.0, 100.0);
-                ship.spawned = true;
-                sim.ships.push(ship);
-            }
-        }
-        // The wreck of the ship at x=100, and the living one at x=3000.
-        app.world_mut().spawn((AiShip, AiShipType::RecursiveKingdom, state(true), Transform::from_xyz(100.0, 0.0, 0.0)));
-        app.world_mut().spawn((AiShip, AiShipType::RecursiveKingdom, state(false), Transform::from_xyz(3_000.0, 0.0, 0.0)));
+        let wrecked = add_spawned(&mut app, 100.0);
+        let living = add_spawned(&mut app, 3_000.0);
+        app.world_mut().spawn((AiShip, AiShipType::RecursiveKingdom, state(true), SimShipId(wrecked), Transform::from_xyz(100.0, 0.0, 0.0)));
+        app.world_mut().spawn((AiShip, AiShipType::RecursiveKingdom, state(false), SimShipId(living), Transform::from_xyz(3_000.0, 0.0, 0.0)));
         for _ in 0..5 {
             app.update();
         }
@@ -902,5 +989,83 @@ mod wreck_bookkeeping_tests {
         let dead = sim.ships.iter().filter(|s| s.behavior == SimBehavior::Dead).count();
         assert_eq!(dead, 1, "the wreck took a living ship's entry with it");
         assert!(sim.ships[1].spawned, "the living ship lost its entry");
+    }
+
+    /// A wreck with no entry (a debug spawn, the tutorial's raider) settles
+    /// nobody's: the old nearest-of-its-faction guess killed a stranger.
+    #[test]
+    fn an_untracked_wreck_touches_no_entry() {
+        let mut app = app();
+        add_spawned(&mut app, 100.0);
+        app.world_mut().spawn((AiShip, AiShipType::RecursiveKingdom, state(true), Transform::from_xyz(120.0, 0.0, 0.0)));
+        for _ in 0..3 {
+            app.update();
+        }
+        let sim = app.world().resource::<WorldSimulation>();
+        assert!(sim.ships.iter().all(|s| s.behavior != SimBehavior::Dead));
+    }
+
+    /// An untracked ship that leaves range joins the simulation instead of
+    /// overwriting another ship's record.
+    #[test]
+    fn an_untracked_ship_is_adopted_when_it_leaves() {
+        let mut app = app();
+        let tracked = add_spawned(&mut app, 100.0);
+        app.world_mut().spawn((AiShip, AiShipType::RecursiveKingdom, state(false), Transform::from_xyz(50_000.0, 0.0, 0.0)));
+        app.update();
+        let sim = app.world().resource::<WorldSimulation>();
+        assert_eq!(sim.ships.len(), 2, "the stray was adopted");
+        let first = sim.ships.iter().find(|s| s.id == tracked).unwrap();
+        assert!(first.spawned && first.position.x == 100.0, "the tracked ship's record was left alone");
+        assert!(sim.ships.iter().any(|s| s.position.x == 50_000.0 && !s.spawned));
+    }
+
+    /// The whole round trip: a ship spawns from its entry, loses blocks,
+    /// leaves range (its holes are written down), and comes back with them.
+    #[test]
+    fn damage_survives_going_off_screen() {
+        let mut app = app();
+        // Real ships load their sprites.
+        app.init_asset::<Image>();
+        let class = crate::ai_ship::roster::intern("lancer");
+        {
+            let mut sim = app.world_mut().resource_mut::<WorldSimulation>();
+            let mut ship = SimulatedShip::patrolling(0, AiShipType::TerranHegemony, Vec2::new(2_000.0, 0.0), Vec2::new(2_000.0, 0.0), 500.0, 0.0);
+            ship.class = class;
+            sim.add(ship);
+        }
+        app.update();
+        let mut roots = app.world_mut().query_filtered::<(Entity, &Children), With<AiShip>>();
+        let (_, children) = roots.single(app.world()).expect("the ship spawned from its entry");
+        let built: Vec<Entity> = children.iter().collect();
+        // Shoot three hull cells clean off.
+        let mut hull = app.world_mut().query::<&crate::components::HullSegment>();
+        let victims: Vec<Entity> = built.iter().copied().filter(|e| hull.get(app.world(), *e).is_ok()).take(3).collect();
+        let lost: Vec<IVec2> = victims.iter().map(|e| hull.get(app.world(), *e).unwrap().grid_position).collect();
+        for v in &victims {
+            app.world_mut().despawn(*v);
+        }
+        // The player leaves: the ship goes back into the simulation.
+        let player = app.world_mut().query_filtered::<Entity, With<Ship>>().single(app.world()).unwrap();
+        app.world_mut().entity_mut(player).insert(Transform::from_xyz(-40_000.0, 0.0, 0.0));
+        app.update();
+        let sim = app.world().resource::<WorldSimulation>();
+        let wounds = sim.ships[0].wounds.clone().expect("its damage was written down");
+        assert!(!sim.ships[0].spawned);
+        for p in &lost {
+            assert!(wounds.hull.contains(p), "lost cell {p:?} was not recorded");
+        }
+        // And comes back: the same holes, nothing else missing.
+        app.world_mut().entity_mut(player).insert(Transform::default());
+        app.update();
+        let mut roots = app.world_mut().query_filtered::<&Children, With<AiShip>>();
+        let children: Vec<Entity> = roots.single(app.world()).unwrap().iter().collect();
+        let mut hull = app.world_mut().query::<&crate::components::HullSegment>();
+        let cells: Vec<IVec2> = children.iter().filter_map(|e| hull.get(app.world(), *e).ok()).map(|h| h.grid_position).collect();
+        for p in &lost {
+            assert!(!cells.contains(p), "lost cell {p:?} grew back");
+        }
+        let design = crate::ai_ship::spawner::built_design(AiShipType::TerranHegemony, class);
+        assert_eq!(cells.len(), design.hull_cells.len() - lost.len());
     }
 }

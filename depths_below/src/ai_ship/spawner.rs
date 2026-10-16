@@ -82,7 +82,9 @@ pub fn spawn_mirror_ship(
     asset_server: &AssetServer,
 ) -> Option<Entity> {
     let design = mirror_slot().lock().ok()?.clone()?;
-    Some(spawn_ai_ship_with_design(ship_type, position, commands, registry, asset_server, Some(design)))
+    let root = spawn_ai_ship_with_design(ship_type, position, commands, registry, asset_server, Some(design));
+    commands.entity(root).insert(MirrorShip);
+    Some(root)
 }
 
 fn faction_design(ship_type: AiShipType) -> Blueprint {
@@ -174,18 +176,74 @@ pub fn spawn_ai_ship_class(
     registry: &ModuleRegistry,
     asset_server: &AssetServer,
 ) -> Entity {
-    let root = spawn_ai_ship_with_design(
-        ship_type,
-        position,
-        commands,
-        registry,
-        asset_server,
-        Some(class_design(ship_type, class)),
-    );
+    spawn_ai_ship_wounded(ship_type, class, None, position, commands, registry, asset_server)
+}
+
+/// The design a ship of this class is built from (None = the faction's own).
+pub fn built_design(ship_type: AiShipType, class: Option<&'static str>) -> Blueprint {
+    class_design(ship_type, class)
+}
+
+/// Hull cells + modules in a class's design: what one of these costs the
+/// live-ship budget. Cached; called for every spawn candidate.
+pub fn design_blocks(ship_type: AiShipType, class: Option<&'static str>) -> usize {
+    static SIZES: OnceLock<Mutex<HashMap<(AiShipType, Option<&'static str>), usize>>> = OnceLock::new();
+    let sizes = SIZES.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(&n) = sizes.lock().unwrap().get(&(ship_type, class)) {
+        return n;
+    }
+    let design = class_design(ship_type, class);
+    let n = design.hull_cells.len() + design.modules.len();
+    sizes.lock().unwrap().insert((ship_type, class), n);
+    n
+}
+
+/// A class's design with the blocks it lost before going off-screen taken out.
+pub fn wounded_design(built: &Blueprint, wounds: &Wounds) -> Blueprint {
+    let mut design = built.clone();
+    design.hull_cells.retain(|c| !wounds.hull.contains(&c.grid_pos));
+    design.modules.retain(|m| !wounds.modules.contains(&m.grid_pos));
+    design
+}
+
+/// Spawns a ship of a class carrying the damage it left with. Every "how
+/// much is left" ratio still divides by the ship as BUILT, so a battleship
+/// that came back with half its guns reads as half-armed, not fully armed.
+pub fn spawn_ai_ship_wounded(
+    ship_type: AiShipType,
+    class: Option<&'static str>,
+    wounds: Option<&Wounds>,
+    position: Vec2,
+    commands: &mut Commands,
+    registry: &ModuleRegistry,
+    asset_server: &AssetServer,
+) -> Entity {
+    let built = class_design(ship_type, class);
+    let wounds = wounds.filter(|w| !w.is_empty());
+    let design = wounds.map_or_else(|| built.clone(), |w| wounded_design(&built, w));
+    let root = spawn_ai_ship_with_design(ship_type, position, commands, registry, asset_server, Some(design));
+    if let Some(w) = wounds {
+        let (health_mult, _) = faction_difficulty(ship_type);
+        commands.entity(root).insert((built_loadout(&built, health_mult), SpawnIntegrity(w.integrity)));
+    }
     if let Some(key) = class {
         commands.entity(root).insert(AiShipClass(key));
     }
     root
+}
+
+/// The loadout of a design as built: guns, engines, and the hull health it
+/// starts with (the same per-cell health spawn_ai_hull gives).
+fn built_loadout(design: &Blueprint, health_mult: f32) -> AiLoadout {
+    AiLoadout {
+        guns: design.modules.iter().filter(|m| super::combat::is_weapon_type(m.module_type)).count() as u32,
+        engines: design.modules.iter().filter(|m| super::combat::is_engine_type(m.module_type)).count() as u32,
+        hull_max: design
+            .hull_cells
+            .iter()
+            .map(|c| c.material.health_multiplier() * 100.0 * health_mult)
+            .sum(),
+    }
 }
 
 /// As `spawn_ai_ship`, but optionally wearing a design that is not this
@@ -476,4 +534,30 @@ fn spawn_ai_hull(
         hull_max += health;
     }
     hull_max
+}
+
+#[cfg(test)]
+mod wound_tests {
+    use super::*;
+
+    /// A wounded ship is its design minus exactly the blocks it lost.
+    #[test]
+    fn a_wounded_design_is_missing_only_what_was_lost() {
+        let built = built_design(AiShipType::TerranHegemony, crate::ai_ship::roster::intern("bulwark"));
+        let lost_cell = built.hull_cells[5].grid_pos;
+        let lost_module = built.modules[3].grid_pos;
+        let wounds = Wounds { hull: vec![lost_cell], modules: vec![lost_module], integrity: 0.9 };
+        let hurt = wounded_design(&built, &wounds);
+        assert_eq!(hurt.hull_cells.len(), built.hull_cells.len() - 1);
+        assert!(hurt.modules.len() < built.modules.len());
+        assert!(hurt.hull_cells.iter().all(|c| c.grid_pos != lost_cell));
+        assert!(hurt.modules.iter().all(|m| m.grid_pos != lost_module));
+    }
+
+    #[test]
+    fn the_budget_counts_blocks_not_ships() {
+        let skiff = design_blocks(AiShipType::Shepherd, crate::ai_ship::roster::intern("lamb"));
+        let boss = design_blocks(AiShipType::Shepherd, crate::ai_ship::roster::intern("the_shepherd"));
+        assert!(boss > skiff * 10, "a boss costs far more than an attendant ({boss} vs {skiff})");
+    }
 }

@@ -138,8 +138,11 @@ fn sync_faction_stations(
     // Forget a station whose system is gone or which has been destroyed.
     let stale = stations.live.as_ref().and_then(|live| {
         let wrong_system = system.map_or(true, |s| s.id != live.system_id);
-        let core_dead = alive.get(live.core).map_or(true, |s| s.is_destroyed);
-        (wrong_system || core_dead).then(|| (wrong_system, core_dead))
+        // Destroyed is a station shot down; gone (despawned by a load, say)
+        // is only a record to drop.
+        let core_dead = alive.get(live.core).is_ok_and(|s| s.is_destroyed);
+        let core_gone = alive.get(live.core).is_err();
+        (wrong_system || core_dead || core_gone).then(|| (wrong_system, core_dead))
     });
     if let Some((wrong_system, core_dead)) = stale {
         let live = stations.live.take().unwrap();

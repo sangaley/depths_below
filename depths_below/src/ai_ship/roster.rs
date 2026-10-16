@@ -154,6 +154,21 @@ fn original_weight(faction: AiShipType) -> u32 {
     }
 }
 
+/// The roster's own `&'static str` for a key read back from a save: every
+/// class and every station design. None for a key no longer on any roster
+/// (the ship then flies its faction's original design).
+pub fn intern(key: &str) -> Option<&'static str> {
+    const ALL: [AiShipType; 10] = [
+        AiShipType::StellarPreserve, AiShipType::SynthesisCollective, AiShipType::BrokenChoir,
+        AiShipType::CorpseStars, AiShipType::TheSilence, AiShipType::TerranHegemony,
+        AiShipType::GildedThrone, AiShipType::RecursiveKingdom, AiShipType::EternalHegemony,
+        AiShipType::Shepherd,
+    ];
+    ALL.iter()
+        .flat_map(|&f| roster(f).iter().map(|c| c.key))
+        .find(|k| *k == key)
+}
+
 pub fn find(faction: AiShipType, key: &str) -> Option<&'static ShipClass> {
     roster(faction).iter().find(|c| c.key == key)
 }

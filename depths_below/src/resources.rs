@@ -1663,6 +1663,13 @@ pub struct SaveData {
     /// which load with the lore's starting standing.
     #[serde(default)]
     pub standing: Option<crate::diplomacy::FactionStanding>,
+    /// Every faction ship in the galaxy: class, position, health, damage,
+    /// alive or dead. None on older saves, which roll their fleets afresh.
+    #[serde(default)]
+    pub world: Option<crate::ai_ship::components::SavedWorld>,
+    /// Systems whose faction station you destroyed.
+    #[serde(default)]
+    pub destroyed_stations: Vec<u32>,
 }
 
 impl Default for SaveData {
@@ -1697,6 +1704,8 @@ impl Default for SaveData {
             contracts: crate::contracts::ContractState::default(),
             reputation: crate::contracts::FactionReputation::default(),
             standing: None,
+            world: None,
+            destroyed_stations: Vec::new(),
         }
     }
 }
@@ -1951,7 +1960,7 @@ mod save_tests {
     fn a_save_from_before_them_still_loads() {
         let mut json = serde_json::to_value(with_new_fields()).unwrap();
         let obj = json.as_object_mut().unwrap();
-        for key in ["uncharted_galaxy_pos", "fuel", "contracts", "reputation", "standing"] {
+        for key in ["uncharted_galaxy_pos", "fuel", "contracts", "reputation", "standing", "world", "destroyed_stations"] {
             assert!(obj.remove(key).is_some(), "{key} is not in the save under that name");
         }
         obj["galaxy_systems"][0].as_object_mut().unwrap().remove("looted_pois");
