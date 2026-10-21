@@ -1055,6 +1055,74 @@ fn leader_waypoints(fleet: &super::fleet::SimFleet, rng: &mut impl Rng) -> Vec<V
     }
 }
 
+/// A system changed hands. The loser's fleets there that are off-screen
+/// fall back to its nearest remaining system; the winner sends a garrison (a
+/// patrol, and a guard for the station it will put up). Fleets on screen
+/// stay and fight it out. A system nobody has populated yet needs nothing:
+/// it is populated for its new owner when it first loads.
+pub fn fleets_change_hands(
+    mut flips: MessageReader<crate::celestial::territory::SystemChangedHands>,
+    mut sim: ResMut<WorldSimulation>,
+    galaxy: Res<crate::celestial::resources::GalaxyMap>,
+) {
+    use super::fleet::FleetKind;
+    let sim: &mut WorldSimulation = &mut sim;
+    let mut rng = rand::thread_rng();
+    for flip in flips.read() {
+        if !sim.ships.iter().any(|s| s.system_id == flip.system_id) {
+            continue;
+        }
+        let Some(lost) = galaxy.systems.iter().find(|s| s.id == flip.system_id) else { continue };
+        if let Some(loser) = flip.from {
+            let refuge = galaxy
+                .systems
+                .iter()
+                .filter(|s| s.faction == Some(loser) && s.id != flip.system_id)
+                .min_by(|a, b| a.galaxy_pos.distance(lost.galaxy_pos).total_cmp(&b.galaxy_pos.distance(lost.galaxy_pos)));
+            if let Some(refuge) = refuge {
+                let live: std::collections::HashSet<u32> =
+                    sim.ships.iter().filter(|s| s.spawned && s.fleet != 0).map(|s| s.fleet).collect();
+                let home = crate::celestial::galaxy::faction_cluster_center(refuge);
+                for fleet in sim.fleets.iter_mut() {
+                    if fleet.system_id != flip.system_id || fleet.faction != loser || live.contains(&fleet.id) {
+                        continue;
+                    }
+                    let at = home + Vec2::from_angle(rng.gen_range(0.0..std::f32::consts::TAU)) * rng.gen_range(3_000.0..12_000.0);
+                    fleet.system_id = refuge.id;
+                    fleet.position = at;
+                    fleet.home_zone = home;
+                    fleet.destination = at;
+                    fleet.route.clear();
+                    if fleet.kind == FleetKind::Convoy {
+                        fleet.kind = FleetKind::Patrol;
+                    }
+                    let fleet = fleet.clone();
+                    for ship in sim.ships.iter_mut().filter(|s| s.fleet == fleet.id) {
+                        ship.system_id = refuge.id;
+                        ship.home_zone = home;
+                        ship.position = fleet.slot_position(ship.slot);
+                    }
+                }
+            }
+        }
+        let Some(template) = faction_territories().into_iter().find(|t| t.faction == flip.to) else { continue };
+        let home = crate::celestial::galaxy::faction_cluster_center(lost);
+        let mut held = super::fleet::Held::new();
+        let guard = crate::diplomacy::stations::station_plan(flip.to).is_some();
+        for kind in [FleetKind::Patrol, FleetKind::StationGuard] {
+            if kind == FleetKind::StationGuard && !guard {
+                continue;
+            }
+            let Some(hulls) = super::fleet::compose(flip.to, kind, &mut rng, &mut held) else { continue };
+            let at = home + Vec2::from_angle(rng.gen_range(0.0..std::f32::consts::TAU)) * rng.gen_range(3_000.0..12_000.0);
+            let radius = if kind == FleetKind::StationGuard { GUARD_RADIUS } else { template.radius };
+            let (mut fleet, members) = super::fleet::new_fleet(flip.to, kind, &hulls, flip.system_id, at, home, radius, &mut rng);
+            fleet.destination = patrol_waypoint(&mut rng, home, radius);
+            sim.add_fleet(fleet, members);
+        }
+    }
+}
+
 /// Keep the records of on-screen ships current: where they are, how hurt,
 /// what they've lost, and where their fleet is. Once a second.
 ///

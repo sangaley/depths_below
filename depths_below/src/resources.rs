@@ -1612,6 +1612,17 @@ pub struct SystemSaveData {
     /// celestial::resources::LootedPois). Empty on older saves.
     #[serde(default)]
     pub looted_pois: Vec<u32>,
+    /// Who holds it now, and whether it's their capital: borders move
+    /// (celestial::territory). None on older saves: the generated owner stands.
+    #[serde(default)]
+    pub held: Option<HeldBy>,
+}
+
+/// A system's owner as saved.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct HeldBy {
+    pub owner: Option<crate::ai_ship::components::AiShipType>,
+    pub capital: bool,
 }
 
 #[derive(Resource, Serialize, Deserialize)]
@@ -1671,6 +1682,9 @@ pub struct SaveData {
     /// Systems whose faction station you destroyed.
     #[serde(default)]
     pub destroyed_stations: Vec<u32>,
+    /// The border war's standing: every contested system's shares.
+    #[serde(default)]
+    pub border_war: Option<crate::celestial::territory::BorderWar>,
 }
 
 impl Default for SaveData {
@@ -1707,6 +1721,7 @@ impl Default for SaveData {
             standing: None,
             world: None,
             destroyed_stations: Vec::new(),
+            border_war: None,
         }
     }
 }
@@ -1934,6 +1949,7 @@ mod save_tests {
             last_updated: 12.0,
             resource_fraction_remaining: 0.5,
             looted_pois: vec![0, 2],
+            held: Some(HeldBy { owner: Some(crate::ai_ship::components::AiShipType::TerranHegemony), capital: true }),
         }];
         save.uncharted_galaxy_pos = Some(Vec2::new(1_200_000.0, -40_000.0));
         save.fuel = Some(321.0);

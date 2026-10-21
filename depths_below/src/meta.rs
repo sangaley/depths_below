@@ -146,6 +146,7 @@ fn collect_save_data(
     standing: &crate::diplomacy::FactionStanding,
     sim: &crate::ai_ship::components::WorldSimulation,
     stations: &crate::diplomacy::stations::FactionStations,
+    war: &crate::celestial::territory::BorderWar,
 ) -> SaveData {
     let position = ship_query
         .single()
@@ -243,6 +244,7 @@ fn collect_save_data(
             last_updated: s.last_updated,
             resource_fraction_remaining: s.resource_fraction_remaining,
             looted_pois: looted.for_system(s.id).to_vec(),
+            held: Some(crate::resources::HeldBy { owner: s.faction, capital: s.capital }),
         }).collect(),
         uncharted_galaxy_pos: streaming.loaded_system.is_none().then_some(streaming.current_galaxy_pos),
         fuel: Some(fuel.current_fuel),
@@ -251,6 +253,7 @@ fn collect_save_data(
         standing: Some(standing.clone()),
         world: sim.initialized.then(|| sim.snapshot()),
         destroyed_stations: stations.destroyed.clone(),
+        border_war: Some(war.clone()),
     }
 }
 
@@ -306,6 +309,7 @@ fn handle_save_request(
         Res<crate::diplomacy::FactionStanding>,
         Res<crate::ai_ship::components::WorldSimulation>,
         Res<crate::diplomacy::stations::FactionStations>,
+        Res<crate::celestial::territory::BorderWar>,
     ),
     current_state: Res<State<GameState>>,
     ship_query: Query<&Transform, With<Ship>>,
@@ -318,7 +322,7 @@ fn handle_save_request(
     hull_query: Query<(&HullSegment, &Transform), PlayerBlocks>,
     crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
 ) {
-    let (world_state, galaxy_map, streaming, drifting_dead, looted, fuel, contracts, reputation, standing, sim, faction_stations) = &world_galaxy;
+    let (world_state, galaxy_map, streaming, drifting_dead, looted, fuel, contracts, reputation, standing, sim, faction_stations, war) = &world_galaxy;
     for event in save_events.read() {
         let save_data = collect_save_data(
             event.slot,
@@ -345,6 +349,7 @@ fn handle_save_request(
             standing,
             sim,
             faction_stations,
+            war,
         );
 
         // Tier 3 customization is saved via customization_params field
@@ -504,6 +509,7 @@ fn rebuild_entities_from_save(
         Query<Entity, With<crate::celestial::components::StarSystemMember>>,
         Query<Entity, With<crate::ai_ship::components::AiShip>>,
         ResMut<crate::diplomacy::stations::FactionStations>,
+        ResMut<crate::celestial::territory::BorderWar>,
     ),
     // State the old ship was in the middle of, that the loaded one is not.
     flight: (
@@ -512,7 +518,7 @@ fn rebuild_entities_from_save(
         ResMut<crate::ui::PendingWarpTarget>,
     ),
 ) {
-    let (mut galaxy, mut looted, mut sim, textures, time, members, ai_ships, mut faction_stations) = world;
+    let (mut galaxy, mut looted, mut sim, textures, time, members, ai_ships, mut faction_stations, mut border_war) = world;
     let (mut rebuild_queue, mut towing, mut dash_target) = flight;
     let Some(save) = pending.save_data.take() else { return };
     let slot = pending.slot;
@@ -680,6 +686,11 @@ fn rebuild_entities_from_save(
                 sys.discovery = SystemDiscovery::from_u8(sd.discovery);
                 sys.last_updated = sd.last_updated;
                 sys.resource_fraction_remaining = sd.resource_fraction_remaining;
+                if let Some(held) = sd.held {
+                    sys.faction = held.owner;
+                    sys.capital = held.capital;
+                    sys.danger_tier = crate::celestial::territory::danger_of(sys);
+                }
             }
             for &poi_slot in &sd.looted_pois {
                 looted.mark(sd.id, poi_slot);
@@ -743,6 +754,7 @@ fn rebuild_entities_from_save(
             sim.restore(world);
             faction_stations.live = None;
             faction_stations.destroyed = save.destroyed_stations.clone();
+            *border_war = save.border_war.clone().unwrap_or_default();
         }
         // A running simulation populates the saved system
         // and its neighbours now (a no-op for any already populated). One not
@@ -861,9 +873,10 @@ pub fn reset_for_new_game(
         ResMut<crate::ai_ship::components::WorldSimulation>,
         ResMut<LootedPois>,
         ResMut<crate::diplomacy::stations::FactionStations>,
+        ResMut<crate::celestial::territory::BorderWar>,
     ),
 ) {
-    let (mut spawned, mut sim, mut looted, mut faction_stations) = world;
+    let (mut spawned, mut sim, mut looted, mut faction_stations, mut border_war) = world;
     if requests.read().next().is_none() {
         return;
     }
@@ -895,6 +908,7 @@ pub fn reset_for_new_game(
     *spawned = GalaxyState::default();
     *sim = crate::ai_ship::components::WorldSimulation::default();
     *faction_stations = crate::diplomacy::stations::FactionStations::default();
+    *border_war = crate::celestial::territory::BorderWar::default();
     // Derelicts stripped last run are full again in a new galaxy.
     *looted = LootedPois::default();
 

@@ -53,6 +53,9 @@ const PLANS: &[(AiShipType, StationPlan)] = &[
     (AiShipType::FreeHaulersCompact, plan("depot", "Depot", None, 0)),
 ];
 
+/// Control a point of trade standing buys the station's owner.
+const TRADE_PUSH: f32 = 0.5;
+
 /// How a faction's own prices lean, on top of what your standing gets you:
 /// the Princes charge more for their luxuries and pay more for your cargo;
 /// the Compact is cheap at both ends. (buy, sell) multipliers.
@@ -352,6 +355,27 @@ fn clear_dock_terms(mut market: ResMut<MarketEvents>) {
     market.dock_terms = None;
 }
 
+/// A system changed hands: the old owner's station there goes (the new
+/// owner's appears next time you come near), and one you'd destroyed is
+/// rebuilt by the new owner.
+fn station_changes_hands(
+    mut commands: Commands,
+    mut flips: MessageReader<crate::celestial::territory::SystemChangedHands>,
+    mut stations: ResMut<FactionStations>,
+) {
+    for flip in flips.read() {
+        stations.destroyed.retain(|&s| s != flip.system_id);
+        if stations.live.as_ref().is_some_and(|l| l.system_id == flip.system_id) {
+            let live = stations.live.take().unwrap();
+            for e in std::iter::once(live.core).chain(live.parts) {
+                if let Ok(mut ec) = commands.get_entity(e) {
+                    ec.try_despawn();
+                }
+            }
+        }
+    }
+}
+
 /// Docked at an ownerless station: free-port prices (after the opening grace).
 fn free_port_docking(
     mut market: ResMut<MarketEvents>,
@@ -384,7 +408,14 @@ fn standing_from_trade(
     inventory: Res<Inventory>,
     mut standing: ResMut<FactionStanding>,
     mut last: Local<Option<u32>>,
+    // Trade also strengthens the station's owner's hold on its system.
+    border: (
+        ResMut<crate::celestial::territory::BorderWar>,
+        ResMut<crate::celestial::resources::GalaxyMap>,
+        Res<SystemStreamingManager>,
+    ),
 ) {
+    let (mut war, mut galaxy, streaming) = border;
     let held: u32 = inventory.items.values().sum();
     let Some((terms, faction)) = market.dock_terms.as_ref().and_then(|t| t.faction.map(|f| (t, f))) else {
         *last = None;
@@ -399,6 +430,10 @@ fn standing_from_trade(
         let gain = (moved * 0.2).clamp(0.5, 3.0);
         let verb = if held < before { "sold" } else { "bought" };
         standing.change(faction, gain, format!("You {verb} goods at {}", terms.name));
+        // Strengthening an owner never hands its system to anyone else.
+        if let Some(system) = streaming.loaded_system {
+            war.push(&mut galaxy, system, faction, gain * TRADE_PUSH);
+        }
         // The trade war: business with one guild is business taken from the other.
         if faction.is_trading() {
             for &rival in super::FACTIONS.iter() {
@@ -500,6 +535,7 @@ impl Plugin for FactionStationPlugin {
             // pausing while docked leaves and re-enters Docked, and the
             // station's terms must survive that.
             .add_systems(OnEnter(GameState::Exploring), clear_dock_terms)
+            .add_systems(Update, station_changes_hands)
             .add_systems(OnEnter(GameState::Docked), free_port_docking)
             .add_systems(OnEnter(GameState::StationDocked), free_port_docking);
     }

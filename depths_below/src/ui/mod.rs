@@ -3411,8 +3411,10 @@ fn toggle_galaxy_view(
     pending: Res<PendingWarpTarget>,
     fuel_state: Res<FuelState>,
     windows: Query<&Window>,
-    standing: Res<crate::diplomacy::FactionStanding>,
+    // Bundled: this system is at Bevy's 16-param cap.
+    politics: (Res<crate::diplomacy::FactionStanding>, Res<crate::celestial::territory::BorderWar>),
 ) {
+    let (standing, war) = politics;
     let Ok(entity) = existing.single() else { return };
     if !keyboard.just_pressed(KeyCode::Tab) {
         return;
@@ -3433,7 +3435,7 @@ fn toggle_galaxy_view(
         MapViewMode::Galaxy => {
             let (win_w, win_h) = windows.single().map(|w| (w.width(), w.height())).unwrap_or((1280.0, 800.0));
             let panel_size = (win_w.min(win_h) * 0.85).max(200.0);
-            spawn_galaxy_map_overlay(&mut commands, &galaxy_map, &streaming, pending_galaxy.0, &fuel_state, &standing, panel_size);
+            spawn_galaxy_map_overlay(&mut commands, &galaxy_map, &streaming, pending_galaxy.0, &fuel_state, &standing, &war, panel_size);
         }
     }
 }
@@ -3463,6 +3465,7 @@ fn spawn_galaxy_map_overlay(
     pending: Option<crate::celestial::resources::GalaxyWarpTarget>,
     fuel_state: &FuelState,
     standing: &crate::diplomacy::FactionStanding,
+    war: &crate::celestial::territory::BorderWar,
     panel_size: f32,
 ) {
     use crate::celestial::resources::SystemDiscovery;
@@ -3518,9 +3521,12 @@ fn spawn_galaxy_map_overlay(
                     let (x, y) = galaxy_to_map_px(sys.galaxy_pos, panel_size);
                     // A capital wears a ring in its owner's colour; a haunted
                     // system a red one, wider -- the boss is what matters there.
+                    // Contested: a rival holds a real share (a quarter or more).
+                    let contested = war.contest(sys.id).is_some_and(|c| c.claims.iter().any(|(_, share)| *share >= 25.0));
                     for (ring, ring_color, show) in [
                         (size + 8.0, owner_color, sys.capital),
                         (size + 14.0, Color::srgb(0.95, 0.15, 0.15), sys.haunt.is_some()),
+                        (size + 20.0, Color::srgb(0.95, 0.75, 0.2), contested),
                     ] {
                         if show {
                             map.spawn((
@@ -3702,6 +3708,15 @@ fn spawn_galaxy_map_overlay(
                     if let Some(boss) = sys.haunt {
                         caption(parent, format!("Haunted by {}", faction_display_name(boss)), Color::srgb(0.95, 0.3, 0.3));
                     }
+                    if let Some(contest) = war.contest(id) {
+                        for (claimant, share) in contest.claims.iter().filter(|(_, share)| *share >= 1.0) {
+                            caption(
+                                parent,
+                                format!("Contested: {} holds {:.0}%", faction_display_name(*claimant), share),
+                                Color::srgb(0.95, 0.75, 0.2),
+                            );
+                        }
+                    }
                 }
             }
 
@@ -3732,8 +3747,35 @@ fn spawn_galaxy_map_overlay(
                     ));
                 }
             }
+            // Systems that changed hands lately, on your charts.
+            let news: Vec<String> = war
+                .news
+                .iter()
+                .rev()
+                .filter_map(|(id, _, to)| {
+                    let sys = galaxy_map.systems.iter().find(|s| s.id == *id)?;
+                    (sys.discovery != SystemDiscovery::Unknown)
+                        .then(|| format!("{} fell to the {}", sys.name, faction_display_name(*to)))
+                })
+                .take(5)
+                .collect();
+            if !news.is_empty() {
+                parent.spawn((
+                    Text::new("RECENT"),
+                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                    TextColor(theme::ThemeColors::TEXT_MUTED),
+                    Node { margin: UiRect::top(Val::Px(theme::ThemeSpacing::SM)), ..default() },
+                ));
+                for line in news {
+                    parent.spawn((
+                        Text::new(line),
+                        TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                        TextColor(theme::ThemeColors::TEXT_SECONDARY),
+                    ));
+                }
+            }
             parent.spawn((
-                Text::new("Ring: capital   Red ring: haunted"),
+                Text::new("Ring: capital   Red: haunted   Amber: contested"),
                 TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
                 TextColor(theme::ThemeColors::TEXT_MUTED),
                 Node { margin: UiRect::top(Val::Px(theme::ThemeSpacing::SM)), ..default() },
@@ -3826,6 +3868,7 @@ fn galaxy_map_click_system(
     fuel_state: Res<FuelState>,
     mut notifications: MessageWriter<ShowNotification>,
     standing: Res<crate::diplomacy::FactionStanding>,
+    war: Res<crate::celestial::territory::BorderWar>,
 ) {
     use crate::celestial::resources::{GalaxyWarpTarget, SystemDiscovery};
 
@@ -3870,7 +3913,7 @@ fn galaxy_map_click_system(
     }
     let (win_w, win_h) = windows.single().map(|w| (w.width(), w.height())).unwrap_or((1280.0, 800.0));
     let panel_size = (win_w.min(win_h) * 0.85).max(200.0);
-    spawn_galaxy_map_overlay(&mut commands, &galaxy_map, &streaming, pending.0, &fuel_state, &standing, panel_size);
+    spawn_galaxy_map_overlay(&mut commands, &galaxy_map, &streaming, pending.0, &fuel_state, &standing, &war, panel_size);
 }
 
 /// G: hold to charge a warp dash toward the pending map destination. Release
@@ -6504,7 +6547,8 @@ mod galaxy_map_tests {
         {
             let world = app.world_mut();
             let mut commands = world.commands();
-            spawn_galaxy_map_overlay(&mut commands, &map, &streaming, Some(GalaxyWarpTarget::System(haunted)), &fuel, &standing, 600.0);
+            let war = crate::celestial::territory::BorderWar::default();
+            spawn_galaxy_map_overlay(&mut commands, &map, &streaming, Some(GalaxyWarpTarget::System(haunted)), &fuel, &standing, &war, 600.0);
         }
         app.update();
         let all = texts(&mut app);

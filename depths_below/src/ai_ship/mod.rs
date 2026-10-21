@@ -26,6 +26,8 @@ pub struct AiShipPlugin;
 impl Plugin for AiShipPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Last, clear_ships_left_by_load);
+        // A system changing hands moves its fleets (celestial::territory).
+        app.add_systems(Update, simulation::fleets_change_hands);
         app
             .init_resource::<WorldSimulation>()
             .init_resource::<scavenger::ScavengerWaves>()

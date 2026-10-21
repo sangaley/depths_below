@@ -144,6 +144,7 @@ fn census(
     time: Res<Time>,
     mut next: Local<f32>,
     mut dumped: Local<bool>,
+    mut last_holdings: Local<String>,
     galaxy: Res<crate::celestial::resources::GalaxyMap>,
     ai: Query<(), With<AiShip>>,
     owned: Query<(), With<crate::ai_ship::components::OwnedByAiShip>>,
@@ -165,6 +166,19 @@ fn census(
         return;
     }
     *next = 1.0;
+    // Who holds how much, whenever it changes: borders move (territory),
+    // and a load must put them back where the save had them.
+    if !galaxy.systems.is_empty() {
+        let line = crate::celestial::territory::TERRITORIAL
+            .iter()
+            .map(|f| format!("{f:?}={}", galaxy.systems.iter().filter(|s| s.faction == Some(*f)).count()))
+            .collect::<Vec<_>>()
+            .join(" ");
+        if *last_holdings != line {
+            info!("HOLDINGS {line}");
+            *last_holdings = line;
+        }
+    }
     // The territory map, once, when the galaxy exists.
     if !*dumped && !galaxy.systems.is_empty() {
         *dumped = true;

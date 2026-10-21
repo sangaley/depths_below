@@ -30,6 +30,7 @@ pub enum CelestialSet {
 impl Plugin for CelestialPlugin {
     fn build(&self, app: &mut App) {
         app
+            .add_plugins(territory::TerritoryPlugin)
             .init_resource::<resources::GalaxyState>()
             .init_resource::<resources::CelestialConfig>()
             .init_resource::<resources::GalaxyMap>()

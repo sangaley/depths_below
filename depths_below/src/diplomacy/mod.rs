@@ -205,7 +205,7 @@ impl FactionStanding {
 }
 
 /// What a kill costs with the victim's faction, by what kind of hull it was.
-fn kill_penalty(role: Option<ClassRole>, station: bool, platform: bool) -> f32 {
+pub(crate) fn kill_penalty(role: Option<ClassRole>, station: bool, platform: bool) -> f32 {
     if platform {
         return 15.0;
     }
