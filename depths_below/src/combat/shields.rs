@@ -365,7 +365,7 @@ pub fn refresh_player_shield_skin(
     *last_hash = hash;
     // drop the previous skin sprite(s) for the player ship, then rebuild
     for (e, p) in skin_query.iter() {
-        if p.parent() == ship { commands.entity(e).despawn(); }
+        if p.parent() == ship { commands.entity(e).try_despawn(); }
     }
     spawn_shield_skin(&mut commands, &mut images, ship, &cells, true);
 }

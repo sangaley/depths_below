@@ -13,6 +13,7 @@ pub mod interior;
 mod power;
 pub mod roster;
 pub mod fleet;
+pub mod standing_spawns;
 
 use bevy::prelude::*;
 
@@ -28,6 +29,17 @@ impl Plugin for AiShipPlugin {
         app.add_systems(Last, clear_ships_left_by_load);
         // A system changing hands moves its fleets (celestial::territory).
         app.add_systems(Update, simulation::fleets_change_hands);
+        // Your standing sends hunters, escorts and war fleets.
+        app.init_resource::<standing_spawns::StandingSpawns>().add_systems(
+            Update,
+            (
+                standing_spawns::standing_spawns,
+                standing_spawns::war_fleets,
+                standing_spawns::tick_missions,
+                standing_spawns::allies_defend_player,
+            )
+                .run_if(in_state(crate::states::GameState::Exploring)),
+        );
         app
             .init_resource::<WorldSimulation>()
             .init_resource::<scavenger::ScavengerWaves>()

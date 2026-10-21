@@ -243,7 +243,7 @@ pub fn draw_aim_lock(
     camera: Query<&Projection, With<crate::camera::MainCamera>>,
 ) {
     for entity in existing.iter() {
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
     let Some(point) = lock.aim_point() else { return };
 

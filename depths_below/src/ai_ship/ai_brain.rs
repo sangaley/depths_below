@@ -50,6 +50,8 @@ pub fn ai_brain_system(
         Option<&AiLoadout>,
         Option<&super::fleet::FleetMember>,
         Has<super::fleet::CivilianHull>,
+        Has<super::standing_spawns::PlayerEscort>,
+        Has<super::standing_spawns::Hunter>,
     )>,
     player_ship: Query<(Entity, &Transform, &Children), With<Ship>>,
     player_weapon_query: Query<(&Weapon, &Module), Without<OwnedByAiShip>>,
@@ -83,10 +85,10 @@ pub fn ai_brain_system(
     // living member nearest the formation's centre. (fleet, ship, position,
     // facing, slot)
     let mut fleet_anchors: Vec<(u32, Entity, Vec2, Quat, Vec2)> = Vec::new();
-    for (entity, transform, ship_type, state, _, _, _, _, children, _, member, _) in ai_ships.iter() {
+    for (entity, transform, ship_type, state, _, _, _, _, children, _, member, _, escort, _) in ai_ships.iter() {
         if !state.is_destroyed {
             ai_factions.push((entity, *ship_type));
-            if let Some(m) = member {
+            if let Some(m) = member.filter(|_| !escort) {
                 let candidate = (m.fleet, entity, transform.translation.truncate(), transform.rotation, m.slot);
                 match fleet_anchors.iter_mut().find(|a| a.0 == m.fleet) {
                     None => fleet_anchors.push(candidate),
@@ -116,7 +118,11 @@ pub fn ai_brain_system(
         (e, t.translation.truncate(), threat_value(children, weapon_dmg))
     });
 
-    for (entity, transform, ship_type, mut state, mut behavior, mut nav, mut timer, mut ai_target, children, loadout, member, civilian) in ai_ships.iter_mut() {
+    // An escort forms up on you: where you are and which way you face.
+    let player_frame: Option<(Vec2, Quat)> =
+        player_ship.iter().next().map(|(_, t, _)| (t.translation.truncate(), t.rotation));
+
+    for (entity, transform, ship_type, mut state, mut behavior, mut nav, mut timer, mut ai_target, children, loadout, member, civilian, escort, hunter) in ai_ships.iter_mut() {
         timer.timer.tick(time.delta());
         if !timer.timer.just_finished() {
             continue;
@@ -305,6 +311,9 @@ pub fn ai_brain_system(
         // A fleet escort's place: its slot on whoever the fleet forms up on,
         // turned with that ship. None for a leader or a ship alone.
         let formation_point: Option<Vec2> = member.and_then(|m| {
+            if escort {
+                return player_frame.map(|(at, facing)| at + (facing * m.slot.extend(0.0)).truncate());
+            }
             fleet_anchors
                 .iter()
                 .find(|a| a.0 == m.fleet && a.1 != entity)
@@ -956,6 +965,20 @@ pub fn ai_brain_system(
                         target: None,
                     });
                 }
+            }
+        }
+
+        // A hunter came for you: it closes and engages wherever you are in
+        // the system, whatever its faction's habits, unless its own
+        // survival or its signature move scores higher.
+        if hunter {
+            if let Some((pe, pp, _)) = player_info {
+                actions.push(ScoredAction {
+                    score: 92.0,
+                    behavior: AiShipBehavior::Engaging,
+                    destination: Some(pp),
+                    target: Some((pe, pp)),
+                });
             }
         }
 

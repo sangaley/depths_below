@@ -37,7 +37,7 @@ pub fn enforce_projectile_limit(
     to_remove.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
     for (entity, _) in to_remove.iter().take(excess) {
-        commands.entity(*entity).despawn();
+        commands.entity(*entity).try_despawn();
     }
 }
 
@@ -72,6 +72,6 @@ pub fn enforce_particle_limit(
     to_remove.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
     for (entity, _) in to_remove.iter().take(excess) {
-        commands.entity(*entity).despawn();
+        commands.entity(*entity).try_despawn();
     }
 }

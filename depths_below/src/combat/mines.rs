@@ -34,7 +34,7 @@ pub(super) fn mine_system(
 
         // Despawn expired mines
         if mine.lifetime.is_finished() {
-            commands.entity(mine_entity).despawn();
+            commands.entity(mine_entity).try_despawn();
             continue;
         }
 
@@ -50,7 +50,7 @@ pub(super) fn mine_system(
             if mine_pos.distance(c_pos) < mine.detection_radius {
                 // Detonate: despawn mine, spawn explosion entity
                 let damage = mine.damage;
-                commands.entity(mine_entity).despawn();
+                commands.entity(mine_entity).try_despawn();
                 commands.spawn((
                     (Sprite {
                             image: asset_server.load(crate::sprite_map::effect_sprite_path("explosion")),
@@ -99,7 +99,7 @@ pub(super) fn mine_explosion_system(
 
         // Despawn after timer
         if explosion.timer.is_finished() {
-            commands.entity(exp_entity).despawn();
+            commands.entity(exp_entity).try_despawn();
         }
     }
 }

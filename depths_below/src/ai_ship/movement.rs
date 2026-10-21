@@ -17,6 +17,7 @@ pub fn ai_ship_movement_system(
         &Children,
         Option<&crate::ship::collision::Collider>,
         Option<&super::fleet::FleetMember>,
+        Has<super::standing_spawns::PlayerEscort>,
     ), With<AiShip>>,
     engine_query: Query<(&Engine, &Module, &OwnedByAiShip)>,
     weapon_query: Query<(&Weapon, &Module, &OwnedByAiShip), Without<Engine>>,
@@ -36,7 +37,7 @@ pub fn ai_ship_movement_system(
         (crate::ship::collision::world_point(tf, c.bound_center), c.bound_radius)
     });
 
-    for (_entity, mut transform, mut velocity, behavior, nav, state, ship_type, children, collider, member) in ai_ships.iter_mut() {
+    for (_entity, mut transform, mut velocity, behavior, nav, state, ship_type, children, collider, member, escort) in ai_ships.iter_mut() {
         if *behavior == AiShipBehavior::Dead || state.is_destroyed {
             velocity.0 = Vec2::ZERO;
             continue;
@@ -89,11 +90,14 @@ pub fn ai_ship_movement_system(
         let to_slot = nav.destination.map_or(0.0, |d| d.distance(transform.translation.truncate()));
         let behavior_mult = match (member, behavior) {
             (Some(m), AiShipBehavior::Patrolling) if m.leader => behavior_mult * 0.75,
+            // An escort keeps up with you: you fly at full speed, it doesn't
+            // dawdle at patrol pace.
+            (Some(_), AiShipBehavior::Patrolling) if escort => behavior_mult * 1.6,
             (Some(_), AiShipBehavior::Patrolling) if to_slot > 1_500.0 => behavior_mult * 1.35,
             _ => behavior_mult,
         };
         // An escort settles into its slot rather than overshooting it.
-        let settle = member.is_some_and(|m| !m.leader) && *behavior == AiShipBehavior::Patrolling;
+        let settle = (escort || member.is_some_and(|m| !m.leader)) && *behavior == AiShipBehavior::Patrolling;
 
         // Faction-specific speed characteristics
         let faction_mult = match ship_type {
@@ -167,6 +171,14 @@ pub fn ai_ship_movement_system(
                     AiShipType::GildedThrone => 2200.0,
                     _ => 1800.0,
                 }
+            } else {
+                0.0
+            };
+            // Measured from the ship's centre, so a hull kilometres across
+            // held its "distance" with its own bow in your hull, shoving you
+            // across the system. The standoff starts where its hull ends.
+            let standoff = if standoff > 0.0 {
+                standoff + collider.map_or(0.0, |c| c.bound_radius)
             } else {
                 0.0
             };

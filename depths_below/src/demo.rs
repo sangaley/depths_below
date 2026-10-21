@@ -159,7 +159,9 @@ fn census(
         &crate::ai_ship::components::AiShipBehavior,
         &crate::ai_ship::components::AiShipState,
         Has<crate::ai_ship::fleet::CivilianHull>,
+        Has<crate::ai_ship::standing_spawns::PlayerEscort>,
     )>,
+    player: Query<&Transform, With<crate::components::Ship>>,
 ) {
     *next -= time.delta_secs();
     if *next > 0.0 {
@@ -211,8 +213,22 @@ fn census(
     ids.sort_unstable();
     ids.dedup();
     for id in ids {
+        // An escort forms up on you.
+        if let (Some((_, _, b, _, _, true)), Ok(you)) = (fleets.iter().find(|(_, m, ..)| m.fleet == id), player.single()) {
+            let parts: Vec<String> = fleets
+                .iter()
+                .filter(|(_, m, ..)| m.fleet == id)
+                .map(|(tf, m, b, ..)| {
+                    let want = you.translation.truncate() + (you.rotation * m.slot.extend(0.0)).truncate();
+                    format!("{:?} off={:.0}", b, tf.translation.truncate().distance(want))
+                })
+                .collect();
+            let _ = b;
+            info!("ESCORT {id}: {}", parts.join(" | "));
+            continue;
+        }
         let members: Vec<_> = fleets.iter().filter(|(_, m, ..)| m.fleet == id).collect();
-        let Some((lead_tf, _, lead_b, _, _)) = members.iter().find(|(_, m, ..)| m.leader) else {
+        let Some((lead_tf, _, lead_b, _, _, _)) = members.iter().find(|(_, m, ..)| m.leader) else {
             info!("FLEET {id}: no live leader, {} members", members.len());
             continue;
         };
@@ -220,7 +236,7 @@ fn census(
         let parts: Vec<String> = members
             .iter()
             .filter(|(_, m, ..)| !m.leader)
-            .map(|(tf, m, b, st, civ)| {
+            .map(|(tf, m, b, st, civ, _)| {
                 let want = lead + (lead_tf.rotation * m.slot.extend(0.0)).truncate();
                 let off = tf.translation.truncate().distance(want);
                 format!("{}{:?} off={:.0}{}", if *civ { "civ " } else { "" }, b, off, if st.is_destroyed { " DEAD" } else { "" })

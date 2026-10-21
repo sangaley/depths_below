@@ -578,7 +578,7 @@ pub fn move_missiles(
         missile.age += dt;
         missile.life -= dt;
         if missile.life <= 0.0 {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
             continue;
         }
 
@@ -844,7 +844,7 @@ pub fn check_missile_hits(
                     {
                         shield.absorb(missile.damage);
                         spawn_explosion(&mut commands, &fx, missile_pos_now, missile.blast_radius * 0.7, Color::srgb(0.5, 0.8, 1.0));
-                        commands.entity(missile_entity).despawn();
+                        commands.entity(missile_entity).try_despawn();
                         continue 'missiles;
                     }
                 }
@@ -926,7 +926,7 @@ pub fn check_missile_hits(
                     duration: 2.5,
                 });
             }
-            commands.entity(missile_entity).despawn();
+            commands.entity(missile_entity).try_despawn();
             continue 'missiles;
         }
 
@@ -946,7 +946,7 @@ pub fn check_missile_hits(
             if shield.is_up() && dist_to_ship < shield.radius && shield.covers_arc(missile_pos - center) {
                 shield.absorb(missile.damage);
                 spawn_explosion(&mut commands, &fx, missile_pos, missile.blast_radius * 0.7, Color::srgb(0.5, 0.8, 1.0));
-                commands.entity(missile_entity).despawn();
+                commands.entity(missile_entity).try_despawn();
                 continue 'missiles;
             }
 
@@ -1027,7 +1027,7 @@ pub fn check_missile_hits(
                         direction: None,
                         attacker: owner_ship,
                     });
-                    commands.entity(missile_entity).despawn();
+                    commands.entity(missile_entity).try_despawn();
                     continue 'missiles;
                 }
             }
@@ -1057,7 +1057,7 @@ pub fn check_missile_hits(
             spawn_explosion(&mut commands, &fx, missile_pos, missile.blast_radius, Color::srgb(1.0, 0.5, 0.1));
             spawn_floating_damage(&mut commands, missile_pos, missile.damage, Color::srgb(1.0, 0.3, 0.1));
 
-            commands.entity(missile_entity).despawn();
+            commands.entity(missile_entity).try_despawn();
             break;
         }
     }

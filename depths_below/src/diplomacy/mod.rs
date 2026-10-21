@@ -120,6 +120,10 @@ pub struct FactionStanding {
     pub entries: Vec<FactionEntry>,
     #[serde(default)]
     pub log: Vec<StandingEvent>,
+    /// Factions you just dealt a big blow (a drop of PROVOCATION or more at
+    /// once), for ai_ship::standing_spawns to answer with a war fleet.
+    #[serde(skip)]
+    pub provocations: Vec<AiShipType>,
 }
 
 impl Default for FactionStanding {
@@ -130,6 +134,7 @@ impl Default for FactionStanding {
                 .map(|&f| FactionEntry { faction: f, value: starting_standing(f), allied: false })
                 .collect(),
             log: Vec::new(),
+            provocations: Vec::new(),
         }
     }
 }
@@ -188,6 +193,9 @@ impl FactionStanding {
         if e.allied && e.value < StandingTier::ALLIANCE_FROM - 20.0 {
             e.allied = false;
             reason.push_str(" (the alliance is over)");
+        }
+        if applied <= -crate::ai_ship::standing_spawns::PROVOCATION && !self.provocations.contains(&faction) {
+            self.provocations.push(faction);
         }
         if applied != 0.0 {
             self.log.push(StandingEvent { faction, delta: applied, reason });
@@ -313,9 +321,26 @@ fn standing_from_env(mut standing: ResMut<FactionStanding>, mut done: Local<bool
             warn!("DEPTHS_STANDING: no faction called {name:?}");
             continue;
         };
-        if let Ok(v) = value.trim().parse::<f32>() {
-            let now = standing.value(faction);
-            standing.change(faction, v - now, "DEPTHS_STANDING");
+        // "allied": an alliance (at 80); otherwise a number.
+        let (v, allied) = match value.trim() {
+            "allied" => (80.0, true),
+            v => match v.parse::<f32>() {
+                Ok(v) => (v, false),
+                Err(_) => continue,
+            },
+        };
+        let now = standing.value(faction);
+        standing.change(faction, v - now, "DEPTHS_STANDING");
+        if allied {
+            standing.set_allied(faction, true, "DEPTHS_STANDING");
+        }
+    }
+    // Setting it is not a blow you dealt them.
+    standing.provocations.clear();
+    // DEPTHS_PROVOKE=<Faction>: as if you'd just destroyed their station.
+    if let Ok(name) = std::env::var("DEPTHS_PROVOKE") {
+        if let Some(&faction) = FACTIONS.iter().find(|f| format!("{f:?}") == name.trim()) {
+            standing.provocations.push(faction);
         }
     }
 }
@@ -370,5 +395,19 @@ mod tests {
     fn a_save_without_standing_still_loads() {
         let s: FactionStanding = serde_json::from_str(r#"{"entries":[]}"#).unwrap();
         assert_eq!(s.value(AiShipType::CorpseStars), starting_standing(AiShipType::CorpseStars));
+    }
+
+    /// A big blow (a station, a capital ship) is a provocation; the cost of
+    /// a hit or a scout is not.
+    #[test]
+    fn a_big_blow_provokes() {
+        let mut s = FactionStanding::default();
+        s.change(AiShipType::TerranHegemony, -8.0, "a scout");
+        assert!(s.provocations.is_empty());
+        s.change(AiShipType::TerranHegemony, -50.0, "their station");
+        assert_eq!(s.provocations, vec![AiShipType::TerranHegemony]);
+        // Not saved: a load doesn't replay old grudges.
+        let back: FactionStanding = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert!(back.provocations.is_empty());
     }
 }

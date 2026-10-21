@@ -181,8 +181,8 @@ pub fn pd_missile_collision(
 
             if dist < 20.0 {
                 // Missile destroyed by point defense!
-                commands.entity(missile_entity).despawn();
-                commands.entity(proj_entity).despawn();
+                commands.entity(missile_entity).try_despawn();
+                commands.entity(proj_entity).try_despawn();
 
                 // Small explosion
                 spawn_hit_effect(&mut commands, missile_pos, Color::srgb(1.0, 0.6, 0.2), 15.0);

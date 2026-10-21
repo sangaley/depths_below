@@ -911,12 +911,20 @@ pub fn sync_simulation_entities(
                 commands.entity(root).insert(SpawnIntegrity(integrity));
             }
             if let Some(fleet) = &fleet {
-                let is_leader = leader == Some(index);
+                // An escort forms up on you, not on a leader of its own.
+                let escort = fleet.mission == super::fleet::Mission::Escort;
+                let is_leader = leader == Some(index) && !escort;
                 commands.entity(root).insert(super::fleet::FleetMember {
                     fleet: fleet.id,
                     slot: sim_ship.slot,
                     leader: is_leader,
                 });
+                if escort {
+                    commands.entity(root).insert(super::standing_spawns::PlayerEscort);
+                }
+                if matches!(fleet.mission, super::fleet::Mission::Hunt { .. }) {
+                    commands.entity(root).insert(super::standing_spawns::Hunter);
+                }
                 if is_leader {
                     let waypoints = leader_waypoints(fleet, &mut rng);
                     commands.entity(root).insert(AiShipNav {

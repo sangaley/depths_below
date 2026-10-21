@@ -115,7 +115,7 @@ pub fn update_damage_indicators(
         arrow.timer -= dt;
 
         if arrow.timer <= 0.0 {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
             continue;
         }
 
@@ -369,7 +369,7 @@ pub fn crew_fights_boarders(
     for (entity, mut parasite) in parasite_query.iter_mut() {
         parasite.health -= kill_rate;
         if parasite.health <= 0.0 {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
             notifications.write(ShowNotification {
                 message: "Crew eliminated a boarded parasite!".into(),
                 notification_type: NotificationType::Success,

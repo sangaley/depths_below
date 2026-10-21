@@ -55,6 +55,21 @@ pub struct SimFleet {
     pub route: Vec<Vec2>,
     #[serde(default)]
     pub leg: usize,
+    /// Sent after you, or with you (ai_ship::standing_spawns).
+    #[serde(default)]
+    pub mission: Mission,
+}
+
+/// What a fleet sent because of your standing is doing.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub enum Mission {
+    /// An ordinary fleet of its system.
+    #[default]
+    None,
+    /// Hunting you (a hunter wing, or a war fleet), for `left` more seconds.
+    Hunt { left: f32 },
+    /// Flying with you through its faction's space.
+    Escort,
 }
 
 impl SimFleet {
@@ -73,6 +88,7 @@ impl SimFleet {
             cruise,
             route: Vec::new(),
             leg: 0,
+            mission: Mission::None,
         }
     }
 

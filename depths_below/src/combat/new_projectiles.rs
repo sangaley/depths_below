@@ -621,7 +621,7 @@ pub fn move_projectiles(
         // Age
         proj.lifetime -= dt;
         if proj.lifetime <= 0.0 {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
         }
     }
 }
@@ -714,7 +714,7 @@ pub fn check_projectile_hits(
             if let Some(at) = contact.filter(|at| !phased && shield.is_up() && shield.covers_arc(*at - center)) {
                 shield.absorb(proj.damage);
                 spawn_hit_effect(&mut commands, at, Color::srgb(0.5, 0.8, 1.0), 14.0);
-                commands.entity(proj_entity).despawn();
+                commands.entity(proj_entity).try_despawn();
                 continue 'projectiles;
             }
 
@@ -875,7 +875,7 @@ pub fn check_projectile_hits(
                     // than filled with something wrong.
                     spawn_hit_effect(&mut commands, hit_pos, Color::srgb(0.95, 0.95, 0.85), 10.0);
                     if proj.bounces > MAX_BOUNCES {
-                        commands.entity(proj_entity).despawn();
+                        commands.entity(proj_entity).try_despawn();
                         continue 'projectiles;
                     }
                     // Plate normal back out into world space — the ship's
@@ -1069,7 +1069,7 @@ pub fn check_projectile_hits(
                     attacker: owner_ship,
                 });
                 if !penetrates {
-                    commands.entity(proj_entity).despawn();
+                    commands.entity(proj_entity).try_despawn();
                 }
                 continue 'projectiles;
             }
@@ -1137,7 +1137,7 @@ pub fn check_projectile_hits(
 
             // Despawn projectile (unless it penetrates)
             if proj.penetration < 30.0 || proj.has_penetrated {
-                commands.entity(proj_entity).despawn();
+                commands.entity(proj_entity).try_despawn();
             }
             // High penetration projectiles continue through
 
