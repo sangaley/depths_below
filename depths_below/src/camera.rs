@@ -623,6 +623,9 @@ fn update_depth_vignette(
                 // Stations are lit installations, not things you find
                 // with the torch -- and the beacons set their own alpha.
                 Without<crate::world::home_base::StationPart>,
+                // Far ships' pictures fade by their own distance rule, out
+                // past where this culls (ai_ship::preview).
+                Without<crate::ai_ship::preview::Preview>,
             ),
         ),
     >,

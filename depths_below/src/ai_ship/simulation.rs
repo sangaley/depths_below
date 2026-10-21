@@ -11,7 +11,7 @@ use super::spawner;
 /// distances up to ~8,160 (85% of their longest weapon's range, see
 /// ai_ship::movement). 10,000 means a ship materializes as a real entity
 /// before the player is even in its weapon range, instead of after.
-const RENDER_DISTANCE: f32 = 10_000.0;
+pub const RENDER_DISTANCE: f32 = 10_000.0;
 
 /// How many AI blocks (hull cells + modules) may exist as real entities at once.
 ///

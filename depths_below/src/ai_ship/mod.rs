@@ -14,6 +14,7 @@ mod power;
 pub mod roster;
 pub mod fleet;
 pub mod standing_spawns;
+pub mod preview;
 
 use bevy::prelude::*;
 
@@ -29,6 +30,13 @@ impl Plugin for AiShipPlugin {
         app.add_systems(Last, clear_ships_left_by_load);
         // A system changing hands moves its fleets (celestial::territory).
         app.add_systems(Update, simulation::fleets_change_hands);
+        // Far ships drawn as pictures of their designs, until they materialise.
+        app.init_resource::<preview::PreviewImages>().add_systems(
+            Update,
+            preview::sync_previews
+                .after(simulation::sync_simulation_entities)
+                .run_if(in_state(crate::states::GameState::Exploring)),
+        );
         // Your standing sends hunters, escorts and war fleets.
         app.init_resource::<standing_spawns::StandingSpawns>().add_systems(
             Update,

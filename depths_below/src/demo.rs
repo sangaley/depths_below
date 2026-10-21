@@ -162,6 +162,7 @@ fn census(
         Has<crate::ai_ship::standing_spawns::PlayerEscort>,
     )>,
     player: Query<&Transform, With<crate::components::Ship>>,
+    previews: Query<(&Transform, &Sprite), With<crate::ai_ship::preview::Preview>>,
 ) {
     *next -= time.delta_secs();
     if *next > 0.0 {
@@ -207,6 +208,17 @@ fn census(
         concealed.iter().count(),
         dead.bodies.len()
     );
+    // Far ships drawn as pictures: how many, and the nearest.
+    if let Ok(you) = player.single() {
+        let you = you.translation.truncate();
+        let nearest = previews
+            .iter()
+            .map(|(t, s)| (t.translation.truncate().distance(you), s.color.alpha()))
+            .min_by(|a, b| a.0.total_cmp(&b.0));
+        if let Some((d, a)) = nearest {
+            info!("PREVIEWS {} nearest {:.0} alpha {:.2}", previews.iter().count(), d, a);
+        }
+    }
     // Each live fleet: where its leader is, and how far each escort sits
     // from its slot (turned with the leader), and what it is doing.
     let mut ids: Vec<u32> = fleets.iter().map(|(_, m, ..)| m.fleet).collect();
