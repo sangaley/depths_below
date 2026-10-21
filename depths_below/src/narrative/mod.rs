@@ -180,6 +180,8 @@ mod tests {
             local_center: Vec2::ZERO,
             seed: 0,
             faction: None,
+            capital: false,
+            haunt: None,
             danger_tier: 0.0,
             discovery,
             last_updated: 0.0,

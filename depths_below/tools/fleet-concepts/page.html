@@ -183,7 +183,7 @@ function concept(f, i) {
     <div class="sheet">
       <div><span class="cls">${esc(i.cls)}</span><h3>${esc(i.name)}</h3></div>
       <p class="note">${esc(i.note)}</p>
-      ${i.revised ? `<div class="revised"><b>Changed after your note</b>${esc(i.revised)}</div>` : ""}
+      ${i.revised ? `<div class="revised"><b>${esc(i.badge || "Changed after your note")}</b>${esc(i.revised)}</div>` : ""}
       <div class="scale"><div class="bar"><i style="width:${pct}%"></i><span class="pin" style="left:${pin}%" title="Pincer"></span></div>
         <small>${i.hull} hull cells · ${i.x}× Pincer · white tick = Pincer</small></div>
       <dl class="specs">

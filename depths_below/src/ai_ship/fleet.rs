@@ -116,6 +116,9 @@ fn kind_weights(faction: AiShipType) -> &'static [(FleetKind, u32)] {
         Shepherd => &[(Patrol, 60), (BattleGroup, 40)],
         // Scrap swarms: everything they field is a pack.
         RecursiveKingdom => &[(Patrol, 40), (Raiders, 60)],
+        // Traders: convoys under their ally's guns, lone traders, and their
+        // stations guarded by the ally (see `compose`).
+        MerchantPrinces | FreeHaulersCompact => &[(Convoy, 55), (Patrol, 30), (StationGuard, 15)],
     }
 }
 
@@ -206,18 +209,37 @@ fn pick_any(
 /// The hulls of one fleet of `kind`, leader first. None when the faction
 /// can't crew it (no haulers for a convoy, no capital left for a battle
 /// group under the system's caps).
+/// One hull of a fleet: whose it is, and its class (None = that faction's
+/// original design). A trading faction's convoy carries its ally's hulls.
+pub type Hull = (AiShipType, Option<&'static str>);
+
+/// The hulls of one fleet of `kind`, leader first. None when the faction
+/// can't crew it (no haulers for a convoy, no capital left for a battle
+/// group under the system's caps).
+///
+/// A trading faction has no warships of its own: its convoys are guarded,
+/// and its station held, by its ally's ships (`AiShipType::ally`).
 pub fn compose(
     faction: AiShipType,
     kind: FleetKind,
     rng: &mut impl Rng,
     held: &mut Held,
-) -> Option<Vec<Option<&'static str>>> {
+) -> Option<Vec<Hull>> {
     use ClassRole::*;
-    let mut members = Vec::new();
+    let mut members: Vec<Hull> = Vec::new();
     // Escorts are picked against a scratch copy of the caps, then committed:
     // a refused fleet must not use up the system's capital allowance.
     let mut trial = held.clone();
+    let guard = faction.ally().unwrap_or(faction);
+    let own = |c: Option<&'static str>| (faction, c);
+    let hired = |c: Option<&'static str>| (guard, c);
     match kind {
+        FleetKind::Patrol if faction.is_trading() => {
+            // A lone trader, or two in company.
+            for _ in 0..rng.gen_range(1..=2) {
+                members.push(own(pick(faction, &[Civilian, Experimental], rng, &mut trial)?));
+            }
+        }
         FleetKind::Patrol => {
             let size = match rng.gen_range(0..100) {
                 0..=19 => 1,
@@ -226,19 +248,20 @@ pub fn compose(
                 _ => 4,
             };
             for _ in 0..size {
-                members.push(pick_any(faction, &[&[Scout, Line, Experimental], &[Scout, Line]], rng, &mut trial)?);
+                members.push(own(pick_any(faction, &[&[Scout, Line, Experimental], &[Scout, Line]], rng, &mut trial)?));
             }
         }
+        FleetKind::BattleGroup if faction.is_trading() => return None,
         FleetKind::BattleGroup => {
-            members.push(pick(faction, &[Boss, Capital], rng, &mut trial)?);
+            members.push(own(pick(faction, &[Boss, Capital], rng, &mut trial)?));
             for _ in 0..rng.gen_range(2..=4) {
                 if let Some(m) = pick_any(faction, &[&[Line, Experimental], &[Line], &[Scout]], rng, &mut trial) {
-                    members.push(m);
+                    members.push(own(m));
                 }
             }
             if rng.gen_bool(0.5) {
                 if let Some(m) = pick(faction, &[Scout], rng, &mut trial) {
-                    members.push(m);
+                    members.push(own(m));
                 }
             }
         }
@@ -247,30 +270,32 @@ pub fn compose(
             if roster::roster(faction).iter().all(|c| c.role != Civilian) {
                 return None;
             }
-            for _ in 0..rng.gen_range(2..=3) {
-                members.push(pick(faction, &[Civilian], rng, &mut trial)?);
+            let haulers = if faction.is_trading() { rng.gen_range(2..=4) } else { rng.gen_range(2..=3) };
+            for _ in 0..haulers {
+                members.push(own(pick(faction, &[Civilian], rng, &mut trial)?));
             }
             for _ in 0..rng.gen_range(1..=2) {
-                if let Some(m) = pick_any(faction, &[&[Line], &[Scout]], rng, &mut trial) {
-                    members.push(m);
+                if let Some(m) = pick_any(guard, &[&[Line], &[Scout]], rng, &mut trial) {
+                    members.push(hired(m));
                 }
             }
         }
         FleetKind::StationGuard => {
             for _ in 0..rng.gen_range(2..=4) {
-                members.push(pick_any(faction, &[&[Line], &[Scout, Line, Experimental]], rng, &mut trial)?);
+                members.push(hired(pick_any(guard, &[&[Line], &[Scout, Line, Experimental]], rng, &mut trial)?));
             }
         }
+        FleetKind::Raiders if faction.is_trading() => return None,
         FleetKind::Raiders => {
             for _ in 0..rng.gen_range(3..=5) {
-                members.push(pick_any(faction, &[&[Scout], &[Line]], rng, &mut trial)?);
+                members.push(own(pick_any(faction, &[&[Scout], &[Line]], rng, &mut trial)?));
             }
         }
     }
     // Biggest first, so the leader is the hull the rest form up on -- except
     // where the leader is the point: the capital, or a convoy's lead hauler.
     if matches!(kind, FleetKind::Patrol | FleetKind::StationGuard | FleetKind::Raiders) {
-        members.sort_by_key(|&c| std::cmp::Reverse(super::spawner::design_blocks(faction, c)));
+        members.sort_by_key(|&(f, c)| std::cmp::Reverse(super::spawner::design_blocks(f, c)));
     }
     *held = trial;
     Some(members)
@@ -283,7 +308,7 @@ pub fn roll_fleet(
     rng: &mut impl Rng,
     held: &mut Held,
     allow: impl Fn(FleetKind) -> bool,
-) -> Option<(FleetKind, Vec<Option<&'static str>>)> {
+) -> Option<(FleetKind, Vec<Hull>)> {
     let mut kinds: Vec<(FleetKind, u32)> = kind_weights(faction).iter().copied().filter(|(k, _)| allow(*k)).collect();
     while !kinds.is_empty() {
         let total: u32 = kinds.iter().map(|(_, w)| w).sum();
@@ -327,18 +352,15 @@ pub fn formation(extents: &[f32]) -> Vec<Vec2> {
 
 /// Build a fleet's members at `position`, slotted into formation. The caller
 /// adds them with `WorldSimulation::add_fleet`.
-pub fn crew(
-    fleet: &SimFleet,
-    classes: &[Option<&'static str>],
-) -> Vec<SimulatedShip> {
-    let extents: Vec<f32> = classes.iter().map(|&c| super::spawner::design_extent(fleet.faction, c)).collect();
+pub fn crew(fleet: &SimFleet, hulls: &[Hull]) -> Vec<SimulatedShip> {
+    let extents: Vec<f32> = hulls.iter().map(|&(f, c)| super::spawner::design_extent(f, c)).collect();
     formation(&extents)
         .into_iter()
-        .zip(classes)
-        .map(|(slot, &class)| {
+        .zip(hulls)
+        .map(|(slot, &(faction, class))| {
             let mut ship = SimulatedShip::patrolling(
                 fleet.system_id,
-                fleet.faction,
+                faction,
                 fleet.position,
                 fleet.home_zone,
                 fleet.patrol_radius,
@@ -352,11 +374,13 @@ pub fn crew(
 }
 
 /// A fleet, built and named for its kind: cruise speed rolled, members
-/// slotted. Returns None when the faction can't crew a fleet at all.
+/// slotted. Its faction is the one it flies for (a trading convoy's, even
+/// with hired guns aboard).
+#[allow(clippy::too_many_arguments)]
 pub fn new_fleet(
     faction: AiShipType,
     kind: FleetKind,
-    classes: &[Option<&'static str>],
+    hulls: &[Hull],
     system_id: u32,
     position: Vec2,
     home_zone: Vec2,
@@ -365,12 +389,15 @@ pub fn new_fleet(
 ) -> (SimFleet, Vec<SimulatedShip>) {
     let mut fleet = SimFleet::new(kind, faction, system_id, position, home_zone, patrol_radius, cruise_for(kind, rng));
     fleet.heading = rng.gen_range(0.0..std::f32::consts::TAU);
-    let members = crew(&fleet, classes);
+    let members = crew(&fleet, hulls);
     (fleet, members)
 }
 
-/// How much fight a ship has in it off-screen: its size, what's left of it,
-/// and whether it's built to fight at all.
+/// Every hull of a faction, as one fleet's worth of a single class each.
+pub fn hulls_of(faction: AiShipType, classes: &[Option<&'static str>]) -> Vec<Hull> {
+    classes.iter().map(|&c| (faction, c)).collect()
+}
+
 pub fn strength(ship: &SimulatedShip) -> f32 {
     let role = match role_of(ship.faction, ship.class) {
         ClassRole::Civilian => 0.15,
@@ -388,6 +415,8 @@ pub fn strength(ship: &SimulatedShip) -> f32 {
 const BATTLE_SECONDS: f32 = 90.0;
 /// How close two groups must come (past their own spread) to fight.
 const BATTLE_RANGE: f32 = 2_500.0;
+/// How far a trading faction's ally comes from to defend it.
+const ALLY_RANGE: f32 = 20_000.0;
 
 /// One side in an off-screen fight: a fleet's living, off-screen members, or
 /// a ship that flies alone.
@@ -430,9 +459,8 @@ pub fn resolve_battles(ships: &mut [SimulatedShip], active: impl Fn(u32) -> bool
         side.spread = side.members.iter().map(|&i| ships[i].position.distance(side.center)).fold(0.0, f32::max);
     }
 
-    // Damage each side takes this tick (in blocks), and from whom.
-    let mut incoming = vec![0.0_f32; sides.len()];
-    let mut foe: Vec<Option<usize>> = vec![None; sides.len()];
+    // Who fights whom this tick.
+    let mut fights: Vec<(usize, usize)> = Vec::new();
     for a in 0..sides.len() {
         for b in (a + 1)..sides.len() {
             if !super::components::factions_hostile(sides[a].faction, sides[b].faction) {
@@ -442,12 +470,42 @@ pub fn resolve_battles(ships: &mut [SimulatedShip], active: impl Fn(u32) -> bool
             if sides[a].center.distance(sides[b].center) > reach {
                 continue;
             }
-            let power = |s: &Side| s.members.iter().map(|&i| strength(&ships[i])).sum::<f32>();
-            incoming[b] += power(&sides[a]) * dt / BATTLE_SECONDS;
-            incoming[a] += power(&sides[b]) * dt / BATTLE_SECONDS;
-            foe[a] = foe[a].or(Some(sides[b].members[0]));
-            foe[b] = foe[b].or(Some(sides[a].members[0]));
+            fights.push((a, b));
         }
+    }
+    // A trading faction's ally comes to its aid from further out: any of its
+    // groups within ALLY_RANGE of a trader under attack joins the fight
+    // against the attacker. ("Allied will go to fully help them.")
+    let mut assists: Vec<(usize, usize)> = Vec::new();
+    for &(a, b) in &fights {
+        for (trader, attacker) in [(a, b), (b, a)] {
+            if !sides[trader].faction.is_trading() {
+                continue;
+            }
+            for c in 0..sides.len() {
+                let helps = c != trader
+                    && c != attacker
+                    && sides[c].faction.defends(sides[trader].faction)
+                    && !sides[c].faction.defends(sides[attacker].faction)
+                    && sides[c].center.distance(sides[trader].center) < ALLY_RANGE + sides[c].spread;
+                let already = fights.iter().chain(assists.iter()).any(|&p| p == (c, attacker) || p == (attacker, c));
+                if helps && !already {
+                    assists.push((c, attacker));
+                }
+            }
+        }
+    }
+    fights.extend(assists);
+
+    // Damage each side takes this tick (in blocks), and from whom.
+    let mut incoming = vec![0.0_f32; sides.len()];
+    let mut foe: Vec<Option<usize>> = vec![None; sides.len()];
+    let power = |s: &Side| s.members.iter().map(|&i| strength(&ships[i])).sum::<f32>();
+    for &(a, b) in &fights {
+        incoming[b] += power(&sides[a]) * dt / BATTLE_SECONDS;
+        incoming[a] += power(&sides[b]) * dt / BATTLE_SECONDS;
+        foe[a] = foe[a].or(Some(sides[b].members[0]));
+        foe[b] = foe[b].or(Some(sides[a].members[0]));
     }
 
     for (k, side) in sides.iter().enumerate() {
@@ -501,7 +559,7 @@ mod tests {
             let mut held = Held::new();
             let members = compose(AiShipType::TerranHegemony, FleetKind::BattleGroup, &mut rng, &mut held)
                 .expect("the Hegemony can always crew a battle group in an empty system");
-            assert_eq!(members[0], Some("sovereign"));
+            assert_eq!(members[0], (AiShipType::TerranHegemony, Some("sovereign")));
             assert!(members.len() >= 3, "a capital never travels alone: {members:?}");
         }
     }
@@ -513,7 +571,7 @@ mod tests {
         let mut capitals = 0;
         for _ in 0..20 {
             if let Some(members) = compose(AiShipType::TerranHegemony, FleetKind::BattleGroup, &mut rng, &mut held) {
-                capitals += members.iter().filter(|&&c| role_of(AiShipType::TerranHegemony, c) == ClassRole::Capital).count();
+                capitals += members.iter().filter(|&&(f, c)| role_of(f, c) == ClassRole::Capital).count();
             }
         }
         assert_eq!(capitals, ClassRole::Capital.per_system_cap());
@@ -525,8 +583,8 @@ mod tests {
         for _ in 0..30 {
             let mut held = Held::new();
             let m = compose(AiShipType::TerranHegemony, FleetKind::Convoy, &mut rng, &mut held).unwrap();
-            assert_eq!(role_of(AiShipType::TerranHegemony, m[0]), ClassRole::Civilian);
-            assert!(m.iter().any(|&c| role_of(AiShipType::TerranHegemony, c) != ClassRole::Civilian), "{m:?}");
+            assert_eq!(role_of(m[0].0, m[0].1), ClassRole::Civilian);
+            assert!(m.iter().any(|&(f, c)| role_of(f, c) != ClassRole::Civilian), "{m:?}");
         }
         let mut held = Held::new();
         assert!(compose(AiShipType::CorpseStars, FleetKind::Convoy, &mut rng, &mut held).is_none());
@@ -539,7 +597,7 @@ mod tests {
             AiShipType::StellarPreserve, AiShipType::SynthesisCollective, AiShipType::BrokenChoir,
             AiShipType::CorpseStars, AiShipType::TheSilence, AiShipType::TerranHegemony,
             AiShipType::GildedThrone, AiShipType::RecursiveKingdom, AiShipType::EternalHegemony,
-            AiShipType::Shepherd,
+            AiShipType::Shepherd, AiShipType::MerchantPrinces, AiShipType::FreeHaulersCompact,
         ] {
             let mut held = Held::new();
             let fleet = roll_fleet(faction, &mut rng, &mut held, |_| true);
@@ -605,5 +663,54 @@ mod tests {
         }
         let alive = |f: u32| ships.iter().any(|s| s.fleet == f && s.behavior != SimBehavior::Dead);
         assert!(!(alive(1) && alive(2)), "ten minutes in, both fleets still stand");
+    }
+
+    /// A trader's convoy is its own haulers under its ally's guns, and it
+    /// fields no warfleet of its own.
+    #[test]
+    fn a_trading_convoy_carries_its_allys_guards() {
+        let mut rng = rand::thread_rng();
+        for trader in [AiShipType::MerchantPrinces, AiShipType::FreeHaulersCompact] {
+            let ally = trader.ally().unwrap();
+            for _ in 0..20 {
+                let mut held = Held::new();
+                let m = compose(trader, FleetKind::Convoy, &mut rng, &mut held).unwrap();
+                assert_eq!(m[0].0, trader);
+                assert!(m.iter().filter(|h| h.0 == trader).all(|&(f, c)| role_of(f, c) == ClassRole::Civilian), "{m:?}");
+                assert!(m.iter().any(|h| h.0 == ally), "no hired guns: {m:?}");
+                let guard = compose(trader, FleetKind::StationGuard, &mut rng, &mut held).unwrap();
+                assert!(guard.iter().all(|h| h.0 == ally), "{guard:?}");
+            }
+            let mut held = Held::new();
+            assert!(compose(trader, FleetKind::BattleGroup, &mut rng, &mut held).is_none());
+            assert!(compose(trader, FleetKind::Raiders, &mut rng, &mut held).is_none());
+            assert!(!super::super::components::factions_hostile(trader, ally));
+        }
+        assert!(super::super::components::factions_hostile(AiShipType::MerchantPrinces, AiShipType::FreeHaulersCompact));
+    }
+
+    /// A Princes convoy jumped by pirates, with a Throne patrol 15 km off:
+    /// the patrol joins in, and the convoy outlives what it would alone.
+    #[test]
+    fn an_ally_comes_to_a_traders_aid() {
+        let convoy = |fleet| vec![
+            ship_at(AiShipType::MerchantPrinces, roster::intern("hauler"), fleet, 0.0),
+            ship_at(AiShipType::MerchantPrinces, roster::intern("hauler"), fleet, 400.0),
+        ];
+        let pirates = |fleet| (0..4).map(|i| ship_at(AiShipType::RecursiveKingdom, None, fleet, 1_200.0 + i as f32 * 200.0)).collect::<Vec<_>>();
+        let mut alone: Vec<SimulatedShip> = convoy(1).into_iter().chain(pirates(2)).collect();
+        let mut helped: Vec<SimulatedShip> = convoy(1).into_iter().chain(pirates(2)).collect();
+        for i in 0..3 {
+            helped.push(ship_at(AiShipType::GildedThrone, roster::intern("dividend"), 3, 15_000.0 + i as f32 * 300.0));
+        }
+        for _ in 0..8 {
+            resolve_battles(&mut alone, |_| true, 2.0);
+            resolve_battles(&mut helped, |_| true, 2.0);
+        }
+        assert!(helped[6..].iter().any(|s| matches!(s.behavior, SimBehavior::Fighting(_))), "the Throne stayed out of it");
+        let hp = |v: &[SimulatedShip]| v[..2].iter().map(|s| s.health).sum::<f32>();
+        let pirates_hp = |v: &[SimulatedShip]| v[2..6].iter().map(|s| s.health).sum::<f32>();
+        assert!(pirates_hp(&helped) < pirates_hp(&alone), "the pirates took no extra fire");
+        assert!(hp(&helped) >= hp(&alone));
     }
 }

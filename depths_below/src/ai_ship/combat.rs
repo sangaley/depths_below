@@ -447,8 +447,16 @@ pub fn ai_distress_system(
     // PASS 1 — collect fresh broadcasts: a fighting ship, off cooldown, that's
     // actually in trouble (recently hit or hull hurt) and has a target.
     let mut broadcasts: Vec<(Entity, AiShipType, Vec2, Entity)> = Vec::new();
-    for (e, tf, ftype, behavior, target, state, _, _) in ai_ships.iter() {
+    for (e, tf, ftype, behavior, target, state, _, civilian) in ai_ships.iter() {
         if state.is_destroyed { continue; }
+        // A civilian hull doesn't fight, but it does call for help when
+        // it's hit: its escort, its faction's ships, and a trader's ally.
+        if civilian && state.distress_cooldown <= 0.0 && state.last_hit_timer < 5.0 {
+            if let Some(attacker) = state.last_attacker {
+                broadcasts.push((e, *ftype, tf.translation.truncate(), attacker));
+                continue;
+            }
+        }
         if *behavior != AiShipBehavior::Engaging { continue; }
         if state.distress_cooldown > 0.0 { continue; }
         if !faction_fights(*ftype) { continue; }
@@ -488,9 +496,12 @@ pub fn ai_distress_system(
         // Answer the nearest same-faction call within earshot (never one's own).
         let mut nearest: Option<(f32, Entity)> = None;
         for (be, bfaction, bpos, btgt) in &broadcasts {
-            if *be == e || *bfaction != *ftype { continue; }
+            if *be == e || !ftype.defends(*bfaction) { continue; }
             let d = pos.distance(*bpos);
-            if d > DISTRESS_RADIUS { continue; }
+            // A trader's ally answers from twice as far: it's what the
+            // trader pays it for.
+            let reach = if *bfaction != *ftype { DISTRESS_RADIUS * 2.0 } else { DISTRESS_RADIUS };
+            if d > reach { continue; }
             if nearest.map_or(true, |(nd, _)| d < nd) {
                 nearest = Some((d, *btgt));
             }
@@ -1095,6 +1106,8 @@ fn angle_proof_round(faction: AiShipType) -> KineticAmmoType {
         SynthesisCollective | CorpseStars | TheSilence => KineticAmmoType::HESH,
         // Gravity does not care what angle you hit at.
         EternalHegemony | Shepherd => KineticAmmoType::Singularity,
+        // Freight: whatever the hold had in it.
+        MerchantPrinces | FreeHaulersCompact => KineticAmmoType::HESH,
     }
 }
 

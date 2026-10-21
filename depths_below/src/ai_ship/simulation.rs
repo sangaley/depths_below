@@ -182,6 +182,8 @@ fn faction_named(name: &str) -> Option<AiShipType> {
         "EternalHegemony" => AiShipType::EternalHegemony,
         "Shepherd" => AiShipType::Shepherd,
         "BrokenChoir" => AiShipType::BrokenChoir,
+        "MerchantPrinces" => AiShipType::MerchantPrinces,
+        "FreeHaulersCompact" => AiShipType::FreeHaulersCompact,
         _ => return None,
     })
 }
@@ -197,7 +199,9 @@ pub fn ensure_system_population(sim: &mut WorldSimulation, galaxy_map: &crate::c
         return;
     }
     if let Some(system) = galaxy_map.systems.iter().find(|s| s.id == system_id) {
+        let borders = crate::celestial::territory::border_factions(galaxy_map, system_id);
         spawn_system_faction_population(sim, system);
+        spawn_visitors(sim, system, &borders);
     }
 }
 
@@ -225,7 +229,11 @@ fn spawn_system_faction_population(sim: &mut WorldSimulation, system: &crate::ce
     // band round its holding: a single clump was reported as "only in a
     // single pack and not spread around".
     let holdings = faction_holdings(system, &mut rng);
-    let count = system_ship_count(template.ship_count, system.danger_tier);
+    // The danger the faction itself brings (a haunted system's danger is the
+    // boss's, and the boss brings its own ships).
+    let count = system_ship_count(template.ship_count, super::components::faction_power(faction));
+    // A capital is where a faction keeps its strength.
+    let count = if system.capital { (count as f32 * CAPITAL_SHARE).round() as usize } else { count };
     // How many of each capped role this system already holds.
     let mut held = super::fleet::Held::new();
     let has_station = crate::diplomacy::stations::station_plan(faction).is_some();
@@ -249,7 +257,7 @@ fn spawn_system_faction_population(sim: &mut WorldSimulation, system: &crate::ce
 
             let reach = classes
                 .iter()
-                .map(|&c| super::spawner::design_extent(faction, c))
+                .map(|&(f, c)| super::spawner::design_extent(f, c))
                 .fold(0.0_f32, f32::max)
                 * (classes.len() as f32 + 1.0)
                 + 1_000.0;
@@ -310,6 +318,62 @@ fn spawn_system_faction_population(sim: &mut WorldSimulation, system: &crate::ce
 
 /// How far a station guard ranges from its post, past the station's hull.
 const GUARD_RADIUS: f32 = 8_000.0;
+
+/// How much busier a faction's capital is than its other systems.
+const CAPITAL_SHARE: f32 = 1.4;
+
+/// The fleets a system holds that aren't its owner's: patrols from the
+/// factions it borders (neighbours meet at border systems), and the boss
+/// that haunts it, if one does.
+fn spawn_visitors(sim: &mut WorldSimulation, system: &crate::celestial::resources::StarSystemDef, borders: &[AiShipType]) {
+    use super::fleet::FleetKind;
+    let mut rng = rand::thread_rng();
+    // Out on the open bearings, away from the owner's cluster point and its
+    // stations: the edge of the system, where a border is.
+    let edge = |rng: &mut rand::rngs::ThreadRng| {
+        system.local_center + Vec2::from_angle(rng.gen_range(0.0..std::f32::consts::TAU)) * rng.gen_range(OPEN_HOLDING_RANGE)
+    };
+    let stations: Vec<Vec2> = crate::world::home_base::station_sites(system).iter().map(|s| s.pos).collect();
+    for &neighbour in borders {
+        let Some(template) = faction_territories().into_iter().find(|t| t.faction == neighbour) else { continue };
+        let mut held = super::fleet::Held::new();
+        for _ in 0..rng.gen_range(1..=2) {
+            let Some((kind, hulls)) = super::fleet::roll_fleet(neighbour, &mut rng, &mut held, |k| {
+                matches!(k, FleetKind::Patrol | FleetKind::Raiders | FleetKind::Convoy)
+            }) else {
+                break;
+            };
+            let home = clear_of_stations(edge(&mut rng), &stations);
+            let (mut fleet, members) =
+                super::fleet::new_fleet(neighbour, kind, &hulls, system.id, home, home, template.radius * 1.5, &mut rng);
+            if kind == FleetKind::Convoy {
+                // A convoy crossing the border: through the system and out.
+                let far = clear_of_stations(edge(&mut rng), &stations);
+                fleet.route = vec![home, far];
+                fleet.leg = 1;
+                fleet.home_zone = (home + far) * 0.5;
+                fleet.patrol_radius = home.distance(far) * 0.5 + template.radius;
+                fleet.destination = far;
+            } else {
+                fleet.destination = patrol_waypoint(&mut rng, home, fleet.patrol_radius);
+            }
+            sim.add_fleet(fleet, members);
+        }
+    }
+    if let Some(boss) = system.haunt {
+        // The boss's battle group, ranging the whole system, and a patrol of
+        // its own.
+        for kind in [FleetKind::BattleGroup, FleetKind::Patrol] {
+            let mut held = super::fleet::Held::new();
+            let Some(hulls) = super::fleet::compose(boss, kind, &mut rng, &mut held) else { continue };
+            let home = clear_of_stations(edge(&mut rng), &stations);
+            let (mut fleet, members) =
+                super::fleet::new_fleet(boss, kind, &hulls, system.id, home, system.local_center, OPEN_HOLDING_RANGE.end, &mut rng);
+            fleet.destination = patrol_waypoint(&mut rng, system.local_center, fleet.patrol_radius);
+            sim.add_fleet(fleet, members);
+        }
+    }
+}
 
 /// Share of a system's ships kept at the faction's cluster point; the rest
 /// spread evenly over its other holdings.
@@ -1123,6 +1187,8 @@ mod population_tests {
             local_center: Vec2::ZERO,
             seed: 1,
             faction: Some(AiShipType::RecursiveKingdom),
+            capital: false,
+            haunt: None,
             danger_tier: 60.0,
             discovery: crate::celestial::resources::SystemDiscovery::Visited,
             last_updated: 0.0,
@@ -1420,7 +1486,7 @@ mod wreck_bookkeeping_tests {
                 super::super::fleet::FleetKind::Patrol, AiShipType::TerranHegemony, 0,
                 Vec2::new(8_000.0, 0.0), Vec2::ZERO, 50_000.0, 80.0,
             );
-            let members = super::super::fleet::crew(&fleet, &[lancer, lancer, lancer]);
+            let members = super::super::fleet::crew(&fleet, &super::super::fleet::hulls_of(AiShipType::TerranHegemony, &[lancer, lancer, lancer]));
             sim.add_fleet(fleet, members);
             // Strung out: only the first is inside render distance.
             sim.ships[0].position = Vec2::new(8_000.0, 0.0);

@@ -48,7 +48,38 @@ const PLANS: &[(AiShipType, StationPlan)] = &[
     (AiShipType::StellarPreserve, plan("sanctuary", "Sanctuary", None, 0)),
     (AiShipType::TheSilence, plan("monastery", "Monastery", None, 0)),
     (AiShipType::Shepherd, plan("the_fold", "The Fold", None, 0)),
+    (AiShipType::MerchantPrinces, plan("trade_post", "Guild Trade Post", None, 0)),
+    // Drawn 2026-10-21 for the trade war; awaiting review.
+    (AiShipType::FreeHaulersCompact, plan("depot", "Depot", None, 0)),
 ];
+
+/// How a faction's own prices lean, on top of what your standing gets you:
+/// the Princes charge more for their luxuries and pay more for your cargo;
+/// the Compact is cheap at both ends. (buy, sell) multipliers.
+pub fn price_lean(faction: AiShipType) -> (f32, f32) {
+    match faction {
+        AiShipType::MerchantPrinces => (1.1, 1.1),
+        AiShipType::FreeHaulersCompact => (0.9, 0.9),
+        _ => (1.0, 1.0),
+    }
+}
+
+/// What a free port (an ownerless station, Haven included) charges: worse
+/// than any faction that will let you dock, so it's the fallback when you're
+/// at war with everyone rather than the default. (Unfriendly stations charge
+/// up to x1.65 with a faction's own lean and pay at least x0.63; these are
+/// worse at both ends.)
+pub const FREE_PORT: (f32, f32) = (1.7, 0.55);
+/// The opening grace: ordinary prices for the first ninety minutes of play,
+/// then easing to free-port prices over the next half hour.
+const GRACE_SECONDS: f32 = 90.0 * 60.0;
+const GRACE_EASE_SECONDS: f32 = 30.0 * 60.0;
+
+/// Free-port (buy, sell) after `play_time` seconds of play.
+pub fn free_port_terms(play_time: f32) -> (f32, f32) {
+    let t = ((play_time - GRACE_SECONDS) / GRACE_EASE_SECONDS).clamp(0.0, 1.0);
+    (1.0 + (FREE_PORT.0 - 1.0) * t, 1.0 + (FREE_PORT.1 - 1.0) * t)
+}
 
 pub fn station_plan(faction: AiShipType) -> Option<StationPlan> {
     PLANS.iter().find(|(f, _)| *f == faction).map(|(_, p)| *p)
@@ -286,9 +317,11 @@ fn faction_station_docking(
         station_plan(faction).map_or("station", |p| p.name)
     );
     let tier = standing.tier(faction);
+    let (lean_buy, lean_sell) = price_lean(faction);
+    let prices = tier.station_prices().map(|(b, s)| (b * lean_buy, s * lean_sell));
     if !*prompted {
         *prompted = true;
-        let message = match tier.station_prices() {
+        let message = match prices {
             Some((buy, sell)) => format!("{name}: press F to dock ({}, buy x{buy:.2}, sell x{sell:.2})", tier.label()),
             None => format!("{name} counts you Hostile and won't let you dock"),
         };
@@ -298,7 +331,7 @@ fn faction_station_docking(
         return;
     }
     press.claim();
-    let Some((buy, sell)) = tier.station_prices() else {
+    let Some((buy, sell)) = prices else {
         notifications.write(ShowNotification {
             message: format!("{name} refuses you. Improve your standing first (X: diplomacy)."),
             notification_type: NotificationType::Danger,
@@ -306,7 +339,7 @@ fn faction_station_docking(
         });
         return;
     };
-    market.dock_terms = Some(DockTerms { faction, name: name.clone(), standing: tier.label(), buy, sell });
+    market.dock_terms = Some(DockTerms { faction: Some(faction), name: name.clone(), standing: tier.label(), buy, sell });
     notifications.write(ShowNotification {
         message: format!("Docking at {name}..."),
         notification_type: NotificationType::Info,
@@ -319,6 +352,31 @@ fn clear_dock_terms(mut market: ResMut<MarketEvents>) {
     market.dock_terms = None;
 }
 
+/// Docked at an ownerless station: free-port prices (after the opening grace).
+fn free_port_docking(
+    mut market: ResMut<MarketEvents>,
+    stats: Res<crate::resources::Statistics>,
+    player: Query<&Transform, With<Ship>>,
+    stations: Res<crate::world::home_base::SystemStations>,
+) {
+    if market.dock_terms.is_some() {
+        return;
+    }
+    let index = player
+        .single()
+        .ok()
+        .and_then(|t| stations.nearest_index(t.translation.truncate()))
+        .unwrap_or(0);
+    let (buy, sell) = free_port_terms(stats.play_time_seconds);
+    market.dock_terms = Some(DockTerms {
+        faction: None,
+        name: crate::world::home_base::station_display_name(index),
+        standing: "Free Port",
+        buy,
+        sell,
+    });
+}
+
 /// Trading at a faction's station earns a little standing with it: a fifth
 /// of a point per item bought or sold, a few points at most per deal.
 fn standing_from_trade(
@@ -328,7 +386,7 @@ fn standing_from_trade(
     mut last: Local<Option<u32>>,
 ) {
     let held: u32 = inventory.items.values().sum();
-    let Some(terms) = &market.dock_terms else {
+    let Some((terms, faction)) = market.dock_terms.as_ref().and_then(|t| t.faction.map(|f| (t, f))) else {
         *last = None;
         return;
     };
@@ -340,7 +398,15 @@ fn standing_from_trade(
         let moved = held.abs_diff(before) as f32;
         let gain = (moved * 0.2).clamp(0.5, 3.0);
         let verb = if held < before { "sold" } else { "bought" };
-        standing.change(terms.faction, gain, format!("You {verb} goods at {}", terms.name));
+        standing.change(faction, gain, format!("You {verb} goods at {}", terms.name));
+        // The trade war: business with one guild is business taken from the other.
+        if faction.is_trading() {
+            for &rival in super::FACTIONS.iter() {
+                if rival != faction && rival.is_trading() && crate::ai_ship::components::factions_hostile(rival, faction) {
+                    standing.change(rival, -gain * 0.5, format!("You traded with their rival at {}", terms.name));
+                }
+            }
+        }
         *last = Some(held);
     }
 }
@@ -430,7 +496,12 @@ impl Plugin for FactionStationPlugin {
             )
             .add_systems(PostUpdate, hold_anchored.before(bevy::transform::TransformSystems::Propagate))
             .add_systems(Update, standing_from_trade.run_if(in_state(GameState::Docked)))
-            .add_systems(OnExit(GameState::Docked), clear_dock_terms);
+            // Cleared on the way back out to space, not on leaving the dock:
+            // pausing while docked leaves and re-enters Docked, and the
+            // station's terms must survive that.
+            .add_systems(OnEnter(GameState::Exploring), clear_dock_terms)
+            .add_systems(OnEnter(GameState::Docked), free_port_docking)
+            .add_systems(OnEnter(GameState::StationDocked), free_port_docking);
     }
 }
 
@@ -460,5 +531,51 @@ mod tests {
         let (buy, sell) = StandingTier::Allied.station_prices().unwrap();
         let (nbuy, nsell) = StandingTier::Neutral.station_prices().unwrap();
         assert!(buy < nbuy && sell > nsell, "allies get a better deal than strangers");
+    }
+
+    /// A free port is ordinary at the start, then worse than any faction
+    /// station that will let you dock.
+    #[test]
+    fn free_ports_are_the_fallback_after_the_grace() {
+        assert_eq!(free_port_terms(0.0), (1.0, 1.0));
+        assert_eq!(free_port_terms(GRACE_SECONDS), (1.0, 1.0));
+        let (buy, sell) = free_port_terms(GRACE_SECONDS + GRACE_EASE_SECONDS * 2.0);
+        assert_eq!((buy, sell), FREE_PORT);
+        for tier in [StandingTier::Unfriendly, StandingTier::Neutral, StandingTier::Friendly, StandingTier::Allied] {
+            let (b, s) = tier.station_prices().unwrap();
+            for faction in crate::diplomacy::FACTIONS {
+                let (lb, ls) = price_lean(faction);
+                assert!(buy > b * lb && sell < s * ls, "{tier:?} {faction:?} is worse than a free port");
+            }
+        }
+        // Halfway through the ease, halfway there.
+        let (mid, _) = free_port_terms(GRACE_SECONDS + GRACE_EASE_SECONDS * 0.5);
+        assert!((mid - 1.35).abs() < 1e-4);
+    }
+
+    /// Docking at an ownerless station sets free-port terms, after the grace;
+    /// a faction station's terms are left alone.
+    #[test]
+    fn docking_at_a_free_port_sets_its_terms() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut app = App::new();
+        app.init_resource::<MarketEvents>();
+        app.insert_resource(crate::resources::Statistics { play_time_seconds: 5.0 * 3600.0, ..Default::default() });
+        app.init_resource::<crate::world::home_base::SystemStations>();
+        app.world_mut().spawn((Ship, Transform::default()));
+        app.world_mut().run_system_once(free_port_docking).unwrap();
+        let terms = app.world().resource::<MarketEvents>().dock_terms.clone().expect("free-port terms set");
+        assert_eq!(terms.faction, None);
+        assert_eq!((terms.buy, terms.sell), FREE_PORT);
+        assert_eq!(terms.standing, "Free Port");
+
+        // Already docked at a faction station: untouched.
+        let mut market = app.world_mut().resource_mut::<MarketEvents>();
+        market.dock_terms = Some(DockTerms {
+            faction: Some(AiShipType::TerranHegemony), name: "x".into(), standing: "Neutral", buy: 1.2, sell: 0.85,
+        });
+        app.world_mut().run_system_once(free_port_docking).unwrap();
+        let terms = app.world().resource::<MarketEvents>().dock_terms.clone().unwrap();
+        assert_eq!(terms.faction, Some(AiShipType::TerranHegemony));
     }
 }

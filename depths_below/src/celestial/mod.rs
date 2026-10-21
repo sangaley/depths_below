@@ -9,6 +9,7 @@ pub mod spawning;
 pub mod warp;
 pub mod poi;
 pub mod galaxy;
+pub mod territory;
 
 use bevy::prelude::*;
 use crate::states::GameState;

@@ -26,6 +26,10 @@ pub fn roll_wreck_loot(ship_type: AiShipType, intact_frac: f32, rng: &mut impl R
         AiShipType::StellarPreserve => &[(BioSample, 5.0), (Crystal, 2.0), (ScrapMetal, 2.0), (RareAlloy, 1.0)],
         AiShipType::EternalHegemony => &[(AmmoCrate, 4.0), (RareAlloy, 3.0), (ScrapMetal, 2.0), (FuelCell, 1.0)],
         AiShipType::Shepherd => &[(AncientArtifact, 3.0), (RareAlloy, 3.0), (Crystal, 2.0), (AmmoCrate, 1.0), (FuelCell, 1.0)],
+        // Luxuries and rare goods from a dozen universes.
+        AiShipType::MerchantPrinces => &[(Crystal, 3.0), (RareAlloy, 3.0), (AncientArtifact, 2.0), (FuelCell, 1.0)],
+        // Bulk: fuel, scrap, ammo.
+        AiShipType::FreeHaulersCompact => &[(FuelCell, 4.0), (ScrapMetal, 4.0), (AmmoCrate, 3.0)],
     };
 
     let good_mult = if intact_frac >= 0.7 {
@@ -147,6 +151,8 @@ pub fn ai_ship_death_system(
             AiShipType::TerranHegemony => 10,    // massive wreck
             AiShipType::GildedThrone => 6,
             AiShipType::RecursiveKingdom => 2,    // junk
+            AiShipType::MerchantPrinces => 10,  // a hold full of cargo
+            AiShipType::FreeHaulersCompact => 8,
         };
 
         // A meltdown takes the ship apart on the way out: the blast guts a

@@ -36,6 +36,7 @@ def main(mods):
                 "weapons": weapons_line(st["weapons"]), "engines": st["engines"],
                 "reactors": st["reactors"], "shields": st["shields"], "ok": not checks,
                 "revised": getattr(mod, "REVISED", {}).get(key, ""),
+                "badge": getattr(mod, "REVISED_LABEL", ""),
             })
         lu = f"img/{slug}/_lineup.png"
         order = [os.path.join(HERE, "concepts", slug, f"{k}.json") for k, *_ in mod.CONCEPTS]

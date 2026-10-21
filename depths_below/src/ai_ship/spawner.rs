@@ -151,6 +151,8 @@ fn ship_tint(ship_type: AiShipType) -> Color {
         AiShipType::TerranHegemony => Color::srgb(0.45, 0.45, 0.5),    // steel gray - battleship
         AiShipType::GildedThrone => Color::srgb(0.2, 0.2, 0.25),   // dark tactical
         AiShipType::RecursiveKingdom => Color::srgb(0.7, 0.4, 0.15),    // rusty orange
+        AiShipType::MerchantPrinces => Color::srgb(0.4, 0.55, 0.35),    // guild green
+        AiShipType::FreeHaulersCompact => Color::srgb(0.6, 0.35, 0.22), // rust
     }
 }
 
@@ -306,6 +308,7 @@ pub fn spawn_ai_ship_with_design(
         AiShipType::TerranHegemony => AiShipBehavior::Patrolling,
         AiShipType::GildedThrone => AiShipBehavior::Patrolling,
         AiShipType::RecursiveKingdom => AiShipBehavior::Patrolling,
+        AiShipType::MerchantPrinces | AiShipType::FreeHaulersCompact => AiShipBehavior::Patrolling,
     };
 
     let fuel = match ship_type {
@@ -319,6 +322,8 @@ pub fn spawn_ai_ship_with_design(
         AiShipType::TerranHegemony => 1000.0,
         AiShipType::GildedThrone => 700.0,
         AiShipType::RecursiveKingdom => 150.0,
+        AiShipType::MerchantPrinces => 900.0,
+        AiShipType::FreeHaulersCompact => 1100.0,
     };
 
     // Compute initial rotation: face toward first waypoint (or default to 0 = facing right)

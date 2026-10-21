@@ -48,6 +48,38 @@ pub enum AiShipType {
     /// It does not want to kill you. It wants you to become one. The largest
     /// and hardest kill in the game.
     Shepherd,
+    // --- Trading factions: full factions (standing, stations, territory)
+    // with no real fleet of their own. Their allies fight for them.
+    /// Trade across parallel universes, sell weapons to both sides of a war,
+    /// and are whispered to collapse universes to make scarcity. Luxuries
+    /// and deep stock; hired Gilded Throne escorts.
+    MerchantPrinces,
+    /// Independent haulers, miners and salvagers who refuse the Princes'
+    /// monopoly. Bulk goods, fuel, scrap and ammo, cheap and plain; patched
+    /// ships that shoot back, and the Terran Hegemony at their side.
+    FreeHaulersCompact,
+}
+
+impl AiShipType {
+    /// A trading faction: no warfleet of its own, defended by its ally.
+    pub fn is_trading(self) -> bool {
+        matches!(self, AiShipType::MerchantPrinces | AiShipType::FreeHaulersCompact)
+    }
+
+    /// The combat faction that fights for a trading faction: escorts its
+    /// convoys, guards its stations, and answers when it's attacked.
+    pub fn ally(self) -> Option<AiShipType> {
+        match self {
+            AiShipType::MerchantPrinces => Some(AiShipType::GildedThrone),
+            AiShipType::FreeHaulersCompact => Some(AiShipType::TerranHegemony),
+            _ => None,
+        }
+    }
+
+    /// Whether `self` fights for `other`: the same faction, or `other`'s ally.
+    pub fn defends(self, other: AiShipType) -> bool {
+        self == other || other.ally() == Some(self)
+    }
 }
 
 /// The faction's name as the player should ever see it.
@@ -68,6 +100,8 @@ pub fn faction_display_name(ship_type: AiShipType) -> &'static str {
         RecursiveKingdom => "Recursive Kingdom",
         EternalHegemony => "Eternal Hegemony",
         Shepherd => "The Shepherd",
+        MerchantPrinces => "Merchant Princes",
+        FreeHaulersCompact => "Free Haulers' Compact",
     }
 }
 
@@ -751,6 +785,20 @@ pub fn faction_territories() -> Vec<FactionTerritory> {
             radius: 80_000.0,
             ship_count: 1,
         },
+        // The trading guilds: traffic, not warships. Their convoys run long
+        // routes, so the territory is wide.
+        FactionTerritory {
+            faction: AiShipType::MerchantPrinces,
+            center: Vec2::ZERO,
+            radius: 20_000.0,
+            ship_count: 5,
+        },
+        FactionTerritory {
+            faction: AiShipType::FreeHaulersCompact,
+            center: Vec2::ZERO,
+            radius: 20_000.0,
+            ship_count: 5,
+        },
     ]
 }
 
@@ -768,6 +816,8 @@ pub fn faction_power(faction: AiShipType) -> f32 {
         AiShipType::BrokenChoir => 1.0,        // Already damaged
         AiShipType::RecursiveKingdom => 0.5,      // Weak individually
         AiShipType::TheSilence => 0.1,       // No weapons
+        AiShipType::MerchantPrinces => 0.4,  // Freight; their escorts are the Throne's
+        AiShipType::FreeHaulersCompact => 0.6, // Freight that shoots back
     }
 }
 
@@ -792,6 +842,8 @@ pub fn faction_map_color(faction: AiShipType) -> bevy::prelude::Color {
         AiShipType::TerranHegemony => Color::srgb(0.65, 0.7, 0.8),       // steel blue-gray
         AiShipType::GildedThrone => Color::srgb(0.4, 0.45, 0.65),    // slate blue
         AiShipType::RecursiveKingdom => Color::srgb(0.95, 0.55, 0.2),     // rusty orange
+        AiShipType::MerchantPrinces => Color::srgb(0.5, 0.75, 0.4),     // guild green
+        AiShipType::FreeHaulersCompact => Color::srgb(0.8, 0.45, 0.3),   // rust red
     }
 }
 
@@ -820,6 +872,8 @@ pub fn crew_fill_fraction(faction: AiShipType) -> f32 {
         AiShipType::TheSilence => 1.1,       // skeleton crew (no weapons anyway)
         AiShipType::RecursiveKingdom => 1.15,     // scrappy, but now mans all its guns
         AiShipType::BrokenChoir => 1.1,        // ghost ship, still staffs the guns
+        AiShipType::MerchantPrinces => 1.1,     // freighter crews, the guns are an afterthought
+        AiShipType::FreeHaulersCompact => 1.2,  // every hand pulls a trigger when it comes to it
     }
 }
 
@@ -855,7 +909,18 @@ pub fn faction_fights(faction: AiShipType) -> bool {
 pub fn factions_hostile(a: AiShipType, b: AiShipType) -> bool {
     use AiShipType::*;
     if a == b { return false; } // same faction = allies
+    // A trading faction and the faction that fights for it never fight.
+    if a.ally() == Some(b) || b.ally() == Some(a) { return false; }
     match (a, b) {
+        // The trade war: the two guilds, and each one's ally against the
+        // other guild. (The Hegemony and the Throne stay allied with each
+        // other: a proxy war, fought through clients.)
+        (MerchantPrinces, FreeHaulersCompact) | (FreeHaulersCompact, MerchantPrinces) => true,
+        (GildedThrone, FreeHaulersCompact) | (FreeHaulersCompact, GildedThrone) => true,
+        (TerranHegemony, MerchantPrinces) | (MerchantPrinces, TerranHegemony) => true,
+        // Pirates prey on traders.
+        (RecursiveKingdom, MerchantPrinces) | (MerchantPrinces, RecursiveKingdom) => true,
+        (RecursiveKingdom, FreeHaulersCompact) | (FreeHaulersCompact, RecursiveKingdom) => true,
         // Bosses are hostile to everything, including each other — rampaging
         // apex threats, not aligned with any faction's politics.
         (Shepherd, _) | (_, Shepherd) => true,

@@ -548,7 +548,8 @@ pub struct MarketEvents {
 /// What a faction station charges you, from your standing with it.
 #[derive(Clone, Debug)]
 pub struct DockTerms {
-    pub faction: crate::ai_ship::components::AiShipType,
+    /// Whose station; None for a free port (an ownerless station).
+    pub faction: Option<crate::ai_ship::components::AiShipType>,
     pub name: String,
     /// Your standing with them, as the diplomacy window names it.
     pub standing: &'static str,

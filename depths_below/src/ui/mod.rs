@@ -3411,6 +3411,7 @@ fn toggle_galaxy_view(
     pending: Res<PendingWarpTarget>,
     fuel_state: Res<FuelState>,
     windows: Query<&Window>,
+    standing: Res<crate::diplomacy::FactionStanding>,
 ) {
     let Ok(entity) = existing.single() else { return };
     if !keyboard.just_pressed(KeyCode::Tab) {
@@ -3432,7 +3433,7 @@ fn toggle_galaxy_view(
         MapViewMode::Galaxy => {
             let (win_w, win_h) = windows.single().map(|w| (w.width(), w.height())).unwrap_or((1280.0, 800.0));
             let panel_size = (win_w.min(win_h) * 0.85).max(200.0);
-            spawn_galaxy_map_overlay(&mut commands, &galaxy_map, &streaming, pending_galaxy.0, &fuel_state, panel_size);
+            spawn_galaxy_map_overlay(&mut commands, &galaxy_map, &streaming, pending_galaxy.0, &fuel_state, &standing, panel_size);
         }
     }
 }
@@ -3461,9 +3462,11 @@ fn spawn_galaxy_map_overlay(
     streaming: &crate::celestial::resources::SystemStreamingManager,
     pending: Option<crate::celestial::resources::GalaxyWarpTarget>,
     fuel_state: &FuelState,
+    standing: &crate::diplomacy::FactionStanding,
     panel_size: f32,
 ) {
     use crate::celestial::resources::SystemDiscovery;
+    use crate::ai_ship::components::{faction_display_name, faction_map_color};
 
     commands.spawn((
         (Node {
@@ -3499,21 +3502,41 @@ fn spawn_galaxy_map_overlay(
                 GalaxyMapPanel,
             )).with_children(|map| {
                 for sys in &galaxy_map.systems {
+                    // Colored by WHOSE territory it is, not a generic danger
+                    // bucket (faction_map_color). The charts know who holds
+                    // a system you've only located, so its pip carries the
+                    // owner's colour too, dimmed; a visited one is full size.
+                    let owner_color = match sys.faction {
+                        None => Color::srgb(0.3, 0.9, 1.0), // Haven
+                        Some(faction) => faction_map_color(faction),
+                    };
                     let (size, color) = match sys.discovery {
                         SystemDiscovery::Unknown => continue,
-                        SystemDiscovery::Located => (6.0, theme::ThemeColors::TEXT_MUTED),
-                        SystemDiscovery::Visited => {
-                            // Colored by WHOSE territory it is, not a
-                            // generic danger bucket — see
-                            // ai_ship::components::faction_map_color.
-                            let color = match sys.faction {
-                                None => Color::srgb(0.3, 0.9, 1.0), // Haven
-                                Some(faction) => crate::ai_ship::components::faction_map_color(faction),
-                            };
-                            (10.0, color)
-                        }
+                        SystemDiscovery::Located => (7.0, owner_color.with_alpha(0.45)),
+                        SystemDiscovery::Visited => (10.0, owner_color),
                     };
                     let (x, y) = galaxy_to_map_px(sys.galaxy_pos, panel_size);
+                    // A capital wears a ring in its owner's colour; a haunted
+                    // system a red one, wider -- the boss is what matters there.
+                    for (ring, ring_color, show) in [
+                        (size + 8.0, owner_color, sys.capital),
+                        (size + 14.0, Color::srgb(0.95, 0.15, 0.15), sys.haunt.is_some()),
+                    ] {
+                        if show {
+                            map.spawn((
+                                Node {
+                                    position_type: PositionType::Absolute,
+                                    left: Val::Px(x - ring / 2.0),
+                                    top: Val::Px(y - ring / 2.0),
+                                    width: Val::Px(ring),
+                                    height: Val::Px(ring),
+                                    border: UiRect::all(Val::Px(2.0)),
+                                    ..default()
+                                },
+                                BorderColor::all(ring_color),
+                            ));
+                        }
+                    }
                     map.spawn((
                         Node {
                             position_type: PositionType::Absolute,
@@ -3571,24 +3594,14 @@ fn spawn_galaxy_map_overlay(
                 width: Val::Px(panel_size),
                 ..default()
             }).with_children(|legend| {
-                use crate::ai_ship::components::{faction_display_name, faction_map_color, AiShipType};
                 // Labels come from faction_display_name so the legend can never
-                // drift out of step with the roster.
-                let factions = [
-                    AiShipType::RecursiveKingdom,
-                    AiShipType::BrokenChoir,
-                    AiShipType::StellarPreserve,
-                    AiShipType::SynthesisCollective,
-                    AiShipType::TheSilence,
-                    AiShipType::GildedThrone,
-                    AiShipType::CorpseStars,
-                    AiShipType::TerranHegemony,
-                    AiShipType::EternalHegemony,
-                    AiShipType::Shepherd,
-                ];
+                // drift out of step with the roster. Only the factions that
+                // hold ground have a colour on the map; the bosses haunt.
                 let mut entries: Vec<(Color, &str)> = vec![(Color::srgb(0.3, 0.9, 1.0), "Haven")];
-                entries.extend(factions.iter().map(|f| (faction_map_color(*f), faction_display_name(*f))));
-                entries.push((theme::ThemeColors::TEXT_MUTED, "Located (unknown)"));
+                entries.extend(
+                    crate::celestial::territory::TERRITORIAL.iter().map(|f| (faction_map_color(*f), faction_display_name(*f))),
+                );
+                entries.push((Color::WHITE.with_alpha(0.45), "Located (dim)"));
                 let entries: &[(Color, &str)] = &entries;
                 for (color, label) in entries {
                     legend.spawn(Node {
@@ -3607,9 +3620,8 @@ fn spawn_galaxy_map_overlay(
             });
         });
 
-        // Sidebar: simple discovery-progress readout for now — per-system
-        // detail (name/faction/danger/click-to-warp) lands in Phase 5 once
-        // discovery mechanics exist to gate it.
+        // Sidebar: discovery progress, the warp target's owner and what it
+        // thinks of you, and who is at war along which border.
         parent.spawn((
             Node {
                 flex_direction: FlexDirection::Column,
@@ -3665,6 +3677,67 @@ fn spawn_galaxy_map_overlay(
                     parent.spawn((Text::new("Press V to jump"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
                 }
             }
+
+            // The warp target's place in the galaxy: whose it is, whether
+            // it's their capital, who it borders, and what haunts it.
+            if let Some(crate::celestial::resources::GalaxyWarpTarget::System(id)) = pending {
+                if let Some(sys) = galaxy_map.systems.iter().find(|s| s.id == id) {
+                    let caption = |p: &mut ChildSpawnerCommands, text: String, color: Color| {
+                        p.spawn((Text::new(text), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(color)));
+                    };
+                    match sys.faction {
+                        None => caption(parent, "Nobody's space".into(), theme::ThemeColors::TEXT_SECONDARY),
+                        Some(owner) => {
+                            let tier = standing.tier(owner);
+                            let what = if sys.capital { "capital" } else { "space" };
+                            caption(parent, format!("{} {what}", faction_display_name(owner)), faction_map_color(owner));
+                            caption(parent, format!("They count you {}", tier.label()), theme::ThemeColors::TEXT_SECONDARY);
+                        }
+                    }
+                    let borders = crate::celestial::territory::border_factions(galaxy_map, id);
+                    if !borders.is_empty() {
+                        let names: Vec<&str> = borders.iter().map(|f| faction_display_name(*f)).collect();
+                        caption(parent, format!("Borders: {}", names.join(", ")), theme::ThemeColors::TEXT_MUTED);
+                    }
+                    if let Some(boss) = sys.haunt {
+                        caption(parent, format!("Haunted by {}", faction_display_name(boss)), Color::srgb(0.95, 0.3, 0.3));
+                    }
+                }
+            }
+
+            // Wars along the borders you know of: two factions at war whose
+            // territories touch at a system you've at least located.
+            let mut wars: Vec<(crate::ai_ship::components::AiShipType, crate::ai_ship::components::AiShipType)> = Vec::new();
+            for sys in galaxy_map.systems.iter().filter(|s| s.discovery != SystemDiscovery::Unknown) {
+                let Some(owner) = sys.faction else { continue };
+                for other in crate::celestial::territory::border_factions(galaxy_map, sys.id) {
+                    let pair = if (owner as u8) < (other as u8) { (owner, other) } else { (other, owner) };
+                    if crate::ai_ship::components::factions_hostile(owner, other) && !wars.contains(&pair) {
+                        wars.push(pair);
+                    }
+                }
+            }
+            if !wars.is_empty() {
+                parent.spawn((
+                    Text::new("AT WAR"),
+                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                    TextColor(theme::ThemeColors::TEXT_MUTED),
+                    Node { margin: UiRect::top(Val::Px(theme::ThemeSpacing::SM)), ..default() },
+                ));
+                for (a, b) in wars.iter().take(10) {
+                    parent.spawn((
+                        Text::new(format!("{} - {}", faction_display_name(*a), faction_display_name(*b))),
+                        TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                        TextColor(theme::ThemeColors::TEXT_SECONDARY),
+                    ));
+                }
+            }
+            parent.spawn((
+                Text::new("Ring: capital   Red ring: haunted"),
+                TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                TextColor(theme::ThemeColors::TEXT_MUTED),
+                Node { margin: UiRect::top(Val::Px(theme::ThemeSpacing::SM)), ..default() },
+            ));
 
             parent.spawn((Text::new("Press M to close"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
         });
@@ -3752,6 +3825,7 @@ fn galaxy_map_click_system(
     streaming: Res<crate::celestial::resources::SystemStreamingManager>,
     fuel_state: Res<FuelState>,
     mut notifications: MessageWriter<ShowNotification>,
+    standing: Res<crate::diplomacy::FactionStanding>,
 ) {
     use crate::celestial::resources::{GalaxyWarpTarget, SystemDiscovery};
 
@@ -3796,7 +3870,7 @@ fn galaxy_map_click_system(
     }
     let (win_w, win_h) = windows.single().map(|w| (w.width(), w.height())).unwrap_or((1280.0, 800.0));
     let panel_size = (win_w.min(win_h) * 0.85).max(200.0);
-    spawn_galaxy_map_overlay(&mut commands, &galaxy_map, &streaming, pending.0, &fuel_state, panel_size);
+    spawn_galaxy_map_overlay(&mut commands, &galaxy_map, &streaming, pending.0, &fuel_state, &standing, panel_size);
 }
 
 /// G: hold to charge a warp dash toward the pending map destination. Release
@@ -4986,7 +5060,8 @@ fn spawn_docking_menu(
         );
         let kind = crate::world::station_types::station_type_name(s_type);
         let title = if let Some(terms) = &market.dock_terms {
-            // A faction station: what matters is what they think of you.
+            // A faction station: what matters is what they think of you. A
+            // free port says so.
             format!("{} - {}", name.to_uppercase(), terms.standing.to_uppercase())
         } else if name.ends_with(kind) {
             name.to_uppercase()
@@ -5004,10 +5079,13 @@ fn spawn_docking_menu(
         );
         let mut perks = Vec::new();
         if let Some(terms) = &market.dock_terms {
-            perks.push(format!(
-                "Your standing: {} - you pay x{:.2}, they pay you x{:.2}",
-                terms.standing, terms.buy, terms.sell
-            ));
+            perks.push(if terms.faction.is_some() {
+                format!("Your standing: {} - you pay x{:.2}, they pay you x{:.2}", terms.standing, terms.buy, terms.sell)
+            } else if terms.buy <= 1.0 && terms.sell >= 1.0 {
+                "Free port - ordinary prices for now; they rise after your first hours out".to_string()
+            } else {
+                format!("Free port - no one's protection: you pay x{:.2}, they pay you x{:.2}", terms.buy, terms.sell)
+            });
         }
         if discounts.fuel < 1.0 { perks.push(format!("Fuel -{:.0}%", (1.0 - discounts.fuel) * 100.0)); }
         if discounts.hull_repair < 1.0 { perks.push(format!("Repairs -{:.0}%", (1.0 - discounts.hull_repair) * 100.0)); }
@@ -6394,5 +6472,52 @@ mod module_repair_tests {
     #[test]
     fn no_credits_fixes_nothing() {
         assert!(plan_module_repair(&[(0, 50.0)], 0, 5.0).iter().all(|a| *a == 0.0));
+    }
+}
+
+#[cfg(test)]
+mod galaxy_map_tests {
+    use super::*;
+    use crate::celestial::resources::{GalaxyWarpTarget, SystemDiscovery, SystemStreamingManager};
+
+    fn texts(app: &mut App) -> Vec<String> {
+        let mut q = app.world_mut().query::<&Text>();
+        q.iter(app.world()).map(|t| t.0.clone()).collect()
+    }
+
+    /// The map tells you whose space a system is, what they think of you,
+    /// who it borders and what haunts it, and lists the wars it knows of.
+    #[test]
+    fn the_galaxy_map_shows_territory() {
+        let mut map = crate::celestial::galaxy::generate_galaxy_map(42);
+        for s in &mut map.systems {
+            s.discovery = SystemDiscovery::Located;
+        }
+        let haunted = map.systems.iter().find(|s| s.haunt.is_some()).unwrap().id;
+        let owner = map.systems.iter().find(|s| s.id == haunted).unwrap().faction.unwrap();
+        let standing = crate::diplomacy::FactionStanding::default();
+
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        let streaming = SystemStreamingManager::default();
+        let fuel = FuelState::default();
+        {
+            let world = app.world_mut();
+            let mut commands = world.commands();
+            spawn_galaxy_map_overlay(&mut commands, &map, &streaming, Some(GalaxyWarpTarget::System(haunted)), &fuel, &standing, 600.0);
+        }
+        app.update();
+        let all = texts(&mut app);
+        let has = |needle: &str| all.iter().any(|t| t.contains(needle));
+        let name = crate::ai_ship::components::faction_display_name(owner);
+        assert!(has(name), "owner {name} not shown: {all:?}");
+        assert!(has("They count you"), "standing not shown: {all:?}");
+        assert!(has("Haunted by"), "haunt not shown: {all:?}");
+        assert!(has("AT WAR"), "no wars listed: {all:?}");
+        // One capital ring per territorial faction, and a red ring per haunt.
+        let mut rings = app.world_mut().query::<&Node>();
+        let ringed = rings.iter(app.world()).filter(|n| n.border.left == Val::Px(2.0)).count();
+        let haunts = map.systems.iter().filter(|s| s.haunt.is_some()).count();
+        assert_eq!(ringed, crate::celestial::territory::TERRITORIAL.len() + haunts);
     }
 }

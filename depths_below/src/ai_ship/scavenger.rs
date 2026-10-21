@@ -107,7 +107,7 @@ pub fn spawn_scavenger_waves(
         let (mut fleet, members) = super::fleet::new_fleet(
             AiShipType::RecursiveKingdom,
             super::fleet::FleetKind::Raiders,
-            &classes,
+            &super::fleet::hulls_of(AiShipType::RecursiveKingdom, &classes),
             system_id,
             base,
             wave.position,

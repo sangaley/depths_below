@@ -28,7 +28,7 @@ pub mod stations;
 pub mod ui;
 
 /// Every faction with an opinion of you, in the order the window lists them.
-pub const FACTIONS: [AiShipType; 10] = [
+pub const FACTIONS: [AiShipType; 12] = [
     AiShipType::RecursiveKingdom,
     AiShipType::TheSilence,
     AiShipType::StellarPreserve,
@@ -39,6 +39,8 @@ pub const FACTIONS: [AiShipType; 10] = [
     AiShipType::TerranHegemony,
     AiShipType::EternalHegemony,
     AiShipType::Shepherd,
+    AiShipType::MerchantPrinces,
+    AiShipType::FreeHaulersCompact,
 ];
 
 /// Where standing starts, from the lore.
@@ -50,6 +52,8 @@ pub fn starting_standing(faction: AiShipType) -> f32 {
         RecursiveKingdom | BrokenChoir | SynthesisCollective | CorpseStars => -60.0,
         EternalHegemony => -70.0,
         Shepherd => -85.0,
+        // Traders deal with anyone who pays.
+        MerchantPrinces | FreeHaulersCompact => 10.0,
     }
 }
 

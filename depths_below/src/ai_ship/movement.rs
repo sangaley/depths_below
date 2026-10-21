@@ -107,6 +107,8 @@ pub fn ai_ship_movement_system(
             AiShipType::TerranHegemony => 0.6,       // slow battleship
             AiShipType::EternalHegemony => 0.4,    // colossal, lumbering
             AiShipType::Shepherd => 0.35,     // barely moves, but it doesn't need to
+            AiShipType::MerchantPrinces => 0.9,   // laden freight
+            AiShipType::FreeHaulersCompact => 0.8, // pushing a load
         };
 
         // Global AI pace.

@@ -10,6 +10,7 @@ SLUGS = {
     "CHOIR": "broken_choir", "SYNTHESIS": "synthesis_collective", "CORPSE": "corpse_stars",
     "PRESERVE": "stellar_preserve", "SILENCE": "the_silence", "SHEPHERD": "shepherd",
     "RECURSIVE": "recursive_kingdom", "MERCHANTS": "merchant_princes",
+    "COMPACT": "free_haulers_compact",
 }
 src = open(os.path.join(ROOT, "src/ai_ship/roster.rs")).read()
 copied = 0
@@ -30,7 +31,8 @@ ENUM = {"TerranHegemony": "terran_hegemony", "EternalHegemony": "eternal_hegemon
         "GildedThrone": "gilded_throne", "BrokenChoir": "broken_choir",
         "SynthesisCollective": "synthesis_collective", "CorpseStars": "corpse_stars",
         "StellarPreserve": "stellar_preserve", "TheSilence": "the_silence", "Shepherd": "shepherd",
-        "RecursiveKingdom": "recursive_kingdom"}
+        "RecursiveKingdom": "recursive_kingdom", "MerchantPrinces": "merchant_princes",
+        "FreeHaulersCompact": "free_haulers_compact"}
 stations = open(os.path.join(ROOT, "src/diplomacy/stations.rs")).read()
 for enum, key, platform in re.findall(r'\(AiShipType::(\w+), plan\("(\w+)", "[^"]*", (?:Some\("(\w+)"\)|None)', stations):
     for k in filter(None, (key, platform)):

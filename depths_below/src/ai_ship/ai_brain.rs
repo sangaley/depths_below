@@ -353,6 +353,36 @@ pub fn ai_brain_system(
         // ====================================================================
         match *ship_type {
             // ----------------------------------------------------------------
+            // TRADERS (Merchant Princes, Free Haulers' Compact): no warfleet.
+            // Shot at, they run from whoever did it and let their escort and
+            // their ally do the fighting (ai_distress_system); otherwise they
+            // keep their course. Their civilian hulls run from any threat
+            // anyway (CivilianHull, below); this covers the rest, the Arms
+            // Bazaar among them.
+            // ----------------------------------------------------------------
+            AiShipType::MerchantPrinces | AiShipType::FreeHaulersCompact => {
+                if under_fire {
+                    if let Some((_, t_pos)) = attacker_target {
+                        let away = (pos - t_pos).normalize_or(Vec2::X);
+                        actions.push(ScoredAction {
+                            score: 90.0,
+                            behavior: AiShipBehavior::Fleeing,
+                            destination: Some(pos + away * 4_000.0),
+                            target: None,
+                        });
+                    }
+                }
+                if !nav.waypoints.is_empty() {
+                    actions.push(ScoredAction {
+                        score: 40.0,
+                        behavior: AiShipBehavior::Patrolling,
+                        destination: nav.waypoints.get(nav.current_waypoint).copied(),
+                        target: None,
+                    });
+                }
+            }
+
+            // ----------------------------------------------------------------
             // LEVIATHAN RIDERS: Hunt creatures, avoid combat, flee when hurt
             // Prioritize: find creatures > capture > flee > patrol
             // ----------------------------------------------------------------

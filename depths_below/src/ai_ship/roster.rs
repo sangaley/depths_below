@@ -119,6 +119,24 @@ const SILENCE: &[ShipClass] = &[
     class("vigil", "Vigil", Line, 12),
 ];
 
+// Traders: civilian hulls, and the arms bazaar that parks between two
+// fleets mid-battle and sells to both. Their fighting is done by their ally.
+const MERCHANTS: &[ShipClass] = &[
+    class("pedlar", "Pedlar", Civilian, 30),
+    class("hauler", "Container Hauler", Civilian, 25),
+    class("bulk_freighter", "Bulk Freighter", Civilian, 12),
+    class("tanker", "Tanker", Civilian, 12),
+    class("mining_barge", "Mining Barge", Civilian, 10),
+    class("arms_bazaar", "Arms Bazaar", Experimental, 5),
+];
+
+// Drawn 2026-10-21 for the trade war; awaiting review on the concepts page.
+const COMPACT: &[ShipClass] = &[
+    class("tug", "Tug", Civilian, 35),
+    class("ore_hauler", "Ore Hauler", Civilian, 30),
+    class("fuel_runner", "Fuel Runner", Civilian, 20),
+];
+
 const SHEPHERD: &[ShipClass] = &[
     class("lamb", "Lamb", Scout, 40),
     class("ram", "Ram", Line, 30),
@@ -140,6 +158,8 @@ pub fn roster(faction: AiShipType) -> &'static [ShipClass] {
         Shepherd => SHEPHERD,
         // All seven redrawn after "too basic"; flies the original until approved.
         RecursiveKingdom => &[],
+        MerchantPrinces => MERCHANTS,
+        FreeHaulersCompact => COMPACT,
     }
 }
 
@@ -158,11 +178,11 @@ pub fn original_weight(faction: AiShipType) -> u32 {
 /// class and every station design. None for a key no longer on any roster
 /// (the ship then flies its faction's original design).
 pub fn intern(key: &str) -> Option<&'static str> {
-    const ALL: [AiShipType; 10] = [
+    const ALL: [AiShipType; 12] = [
         AiShipType::StellarPreserve, AiShipType::SynthesisCollective, AiShipType::BrokenChoir,
         AiShipType::CorpseStars, AiShipType::TheSilence, AiShipType::TerranHegemony,
         AiShipType::GildedThrone, AiShipType::RecursiveKingdom, AiShipType::EternalHegemony,
-        AiShipType::Shepherd,
+        AiShipType::Shepherd, AiShipType::MerchantPrinces, AiShipType::FreeHaulersCompact,
     ];
     ALL.iter()
         .flat_map(|&f| roster(f).iter().map(|c| c.key))

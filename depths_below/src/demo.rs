@@ -143,6 +143,8 @@ fn open_build_tab(
 fn census(
     time: Res<Time>,
     mut next: Local<f32>,
+    mut dumped: Local<bool>,
+    galaxy: Res<crate::celestial::resources::GalaxyMap>,
     ai: Query<(), With<AiShip>>,
     owned: Query<(), With<crate::ai_ship::components::OwnedByAiShip>>,
     hull: Query<&ChildOf, With<crate::components::HullSegment>>,
@@ -163,6 +165,17 @@ fn census(
         return;
     }
     *next = 1.0;
+    // The territory map, once, when the galaxy exists.
+    if !*dumped && !galaxy.systems.is_empty() {
+        *dumped = true;
+        for sys in &galaxy.systems {
+            let borders = crate::celestial::territory::border_factions(&galaxy, sys.id);
+            info!(
+                "TERRITORY {:>2} {:<9} owner={:?} capital={} haunt={:?} danger={:.1} borders={:?}",
+                sys.id, sys.name, sys.faction, sys.capital, sys.haunt, sys.danger_tier, borders
+            );
+        }
+    }
     let roots: std::collections::HashSet<Entity> = ai_roots.iter().collect();
     let ai_hull = hull.iter().filter(|c| roots.contains(&c.parent())).count();
     let nav_cells: usize = navs.iter().map(|n| n.cells.len()).sum();
@@ -277,28 +290,79 @@ impl Plugin for DemoPlugin {
         if std::env::var("DEPTHS_CENSUS").ok().as_deref() == Some("1") {
             app.add_systems(Update, census);
         }
-        if let Some(id) = std::env::var("DEPTHS_START_SYSTEM").ok().and_then(|v| v.parse::<u32>().ok()) {
-            app.add_systems(
-                Update,
-                (move |time: Res<Time<Real>>,
-                       mut done: Local<bool>,
-                       mut since: Local<f32>,
-                       mut jumps: MessageWriter<crate::celestial::events::WarpJumpStarted>| {
-                    if *done {
-                        return;
-                    }
-                    *since += time.delta_secs();
-                    if *since < 3.0 {
-                        return;
-                    }
-                    *done = true;
-                    info!("DEPTHS_START_SYSTEM: jumping to system {id}");
-                    jumps.write(crate::celestial::events::WarpJumpStarted {
-                        target: crate::celestial::resources::GalaxyWarpTarget::System(id),
-                    });
-                })
-                .run_if(in_state(crate::states::GameState::Exploring)),
-            );
+        // DEPTHS_START_SYSTEM=<where>[:fleet] -- jump there a few seconds in.
+        // <where> is a system id, a faction's type name (its capital: the
+        // galaxy is rolled fresh each run, so ids don't carry over), or
+        // "haunt" (the Shepherd's system). With ":fleet", then park 12 km
+        // off one of its fleets (the arrival berth is kept clear of them).
+        if let Ok(spec) = std::env::var("DEPTHS_START_SYSTEM") {
+            let (place, to_fleet) = match spec.split_once(':') {
+                Some((p, rest)) => (p.to_string(), rest == "fleet"),
+                None => (spec.clone(), false),
+            };
+            {
+                app.add_systems(
+                    Update,
+                    (move |time: Res<Time<Real>>,
+                           mut stage: Local<u8>,
+                           mut since: Local<f32>,
+                           mut target: Local<Option<u32>>,
+                           galaxy: Res<crate::celestial::resources::GalaxyMap>,
+                           mut jumps: MessageWriter<crate::celestial::events::WarpJumpStarted>,
+                           sim: Res<crate::ai_ship::components::WorldSimulation>,
+                           streaming: Res<crate::celestial::resources::SystemStreamingManager>,
+                           mut ship: Query<(&mut Transform, &mut crate::components::Velocity), With<crate::components::Ship>>| {
+                        *since += time.delta_secs();
+                        if target.is_none() && !galaxy.systems.is_empty() {
+                            *target = place.parse::<u32>().ok().or_else(|| {
+                                if place == "haunt" {
+                                    galaxy.systems.iter().find(|s| s.haunt == Some(crate::ai_ship::components::AiShipType::Shepherd)).map(|s| s.id)
+                                } else {
+                                    crate::celestial::territory::TERRITORIAL
+                                        .iter()
+                                        .find(|f| format!("{f:?}") == place)
+                                        .and_then(|f| crate::celestial::territory::capital_of(&galaxy, *f))
+                                }
+                            });
+                            if target.is_none() {
+                                warn!("DEPTHS_START_SYSTEM: no system matches {place:?}");
+                                *stage = 2;
+                            }
+                        }
+                        let Some(id) = *target else { return };
+                        match *stage {
+                            0 if *since >= 3.0 => {
+                                info!("DEPTHS_START_SYSTEM: jumping to system {id}");
+                                jumps.write(crate::celestial::events::WarpJumpStarted {
+                                    target: crate::celestial::resources::GalaxyWarpTarget::System(id),
+                                });
+                                *stage = if to_fleet { 1 } else { 2 };
+                                *since = 0.0;
+                            }
+                            1 if *since >= 2.0 && streaming.loaded_system == Some(id) => {
+                                *stage = 2;
+                                let alive = |f: &crate::ai_ship::fleet::SimFleet| {
+                                    sim.ships.iter().any(|s| s.fleet == f.id && s.behavior != crate::ai_ship::components::SimBehavior::Dead)
+                                };
+                                let fleets: Vec<_> = sim.fleets.iter().filter(|f| f.system_id == id && alive(f)).collect();
+                                let Some(fleet) = fleets.get((time.elapsed_secs() * 1000.0) as usize % fleets.len().max(1)) else {
+                                    warn!("DEPTHS_START_SYSTEM: system {id} has no fleets");
+                                    return;
+                                };
+                                if let Ok((mut tf, mut v)) = ship.single_mut() {
+                                    let at = fleet.position + Vec2::new(12_000.0, 0.0);
+                                    tf.translation.x = at.x;
+                                    tf.translation.y = at.y;
+                                    v.0 = Vec2::ZERO;
+                                    info!("DEPTHS_START_SYSTEM: parked 12 km off a {:?} {:?} (fleet {})", fleet.faction, fleet.kind, fleet.id);
+                                }
+                            }
+                            _ => {}
+                        }
+                    })
+                    .run_if(in_state(crate::states::GameState::Exploring)),
+                );
+            }
         }
         if !full_demo && !skip_menu && !move_test && build_tab.is_none() {
             return;
