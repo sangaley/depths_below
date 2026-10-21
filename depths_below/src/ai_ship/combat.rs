@@ -119,7 +119,11 @@ pub fn ai_weapon_fire_system(
         // shot first (the brain applies the same rule when picking targets;
         // this also covers the no-target fallback below).
         let may_shoot_player = player.is_some_and(|(p, _)| {
-            standing.attacks_player(*ship_type) || state.last_attacker == Some(p)
+            standing.attacks_player(*ship_type)
+                || state.last_attacker == Some(p)
+                // Its fleet (or a ship of its faction it answered) is
+                // fighting you: it fights you too.
+                || (state.alert_timer > 0.0 && state.alert_target == Some(p))
         });
         if !may_shoot_player && ai_target.entity.is_some() && ai_target.entity == player.map(|(p, _)| p) {
             continue;
@@ -402,7 +406,16 @@ const DISTRESS_COOLDOWN: f32 = 12.0;
 pub fn ai_distress_system(
     time: Res<Time>,
     mut ai_ships: Query<
-        (Entity, &Transform, &AiShipType, &AiShipBehavior, &AiShipTarget, &mut AiShipState),
+        (
+            Entity,
+            &Transform,
+            &AiShipType,
+            &AiShipBehavior,
+            &AiShipTarget,
+            &mut AiShipState,
+            Option<&super::fleet::FleetMember>,
+            Has<super::fleet::CivilianHull>,
+        ),
         With<AiShip>,
     >,
     player_query: Query<Entity, With<Ship>>,
@@ -411,10 +424,30 @@ pub fn ai_distress_system(
     let dt = time.delta_secs();
     let player = player_query.single().ok();
 
+    // A fleet fights as one: when any member is fighting, or is being shot
+    // at, the rest of its fighting ships are told who, wherever they are in
+    // the formation. No cooldown and no "in trouble" bar -- an escort doesn't
+    // wait for its capital to be hurt. (fleet, target)
+    let mut fleet_calls: Vec<(u32, Entity)> = Vec::new();
+    for (_, _, _, behavior, target, state, member, _) in ai_ships.iter() {
+        let Some(m) = member else { continue };
+        if state.is_destroyed { continue; }
+        let call = match (behavior, target.entity) {
+            (AiShipBehavior::Engaging, Some(t)) => Some(t),
+            _ if state.last_hit_timer < 5.0 => state.last_attacker,
+            _ => None,
+        };
+        if let Some(t) = call {
+            if !fleet_calls.iter().any(|(f, _)| *f == m.fleet) {
+                fleet_calls.push((m.fleet, t));
+            }
+        }
+    }
+
     // PASS 1 — collect fresh broadcasts: a fighting ship, off cooldown, that's
     // actually in trouble (recently hit or hull hurt) and has a target.
     let mut broadcasts: Vec<(Entity, AiShipType, Vec2, Entity)> = Vec::new();
-    for (e, tf, ftype, behavior, target, state) in ai_ships.iter() {
+    for (e, tf, ftype, behavior, target, state, _, _) in ai_ships.iter() {
         if state.is_destroyed { continue; }
         if *behavior != AiShipBehavior::Engaging { continue; }
         if state.distress_cooldown > 0.0 { continue; }
@@ -428,7 +461,7 @@ pub fn ai_distress_system(
     // PASS 2 — tick every ship's timers, stamp caller cooldowns, and alert
     // nearby same-faction fighters onto the caller's target.
     let mut player_backup_called = false;
-    for (e, tf, ftype, _behavior, _target, mut state) in ai_ships.iter_mut() {
+    for (e, tf, ftype, _behavior, _target, mut state, member, civilian) in ai_ships.iter_mut() {
         state.alert_timer = (state.alert_timer - dt).max(0.0);
         state.distress_cooldown = (state.distress_cooldown - dt).max(0.0);
         if state.is_destroyed { continue; }
@@ -437,7 +470,15 @@ pub fn ai_distress_system(
             state.distress_cooldown = DISTRESS_COOLDOWN;
         }
 
-        if !faction_fights(*ftype) { continue; }
+        if !faction_fights(*ftype) || civilian { continue; }
+        // A fleet's call reaches all of it, before any stranger's.
+        if let Some(&(_, t)) = member.and_then(|m| fleet_calls.iter().find(|(f, _)| *f == m.fleet)) {
+            if t != e {
+                state.alert_target = Some(t);
+                state.alert_timer = state.alert_timer.max(ALERT_DURATION);
+                continue;
+            }
+        }
         let pos = tf.translation.truncate();
         // Whether this ship was already answering a call before this frame —
         // used so the "reinforcements!" warning fires once per NEW recruit,

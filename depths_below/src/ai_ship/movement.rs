@@ -16,6 +16,7 @@ pub fn ai_ship_movement_system(
         &AiShipType,
         &Children,
         Option<&crate::ship::collision::Collider>,
+        Option<&super::fleet::FleetMember>,
     ), With<AiShip>>,
     engine_query: Query<(&Engine, &Module, &OwnedByAiShip)>,
     weapon_query: Query<(&Weapon, &Module, &OwnedByAiShip), Without<Engine>>,
@@ -26,10 +27,16 @@ pub fn ai_ship_movement_system(
         (&Transform, &crate::ship::collision::Collider),
         crate::ship::collision::TerrainFilter,
     >,
+    // The player's hull is in the way too: a fleet crossing near you flowed
+    // into it, and an escort could wedge itself between the Pincer's claws.
+    player: Query<(&Transform, &crate::ship::collision::Collider), (With<Ship>, Without<AiShip>)>,
 ) {
     let dt = time.delta_secs();
+    let player_obstacle = player.single().ok().map(|(tf, c)| {
+        (crate::ship::collision::world_point(tf, c.bound_center), c.bound_radius)
+    });
 
-    for (_entity, mut transform, mut velocity, behavior, nav, state, ship_type, children, collider) in ai_ships.iter_mut() {
+    for (_entity, mut transform, mut velocity, behavior, nav, state, ship_type, children, collider, member) in ai_ships.iter_mut() {
         if *behavior == AiShipBehavior::Dead || state.is_destroyed {
             velocity.0 = Vec2::ZERO;
             continue;
@@ -76,6 +83,17 @@ pub fn ai_ship_movement_system(
             AiShipBehavior::Salvaging => 0.3,
             AiShipBehavior::Dead => 0.0,
         };
+
+        // In formation, the leader holds back so its escorts can keep up,
+        // and an escort out of place hurries to its slot.
+        let to_slot = nav.destination.map_or(0.0, |d| d.distance(transform.translation.truncate()));
+        let behavior_mult = match (member, behavior) {
+            (Some(m), AiShipBehavior::Patrolling) if m.leader => behavior_mult * 0.75,
+            (Some(_), AiShipBehavior::Patrolling) if to_slot > 1_500.0 => behavior_mult * 1.35,
+            _ => behavior_mult,
+        };
+        // An escort settles into its slot rather than overshooting it.
+        let settle = member.is_some_and(|m| !m.leader) && *behavior == AiShipBehavior::Patrolling;
 
         // Faction-specific speed characteristics
         let faction_mult = match ship_type {
@@ -191,9 +209,18 @@ pub fn ai_ship_movement_system(
                     dist,
                     own_radius,
                 );
+                // Not while fighting you: a ship engaging holds its own
+                // standoff, and a rammer means to hit.
+                let direction = match player_obstacle {
+                    Some((center, radius)) if *behavior != AiShipBehavior::Engaging => {
+                        crate::ship::collision::steer_clear_of(pos, direction, dist, own_radius, center, radius)
+                    }
+                    _ => direction,
+                };
 
                 // Gradually accelerate toward desired velocity
-                let desired_vel = direction * max_speed;
+                let arrive = if settle { (dist / 600.0).min(1.0) } else { 1.0 };
+                let desired_vel = direction * max_speed * arrive;
                 velocity.0 = velocity.0.lerp(desired_vel, vel_blend);
 
                 // Update rotation to face movement direction

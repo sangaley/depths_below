@@ -98,23 +98,25 @@ pub fn spawn_scavenger_waves(
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
         let base = wave.position
             + Vec2::new(angle.cos(), angle.sin()) * rng.gen_range(SPAWN_DIST_MIN..SPAWN_DIST_MAX);
-        for i in 0..wave.ships {
-            let jitter = Vec2::new(rng.gen_range(-120.0..120.0), rng.gen_range(-120.0..120.0));
-            let at = base + jitter + Vec2::Y * (i as f32 * 40.0);
-            // Home is the carcass: their patrol rings it and, once built,
-            // the wreck-chasing brain does the rest.
-            let mut ship = super::components::SimulatedShip::patrolling(
-                system_id,
-                AiShipType::RecursiveKingdom,
-                at,
-                wave.position,
-                1_500.0,
-                120.0,
-            );
-            ship.destination = wave.position;
-            ship.class = super::roster::roll(AiShipType::RecursiveKingdom, &mut rng, |_| true).map(|c| c.key);
-            sim.add(ship);
-        }
+        // One fleet: they arrive together and leave together. Home is the
+        // carcass: their patrol rings it and the wreck-chasing brain does
+        // the rest.
+        let classes: Vec<_> = (0..wave.ships)
+            .map(|_| super::roster::roll(AiShipType::RecursiveKingdom, &mut rng, |_| true).map(|c| c.key))
+            .collect();
+        let (mut fleet, members) = super::fleet::new_fleet(
+            AiShipType::RecursiveKingdom,
+            super::fleet::FleetKind::Raiders,
+            &classes,
+            system_id,
+            base,
+            wave.position,
+            1_500.0,
+            &mut rng,
+        );
+        fleet.heading = (wave.position - base).to_angle();
+        fleet.destination = wave.position;
+        sim.add_fleet(fleet, members);
         notifications.write(ShowNotification {
             message: "Scavenger swarm inbound - they smell the wreck!".into(),
             notification_type: NotificationType::Warning,

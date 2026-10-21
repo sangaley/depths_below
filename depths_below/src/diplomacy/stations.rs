@@ -81,6 +81,10 @@ pub struct StationAnchor {
 pub struct FactionStations {
     pub live: Option<LiveStation>,
     pub destroyed: Vec<u32>,
+    /// Where the loaded system's station is (system, centre, hull reach),
+    /// whether or not it has materialised: its guard fleet holds there and
+    /// its convoys run to it. None with no station, or a destroyed one.
+    pub post: Option<(u32, Vec2, f32)>,
 }
 
 pub struct LiveStation {
@@ -160,6 +164,7 @@ fn sync_faction_stations(
         }
     }
 
+    stations.post = None;
     let Some(system) = system else { return };
     let Some(faction) = system.faction else { return };
     let Some(plan) = station_plan(faction) else { return };
@@ -185,6 +190,7 @@ fn sync_faction_stations(
     };
     let at = anchor_point(planet_pos, &core_anchor);
     let dist = player_pos.distance(at);
+    stations.post = Some((system.id, at, extent));
 
     if let Some(live) = &stations.live {
         if dist > DESPAWN_RANGE {

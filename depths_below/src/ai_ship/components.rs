@@ -308,6 +308,11 @@ pub struct SimulatedShip {
     pub id: u32,
     /// Damage it carried off-screen; restored when it spawns again.
     pub wounds: Option<Wounds>,
+    /// The fleet it flies with (`WorldSimulation::fleets`), 0 for none.
+    pub fleet: u32,
+    /// Its place in the fleet's formation, relative to the fleet's centre
+    /// with +x along the fleet's heading.
+    pub slot: Vec2,
 }
 
 /// A SimulatedShip as a save holds it. The class key is a `&'static str`
@@ -334,6 +339,10 @@ struct SavedShip {
     id: u32,
     #[serde(default)]
     wounds: Option<Wounds>,
+    #[serde(default)]
+    fleet: u32,
+    #[serde(default)]
+    slot: Vec2,
 }
 
 impl<'de> Deserialize<'de> for SimulatedShip {
@@ -364,6 +373,8 @@ impl From<SavedShip> for SimulatedShip {
             class: s.class.as_deref().and_then(crate::ai_ship::roster::intern),
             id: s.id,
             wounds: s.wounds,
+            fleet: s.fleet,
+            slot: s.slot,
         }
     }
 }
@@ -396,6 +407,8 @@ impl SimulatedShip {
             class: None,
             id: 0,
             wounds: None,
+            fleet: 0,
+            slot: Vec2::ZERO,
         }
     }
 }
@@ -433,6 +446,10 @@ pub struct SavedWorld {
     pub ships: Vec<SimulatedShip>,
     pub next_ship_id: u32,
     pub next_bounty_id: u32,
+    #[serde(default)]
+    pub fleets: Vec<super::fleet::SimFleet>,
+    #[serde(default)]
+    pub next_fleet_id: u32,
 }
 
 impl SavedWorld {
@@ -465,20 +482,26 @@ pub enum SimBehavior {
 #[derive(Resource)]
 pub struct WorldSimulation {
     pub ships: Vec<SimulatedShip>,
+    /// Ships that travel, fight and spawn together (ai_ship::fleet). A ship
+    /// names its fleet by id; a fleet's members are the ships that do.
+    pub fleets: Vec<super::fleet::SimFleet>,
     pub tick_timer: Timer,
     pub initialized: bool,
     next_bounty_id: u32,
     next_ship_id: u32,
+    next_fleet_id: u32,
 }
 
 impl Default for WorldSimulation {
     fn default() -> Self {
         Self {
             ships: Vec::new(),
+            fleets: Vec::new(),
             tick_timer: Timer::from_seconds(2.0, TimerMode::Repeating),
             initialized: false,
             next_bounty_id: 1,
             next_ship_id: 1,
+            next_fleet_id: 1,
         }
     }
 }
@@ -502,6 +525,8 @@ impl WorldSimulation {
                 .collect(),
             next_ship_id: self.next_ship_id,
             next_bounty_id: self.next_bounty_id,
+            fleets: self.fleets.clone(),
+            next_fleet_id: self.next_fleet_id,
         }
     }
 
@@ -513,6 +538,16 @@ impl WorldSimulation {
         self.next_ship_id = saved.next_ship_id.max(max_id + 1);
         let max_bounty = self.ships.iter().filter_map(|s| s.bounty_id).max().unwrap_or(0);
         self.next_bounty_id = saved.next_bounty_id.max(max_bounty + 1);
+        self.fleets = saved.fleets.clone();
+        let max_fleet = self.fleets.iter().map(|f| f.id).max().unwrap_or(0);
+        self.next_fleet_id = saved.next_fleet_id.max(max_fleet + 1);
+        // A ship whose fleet didn't make it into the save flies alone.
+        let known: Vec<u32> = self.fleets.iter().map(|f| f.id).collect();
+        for ship in &mut self.ships {
+            if ship.fleet != 0 && !known.contains(&ship.fleet) {
+                ship.fleet = 0;
+            }
+        }
         self.initialized = true;
     }
 
@@ -521,6 +556,30 @@ impl WorldSimulation {
         ship.id = self.next_ship_id;
         self.next_ship_id += 1;
         self.ships.push(ship);
+    }
+
+    /// Add a fleet and its members, issuing ids. Each member is placed at its
+    /// formation slot round the fleet's position. Returns the fleet's id.
+    pub fn add_fleet(&mut self, mut fleet: super::fleet::SimFleet, members: Vec<SimulatedShip>) -> u32 {
+        fleet.id = self.next_fleet_id;
+        self.next_fleet_id += 1;
+        for mut ship in members {
+            ship.fleet = fleet.id;
+            ship.position = fleet.slot_position(ship.slot);
+            ship.destination = fleet.destination;
+            ship.system_id = fleet.system_id;
+            self.add(ship);
+        }
+        let id = fleet.id;
+        self.fleets.push(fleet);
+        id
+    }
+
+    pub fn fleet(&self, id: u32) -> Option<&super::fleet::SimFleet> {
+        if id == 0 {
+            return None;
+        }
+        self.fleets.iter().find(|f| f.id == id)
     }
 
     /// Picks a random living, untagged ship belonging to `faction` and tags

@@ -106,7 +106,7 @@ impl Collider {
 #[derive(Component, Default)]
 pub struct KnockVelocity(pub Vec2);
 
-fn world_point(transform: &Transform, local: Vec2) -> Vec2 {
+pub(crate) fn world_point(transform: &Transform, local: Vec2) -> Vec2 {
     transform.translation.truncate() + (transform.rotation * local.extend(0.0)).truncate()
 }
 
@@ -217,6 +217,32 @@ pub fn steer_around(
     (desired + away * (need * (0.6 + 1.4 * urgency)))
         .try_normalize()
         .unwrap_or(desired)
+}
+
+/// `desired`, bent around one round obstacle (a ship) the same way
+/// `steer_around` bends it around terrain.
+pub fn steer_clear_of(pos: Vec2, desired: Vec2, travel: f32, own_radius: f32, center: Vec2, radius: f32) -> Vec2 {
+    let look = travel.min(2200.0);
+    let clearance = radius + own_radius + 60.0;
+    let rel = center - pos;
+    let t_along = rel.dot(desired);
+    let lateral = rel - desired * t_along;
+    // Behind us, past where we're going, or clear to the side: nothing to do.
+    // Inside the clearance already counts whatever the bearing, so a ship
+    // caught in a hull's notch is pushed out of it.
+    let inside = rel.length() < clearance;
+    if !inside && (t_along < 0.0 || t_along > look + clearance || lateral.length() >= clearance) {
+        return desired;
+    }
+    let away = lateral.try_normalize().map(|l| -l).unwrap_or(desired.perp());
+    let need = ((clearance - lateral.length()) / clearance).clamp(0.0, 1.0);
+    let urgency = if look > 1.0 { (1.0 - t_along / look).clamp(0.2, 1.0) } else { 1.0 };
+    let mut out = desired + away * (need * (0.6 + 1.4 * urgency));
+    if inside {
+        // Straight out, away from the hull's middle.
+        out += (-rel).normalize_or(away);
+    }
+    out.try_normalize().unwrap_or(desired)
 }
 
 /// Weapons fire smashes into terrain: bullets, missiles, ion pulses and EMP
@@ -625,9 +651,14 @@ pub fn resolve_collisions(
             // TOWARD the attacker (the convention every other writer uses,
             // and what process_ship_damage walks inward from). `normal`
             // runs a -> b, so for a the attacker lies along +normal.
-            for (entity, other, share, into) in [
-                (a, b, weight_a / total_weight, normal),
-                (b, a, weight_b / total_weight, -normal),
+            // Who rammed whom: the one driving harder into the other along
+            // the contact line. A ship blamed for a ram is the attacker; a
+            // ship that was rammed is not, so a neutral escort drifting into
+            // your hull doesn't count as you attacking it.
+            let (closing_a, closing_b) = (vel_a.dot(normal), -vel_b.dot(normal));
+            for (entity, other, share, into, other_rammed) in [
+                (a, b, weight_a / total_weight, normal, closing_b >= closing_a),
+                (b, a, weight_b / total_weight, -normal, closing_a >= closing_b),
             ] {
                 let amount =
                     (energy * share * ram_profile(other).0 * ram_profile(entity).1).min(150.0);
@@ -650,7 +681,7 @@ pub fn resolve_collisions(
                         direction: Some(into),
                         // Rams aggro: the other ship is the attacker if it
                         // IS a ship (player or AI root), not scenery.
-                        attacker: (player.contains(other) || ai.contains(other))
+                        attacker: (other_rammed && (player.contains(other) || ai.contains(other)))
                             .then_some(other),
                     });
                 }

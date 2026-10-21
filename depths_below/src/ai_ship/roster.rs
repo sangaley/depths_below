@@ -146,7 +146,7 @@ pub fn roster(faction: AiShipType) -> &'static [ShipClass] {
 /// How often the faction's original design still turns up next to its new
 /// roster: only while some of its classes are out for rework, so that slot
 /// isn't simply empty.
-fn original_weight(faction: AiShipType) -> u32 {
+pub fn original_weight(faction: AiShipType) -> u32 {
     match faction {
         AiShipType::StellarPreserve => 60,
         AiShipType::EternalHegemony => 5,

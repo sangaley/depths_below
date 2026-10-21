@@ -198,6 +198,26 @@ pub fn design_blocks(ship_type: AiShipType, class: Option<&'static str>) -> usiz
     n
 }
 
+/// How far a class's hull reaches from the ship's position, in world units:
+/// its farthest cell, plus one. Cells sit at grid_pos x 66 from the root,
+/// uncentred, so this is from the root, not the hull's middle. What a
+/// formation spaces ships by. Cached.
+pub fn design_extent(ship_type: AiShipType, class: Option<&'static str>) -> f32 {
+    static EXTENTS: OnceLock<Mutex<HashMap<(AiShipType, Option<&'static str>), f32>>> = OnceLock::new();
+    let extents = EXTENTS.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(&r) = extents.lock().unwrap().get(&(ship_type, class)) {
+        return r;
+    }
+    let design = class_design(ship_type, class);
+    let r = if design.hull_cells.is_empty() {
+        300.0
+    } else {
+        design.hull_cells.iter().map(|c| c.grid_pos.as_vec2().length()).fold(0.0_f32, f32::max) * 66.0 + 66.0
+    };
+    extents.lock().unwrap().insert((ship_type, class), r);
+    r
+}
+
 /// A class's design with the blocks it lost before going off-screen taken out.
 pub fn wounded_design(built: &Blueprint, wounds: &Wounds) -> Blueprint {
     let mut design = built.clone();
@@ -228,6 +248,9 @@ pub fn spawn_ai_ship_wounded(
     }
     if let Some(key) = class {
         commands.entity(root).insert(AiShipClass(key));
+        if super::roster::find(ship_type, key).is_some_and(|c| c.role == super::roster::ClassRole::Civilian) {
+            commands.entity(root).insert(super::fleet::CivilianHull);
+        }
     }
     root
 }

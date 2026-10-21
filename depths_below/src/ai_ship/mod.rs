@@ -12,6 +12,7 @@ mod crew;
 pub mod interior;
 mod power;
 pub mod roster;
+pub mod fleet;
 
 use bevy::prelude::*;
 
@@ -36,7 +37,7 @@ impl Plugin for AiShipPlugin {
                 Update,
                 (
                     simulation::tick_world_simulation,
-                    (simulation::sync_simulation_entities, simulation::apply_spawn_integrity).chain(),
+                    (simulation::sync_simulation_entities, simulation::apply_spawn_integrity, simulation::track_live_ships).chain(),
                     // spawn_raider_waves removed — was periodically teleporting a
                     // hostile wing in right next to the player regardless of
                     // location, which was most of what made fights feel

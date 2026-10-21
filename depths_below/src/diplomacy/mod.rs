@@ -286,7 +286,12 @@ fn standing_from_hits(
         } else {
             cooldown.push((faction, now + 1.0));
         }
-        standing.change(faction, -1.0, "You fired on their ship");
+        let reason = if matches!(hit.source, crate::events::DamageSource::Collision) {
+            "You rammed their ship"
+        } else {
+            "You fired on their ship"
+        };
+        standing.change(faction, -1.0, reason);
     }
 }
 

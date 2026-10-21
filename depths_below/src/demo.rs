@@ -30,6 +30,7 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //   DEPTHS_OFFSCREEN=1  — render into an image instead of the window, so
 //                          capture works however buried the window is. The
 //                          window itself shows nothing; for unattended runs.
+//   DEPTHS_START_SYSTEM=<id> — jump straight to that star system a few seconds in.
 //   DEPTHS_KEYS=<script> — tap keys at set times, e.g. "3:KeyM,5:F7,8:Escape".
 //                          "6:Minus~3" HOLDS a key for 3s instead -- needed
 //                          for anything read with `pressed` rather than
@@ -149,6 +150,13 @@ fn census(
     navs: Query<&crate::crew::navigation::NavGrid>,
     dead: Res<crate::crew::burial::DriftingDead>,
     concealed: Query<(), With<crate::ai_ship::interior::Concealed>>,
+    fleets: Query<(
+        &Transform,
+        &crate::ai_ship::fleet::FleetMember,
+        &crate::ai_ship::components::AiShipBehavior,
+        &crate::ai_ship::components::AiShipState,
+        Has<crate::ai_ship::fleet::CivilianHull>,
+    )>,
 ) {
     *next -= time.delta_secs();
     if *next > 0.0 {
@@ -170,6 +178,29 @@ fn census(
         concealed.iter().count(),
         dead.bodies.len()
     );
+    // Each live fleet: where its leader is, and how far each escort sits
+    // from its slot (turned with the leader), and what it is doing.
+    let mut ids: Vec<u32> = fleets.iter().map(|(_, m, ..)| m.fleet).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    for id in ids {
+        let members: Vec<_> = fleets.iter().filter(|(_, m, ..)| m.fleet == id).collect();
+        let Some((lead_tf, _, lead_b, _, _)) = members.iter().find(|(_, m, ..)| m.leader) else {
+            info!("FLEET {id}: no live leader, {} members", members.len());
+            continue;
+        };
+        let lead = lead_tf.translation.truncate();
+        let parts: Vec<String> = members
+            .iter()
+            .filter(|(_, m, ..)| !m.leader)
+            .map(|(tf, m, b, st, civ)| {
+                let want = lead + (lead_tf.rotation * m.slot.extend(0.0)).truncate();
+                let off = tf.translation.truncate().distance(want);
+                format!("{}{:?} off={:.0}{}", if *civ { "civ " } else { "" }, b, off, if st.is_destroyed { " DEAD" } else { "" })
+            })
+            .collect();
+        info!("FLEET {id}: lead {:?} at ({:.0},{:.0}) | {}", lead_b, lead.x, lead.y, parts.join(" | "));
+    }
 }
 
 /// Name every sprite sitting near the ship's origin, under DEPTHS_WHATSTHERE=1.
@@ -245,6 +276,29 @@ impl Plugin for DemoPlugin {
         }
         if std::env::var("DEPTHS_CENSUS").ok().as_deref() == Some("1") {
             app.add_systems(Update, census);
+        }
+        if let Some(id) = std::env::var("DEPTHS_START_SYSTEM").ok().and_then(|v| v.parse::<u32>().ok()) {
+            app.add_systems(
+                Update,
+                (move |time: Res<Time<Real>>,
+                       mut done: Local<bool>,
+                       mut since: Local<f32>,
+                       mut jumps: MessageWriter<crate::celestial::events::WarpJumpStarted>| {
+                    if *done {
+                        return;
+                    }
+                    *since += time.delta_secs();
+                    if *since < 3.0 {
+                        return;
+                    }
+                    *done = true;
+                    info!("DEPTHS_START_SYSTEM: jumping to system {id}");
+                    jumps.write(crate::celestial::events::WarpJumpStarted {
+                        target: crate::celestial::resources::GalaxyWarpTarget::System(id),
+                    });
+                })
+                .run_if(in_state(crate::states::GameState::Exploring)),
+            );
         }
         if !full_demo && !skip_menu && !move_test && build_tab.is_none() {
             return;
