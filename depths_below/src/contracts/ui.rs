@@ -73,6 +73,7 @@ pub fn toggle_mission_board(
     mut sim: ResMut<WorldSimulation>,
     mut notifications: MessageWriter<ShowNotification>,
     streaming: Res<crate::celestial::resources::SystemStreamingManager>,
+    standing: Res<crate::diplomacy::FactionStanding>,
 ) {
     if !keyboard.just_pressed(KeyCode::KeyJ) { return; }
     // Shift+J belongs to the HUD tracker toggle (see toggle_contract_hud).
@@ -104,7 +105,13 @@ pub fn toggle_mission_board(
 
     viewing.0 = station;
     let active_systems: Vec<u32> = streaming.loaded_system.into_iter().chain(streaming.warm_systems.iter().copied()).collect();
-    generation::ensure_station_board(station, &mut contract_state, &rep, &mut sim, &active_systems);
+    // No bounties on your friends.
+    let spare: Vec<_> = crate::diplomacy::FACTIONS
+        .iter()
+        .copied()
+        .filter(|f| standing.tier(*f) >= crate::diplomacy::StandingTier::Friendly)
+        .collect();
+    generation::ensure_station_board(station, &mut contract_state, &rep, &mut sim, &active_systems, &spare);
 
     board_open.0 = true;
     commands.init_resource::<MissionBoardSelection>();
@@ -461,11 +468,12 @@ pub fn update_contract_hud(
     streaming: Res<crate::celestial::resources::SystemStreamingManager>,
     player: Query<&Transform, With<crate::components::Ship>>,
     live_bounties: Query<(&Transform, &crate::ai_ship::components::BountyTarget)>,
+    jobs: Res<crate::diplomacy::jobs::Jobs>,
 ) {
     // Hide the whole panel — not just its text — when it's toggled off or
     // there's nothing to track, so its background box doesn't sit empty in the
     // corner.
-    let show = visible.0 && !state.active_contracts.is_empty();
+    let show = visible.0 && (!state.active_contracts.is_empty() || jobs.active().next().is_some());
     if let Ok(mut node) = root_query.single_mut() {
         let want = if show { Display::Flex } else { Display::None };
         if node.display != want {
@@ -505,8 +513,43 @@ pub fn update_contract_hud(
             status,
         ));
     }
+    // Work taken from contacts at the starports.
+    for job in jobs.active() {
+        let mut line = format!("> {}: {}", job.title, job.progress());
+        if let Some(at) = job_whereabouts(job, &sim, streaming.loaded_system, ship_pos) {
+            line = format!("{line} - {at}");
+        }
+        lines.push(line);
+    }
 
     text.0 = lines.join("\n");
+}
+
+/// Where a contact job's business is: a range if it's in this system, the
+/// system's name if not.
+fn job_whereabouts(
+    job: &crate::diplomacy::jobs::Job,
+    sim: &crate::ai_ship::components::WorldSimulation,
+    here: Option<u32>,
+    ship_pos: Vec2,
+) -> Option<String> {
+    use crate::diplomacy::jobs::JobKind;
+    let elsewhere = |id: u32| format!("in {}", crate::celestial::galaxy::system_name(id));
+    match &job.kind {
+        JobKind::Bounty { fleet, system } | JobKind::Raid { fleet, system } | JobKind::Escort { fleet, system, .. } => {
+            if here != Some(*system) {
+                return Some(elsewhere(*system));
+            }
+            sim.ships
+                .iter()
+                .filter(|s| s.fleet == *fleet && s.behavior != crate::ai_ship::components::SimBehavior::Dead)
+                .map(|s| s.position.distance(ship_pos))
+                .min_by(|a, b| a.total_cmp(b))
+                .map(crate::ui::format_range_km)
+        }
+        JobKind::HoldTheLine { system, .. } | JobKind::Survey { system, .. } => (here != Some(*system)).then(|| elsewhere(*system)),
+        JobKind::Delivery { to_system, .. } => Some(if here == Some(*to_system) { "dock to deliver".to_string() } else { format!("to {}", crate::celestial::galaxy::system_name(*to_system)) }),
+    }
 }
 
 #[cfg(test)]

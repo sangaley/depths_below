@@ -2415,6 +2415,10 @@ pub struct DockTabButton(pub DockTab);
 #[derive(Component, Clone, Copy, Debug)]
 pub struct DockFooterHint;
 
+/// The station window's cargo list, redrawn as the hold changes.
+#[derive(Component)]
+pub struct DockHoldList;
+
 // ============================================================================
 // ABYSSAL HORROR COMPONENTS
 // ============================================================================

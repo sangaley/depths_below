@@ -1688,6 +1688,9 @@ pub struct SaveData {
     /// The people you've met at faction starports, and what they think of you.
     #[serde(default)]
     pub contacts: Option<crate::diplomacy::contacts::Contacts>,
+    /// Work you've taken from contacts.
+    #[serde(default)]
+    pub jobs: Option<crate::diplomacy::jobs::Jobs>,
 }
 
 impl Default for SaveData {
@@ -1726,6 +1729,7 @@ impl Default for SaveData {
             destroyed_stations: Vec::new(),
             border_war: None,
             contacts: None,
+            jobs: None,
         }
     }
 }

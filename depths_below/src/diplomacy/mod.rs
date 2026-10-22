@@ -26,6 +26,7 @@ use crate::states::GameState;
 
 pub mod contacts;
 pub mod dock_tabs;
+pub mod jobs;
 pub mod stations;
 pub mod ui;
 
@@ -361,10 +362,13 @@ impl Plugin for DiplomacyPlugin {
             .add_systems(Update, contacts::contacts_flee_fallen_capitals)
             .add_systems(
                 Update,
-                (dock_tabs::dock_tab_keys, dock_tabs::refresh_dock_tabs)
+                (dock_tabs::dock_tab_keys, dock_tabs::refresh_dock_tabs, jobs::deliver_cargo, dock_tabs::refresh_dock_hold)
                     .chain()
                     .run_if(in_state(GameState::Docked)),
-            );
+            )
+            .init_resource::<jobs::Jobs>()
+            .add_systems(OnExit(GameState::Docked), dock_tabs::lapse_offers)
+            .add_systems(Update, (jobs::track_jobs, jobs::standing_from_contracts));
     }
 }
 

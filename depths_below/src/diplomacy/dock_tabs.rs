@@ -6,12 +6,14 @@
 //!   group nearby, a convoy running through, a border slipping, a hunter
 //!   wing someone put on you.
 //! - **Comm directory:** the contacts at this starport (contacts.rs): pick one,
-//!   talk, and they get to know you.
+//!   talk, and they get to know you -- and offer you work (jobs.rs), which A
+//!   takes.
 
 use bevy::prelude::*;
 use rand::{seq::SliceRandom, Rng, SeedableRng};
 
 use super::contacts::{self, Contacts};
+use super::jobs::{self, JobStatus, Jobs};
 use super::FactionStanding;
 use crate::ai_ship::components::{faction_display_name, AiShipType, SimBehavior, WorldSimulation};
 use crate::ai_ship::fleet::{FleetKind, Mission};
@@ -21,8 +23,9 @@ use crate::components::*;
 use crate::resources::MarketEvents;
 use crate::ui::theme::{ThemeColors, ThemeFonts};
 
-/// Q / E switch tabs; in the Comm directory Up / Down pick a contact and
-/// Enter talks to them.
+/// Q / E switch tabs; in the Comm directory Up / Down pick a contact, Enter
+/// talks to them (and asks for work), A takes the work they offer.
+#[allow(clippy::too_many_arguments)]
 pub fn dock_tab_keys(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut windows: Query<&mut DockTabState, With<DockingOverlay>>,
@@ -30,6 +33,10 @@ pub fn dock_tab_keys(
     galaxy: Res<GalaxyMap>,
     streaming: Res<SystemStreamingManager>,
     mut contacts: ResMut<Contacts>,
+    mut work: ResMut<Jobs>,
+    world: (Res<WorldSimulation>, Res<BorderWar>),
+    mut inventory: ResMut<crate::resources::Inventory>,
+    mut notes: MessageWriter<crate::events::ShowNotification>,
 ) {
     let Ok(mut state) = windows.single_mut() else { return };
     if !state.tabs {
@@ -59,11 +66,59 @@ pub fn dock_tab_keys(
         state.contact = (state.contact + here.len() - 1) % here.len();
     }
     state.contact = state.contact.min(here.len() - 1);
+    let def = here[state.contact];
     if keyboard.just_pressed(KeyCode::Enter) {
-        contacts.talk(here[state.contact]);
+        contacts.talk(def);
+        if work.of(&def.id).is_none() {
+            let (sim, war) = (&world.0, &world.1);
+            let at = jobs::World { sim, galaxy: &galaxy, war, here: system };
+            if let Some(job) = jobs::offer_for(def, contacts.relationship(&def.id), &at, &mut rand::thread_rng()) {
+                info!("JOB offered by {}: {} ({} cr) - {}", def.name, job.title, job.reward, job.brief);
+                work.push(job);
+            }
+        }
         // Change-detection on the state is what redraws the panel.
         state.set_changed();
     }
+    if keyboard.just_pressed(KeyCode::KeyA) && work.of(&def.id).is_some_and(|j| j.status == JobStatus::Offered) {
+        let taken = work.accept(&def.id, |item, count| inventory.add_item(item, count));
+        info!("JOB accept from {}: {:?} ({} in hand)", def.name, taken, work.active().count());
+        let (message, kind) = match taken {
+            Ok(()) => (format!("Job taken: {}", work.of(&def.id).map_or("", |j| j.title.as_str())), crate::events::NotificationType::Info),
+            Err(why) => (why.to_string(), crate::events::NotificationType::Warning),
+        };
+        notes.write(crate::events::ShowNotification { message, notification_type: kind, duration: 3.5 });
+        state.set_changed();
+    }
+}
+
+/// The window's cargo list: drawn when the window opens and whenever the hold
+/// changes while you're docked.
+pub fn refresh_dock_hold(
+    mut commands: Commands,
+    lists: Query<Entity, Added<DockHoldList>>,
+    all_lists: Query<Entity, With<DockHoldList>>,
+    inventory: Res<crate::resources::Inventory>,
+) {
+    let targets: Vec<Entity> = if inventory.is_changed() { all_lists.iter().collect() } else { lists.iter().collect() };
+    for list in targets {
+        commands.entity(list).despawn_related::<Children>();
+        let mut items: Vec<_> = inventory.items.iter().collect();
+        items.sort_by_key(|(item, _)| item.name());
+        commands.entity(list).with_children(|l| {
+            if items.is_empty() {
+                l.spawn(line("Empty", ThemeFonts::BODY_SMALL, ThemeColors::TEXT_MUTED));
+            }
+            for (item, n) in items {
+                l.spawn(line(format!("{} x{n}", item.name()), ThemeFonts::BODY_SMALL, ThemeColors::TEXT_SECONDARY));
+            }
+        });
+    }
+}
+
+/// Offers you didn't take lapse when you undock.
+pub fn lapse_offers(mut work: ResMut<Jobs>) {
+    work.drop_offers();
 }
 
 /// Redraw the tabs when the window opens or its state changes: which panel
@@ -80,6 +135,7 @@ pub fn refresh_dock_tabs(
     world: (Res<WorldSimulation>, Res<GalaxyMap>, Res<BorderWar>, Res<FactionStanding>, Res<SystemStreamingManager>, Res<Time>),
     market: Res<MarketEvents>,
     contacts: Res<Contacts>,
+    work: Res<Jobs>,
 ) {
     let Ok(state) = windows.single() else { return };
     let (sim, galaxy, war, standing, streaming, time) = world;
@@ -91,7 +147,7 @@ pub fn refresh_dock_tabs(
             let owner = market.dock_terms.as_ref().and_then(|t| t.faction);
             match panel.0 {
                 DockTab::Bar => fill_bar(&mut commands, entity, &sim, &galaxy, &war, &standing, &streaming, owner, time.elapsed_secs()),
-                DockTab::Comm => fill_comm(&mut commands, entity, &galaxy, &contacts, &streaming, owner, state.contact),
+                DockTab::Comm => fill_comm(&mut commands, entity, &galaxy, &contacts, &work, &streaming, owner, state.contact),
                 DockTab::Market => {}
             }
         }
@@ -110,7 +166,7 @@ pub fn refresh_dock_tabs(
         let want = match state.tab {
             DockTab::Market => "Up/Down  select    Left/Right  cargo choice    Enter  buy    Esc  undock",
             DockTab::Bar => "Q / E  switch tab    Esc  undock",
-            DockTab::Comm => "Up/Down  pick a contact    Enter  talk    Q / E  switch tab    Esc  undock",
+            DockTab::Comm => "Up/Down  pick a contact    Enter  talk    A  take the job    Q / E  switch tab    Esc  undock",
         };
         if text.0 != want {
             text.0 = want.to_string();
@@ -263,11 +319,13 @@ fn fill_bar(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn fill_comm(
     commands: &mut Commands,
     panel: Entity,
     galaxy: &GalaxyMap,
     contacts: &Contacts,
+    work: &Jobs,
     streaming: &SystemStreamingManager,
     owner: Option<AiShipType>,
     selected: usize,
@@ -322,6 +380,32 @@ fn fill_comm(
                 if def.story {
                     d.spawn(line("*  Holds a piece of the summit record", ThemeFonts::CAPTION, ThemeColors::ACCENT_YELLOW));
                 }
+                // The work they have for you.
+                let held = work.active().count();
+                d.spawn((
+                    Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(4.0), padding: UiRect::all(Val::Px(12.0)), margin: UiRect::top(Val::Px(10.0)), border: UiRect::left(Val::Px(3.0)), ..default() },
+                    BackgroundColor(ThemeColors::BG_ELEVATED),
+                    BorderColor::all(ThemeColors::ACCENT_YELLOW),
+                )).with_children(|w| match work.of(&def.id) {
+                    Some(job) if job.status == JobStatus::Offered => {
+                        w.spawn(line("WORK", ThemeFonts::CAPTION, ThemeColors::ACCENT_YELLOW));
+                        w.spawn(line(job.title.clone(), 16.0, ThemeColors::TEXT_TITLE));
+                        w.spawn(line(job.brief.clone(), ThemeFonts::BODY_SMALL, ThemeColors::TEXT_PRIMARY));
+                        w.spawn(line(format!("Pays {} cr", job.reward), ThemeFonts::BODY_SMALL, ThemeColors::ACCENT_GREEN));
+                        let take = if held >= jobs::MAX_ACTIVE { "Your hands are full: three jobs at a time.".to_string() } else { format!("A  take the job    ({held}/{} in hand)", jobs::MAX_ACTIVE) };
+                        w.spawn(line(take, ThemeFonts::CAPTION, ThemeColors::TEXT_MUTED));
+                    }
+                    Some(job) => {
+                        w.spawn(line("IN HAND", ThemeFonts::CAPTION, ThemeColors::ACCENT_YELLOW));
+                        w.spawn(line(job.title.clone(), 16.0, ThemeColors::TEXT_TITLE));
+                        w.spawn(line(job.brief.clone(), ThemeFonts::BODY_SMALL, ThemeColors::TEXT_PRIMARY));
+                        w.spawn(line(format!("{}  |  pays {} cr", job.progress(), job.reward), ThemeFonts::CAPTION, ThemeColors::TEXT_SECONDARY));
+                    }
+                    None => {
+                        w.spawn(line("WORK", ThemeFonts::CAPTION, ThemeColors::TEXT_MUTED));
+                        w.spawn(line("Talk to them and ask.", ThemeFonts::BODY_SMALL, ThemeColors::TEXT_MUTED));
+                    }
+                });
             });
         });
     });

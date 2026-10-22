@@ -5324,12 +5324,15 @@ fn spawn_docking_menu(
                             (format!("Oxygen     {:.0} / {:.0}", oxygen_state.current_oxygen, oxygen_state.max_oxygen), theme::ThemeColors::ACCENT_CYAN),
                             (format!("Crew       {} / {}", crew_count, staffing_state.total_berths), theme::ThemeColors::TEXT_PRIMARY),
                         ]);
-                        let hold: Vec<(String, Color)> = if inventory.items.is_empty() {
-                            vec![("Empty".to_string(), theme::ThemeColors::TEXT_MUTED)]
-                        } else {
-                            inventory.items.iter().map(|(item, n)| (format!("{} x{}", item.name(), n), theme::ThemeColors::TEXT_SECONDARY)).collect()
-                        };
-                        card(side, "Cargo hold", hold);
+                        // Filled by diplomacy::dock_tabs::refresh_dock_hold, so
+                        // what you buy or are handed shows straight away.
+                        side.spawn((
+                            Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), padding: UiRect::all(Val::Px(10.0)), ..default() },
+                            BackgroundColor(theme::ThemeColors::BG_CARD),
+                        )).with_children(|c| {
+                            c.spawn(caption("CARGO HOLD".to_string()));
+                            c.spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), ..default() }, DockHoldList));
+                        });
                         if !perks.is_empty() {
                             card(side, "Terms", perks.iter().map(|p| (p.clone(), theme::ThemeColors::TEXT_SECONDARY)).collect());
                         }
