@@ -150,7 +150,7 @@ fn toggle_window(
         return;
     }
     if let Some((e, _)) = windows.iter().find(|(_, w)| w.id == WINDOW_ID) {
-        commands.entity(e).despawn();
+        commands.entity(e).try_despawn();
         return;
     }
     let content = spawn_floating_window(
@@ -164,6 +164,12 @@ fn toggle_window(
 }
 
 /// Rebuild the open window when anything it shows changes.
+///
+/// Runs in PostUpdate, after every close of the frame (X, the title bar's
+/// close button) has gone through. In Update it could find the window still
+/// standing in the same frame it was closed -- standing changes most frames
+/// in a fight -- and queue new rows into an entity that was gone by the time
+/// they landed: a crash on closing the window.
 fn refresh_window(
     mut commands: Commands,
     contents: Query<(Entity, &WindowContent)>,
@@ -299,17 +305,43 @@ pub struct DiplomacyUiPlugin;
 
 impl Plugin for DiplomacyUiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            (toggle_window, press_treaty, refresh_window.after(press_treaty))
-                .run_if(in_state(GameState::Exploring)),
-        );
+        app.add_systems(Update, (toggle_window, press_treaty).run_if(in_state(GameState::Exploring)))
+            .add_systems(PostUpdate, refresh_window.run_if(in_state(GameState::Exploring)));
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Closing the window in a frame where standing also changed used to
+    /// crash: the redraw queued rows into the window being closed.
+    #[test]
+    fn closing_the_window_while_standing_changes() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<FactionStanding>()
+            .insert_resource(Currency { credits: 100 })
+            .add_systems(Update, toggle_window)
+            .add_systems(PostUpdate, refresh_window);
+        let press = |app: &mut App| {
+            let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+            keys.release(KeyCode::KeyX);
+            keys.clear();
+            keys.press(KeyCode::KeyX);
+        };
+        press(&mut app);
+        app.update();
+        let open = |app: &mut App| app.world_mut().query::<&FloatingWindow>().iter(app.world()).count();
+        assert_eq!(open(&mut app), 1);
+        for _ in 0..3 {
+            press(&mut app);
+            app.world_mut().resource_mut::<FactionStanding>().change(AiShipType::CorpseStars, -1.0, "test");
+            app.update();
+        }
+        assert_eq!(open(&mut app), 0, "opened, closed, opened, closed");
+    }
 
     #[test]
     fn tribute_calms_a_hostile_faction_and_costs_credits() {

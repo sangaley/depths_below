@@ -96,7 +96,6 @@ pub struct GameAudio {
     /// Interior ambience for the station. The opening was ~50 seconds of
     /// silence: no menu audio, no station hum, nothing marking launch.
     station_hum: Handle<AudioSource>,
-    machine_loops: Vec<Handle<AudioSource>>,
     hull_creaks: Vec<Handle<AudioSource>>,
     alarm_loop: Handle<AudioSource>,
     ui_select: Vec<Handle<AudioSource>>,
@@ -144,11 +143,6 @@ fn load_audio(mut commands: Commands, assets: Res<AssetServer>) {
         dread_low: assets.load("audio/ambient/black_hole_drone.mp3"),
         dread_high: assets.load("audio/ambient/hostile_atmosphere_loop.mp3"),
         station_hum: assets.load("audio/ambient/interior_hum.ogg"),
-        machine_loops: vec![
-            assets.load("audio/ambient/machine_loop_1.ogg"),
-            assets.load("audio/ambient/machine_loop_2.ogg"),
-            assets.load("audio/ambient/machine_loop_3.ogg"),
-        ],
         hull_creaks: load_all(&[
             "audio/ambient/hull_creak_1.mp3",
             "audio/ambient/hull_creak_2.mp3",
@@ -524,15 +518,9 @@ fn start_station_loops(
         PlaybackSettings::LOOP.with_volume(Volume::Linear(vol)),
         StationLoopAudio,
     ));
-    // One machine loop under the hum so the berth sounds worked-in rather
-    // than merely not-silent.
-    if let Some(machine) = audio.machine_loops.first() {
-        commands.spawn((
-            AudioPlayer(machine.clone()),
-            PlaybackSettings::LOOP.with_volume(Volume::Linear(vol * 0.55)),
-            StationLoopAudio,
-        ));
-    }
+    // There was a machine loop under the hum: three seconds of clank,
+    // repeating for as long as you sat at the berth. Players heard it as a
+    // fault, not as a station.
 }
 
 fn stop_station_loops(loops: Query<Entity, With<StationLoopAudio>>, mut commands: Commands) {
