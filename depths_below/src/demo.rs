@@ -30,7 +30,8 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //   DEPTHS_OFFSCREEN=1  — render into an image instead of the window, so
 //                          capture works however buried the window is. The
 //                          window itself shows nothing; for unattended runs.
-//   DEPTHS_START_SYSTEM=<id> — jump straight to that star system a few seconds in.
+//   DEPTHS_START_SYSTEM=<id|Faction|haunt>[:fleet|:capital] — jump there a few seconds in.
+//   DEPTHS_ZOOM=<z> — hold the camera at that zoom (1.8 default, 20 furthest out).
 //   DEPTHS_KEYS=<script> — tap keys at set times, e.g. "3:KeyM,5:F7,8:Escape".
 //                          "6:Minus~3" HOLDS a key for 3s instead -- needed
 //                          for anything read with `pressed` rather than
@@ -332,6 +333,15 @@ impl Plugin for DemoPlugin {
         if std::env::var("DEPTHS_CENSUS").ok().as_deref() == Some("1") {
             app.add_systems(Update, census);
         }
+        // DEPTHS_ZOOM=<z>: hold the camera at this zoom (scripted key holds
+        // don't reach the zoom in an offscreen run). 1.8 is the default; 20
+        // the furthest out.
+        if let Some(z) = std::env::var("DEPTHS_ZOOM").ok().and_then(|v| v.parse::<f32>().ok()) {
+            app.add_systems(Update, move |mut cam: ResMut<crate::camera::CameraState>| {
+                cam.zoom = z.clamp(cam.min_zoom, cam.max_zoom);
+                cam.user_zoomed = true;
+            });
+        }
         // DEPTHS_START_SYSTEM=<where>[:fleet] -- jump there a few seconds in.
         // <where> is a system id, a faction's type name (its capital: the
         // galaxy is rolled fresh each run, so ids don't carry over), or
@@ -339,8 +349,8 @@ impl Plugin for DemoPlugin {
         // off one of its fleets (the arrival berth is kept clear of them).
         if let Ok(spec) = std::env::var("DEPTHS_START_SYSTEM") {
             let (place, to_fleet) = match spec.split_once(':') {
-                Some((p, rest)) => (p.to_string(), rest == "fleet"),
-                None => (spec.clone(), false),
+                Some((p, rest)) => (p.to_string(), rest.to_string()),
+                None => (spec.clone(), String::new()),
             };
             {
                 app.add_systems(
@@ -353,7 +363,9 @@ impl Plugin for DemoPlugin {
                            mut jumps: MessageWriter<crate::celestial::events::WarpJumpStarted>,
                            sim: Res<crate::ai_ship::components::WorldSimulation>,
                            streaming: Res<crate::celestial::resources::SystemStreamingManager>,
-                           mut ship: Query<(&mut Transform, &mut crate::components::Velocity), With<crate::components::Ship>>| {
+                           mut ship: Query<(&mut Transform, &mut crate::components::Velocity), With<crate::components::Ship>>,
+                           worlds: Query<(&Transform, &crate::celestial::components::CelestialBody), (With<crate::celestial::capital_worlds::CapitalWorld>, Without<crate::components::Ship>)>,
+                           faction_stations: Res<crate::diplomacy::stations::FactionStations>| {
                         *since += time.delta_secs();
                         if target.is_none() && !galaxy.systems.is_empty() {
                             *target = place.parse::<u32>().ok().or_else(|| {
@@ -378,7 +390,11 @@ impl Plugin for DemoPlugin {
                                 jumps.write(crate::celestial::events::WarpJumpStarted {
                                     target: crate::celestial::resources::GalaxyWarpTarget::System(id),
                                 });
-                                *stage = if to_fleet { 1 } else { 2 };
+                                *stage = match to_fleet.as_str() {
+                                    "fleet" => 1,
+                                    "capital" => 3,
+                                    _ => 2,
+                                };
                                 *since = 0.0;
                             }
                             1 if *since >= 2.0 && streaming.loaded_system == Some(id) => {
@@ -397,6 +413,32 @@ impl Plugin for DemoPlugin {
                                     tf.translation.y = at.y;
                                     v.0 = Vec2::ZERO;
                                     info!("DEPTHS_START_SYSTEM: parked 12 km off a {:?} {:?} (fleet {})", fleet.faction, fleet.kind, fleet.id);
+                                }
+                            }
+                            // ":capital": the capital world's night side, near its starport.
+                            3 if *since >= 3.0 && streaming.loaded_system == Some(id) => {
+                                let Some((world, body)) = worlds.iter().next() else {
+                                    if *since > 10.0 {
+                                        warn!("DEPTHS_START_SYSTEM: system {id} has no capital world");
+                                        *stage = 2;
+                                    }
+                                    return;
+                                };
+                                *stage = 2;
+                                let star = galaxy.systems.iter().find(|s| s.id == id).map_or(Vec2::ZERO, |s| s.local_center);
+                                let at = world.translation.truncate();
+                                let out = (at - star).normalize_or(Vec2::X);
+                                // Beside its starport (in docking reach), which
+                                // stands off the world's night side.
+                                let park = match faction_stations.post.filter(|p| p.0 == id) {
+                                    Some((_, port, extent)) => port + out.perp() * (extent + 1_500.0),
+                                    None => at + out * (body.radius + 2_500.0) + out.perp() * 4_000.0,
+                                };
+                                if let Ok((mut tf, mut v)) = ship.single_mut() {
+                                    tf.translation.x = park.x;
+                                    tf.translation.y = park.y;
+                                    v.0 = Vec2::ZERO;
+                                    info!("DEPTHS_START_SYSTEM: parked on the night side of {}", body.name);
                                 }
                             }
                             _ => {}

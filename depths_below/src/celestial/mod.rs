@@ -10,6 +10,7 @@ pub mod warp;
 pub mod poi;
 pub mod galaxy;
 pub mod territory;
+pub mod capital_worlds;
 
 use bevy::prelude::*;
 use crate::states::GameState;
@@ -30,7 +31,7 @@ pub enum CelestialSet {
 impl Plugin for CelestialPlugin {
     fn build(&self, app: &mut App) {
         app
-            .add_plugins(territory::TerritoryPlugin)
+            .add_plugins((territory::TerritoryPlugin, capital_worlds::CapitalWorldsPlugin))
             .init_resource::<resources::GalaxyState>()
             .init_resource::<resources::CelestialConfig>()
             .init_resource::<resources::GalaxyMap>()

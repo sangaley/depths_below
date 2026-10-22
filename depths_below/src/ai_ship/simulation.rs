@@ -314,7 +314,25 @@ fn spawn_system_faction_population(sim: &mut WorldSimulation, system: &crate::ce
             sim.add_fleet(fleet, members);
         }
     }
+
+    // A capital keeps a home fleet: a battle group that holds by its starport
+    // and never leaves (a trading faction's is its ally's).
+    if system.capital && has_station {
+        let flier = faction.ally().filter(|_| faction.is_trading()).unwrap_or(faction);
+        let mut home_held = super::fleet::Held::new();
+        if let Some(hulls) = super::fleet::compose(flier, super::fleet::FleetKind::BattleGroup, &mut rng, &mut home_held) {
+            let at = holdings[0] + Vec2::new(0.0, 6_000.0);
+            let (mut fleet, members) = super::fleet::new_fleet(
+                faction, super::fleet::FleetKind::StationGuard, &hulls, system.id, at, holdings[0], HOME_FLEET_RADIUS, &mut rng,
+            );
+            fleet.destination = patrol_waypoint(&mut rng, holdings[0], HOME_FLEET_RADIUS);
+            sim.add_fleet(fleet, members);
+        }
+    }
 }
+
+/// How far a capital's home fleet ranges round its starport.
+const HOME_FLEET_RADIUS: f32 = 14_000.0;
 
 /// How far a station guard ranges from its post, past the station's hull.
 const GUARD_RADIUS: f32 = 8_000.0;
@@ -604,7 +622,8 @@ pub fn tick_world_simulation(
             match fleet.kind {
                 FleetKind::StationGuard => {
                     fleet.home_zone = at;
-                    fleet.patrol_radius = extent + GUARD_RADIUS;
+                    // The larger of the two: a capital's home fleet ranges wider.
+                    fleet.patrol_radius = fleet.patrol_radius.max(extent + GUARD_RADIUS);
                     // Posted before anyone knew where the station would be:
                     // take station there, out of sight, rather than crossing
                     // half a system to get to it.
@@ -1333,6 +1352,33 @@ mod population_tests {
                 assert!(clear > 0.0, "ships of two fleets overlap by {:.0}", -clear);
             }
         }
+    }
+
+    /// A capital keeps a home fleet: a battle group (a capital ship and its
+    /// escorts) posted at its starport, besides the ordinary station guard.
+    #[test]
+    fn a_capital_keeps_a_home_fleet() {
+        let galaxy = crate::celestial::galaxy::generate_galaxy_map(42);
+        let capital = galaxy
+            .systems
+            .iter()
+            .find(|s| s.capital && s.faction == Some(AiShipType::TerranHegemony))
+            .expect("the Hegemony has a capital");
+        let mut sim = WorldSimulation::default();
+        spawn_system_faction_population(&mut sim, capital);
+        let guards: Vec<_> = sim.fleets.iter().filter(|f| f.kind == super::super::fleet::FleetKind::StationGuard).collect();
+        let led_by_a_capital = guards.iter().any(|f| {
+            sim.ships.iter().any(|s| {
+                s.fleet == f.id && super::super::fleet::role_of(s.faction, s.class) == super::super::roster::ClassRole::Capital
+            })
+        });
+        assert!(led_by_a_capital, "no home fleet with a capital ship at the Hegemony's capital");
+
+        // An ordinary system of the same faction has none.
+        let outpost = galaxy.systems.iter().find(|s| !s.capital && s.faction == Some(AiShipType::TerranHegemony)).unwrap();
+        let mut sim = WorldSimulation::default();
+        spawn_system_faction_population(&mut sim, outpost);
+        assert!(sim.fleets.iter().filter(|f| f.kind == super::super::fleet::FleetKind::StationGuard).count() <= 1);
     }
 
     /// Spread over the system, not one territory: several holdings occupied,

@@ -62,6 +62,26 @@ pub struct EventHorizonVisual;
 // ATTACH VISUAL LAYERS — runs once per entity when first seen
 // ============================================================================
 
+/// Give a body its glow, ring, atmosphere or shadow sprites, and mark it done
+/// -- if it still exists when the commands land. A load or a jump clears the
+/// system's bodies the same frame a fresh one can first be seen, and adding a
+/// child to a despawned body panicked the game (it did, once, mid-load beside
+/// a capital world). The orphaned layers go with it.
+fn attach_layers(commands: &mut Commands, body: Entity, layers: Vec<Entity>) {
+    commands.queue(move |world: &mut World| {
+        if let Ok(mut body) = world.get_entity_mut(body) {
+            body.insert(HasVisualLayers);
+            body.add_children(&layers);
+        } else {
+            for layer in layers {
+                if let Ok(e) = world.get_entity_mut(layer) {
+                    e.despawn();
+                }
+            }
+        }
+    });
+}
+
 /// Attach glow layers to stars that don't have them yet
 pub fn attach_star_visuals(
     mut commands: Commands,
@@ -108,11 +128,7 @@ pub fn attach_star_visuals(
             StarFlareGlow,
         )).id();
 
-        commands.entity(entity)
-            .insert(HasVisualLayers)
-            .add_child(inner_glow)
-            .add_child(corona)
-            .add_child(flare_glow);
+        attach_layers(&mut commands, entity, vec![inner_glow, corona, flare_glow]);
     }
 }
 
@@ -143,7 +159,7 @@ pub fn attach_planet_visuals(
                     }, Transform::from_xyz(0.0, 0.0, -0.08)),
                 PlanetRing,
             )).id();
-            commands.entity(entity).add_child(ring);
+            attach_layers(&mut commands, entity, vec![ring]);
         }
 
         // Atmosphere glow, where the world has one worth drawing
@@ -174,7 +190,7 @@ pub fn attach_planet_visuals(
                 },
             )).id();
 
-            commands.entity(entity).add_child(atmosphere);
+            attach_layers(&mut commands, entity, vec![atmosphere]);
         }
 
         // Night side. Positioned every frame by `spin_and_light_planets` so
@@ -190,9 +206,7 @@ pub fn attach_planet_visuals(
             PlanetShadow,
         )).id();
 
-        commands.entity(entity)
-            .insert(HasVisualLayers)
-            .add_child(shadow);
+        attach_layers(&mut commands, entity, vec![shadow]);
     }
 }
 
@@ -246,12 +260,7 @@ pub fn attach_black_hole_visuals(
                 }, Transform::from_xyz(0.0, 0.0, -0.1)),
         ).id();
 
-        commands.entity(entity)
-            .insert(HasVisualLayers)
-            .add_child(horizon)
-            .add_child(disk_inner)
-            .add_child(disk_outer)
-            .add_child(distortion);
+        attach_layers(&mut commands, entity, vec![horizon, disk_inner, disk_outer, distortion]);
     }
 }
 

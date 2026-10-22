@@ -304,7 +304,9 @@ fn faction_station_docking(
     mut notifications: MessageWriter<ShowNotification>,
     mut next_state: ResMut<NextState<GameState>>,
     mut prompted: Local<bool>,
+    where_: (Res<GalaxyMap>, Res<SystemStreamingManager>),
 ) {
+    let (galaxy, streaming) = where_;
     let Ok(player) = player.single() else { return };
     let pos = player.translation.truncate();
     let near = cores.iter().find(|(tf, anchor, _, state)| {
@@ -314,11 +316,19 @@ fn faction_station_docking(
         *prompted = false;
         return;
     };
-    let name = format!(
-        "{} {}",
-        faction_display_name(faction),
-        station_plan(faction).map_or("station", |p| p.name)
-    );
+    // Over a capital world the starport is the faction's High Command.
+    let capital = streaming
+        .loaded_system
+        .and_then(|id| galaxy.systems.iter().find(|s| s.id == id))
+        .filter(|s| s.capital && s.faction == Some(faction));
+    let name = match capital {
+        Some(sys) => format!(
+            "{} High Command, {}",
+            faction_display_name(faction),
+            crate::celestial::capital_worlds::capital_world_name(&sys.name)
+        ),
+        None => format!("{} {}", faction_display_name(faction), station_plan(faction).map_or("station", |p| p.name)),
+    };
     let tier = standing.tier(faction);
     let (lean_buy, lean_sell) = price_lean(faction);
     let prices = tier.station_prices().map(|(b, s)| (b * lean_buy, s * lean_sell));

@@ -3700,6 +3700,15 @@ fn spawn_galaxy_map_overlay(
                             caption(parent, format!("They count you {}", tier.label()), theme::ThemeColors::TEXT_SECONDARY);
                         }
                     }
+                    // A capital is a world: its name, its people, what it makes.
+                    if let (true, Some(owner)) = (sys.capital, sys.faction) {
+                        let (people, makes) = crate::celestial::capital_worlds::capital_blurb(owner);
+                        caption(
+                            parent,
+                            format!("{}: {people}; makes {makes}", crate::celestial::capital_worlds::capital_world_name(&sys.name)),
+                            theme::ThemeColors::TEXT_SECONDARY,
+                        );
+                    }
                     let borders = crate::celestial::territory::border_factions(galaxy_map, id);
                     if !borders.is_empty() {
                         let names: Vec<&str> = borders.iter().map(|f| faction_display_name(*f)).collect();
@@ -5111,7 +5120,10 @@ fn spawn_docking_menu(
         } else {
             format!("{} - {}", name.to_uppercase(), kind.to_uppercase())
         };
-        parent.spawn((Text::new(title), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H1), ..default() }, TextColor(theme::ThemeColors::ACCENT_CYAN)));
+        // "TERRAN HEGEMONY HIGH COMMAND, VIGIL PRIME - FRIENDLY" wrapped onto
+        // two lines at H1: a long name drops a size.
+        let title_size = if title.chars().count() > 34 { theme::ThemeFonts::H2 } else { theme::ThemeFonts::H1 };
+        parent.spawn((Text::new(title), TextFont { font_size: FontSize::Px(title_size), ..default() }, TextColor(theme::ThemeColors::ACCENT_CYAN)));
 
         // Station identity subtitle — discounts were already silently baked
         // into displayed prices with nothing explaining why; this states it
