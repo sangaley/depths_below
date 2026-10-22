@@ -147,7 +147,8 @@ impl Plugin for UiPlugin {
             .add_systems(OnExit(GameState::StationDocked), despawn_docking_menu)
             .add_systems(
                 Update,
-                docking_menu_input
+                (docking_menu_input, highlight_dock_rows)
+                    .chain()
                     .run_if(in_state(GameState::Docked).or_else(in_state(GameState::StationDocked))),
             )
             // Game event notifications (while exploring)
@@ -5083,180 +5084,307 @@ fn spawn_docking_menu(
     let crew_count = crew_query.iter().count();
     // Escape leaves a settlement berth, but at a station it only closes this
     // menu (handle_menu_input) -- the hint has to say which.
-    let escape_hint = if *state.get() == GameState::StationDocked { "ESC: Close" } else { "ESC: Undock" };
+    let escape_hint = if *state.get() == GameState::StationDocked { "Esc  close" } else { "Esc  undock" };
     let station_idx = ship_query.single().ok()
         .and_then(|t| stations.nearest_index(t.translation.truncate()))
         .unwrap_or(0);
     let far = distance_price_multiplier_for(station_idx, &galaxy) * market.service_multiplier();
     let services = get_docking_services(&hull_state, &oxygen_state, &fuel_state, &weapon_query, crew_count, staffing_state.total_berths, &inventory, station_idx, &market, far);
 
+    // Who the station belongs to decides its colours and whether it has the
+    // Bar and Comm directory tabs (a faction starport does; a free port has
+    // only its market).
+    let owner = market.dock_terms.as_ref().and_then(|t| t.faction);
+    let accent = owner.map_or(theme::ThemeColors::ACCENT_CYAN, crate::ai_ship::components::faction_map_color);
+    let s_type = crate::world::station_types::station_type(station_idx);
+    let name = market.dock_terms.as_ref().map_or_else(
+        || crate::world::home_base::station_display_name(station_idx),
+        |t| t.name.clone(),
+    );
+    let kind = crate::world::station_types::station_type_name(s_type);
+    let subtitle = match (owner, &market.dock_terms) {
+        (Some(f), _) => format!("{} starport", crate::ai_ship::components::faction_display_name(f)),
+        (None, Some(_)) => format!("Free port  |  {kind}"),
+        (None, None) => kind.to_string(),
+    };
+    let standing_chip: Option<(String, Color)> = market.dock_terms.as_ref().map(|t| {
+        let color = match t.standing {
+            "Allied" => theme::ThemeColors::ACCENT_GREEN,
+            "Friendly" => theme::ThemeColors::STATUS_OK,
+            "Neutral" => theme::ThemeColors::TEXT_SECONDARY,
+            "Unfriendly" => theme::ThemeColors::ACCENT_ORANGE,
+            "Free Port" => theme::ThemeColors::ACCENT_CYAN,
+            _ => theme::ThemeColors::ACCENT_RED,
+        };
+        (t.standing.to_uppercase(), color)
+    });
+
+    // Station identity: discounts were baked silently into prices; say them.
+    let discounts = crate::world::station_types::service_discounts(s_type);
+    let mut perks = Vec::new();
+    if let Some(terms) = &market.dock_terms {
+        perks.push(if terms.faction.is_some() {
+            format!("You pay x{:.2}, they pay you x{:.2}", terms.buy, terms.sell)
+        } else if terms.buy <= 1.0 && terms.sell >= 1.0 {
+            "Ordinary prices for now; they rise after your first hours out".to_string()
+        } else {
+            format!("No one's protection: you pay x{:.2}, they pay you x{:.2}", terms.buy, terms.sell)
+        });
+    }
+    if discounts.fuel < 1.0 { perks.push(format!("Fuel -{:.0}%", (1.0 - discounts.fuel) * 100.0)); }
+    if discounts.hull_repair < 1.0 { perks.push(format!("Repairs -{:.0}%", (1.0 - discounts.hull_repair) * 100.0)); }
+    if discounts.ammo < 1.0 { perks.push(format!("Ammo -{:.0}%", (1.0 - discounts.ammo) * 100.0)); }
+
+    let caption = |text: String| (
+        Text::new(text),
+        TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+        TextColor(theme::ThemeColors::TEXT_MUTED),
+    );
+
+    // A dimmed backdrop (the ship and the station stay visible behind it),
+    // and the window centred on it.
     commands.spawn((
         (Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(8.0),
                 ..default()
-            }, BackgroundColor(theme::ThemeColors::BG_VOID), ZIndex(100)),
+            }, BackgroundColor(Color::srgba(0.0, 0.01, 0.03, 0.72)), ZIndex(100)),
         DockingOverlay,
         DockingMenuSelection(0, 0),
-    )).with_children(|parent| {
-        let s_type = crate::world::station_types::station_type(station_idx);
-        // "HAVEN STATION - SHIPYARD", but "VESPER TRADE HUB" rather than
-        // "VESPER TRADE HUB - TRADE HUB": most names already end in the type.
-        let name = market.dock_terms.as_ref().map_or_else(
-            || crate::world::home_base::station_display_name(station_idx),
-            |t| t.name.clone(),
-        );
-        let kind = crate::world::station_types::station_type_name(s_type);
-        let title = if let Some(terms) = &market.dock_terms {
-            // A faction station: what matters is what they think of you. A
-            // free port says so.
-            format!("{} - {}", name.to_uppercase(), terms.standing.to_uppercase())
-        } else if name.ends_with(kind) {
-            name.to_uppercase()
-        } else {
-            format!("{} - {}", name.to_uppercase(), kind.to_uppercase())
-        };
-        // "TERRAN HEGEMONY HIGH COMMAND, VIGIL PRIME - FRIENDLY" wrapped onto
-        // two lines at H1: a long name drops a size.
-        let title_size = if title.chars().count() > 34 { theme::ThemeFonts::H2 } else { theme::ThemeFonts::H1 };
-        parent.spawn((Text::new(title), TextFont { font_size: FontSize::Px(title_size), ..default() }, TextColor(theme::ThemeColors::ACCENT_CYAN)));
-
-        // Station identity subtitle — discounts were already silently baked
-        // into displayed prices with nothing explaining why; this states it
-        // plainly. discounts < 1.0 is a genuine price cut (service_discounts
-        // multiplies cost), so only surface the ones actually below 1.0.
-        let discounts = crate::world::station_types::service_discounts(
-            crate::world::station_types::station_type(station_idx),
-        );
-        let mut perks = Vec::new();
-        if let Some(terms) = &market.dock_terms {
-            perks.push(if terms.faction.is_some() {
-                format!("Your standing: {} - you pay x{:.2}, they pay you x{:.2}", terms.standing, terms.buy, terms.sell)
-            } else if terms.buy <= 1.0 && terms.sell >= 1.0 {
-                "Free port - ordinary prices for now; they rise after your first hours out".to_string()
-            } else {
-                format!("Free port - no one's protection: you pay x{:.2}, they pay you x{:.2}", terms.buy, terms.sell)
-            });
-        }
-        if discounts.fuel < 1.0 { perks.push(format!("Fuel -{:.0}%", (1.0 - discounts.fuel) * 100.0)); }
-        if discounts.hull_repair < 1.0 { perks.push(format!("Repairs -{:.0}%", (1.0 - discounts.hull_repair) * 100.0)); }
-        if discounts.ammo < 1.0 { perks.push(format!("Ammo -{:.0}%", (1.0 - discounts.ammo) * 100.0)); }
-        if !perks.is_empty() {
-            parent.spawn((
-                Text::new(perks.join("  *  ")),
-                TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
-                TextColor(theme::ThemeColors::TEXT_MUTED),
-            ));
-        }
-
-        // Tagged so it can be refreshed. Spawned once and never updated, this
-        // froze at whatever the balance was when the menu opened — a live run
-        // showed "Credits: 750" in the menu while the HUD read 21, which is
-        // the worst possible place to lie about money.
-        parent.spawn((
-            Text::new(format!("Credits: {}", currency.credits)),
-            TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() },
-            TextColor(theme::ThemeColors::ACCENT_YELLOW),
-            DockingCreditsText,
-        ));
-
-        // Cargo hold — was invisible inside this menu entirely (only
-        // visible via the Map overlay, which doesn't even open while
-        // docked) even though half this menu is about what to do with it.
-        // Static snapshot at open time — the menu doesn't otherwise
-        // rebuild live, matching how the rest of this screen already works.
-        if !inventory.items.is_empty() {
-            parent.spawn((
-                Text::new("CARGO HOLD"),
-                TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
-                TextColor(theme::ThemeColors::TEXT_MUTED),
-            ));
-            parent.spawn(Node {
-                flex_direction: FlexDirection::Row,
-                flex_wrap: FlexWrap::Wrap,
-                column_gap: Val::Px(theme::ThemeSpacing::SM),
-                row_gap: Val::Px(theme::ThemeSpacing::XS),
+        DockTabState { tab: DockTab::Market, tabs: owner.is_some(), contact: 0 },
+    )).with_children(|backdrop| {
+        backdrop.spawn((
+            Node {
+                width: Val::Px(1040.0),
+                // A fixed size: the window used to shrink and grow to each
+                // tab's contents and jump on screen as you switched.
+                height: Val::Px(620.0),
+                max_width: Val::Percent(94.0),
+                max_height: Val::Percent(88.0),
+                flex_direction: FlexDirection::Column,
+                border: UiRect::all(Val::Px(theme::ThemeBorders::DEFAULT)),
+                overflow: Overflow::clip(),
                 ..default()
-            }).with_children(|cargo| {
-                for (item_type, count) in inventory.items.iter() {
-                    cargo.spawn((
-                        Node {
-                            padding: UiRect::new(Val::Px(theme::ThemeSpacing::SM), Val::Px(theme::ThemeSpacing::SM), Val::Px(theme::ThemeSpacing::XS), Val::Px(theme::ThemeSpacing::XS)),
-                            ..default()
-                        },
-                        BackgroundColor(theme::ThemeColors::BG_CARD),
-                    )).with_children(|card| {
-                        card.spawn((
-                            Text::new(format!("{} x{}", item_type.name(), count)),
-                            TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() },
-                            TextColor(theme::ThemeColors::TEXT_SECONDARY),
+            },
+            BackgroundColor(theme::ThemeColors::BG_PANEL),
+            BorderColor::all(theme::ThemeColors::BORDER_BRIGHT),
+        )).with_children(|window| {
+            // The owner's colour, across the top.
+            window.spawn((Node { height: Val::Px(3.0), width: Val::Percent(100.0), ..default() }, BackgroundColor(accent)));
+
+            // Header: name and owner; standing and credits.
+            window.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                align_items: AlignItems::Center,
+                padding: UiRect::new(Val::Px(18.0), Val::Px(18.0), Val::Px(12.0), Val::Px(10.0)),
+                column_gap: Val::Px(16.0),
+                ..default()
+            }).with_children(|header| {
+                header.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(2.0), flex_shrink: 1.0, ..default() })
+                    .with_children(|names| {
+                        names.spawn((Text::new(name.to_uppercase()), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() }, TextColor(theme::ThemeColors::TEXT_TITLE)));
+                        names.spawn((Text::new(subtitle), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() }, TextColor(theme::ThemeColors::TEXT_SECONDARY)));
+                    });
+                header.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(14.0), flex_shrink: 0.0, ..default() })
+                    .with_children(|right| {
+                        if let Some((label, color)) = &standing_chip {
+                            right.spawn((
+                                Node { padding: UiRect::axes(Val::Px(8.0), Val::Px(3.0)), border: UiRect::all(Val::Px(1.0)), ..default() },
+                                BackgroundColor(color.with_alpha(0.12)),
+                                BorderColor::all(color.with_alpha(0.7)),
+                            )).with_children(|chip| {
+                                chip.spawn((Text::new(label.clone()), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(*color)));
+                            });
+                        }
+                        right.spawn((
+                            Text::new(format!("Credits: {}", currency.credits)),
+                            TextFont { font_size: FontSize::Px(theme::ThemeFonts::H3), ..default() },
+                            TextColor(theme::ThemeColors::ACCENT_YELLOW),
+                            DockingCreditsText,
                         ));
                     });
-                }
             });
-        }
-        parent.spawn((Text::new(""), TextFont { font_size: FontSize::Px(8.0), ..default() }, TextColor(Color::WHITE)));
 
-        // Row order/numbering must stay exactly as-is — docking_menu_input
-        // (below) matches on these indices by number throughout its ~550
-        // lines, so this groups the EXISTING order visually rather than
-        // reordering rows into cleaner categories (Repair Modules sits
-        // between Sell/Buy in the source order, hence "Trade & Upkeep"
-        // rather than a pure "Trade" label).
-        for (group_start, group_label) in [(0usize, "Services"), (5, "Trade & Upkeep"), (8, "")] {
-            if !group_label.is_empty() {
-                parent.spawn((
-                    Text::new(group_label.to_uppercase()),
-                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
-                    TextColor(theme::ThemeColors::TEXT_MUTED),
-                    Node { margin: UiRect::top(Val::Px(theme::ThemeSpacing::SM)), ..default() },
-                ));
-            }
-            let group_end = match group_start { 0 => 5, 5 => 8, _ => services.len() };
-            for i in group_start..group_end {
-                let service = &services[i];
-                let cursor = if i == 0 { "> " } else { "  " };
-                // A price on a greyed row read as a charge: "Repair Hull
-                // [1c]" at 0% damage, "Hire Crew [3200c]" with every berth full.
-                let cost_str = if service.cost > 0 && service.available {
-                    format!(" [{}c]", service.cost)
-                } else {
-                    String::new()
-                };
-
-                let color = if !service.available {
-                    Color::srgb(0.4, 0.4, 0.4)
-                } else if i == 0 {
-                    Color::WHITE
-                } else {
-                    Color::srgb(0.8, 0.8, 0.8)
-                };
-
-                parent.spawn((
-                    Text::new(format!("{}{}{}\n", cursor, service.name, cost_str)),
-                    TextFont { font_size: FontSize::Px(20.0), ..default() },
-                    TextColor(color),
-                    DockingServiceItem(i),
-                )).with_children(|section| {
-                    section.spawn((
-                        TextSpan::new(format!("    {}", service.description)),
-                        TextFont { font_size: FontSize::Px(14.0), ..default() },
-                        TextColor(Color::srgb(0.6, 0.6, 0.7)),
-                    ));
+            // Tabs, at a faction starport.
+            if owner.is_some() {
+                window.spawn((
+                    Node {
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::FlexEnd,
+                        column_gap: Val::Px(2.0),
+                        padding: UiRect::horizontal(Val::Px(14.0)),
+                        border: UiRect::bottom(Val::Px(1.0)),
+                        ..default()
+                    },
+                    BorderColor::all(theme::ThemeColors::BORDER_DEFAULT),
+                )).with_children(|bar| {
+                    for tab in DockTab::ALL {
+                        bar.spawn((
+                            Node { padding: UiRect::axes(Val::Px(16.0), Val::Px(7.0)), border: UiRect::bottom(Val::Px(2.0)), ..default() },
+                            BackgroundColor(theme::ThemeColors::BG_CARD),
+                            BorderColor::all(Color::NONE),
+                            DockTabButton(tab),
+                        )).with_children(|b| {
+                            b.spawn((Text::new(tab.label()), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_SECONDARY)));
+                        });
+                    }
+                    bar.spawn((Node { margin: UiRect::left(Val::Auto), padding: UiRect::bottom(Val::Px(8.0)), ..default() }, ))
+                        .with_children(|hint| { hint.spawn(caption("Q / E  switch tab".into())); });
                 });
             }
-        }
 
-        parent.spawn((Text::new(""), TextFont { font_size: FontSize::Px(8.0), ..default() }, TextColor(Color::WHITE)));
+            // Body: the open tab, and your ship beside it.
+            window.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(16.0),
+                padding: UiRect::all(Val::Px(14.0)),
+                min_height: Val::Px(0.0),
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+                overflow: Overflow::clip_y(),
+                ..default()
+            }).with_children(|body| {
+                // The market: the service rows, as cards. Row order and
+                // numbering must stay exactly as-is -- docking_menu_input
+                // matches on these indices throughout.
+                body.spawn((
+                    Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, row_gap: Val::Px(5.0), ..default() },
+                    DockTabPanel(DockTab::Market),
+                )).with_children(|list| {
+                    for (group_start, group_label) in [(0usize, "Services"), (5, "Trade & upkeep"), (8, "")] {
+                        if !group_label.is_empty() {
+                            list.spawn((
+                                Text::new(group_label.to_uppercase()),
+                                TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                                TextColor(theme::ThemeColors::TEXT_MUTED),
+                                Node { margin: UiRect::top(Val::Px(if group_start == 0 { 0.0 } else { 6.0 })), ..default() },
+                            ));
+                        }
+                        let group_end = match group_start { 0 => 5, 5 => 8, _ => services.len() };
+                        for i in group_start..group_end {
+                            let service = &services[i];
+                            let color = if !service.available { theme::ThemeColors::TEXT_MUTED } else { theme::ThemeColors::TEXT_PRIMARY };
+                            list.spawn((
+                                Node {
+                                    padding: UiRect::new(Val::Px(12.0), Val::Px(12.0), Val::Px(6.0), Val::Px(6.0)),
+                                    border: UiRect::left(Val::Px(3.0)),
+                                    ..default()
+                                },
+                                BackgroundColor(theme::ThemeColors::BG_CARD),
+                                BorderColor::all(Color::NONE),
+                                DockingRowCard(i),
+                            )).with_children(|card| {
+                                card.spawn((
+                                    Text::new(service_title(service.name, service.cost, service.available)),
+                                    TextFont { font_size: FontSize::Px(16.0), ..default() },
+                                    TextColor(color),
+                                    DockingServiceItem(i),
+                                )).with_children(|section| {
+                                    section.spawn((
+                                        TextSpan::new(service_detail(&service.description)),
+                                        TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() },
+                                        TextColor(theme::ThemeColors::TEXT_SECONDARY),
+                                    ));
+                                });
+                            });
+                        }
+                    }
+                });
+                // The Bar and the Comm directory: filled by diplomacy::dock_tabs.
+                if owner.is_some() {
+                    for tab in [DockTab::Bar, DockTab::Comm] {
+                        body.spawn((
+                            Node { display: Display::None, flex_direction: FlexDirection::Column, flex_grow: 1.0, row_gap: Val::Px(8.0), ..default() },
+                            DockTabPanel(tab),
+                        ));
+                    }
+                }
 
-        // Was srgb(0.25) on the near-black backdrop -- about 1.5:1, the
-        // controls line was effectively invisible.
-        parent.spawn((Text::new(format!("Up/Down: Select | Left/Right: cargo choice | Enter: Purchase | {escape_hint}")), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(theme::ThemeColors::TEXT_SECONDARY)));
+                // Your ship, and what's in the hold.
+                body.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Px(270.0), flex_shrink: 0.0, row_gap: Val::Px(10.0), ..default() })
+                    .with_children(|side| {
+                        let card = |side: &mut ChildSpawnerCommands, title: &str, lines: Vec<(String, Color)>| {
+                            side.spawn((
+                                Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), padding: UiRect::all(Val::Px(10.0)), ..default() },
+                                BackgroundColor(theme::ThemeColors::BG_CARD),
+                            )).with_children(|c| {
+                                c.spawn(caption(title.to_uppercase()));
+                                for (line, color) in lines {
+                                    c.spawn((Text::new(line), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() }, TextColor(color)));
+                                }
+                            });
+                        };
+                        let pct = |v: f32| format!("{:.0}%", v * 100.0);
+                        card(side, "Your ship", vec![
+                            (format!("Hull       {}", pct(hull_state.hull_integrity)), if hull_state.hull_integrity < 0.5 { theme::ThemeColors::ACCENT_RED } else { theme::ThemeColors::ACCENT_GREEN }),
+                            (format!("Fuel       {:.0} / {:.0}", fuel_state.current_fuel, fuel_state.max_fuel), theme::ThemeColors::ACCENT_ORANGE),
+                            (format!("Oxygen     {:.0} / {:.0}", oxygen_state.current_oxygen, oxygen_state.max_oxygen), theme::ThemeColors::ACCENT_CYAN),
+                            (format!("Crew       {} / {}", crew_count, staffing_state.total_berths), theme::ThemeColors::TEXT_PRIMARY),
+                        ]);
+                        let hold: Vec<(String, Color)> = if inventory.items.is_empty() {
+                            vec![("Empty".to_string(), theme::ThemeColors::TEXT_MUTED)]
+                        } else {
+                            inventory.items.iter().map(|(item, n)| (format!("{} x{}", item.name(), n), theme::ThemeColors::TEXT_SECONDARY)).collect()
+                        };
+                        card(side, "Cargo hold", hold);
+                        if !perks.is_empty() {
+                            card(side, "Terms", perks.iter().map(|p| (p.clone(), theme::ThemeColors::TEXT_SECONDARY)).collect());
+                        }
+                    });
+            });
+
+            // Keys.
+            window.spawn((
+                Node {
+                    padding: UiRect::axes(Val::Px(18.0), Val::Px(8.0)),
+                    border: UiRect::top(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(theme::ThemeColors::BG_CARD),
+                BorderColor::all(theme::ThemeColors::BORDER_SUBTLE),
+            )).with_children(|footer| {
+                footer.spawn((
+                    Text::new(format!("Up/Down  select    Left/Right  cargo choice    Enter  buy    {escape_hint}")),
+                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() },
+                    TextColor(theme::ThemeColors::TEXT_SECONDARY),
+                    DockFooterHint,
+                ));
+            });
+        });
     });
+}
+
+/// A service card's first line: its name, and its price when it has one.
+fn service_title(name: &str, cost: u32, available: bool) -> String {
+    if cost > 0 && available {
+        format!("{name}  -  {cost} cr")
+    } else {
+        name.to_string()
+    }
+}
+
+/// A service card's second line.
+fn service_detail(description: &str) -> String {
+    format!("\n{description}")
+}
+
+/// The selected service card is lit; the rest sit back.
+fn highlight_dock_rows(
+    menu: Query<&DockingMenuSelection, With<DockingOverlay>>,
+    mut cards: Query<(&DockingRowCard, &mut BackgroundColor, &mut BorderColor)>,
+) {
+    let Ok(selection) = menu.single() else { return };
+    for (card, mut bg, mut border) in cards.iter_mut() {
+        let on = card.0 == selection.0;
+        let want_bg = if on { theme::ThemeColors::BG_ELEVATED } else { theme::ThemeColors::BG_CARD };
+        if bg.0 != want_bg {
+            bg.0 = want_bg;
+            *border = BorderColor::all(if on { theme::ThemeColors::ACCENT_CYAN } else { Color::NONE });
+        }
+    }
 }
 
 /// Top of the right-hand HUD column (contract tracker, then notifications):
@@ -5362,7 +5490,7 @@ fn docking_menu_input(
     crew_art: (Res<AssetServer>, Res<crate::crew::animation::CrewAtlases>),
     keyboard: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
-    mut menu_query: Query<&mut DockingMenuSelection, With<DockingOverlay>>,
+    mut menu_query: Query<(&mut DockingMenuSelection, Option<&DockTabState>), With<DockingOverlay>>,
     // Grouped: this system is at Bevy's 16-param cap (see the note above), so
     // the credits readout rides along with the service rows it sits beside.
     mut menu_text: (
@@ -5405,7 +5533,11 @@ fn docking_menu_input(
         }
     }
 
-    let Ok(mut selection) = menu_query.single_mut() else { return };
+    let Ok((mut selection, tabs)) = menu_query.single_mut() else { return };
+    // The Bar and the Comm directory have their own keys (dock_tabs).
+    if tabs.is_some_and(|t| t.tab != DockTab::Market) {
+        return;
+    }
 
     let station_idx = ship_query.single().ok()
         .and_then(|t| stations.nearest_index(t.translation.truncate()))
@@ -5955,21 +6087,21 @@ fn docking_menu_input(
         if idx >= service_info.len() { continue; }
         let (name, desc, cost, available) = &service_info[idx];
 
-        let cursor = if idx == new_idx { "> " } else { "  " };
-        let cost_str = if *cost > 0 && *available { format!(" [{}c]", cost) } else { String::new() };
+        // The selected card is lit by highlight_dock_rows; the text only
+        // says what the row is and what it costs.
         let color = if !available {
-            Color::srgb(0.4, 0.4, 0.4)
+            theme::ThemeColors::TEXT_MUTED
         } else if idx == new_idx {
             Color::WHITE
         } else {
-            Color::srgb(0.8, 0.8, 0.8)
+            theme::ThemeColors::TEXT_PRIMARY
         };
 
-        text.0 = format!("{}{}{}\n", cursor, name, cost_str);
+        text.0 = service_title(name, *cost, *available);
         text_color.0 = color;
         for child in children.iter() {
             if let Ok(mut span) = span_query.get_mut(child) {
-                span.0 = format!("    {}", desc);
+                span.0 = service_detail(desc);
             }
         }
     }

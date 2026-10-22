@@ -1685,6 +1685,9 @@ pub struct SaveData {
     /// The border war's standing: every contested system's shares.
     #[serde(default)]
     pub border_war: Option<crate::celestial::territory::BorderWar>,
+    /// The people you've met at faction starports, and what they think of you.
+    #[serde(default)]
+    pub contacts: Option<crate::diplomacy::contacts::Contacts>,
 }
 
 impl Default for SaveData {
@@ -1722,6 +1725,7 @@ impl Default for SaveData {
             world: None,
             destroyed_stations: Vec::new(),
             border_war: None,
+            contacts: None,
         }
     }
 }

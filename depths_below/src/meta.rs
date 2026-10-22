@@ -147,6 +147,7 @@ fn collect_save_data(
     sim: &crate::ai_ship::components::WorldSimulation,
     stations: &crate::diplomacy::stations::FactionStations,
     war: &crate::celestial::territory::BorderWar,
+    contacts: &crate::diplomacy::contacts::Contacts,
 ) -> SaveData {
     let position = ship_query
         .single()
@@ -254,6 +255,7 @@ fn collect_save_data(
         world: sim.initialized.then(|| sim.snapshot()),
         destroyed_stations: stations.destroyed.clone(),
         border_war: Some(war.clone()),
+        contacts: Some(contacts.clone()),
     }
 }
 
@@ -310,6 +312,7 @@ fn handle_save_request(
         Res<crate::ai_ship::components::WorldSimulation>,
         Res<crate::diplomacy::stations::FactionStations>,
         Res<crate::celestial::territory::BorderWar>,
+        Res<crate::diplomacy::contacts::Contacts>,
     ),
     current_state: Res<State<GameState>>,
     ship_query: Query<&Transform, With<Ship>>,
@@ -322,7 +325,7 @@ fn handle_save_request(
     hull_query: Query<(&HullSegment, &Transform), PlayerBlocks>,
     crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
 ) {
-    let (world_state, galaxy_map, streaming, drifting_dead, looted, fuel, contracts, reputation, standing, sim, faction_stations, war) = &world_galaxy;
+    let (world_state, galaxy_map, streaming, drifting_dead, looted, fuel, contracts, reputation, standing, sim, faction_stations, war, people) = &world_galaxy;
     for event in save_events.read() {
         let save_data = collect_save_data(
             event.slot,
@@ -350,6 +353,7 @@ fn handle_save_request(
             sim,
             faction_stations,
             war,
+            people,
         );
 
         // Tier 3 customization is saved via customization_params field
@@ -506,10 +510,15 @@ fn rebuild_entities_from_save(
         ResMut<crate::ai_ship::components::WorldSimulation>,
         Res<crate::vfx::procedural_textures::CelestialTextures>,
         Res<Time>,
-        Query<Entity, With<crate::celestial::components::StarSystemMember>>,
+        // Not AI ships: a faction starport is a member of its system too, and
+        // despawned here as well as tagged LeftByLoad below, every command
+        // already queued for its blocks that frame hit nothing (16 warnings
+        // per load beside a starport). It leaves with the other AI ships.
+        Query<Entity, (With<crate::celestial::components::StarSystemMember>, Without<crate::ai_ship::components::AiShip>)>,
         Query<Entity, With<crate::ai_ship::components::AiShip>>,
         ResMut<crate::diplomacy::stations::FactionStations>,
         ResMut<crate::celestial::territory::BorderWar>,
+        ResMut<crate::diplomacy::contacts::Contacts>,
     ),
     // State the old ship was in the middle of, that the loaded one is not.
     flight: (
@@ -518,7 +527,7 @@ fn rebuild_entities_from_save(
         ResMut<crate::ui::PendingWarpTarget>,
     ),
 ) {
-    let (mut galaxy, mut looted, mut sim, textures, time, members, ai_ships, mut faction_stations, mut border_war) = world;
+    let (mut galaxy, mut looted, mut sim, textures, time, members, ai_ships, mut faction_stations, mut border_war, mut people) = world;
     let (mut rebuild_queue, mut towing, mut dash_target) = flight;
     let Some(save) = pending.save_data.take() else { return };
     let slot = pending.slot;
@@ -755,6 +764,7 @@ fn rebuild_entities_from_save(
             faction_stations.live = None;
             faction_stations.destroyed = save.destroyed_stations.clone();
             *border_war = save.border_war.clone().unwrap_or_default();
+            *people = save.contacts.clone().unwrap_or_default();
         }
         // A running simulation populates the saved system
         // and its neighbours now (a no-op for any already populated). One not
@@ -874,9 +884,10 @@ pub fn reset_for_new_game(
         ResMut<LootedPois>,
         ResMut<crate::diplomacy::stations::FactionStations>,
         ResMut<crate::celestial::territory::BorderWar>,
+        ResMut<crate::diplomacy::contacts::Contacts>,
     ),
 ) {
-    let (mut spawned, mut sim, mut looted, mut faction_stations, mut border_war) = world;
+    let (mut spawned, mut sim, mut looted, mut faction_stations, mut border_war, mut people) = world;
     if requests.read().next().is_none() {
         return;
     }
@@ -909,6 +920,7 @@ pub fn reset_for_new_game(
     *sim = crate::ai_ship::components::WorldSimulation::default();
     *faction_stations = crate::diplomacy::stations::FactionStations::default();
     *border_war = crate::celestial::territory::BorderWar::default();
+    *people = crate::diplomacy::contacts::Contacts::default();
     // Derelicts stripped last run are full again in a new galaxy.
     *looted = LootedPois::default();
 
