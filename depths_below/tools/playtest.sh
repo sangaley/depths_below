@@ -58,20 +58,29 @@ caffeinate -di env DEPTHS_MUTE=1 DEPTHS_SKIP_MENU=1 DEPTHS_SHOTS=6 DEPTHS_OFFSCR
 RUNNER=$!
 disown "$RUNNER" 2>/dev/null || true   # keep job control quiet on kill
 
-# The binary is a child of cargo; find it so we can stop exactly that one.
+# The binary is a grandchild (caffeinate -> cargo -> game), so look through
+# everything this script started, never by name: matching
+# 'target/debug/depths_below' by name found whichever game was oldest on the
+# machine -- the one the user was playing -- and killed it at the end.
+descendants() { local c; for c in $(pgrep -P "$1"); do echo "$c"; descendants "$c"; done; }
 GAME=""
-for _ in $(seq 1 40); do
+for _ in $(seq 1 600); do
   sleep 1
-  GAME="$(pgrep -P "$RUNNER" -f 'target/debug/depths_below' | head -1)"
+  for pid in $(descendants "$RUNNER"); do
+    case "$(ps -o command= -p "$pid" 2>/dev/null)" in
+      target/debug/depths_below*|*/target/debug/depths_below*) GAME="$pid"; break ;;
+    esac
+  done
   [ -n "$GAME" ] && break
 done
-[ -z "$GAME" ] && GAME="$(pgrep -f 'target/debug/depths_below' | head -1)"
+[ -z "$GAME" ] && echo "[playtest] never saw the game start; stopping only what this script began"
 
 START=$(date +%s)
 sleep "$SECS"
 ALIVE=$(( $(date +%s) - START ))
 
 if [ -n "$GAME" ]; then kill "$GAME" 2>/dev/null; sleep 2; kill -9 "$GAME" 2>/dev/null; fi
+for pid in $(descendants "$RUNNER"); do kill "$pid" 2>/dev/null; done
 kill "$RUNNER" 2>/dev/null; wait "$RUNNER" 2>/dev/null
 
 kill "$WAKE" 2>/dev/null
