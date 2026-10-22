@@ -296,6 +296,11 @@ fn hold_anchored(
     }
 }
 
+/// Whether a ship whose transform is at `ship` can dock with this station.
+fn in_docking_reach(core: &Transform, anchor: &StationAnchor, ship: Vec2) -> bool {
+    core.translation.truncate().distance(ship) < anchor.extent + DOCK_MARGIN
+}
+
 /// F near a faction station: dock on your standing's terms, or be refused.
 fn faction_station_docking(
     mut press: ResMut<InteractPress>,
@@ -312,7 +317,7 @@ fn faction_station_docking(
     let Ok(player) = player.single() else { return };
     let pos = player.translation.truncate();
     let near = cores.iter().find(|(tf, anchor, _, state)| {
-        !state.is_destroyed && tf.translation.truncate().distance(pos) < anchor.extent + DOCK_MARGIN
+        !state.is_destroyed && in_docking_reach(tf, anchor, pos)
     });
     let Some((_, _, &faction, _)) = near else {
         *prompted = false;
@@ -366,8 +371,7 @@ fn faction_station_docking(
 /// Clear space between a berthed ship's hull and the nearest part of the
 /// station, platforms included.
 const BERTH_GAP: f32 = 400.0;
-/// How much further out each fallback ring of berths is, once nothing in
-/// docking reach is clear.
+/// Spacing of the berth rings when there is no docking reach to fit them in.
 const BERTH_RING: f32 = 700.0;
 
 /// Where a ship reaching `ship_reach` from its centre waits off a station.
@@ -377,10 +381,8 @@ const BERTH_RING: f32 = 700.0;
 /// `others` is everything else solid nearby, as (centre, reach): the guard
 /// fleet holding at the station, convoys, rocks. They go their own way, so
 /// the berth only has to be clear of where they are now. `within` is how far
-/// from the core's centre a berth can be and still be in docking reach: the
-/// rings inside it are all tried before any beyond it. The Hegemony's guard
-/// fleet crowding the near rings put the berth 5.1 km out, just past reach,
-/// and you couldn't dock again from where undocking left you.
+/// from the core's centre a berth can be and still be in docking reach; a
+/// berth is never put further out than that.
 ///
 /// A station rides its planet at a couple of hundred units a second and a
 /// ship let go beside it doesn't, so the berth is on the trailing side: the
@@ -396,41 +398,54 @@ pub fn berth_point(parts: &[(Vec2, f32)], others: &[(Vec2, f32)], ship_reach: f3
     let trailing = if moving { -motion.normalize() } else { Vec2::NEG_Y };
     let falling = (trailing + pull.normalize_or_zero() * 0.4).normalize_or(trailing);
     let paths: &[Vec2] = if moving { &[trailing, falling] } else { &[] };
-    let clear = |spot: Vec2| {
-        parts.iter().all(|&(centre, reach)| {
-            let need = reach + ship_reach + BERTH_GAP - 1.0;
+    // How clear a spot is: the smallest gap left against anything, where
+    // anything below zero is too close.
+    let margin = |spot: Vec2| {
+        let mut least = f32::INFINITY;
+        for &(centre, reach) in parts {
+            let need = reach + ship_reach + BERTH_GAP;
+            least = least.min(centre.distance(spot) - need);
             // Nearest the ship comes to this part as the station leaves it behind.
-            centre.distance(spot) >= need
-                && paths.iter().all(|&path| {
-                    let along = (centre - spot).dot(path).max(0.0);
-                    centre.distance(spot + path * along) >= need
-                })
-        }) && others.iter().all(|&(centre, reach)| centre.distance(spot) >= reach + ship_reach + BERTH_GAP - 1.0)
+            for &path in paths {
+                let along = (centre - spot).dot(path).max(0.0);
+                least = least.min(centre.distance(spot + path * along) - need);
+            }
+        }
+        for &(centre, reach) in others {
+            least = least.min(centre.distance(spot) - reach - ship_reach - BERTH_GAP);
+        }
+        least
     };
     let step = 10.0_f32.to_radians();
     let nearest = core_reach + ship_reach + BERTH_GAP;
-    // Four rings spread across docking reach, then three past it.
+    // Four rings spread across docking reach. Never past it: if nothing in
+    // reach is clear, the clearest spot in reach is taken. Guard ships
+    // crowding every near ring sent the berth out past reach, and you could
+    // neither dock at a capital nor dock again after undocking there.
     let rings: Vec<f32> = if within.is_finite() && within > nearest {
-        (0..4)
-            .map(|i| nearest + (within - nearest) * i as f32 / 3.0)
-            .chain((1..=3).map(|i| within + i as f32 * BERTH_RING))
-            .collect()
+        (0..4).map(|i| nearest + (within - nearest) * i as f32 / 3.0).collect()
+    } else if within.is_finite() {
+        // A hull too big to fit clear inside reach: as near as reach allows.
+        vec![within.max(core_reach)]
     } else {
         (0..4).map(|i| nearest + i as f32 * BERTH_RING).collect()
     };
-    let mut spot = core + trailing * nearest;
+    let mut best = (f32::NEG_INFINITY, core + trailing * rings[0]);
     for out in rings {
         // Straight behind first, then swinging out either way.
         for k in 0..=36 {
             let turn = step * ((k + 1) / 2) as f32 * if k % 2 == 0 { 1.0 } else { -1.0 };
             let candidate = core + Vec2::from_angle(turn).rotate(trailing) * out;
-            if clear(candidate) {
+            let m = margin(candidate);
+            if m >= -1.0 {
                 return candidate;
             }
+            if m > best.0 {
+                best = (m, candidate);
+            }
         }
-        spot = core + trailing * out;
     }
-    spot
+    best.1
 }
 
 /// What placing a ship at a faction station's berth needs to look at.
@@ -473,8 +488,8 @@ impl StationBerths<'_, '_> {
         let core_offset = parts.first().map_or(0.0, |&(centre, _)| centre.distance(core_at));
         let within = anchor.extent + DOCK_MARGIN - core_offset - centre_offset.length() - 50.0;
         // Anything that could be where the berth is: out to the farthest a
-        // berth can be put (the last ring out) plus the biggest hull around.
-        let look = within.max(anchor.extent + ship_reach + BERTH_GAP) + 3.0 * BERTH_RING + 4_000.0;
+        // berth can be put plus the biggest hull around.
+        let look = within.max(anchor.extent + ship_reach + BERTH_GAP) + 4_000.0;
         let others: Vec<(Vec2, f32)> = self
             .others
             .iter()
@@ -788,6 +803,55 @@ mod tests {
         for &(centre, reach) in parts.iter().chain(guards.iter()) {
             assert!(centre.distance(at) >= reach + 1_009.0 + BERTH_GAP - 1.0, "berth {at:?} inside something at {centre:?}");
         }
+    }
+
+    /// Wherever the berth goes, you can dock from it, even with guard ships
+    /// boxing in every ring a clear berth could take.
+    #[test]
+    fn the_berth_is_always_in_docking_reach() {
+        use crate::ship::collision::Collider;
+        use bevy::ecs::system::RunSystemOnce;
+        let mut app = App::new();
+        let extent = 1_531.0;
+        let anchor = StationAnchor { planet: Entity::PLACEHOLDER, star: Vec2::ZERO, out: 0.0, around: Vec2::ZERO, extent };
+        let core = app.world_mut().spawn((
+            Transform::default(), anchor, AiShipType::TerranHegemony, AiShipState::default(),
+            StationCore, super::super::FactionStation, Collider::circle(1_593.0, f32::INFINITY),
+        )).id();
+        let parts: Vec<Entity> = (0..4)
+            .map(|i| {
+                let around = Vec2::from_angle(std::f32::consts::TAU * (i as f32 + 0.5) / 4.0) * 4_493.0;
+                app.world_mut().spawn((
+                    Transform::from_translation(around.extend(0.0)), StationAnchor { around, ..anchor },
+                    super::super::FactionStation, StationPlatform, Collider::circle(475.0, f32::INFINITY),
+                )).id()
+            })
+            .collect();
+        // Guard ships on every bearing, out across the whole of docking reach.
+        for ring in 0..4 {
+            for step in 0..18 {
+                let at = Vec2::from_angle(step as f32 * 20.0_f32.to_radians()) * (3_000.0 + ring as f32 * 700.0);
+                app.world_mut().spawn((Transform::from_translation(at.extend(0.0)), Collider::circle(1_359.0, 2_000.0)));
+            }
+        }
+        app.insert_resource(FactionStations { live: Some(LiveStation { system_id: 0, core, parts }), ..default() });
+        // The Pincer, its collider centre off its transform.
+        let ship = Transform::from_xyz(0.0, -4_000.0, 0.0);
+        let at = app
+            .world_mut()
+            .run_system_once(move |berths: StationBerths| {
+                let mut collider = Collider::circle(1_009.0, 1_200.0);
+                collider.bound_center = Vec2::new(250.0, 0.0);
+                berths.berth_for(None, &ship, Some(&collider))
+            })
+            .unwrap()
+            .expect("a berth beside the station");
+        assert!(
+            in_docking_reach(&Transform::default(), &anchor, at),
+            "berth {:.0} from the core, docking reach is {:.0}",
+            at.length(),
+            extent + DOCK_MARGIN
+        );
     }
 
     /// Every station and platform on a plan has its design on disk.
