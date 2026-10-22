@@ -9,14 +9,16 @@
 //! exists as entities only while you are near it, so a system's station costs
 //! nothing while you are on the far side of the system.
 
+use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
 
 use super::FactionStanding;
 use crate::ai_ship::components::{faction_display_name, AiShipState, AiShipType};
 use crate::building::registry::ModuleRegistry;
-use crate::celestial::components::{CelestialBody, Planet, StarSystemMember};
+use crate::celestial::components::{CelestialBody, OrbitalPath, Planet, StarSystemMember};
 use crate::celestial::resources::{GalaxyMap, SystemStreamingManager};
 use crate::components::{Ship, Velocity};
+use crate::ship::collision::Collider;
 use crate::events::{AiShipDestroyed, NotificationType, ShowNotification};
 use crate::resources::{DockTerms, Inventory, InteractPress, MarketEvents};
 use crate::states::GameState;
@@ -361,6 +363,143 @@ fn faction_station_docking(
     next_state.set(GameState::Docked);
 }
 
+/// Clear space between a berthed ship's hull and the nearest part of the
+/// station, platforms included.
+const BERTH_GAP: f32 = 400.0;
+
+/// Where a ship reaching `ship_reach` from its centre waits off a station.
+/// `parts` are the station's pieces as (centre, reach), the core first.
+/// `motion` is the way the station is travelling (zero if it holds still),
+/// and `pull` the way its planet's gravity draws a ship let go beside it.
+/// `others` is everything else solid nearby, as (centre, reach): the guard
+/// fleet holding at the station, convoys, rocks. They go their own way, so
+/// the berth only has to be clear of where they are now.
+///
+/// A station rides its planet at a couple of hundred units a second and a
+/// ship let go beside it doesn't, so the berth is on the trailing side: the
+/// station draws away from it instead of running it down. A berth is only
+/// taken if no part comes within the gap, either where the ship starts or
+/// anywhere along the line the station's departure leaves it on, so a
+/// platform hanging off the station's back can't sweep through it either.
+/// That line bends towards the planet as the ship falls, so the berth must
+/// also be clear along a line tilted that way.
+pub fn berth_point(parts: &[(Vec2, f32)], others: &[(Vec2, f32)], ship_reach: f32, motion: Vec2, pull: Vec2) -> Vec2 {
+    let Some(&(core, core_reach)) = parts.first() else { return Vec2::ZERO };
+    let moving = motion.length_squared() > 1e-6;
+    let trailing = if moving { -motion.normalize() } else { Vec2::NEG_Y };
+    let falling = (trailing + pull.normalize_or_zero() * 0.4).normalize_or(trailing);
+    let paths: &[Vec2] = if moving { &[trailing, falling] } else { &[] };
+    let clear = |spot: Vec2| {
+        parts.iter().all(|&(centre, reach)| {
+            let need = reach + ship_reach + BERTH_GAP - 1.0;
+            // Nearest the ship comes to this part as the station leaves it behind.
+            centre.distance(spot) >= need
+                && paths.iter().all(|&path| {
+                    let along = (centre - spot).dot(path).max(0.0);
+                    centre.distance(spot + path * along) >= need
+                })
+        }) && others.iter().all(|&(centre, reach)| centre.distance(spot) >= reach + ship_reach + BERTH_GAP - 1.0)
+    };
+    let step = 10.0_f32.to_radians();
+    let mut spot = core + trailing * (core_reach + ship_reach + BERTH_GAP);
+    for ring in 0..4 {
+        let out = core_reach + ship_reach + BERTH_GAP + ring as f32 * 1_500.0;
+        // Straight behind first, then swinging out either way.
+        for k in 0..=36 {
+            let turn = step * ((k + 1) / 2) as f32 * if k % 2 == 0 { 1.0 } else { -1.0 };
+            let candidate = core + Vec2::from_angle(turn).rotate(trailing) * out;
+            if clear(candidate) {
+                return candidate;
+            }
+        }
+        spot = core + trailing * out;
+    }
+    spot
+}
+
+/// What placing a ship at a faction station's berth needs to look at.
+#[derive(SystemParam)]
+pub struct StationBerths<'w, 's> {
+    cores: Query<'w, 's, (Entity, &'static Transform, &'static StationAnchor, &'static AiShipType, &'static AiShipState), (With<StationCore>, Without<Ship>)>,
+    parts: Query<'w, 's, (Entity, &'static Transform, Option<&'static Collider>), (With<super::FactionStation>, Without<Ship>)>,
+    bodies: Query<'w, 's, (&'static Transform, Option<&'static OrbitalPath>), (Without<Ship>, Without<StationAnchor>)>,
+    others: Query<'w, 's, (&'static Transform, &'static Collider), (Without<Ship>, Without<StationAnchor>)>,
+    stations: Res<'w, FactionStations>,
+}
+
+impl StationBerths<'_, '_> {
+    /// The ship translation that puts a ship (its transform and collider) at
+    /// the berth of the live station it is in docking reach of, if that
+    /// station belongs to `faction` (any faction, for None). None away from
+    /// one, or before every part of it has its collision shape.
+    pub fn berth_for(&self, faction: Option<AiShipType>, ship: &Transform, collider: Option<&Collider>) -> Option<Vec2> {
+        let live = self.stations.live.as_ref()?;
+        let (core, core_tf, anchor, &owner, state) = self.cores.get(live.core).ok()?;
+        if state.is_destroyed || faction.is_some_and(|f| f != owner) {
+            return None;
+        }
+        let (centre_offset, ship_reach) = collider
+            .map(|c| ((ship.rotation * c.bound_center.extend(0.0)).truncate(), c.bound_radius))
+            .unwrap_or((Vec2::ZERO, 1_200.0));
+        let ship_centre = ship.translation.truncate() + centre_offset;
+        if core_tf.translation.truncate().distance(ship_centre) > anchor.extent + DOCK_MARGIN + ship_reach {
+            return None;
+        }
+        let mut parts = Vec::new();
+        for id in std::iter::once(core).chain(live.parts.iter().copied()) {
+            let Ok((_, tf, collider)) = self.parts.get(id) else { continue };
+            let collider = collider?;
+            parts.push((crate::ship::collision::world_point(tf, collider.bound_center), collider.bound_radius));
+        }
+        // Anything that could be where the berth is: out to the farthest a
+        // berth can be put (four rings out) plus the biggest hull around.
+        let core_at = core_tf.translation.truncate();
+        let look = anchor.extent + ship_reach + BERTH_GAP + 4_500.0 + 4_000.0;
+        let others: Vec<(Vec2, f32)> = self
+            .others
+            .iter()
+            .map(|(tf, c)| (crate::ship::collision::world_point(tf, c.bound_center), c.bound_radius))
+            .filter(|&(centre, reach)| centre.distance(core_at) < look + reach)
+            .collect();
+        let pull = self
+            .bodies
+            .get(anchor.planet)
+            .map_or(Vec2::ZERO, |(planet, _)| planet.translation.truncate() - core_tf.translation.truncate());
+        Some(berth_point(&parts, &others, ship_reach, self.motion(anchor), pull) - centre_offset)
+    }
+
+    /// Which way a station is being carried: its planet's direction along its orbit.
+    fn motion(&self, anchor: &StationAnchor) -> Vec2 {
+        let Ok((planet, Some(orbit))) = self.bodies.get(anchor.planet) else { return Vec2::ZERO };
+        let Ok((parent, _)) = self.bodies.get(orbit.parent) else { return Vec2::ZERO };
+        let centre = parent.translation.truncate();
+        let rel = planet.translation.truncate() - centre;
+        let theta = rel.y.atan2(rel.x);
+        let at = |t: f32| {
+            Vec2::from_angle(t) * crate::celestial::orbits::orbit_radius(orbit.semi_major_axis, orbit.eccentricity, t)
+        };
+        let sign = if orbit.clockwise { -1.0 } else { 1.0 };
+        (at(theta + 1e-3) - at(theta - 1e-3)) * sign
+    }
+}
+
+/// Undocking from a faction station lets the ship go at its berth, at rest.
+/// Docking never moved it, so it used to leave from wherever it had docked:
+/// often against a gun platform, or on the station's path, which the station
+/// resumes the moment you undock and runs you down along.
+fn release_at_berth(
+    market: Res<MarketEvents>,
+    mut player: Query<(&mut Transform, &mut Velocity, Option<&Collider>), With<Ship>>,
+    berths: StationBerths,
+) {
+    let Some(faction) = market.dock_terms.as_ref().and_then(|t| t.faction) else { return };
+    let Ok((mut tf, mut velocity, collider)) = player.single_mut() else { return };
+    let Some(at) = berths.berth_for(Some(faction), &tf, collider) else { return };
+    tf.translation.x = at.x;
+    tf.translation.y = at.y;
+    velocity.0 = Vec2::ZERO;
+}
+
 fn clear_dock_terms(mut market: ResMut<MarketEvents>) {
     market.dock_terms = None;
 }
@@ -544,7 +683,7 @@ impl Plugin for FactionStationPlugin {
             // Cleared on the way back out to space, not on leaving the dock:
             // pausing while docked leaves and re-enters Docked, and the
             // station's terms must survive that.
-            .add_systems(OnEnter(GameState::Exploring), clear_dock_terms)
+            .add_systems(OnEnter(GameState::Exploring), (release_at_berth, clear_dock_terms).chain())
             .add_systems(Update, station_changes_hands)
             .add_systems(OnEnter(GameState::Docked), free_port_docking)
             .add_systems(OnEnter(GameState::StationDocked), free_port_docking);
@@ -555,6 +694,63 @@ impl Plugin for FactionStationPlugin {
 mod tests {
     use super::*;
     use crate::diplomacy::StandingTier;
+
+    fn ring(core_reach: f32, platform_reach: f32) -> Vec<(Vec2, f32)> {
+        let reach = core_reach + platform_reach + 2_500.0;
+        std::iter::once((Vec2::ZERO, core_reach))
+            .chain((0..4).map(|i| (Vec2::from_angle(std::f32::consts::TAU * (i as f32 + 0.5) / 4.0) * reach, platform_reach)))
+            .collect()
+    }
+
+    /// The berth keeps the whole hull clear of every part, for every way the
+    /// station might be travelling, the wide Pincer included.
+    #[test]
+    fn the_berth_clears_the_station_and_its_platforms() {
+        let pincer = 1_065.0;
+        for parts in [ring(1_593.0, 475.0), vec![(Vec2::ZERO, 2_300.0)]] {
+            for step in 0..72 {
+                let motion = Vec2::from_angle(step as f32 * 5.0_f32.to_radians()) * 200.0;
+                let pull = motion.perp();
+                let at = berth_point(&parts, &[], pincer, motion, pull);
+                for &(centre, reach) in &parts {
+                    assert!(
+                        centre.distance(at) >= reach + pincer + BERTH_GAP - 1.0,
+                        "berth {at:?} within {:.0} of a part reaching {reach} (motion {motion:?})",
+                        centre.distance(at) - reach - pincer
+                    );
+                }
+            }
+        }
+    }
+
+    /// It is behind the station, so the station draws away from the ship.
+    #[test]
+    fn the_berth_trails_the_station() {
+        let parts = ring(1_593.0, 475.0);
+        for step in 0..72 {
+            let motion = Vec2::from_angle(step as f32 * 5.0_f32.to_radians()) * 200.0;
+            let at = berth_point(&parts, &[], 1_065.0, motion, Vec2::ZERO);
+            assert!(at.dot(motion) < 0.0, "berth {at:?} is ahead of a station moving {motion:?}");
+            // Nothing is in the way as the station leaves it behind.
+            for t in 0..200 {
+                let ship = at - motion.normalize() * t as f32 * 100.0;
+                for &(centre, reach) in &parts {
+                    assert!(centre.distance(ship) >= reach + 1_065.0, "station sweeps through the berth (motion {motion:?})");
+                }
+            }
+        }
+    }
+
+    /// A guard ship holding where the berth would be pushes the berth elsewhere.
+    #[test]
+    fn the_berth_avoids_ships_holding_nearby() {
+        let parts = ring(2_300.0, 0.0)[..1].to_vec();
+        let motion = Vec2::X * 200.0;
+        let first = berth_point(&parts, &[], 1_065.0, motion, Vec2::ZERO);
+        let guard = [(first, 3_384.0)];
+        let at = berth_point(&parts, &guard, 1_065.0, motion, Vec2::ZERO);
+        assert!(at.distance(first) >= 3_384.0 + 1_065.0 + BERTH_GAP - 1.0, "berth {at:?} still inside the guard at {first:?}");
+    }
 
     /// Every station and platform on a plan has its design on disk.
     #[test]

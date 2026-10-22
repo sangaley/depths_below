@@ -359,14 +359,18 @@ impl Plugin for DemoPlugin {
                            mut stage: Local<u8>,
                            mut since: Local<f32>,
                            mut target: Local<Option<u32>>,
+                           game_state: Res<State<crate::states::GameState>>,
                            galaxy: Res<crate::celestial::resources::GalaxyMap>,
                            mut jumps: MessageWriter<crate::celestial::events::WarpJumpStarted>,
                            sim: Res<crate::ai_ship::components::WorldSimulation>,
                            streaming: Res<crate::celestial::resources::SystemStreamingManager>,
-                           mut ship: Query<(&mut Transform, &mut crate::components::Velocity), With<crate::components::Ship>>,
+                           mut ship: Query<(&mut Transform, &mut crate::components::Velocity, Option<&crate::ship::collision::Collider>), With<crate::components::Ship>>,
                            worlds: Query<(&Transform, &crate::celestial::components::CelestialBody), (With<crate::celestial::capital_worlds::CapitalWorld>, Without<crate::components::Ship>)>,
-                           faction_stations: Res<crate::diplomacy::stations::FactionStations>| {
+                           faction_stations: Res<crate::diplomacy::stations::FactionStations>,
+                           berths: crate::diplomacy::stations::StationBerths| {
                         *since += time.delta_secs();
+                        // Only runs in flight, so a changed state means it docked.
+                        let away = game_state.is_changed();
                         if target.is_none() && !galaxy.systems.is_empty() {
                             *target = place.parse::<u32>().ok().or_else(|| {
                                 if place == "haunt" {
@@ -407,7 +411,7 @@ impl Plugin for DemoPlugin {
                                     warn!("DEPTHS_START_SYSTEM: system {id} has no fleets");
                                     return;
                                 };
-                                if let Ok((mut tf, mut v)) = ship.single_mut() {
+                                if let Ok((mut tf, mut v, _)) = ship.single_mut() {
                                     let at = fleet.position + Vec2::new(12_000.0, 0.0);
                                     tf.translation.x = at.x;
                                     tf.translation.y = at.y;
@@ -424,7 +428,8 @@ impl Plugin for DemoPlugin {
                                     }
                                     return;
                                 };
-                                *stage = 2;
+                                *stage = 4;
+                                *since = 0.0;
                                 let star = galaxy.systems.iter().find(|s| s.id == id).map_or(Vec2::ZERO, |s| s.local_center);
                                 let at = world.translation.truncate();
                                 let out = (at - star).normalize_or(Vec2::X);
@@ -434,11 +439,36 @@ impl Plugin for DemoPlugin {
                                     Some((_, port, extent)) => port + out.perp() * (extent + 1_500.0),
                                     None => at + out * (body.radius + 2_500.0) + out.perp() * 4_000.0,
                                 };
-                                if let Ok((mut tf, mut v)) = ship.single_mut() {
+                                if let Ok((mut tf, mut v, _)) = ship.single_mut() {
                                     tf.translation.x = park.x;
                                     tf.translation.y = park.y;
                                     v.0 = Vec2::ZERO;
                                     info!("DEPTHS_START_SYSTEM: parked on the night side of {}", body.name);
+                                }
+                            }
+                            // Then onto the starport's berth once it has
+                            // materialised (the spot above is only a guess at
+                            // where its platforms aren't), and hold there the
+                            // way a player keeps station, until docking. The
+                            // berth trails the station, so a ship left to
+                            // itself would be out of docking reach in seconds.
+                            4 | 5 => {
+                                if away || (*stage == 5 && *since > 60.0) {
+                                    *stage = 2;
+                                    return;
+                                }
+                                let Ok((mut tf, mut v, collider)) = ship.single_mut() else { return };
+                                if let Some(at) = berths.berth_for(None, &tf, collider) {
+                                    tf.translation.x = at.x;
+                                    tf.translation.y = at.y;
+                                    v.0 = Vec2::ZERO;
+                                    if *stage == 4 {
+                                        *stage = 5;
+                                        *since = 0.0;
+                                        info!("DEPTHS_START_SYSTEM: holding at the starport's berth");
+                                    }
+                                } else if *since > 10.0 {
+                                    *stage = 2;
                                 }
                             }
                             _ => {}
