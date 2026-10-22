@@ -9,9 +9,11 @@
 //! appear where it was. A big fleet can be seen coming from 35 km for the
 //! price of a sprite a ship.
 //!
-//! The pictures are dim: the dark is the game's (camera::light_cone keeps
-//! everything you haven't lit near-black), and a far fleet should read as
-//! shapes against the stars, not as lit hulls.
+//! The pictures are in the ship's own colours -- each cell the average of
+//! the hull texture it's drawn with, times its material's tint, the way
+//! spawn_ai_hull draws the real block -- so a ship doesn't change colour
+//! when it materialises. They fade out with distance, and are opaque by the
+//! time the real ship takes over.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
@@ -25,8 +27,8 @@ use crate::components::Ship;
 pub const PREVIEW_RANGE: f32 = 35_000.0;
 /// How bright a preview is right at the edge of materialising, and at the
 /// edge of the preview range.
-const NEAR_ALPHA: f32 = 0.55;
-const FAR_ALPHA: f32 = 0.18;
+const NEAR_ALPHA: f32 = 1.0;
+const FAR_ALPHA: f32 = 0.4;
 /// World units per grid cell (the spawner's).
 const CELL: f32 = 66.0;
 
@@ -42,11 +44,36 @@ pub struct PreviewImages {
     images: HashMap<(AiShipType, Option<&'static str>), (Handle<Image>, Vec2, Vec2)>,
 }
 
-/// The silhouette of a design: one pixel per cell, outer hull bright, inner
-/// decks darker, modules lighter still. Returns the image, its size in world
-/// units, and the offset from the ship's root to the picture's centre.
+/// Average colour of each hull texture (sRGB, opaque pixels only), measured
+/// from assets/sprites/hull/*.png. Re-measure if the art changes.
+fn texture_average(material: crate::components::HullMaterial, layer: crate::components::HullLayer) -> [f32; 3] {
+    use crate::components::{HullLayer, HullMaterial};
+    if layer == HullLayer::Hallway {
+        return [67.0, 73.0, 84.0];
+    }
+    match material {
+        HullMaterial::Steel => [58.0, 68.0, 80.0],
+        HullMaterial::Titanium => [79.0, 89.0, 100.0],
+        HullMaterial::Composite => [50.0, 56.0, 67.0],
+        HullMaterial::AbyssalAlloy => [46.0, 44.0, 64.0],
+    }
+}
+
+/// The module sprites, averaged together.
+const MODULE_AVERAGE: [u8; 3] = [60, 68, 76];
+
+/// A hull cell's colour as the real block shows it: its texture times the
+/// material tint spawn_ai_hull gives it.
+fn cell_colour(material: crate::components::HullMaterial, layer: crate::components::HullLayer) -> [u8; 3] {
+    let tint = super::spawner::hull_tint(material).to_srgba();
+    let t = texture_average(material, layer);
+    [(t[0] * tint.red) as u8, (t[1] * tint.green) as u8, (t[2] * tint.blue) as u8]
+}
+
+/// The silhouette of a design: one pixel per cell, in the colours the real
+/// blocks are drawn in. Returns the image, its size in world units, and the
+/// offset from the ship's root to the picture's centre.
 pub fn silhouette(design: &crate::building::blueprint::Blueprint) -> Option<(Image, Vec2, Vec2)> {
-    use crate::components::HullLayer;
     let cells = &design.hull_cells;
     let (lo, hi) = cells.iter().fold((IVec2::MAX, IVec2::MIN), |(lo, hi), c| (lo.min(c.grid_pos), hi.max(c.grid_pos)));
     if cells.is_empty() {
@@ -55,26 +82,20 @@ pub fn silhouette(design: &crate::building::blueprint::Blueprint) -> Option<(Ima
     let size = hi - lo + IVec2::ONE;
     let (w, h) = (size.x as usize, size.y as usize);
     let mut data = vec![0u8; w * h * 4];
-    let mut put = |p: IVec2, shade: u8| {
+    let mut put = |p: IVec2, rgb: [u8; 3]| {
         let x = (p.x - lo.x) as usize;
         // Image rows run top-down; grid y runs up.
         let y = (hi.y - p.y) as usize;
         let i = (y * w + x) * 4;
-        data[i] = shade;
-        data[i + 1] = shade;
-        data[i + 2] = shade;
+        data[i..i + 3].copy_from_slice(&rgb);
         data[i + 3] = 255;
     };
     for c in cells {
-        let shade = match c.layer {
-            HullLayer::Outer => 210,
-            _ => 120,
-        };
-        put(c.grid_pos, shade);
+        put(c.grid_pos, cell_colour(c.material, c.layer));
     }
     for m in &design.modules {
         if m.grid_pos.cmpge(lo).all() && m.grid_pos.cmple(hi).all() {
-            put(m.grid_pos, 255);
+            put(m.grid_pos, MODULE_AVERAGE);
         }
     }
     let mut image = Image::new(
@@ -179,14 +200,11 @@ pub fn sync_previews(
         let Some((image, size, centre)) = picture(&mut cache, &mut images, ship.faction, ship.class) else { continue };
         let angle = heading(ship);
         let at = ship.position + Vec2::from_angle(angle).rotate(centre);
-        // The map palette, not the hull tint: several hull tints are near
-        // black (tuned for lit ships close up) and vanish against space.
-        let tint = faction_map_color(ship.faction);
         commands.spawn((
             Sprite {
                 image,
                 custom_size: Some(size),
-                color: tint.with_alpha(preview_alpha(ship.position.distance(player_pos))),
+                color: Color::WHITE.with_alpha(preview_alpha(ship.position.distance(player_pos))),
                 ..default()
             },
             Transform {

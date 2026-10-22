@@ -58,15 +58,17 @@ caffeinate -di env DEPTHS_MUTE=1 DEPTHS_SKIP_MENU=1 DEPTHS_SHOTS=6 DEPTHS_OFFSCR
 RUNNER=$!
 disown "$RUNNER" 2>/dev/null || true   # keep job control quiet on kill
 
-# The binary is a grandchild (caffeinate -> cargo -> game), so look through
-# everything this script started, never by name: matching
+# Find the game among what this script started -- never by name: matching
 # 'target/debug/depths_below' by name found whichever game was oldest on the
-# machine -- the one the user was playing -- and killed it at the end.
+# machine, the one the user was playing, and killed it at the end. On macOS
+# caffeinate runs its command in its own process and `cargo run` execs the
+# binary, so the pid started below usually IS the game; check it as well as
+# everything under it.
 descendants() { local c; for c in $(pgrep -P "$1"); do echo "$c"; descendants "$c"; done; }
 GAME=""
 for _ in $(seq 1 600); do
   sleep 1
-  for pid in $(descendants "$RUNNER"); do
+  for pid in "$RUNNER" $(descendants "$RUNNER"); do
     case "$(ps -o command= -p "$pid" 2>/dev/null)" in
       target/debug/depths_below*|*/target/debug/depths_below*) GAME="$pid"; break ;;
     esac

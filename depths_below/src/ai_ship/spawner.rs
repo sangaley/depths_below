@@ -504,6 +504,17 @@ fn roll_crew_complement(rng: &mut impl Rng, floor: u32, typical: u32, ceiling: u
     sample.round() as u32
 }
 
+/// The tint an AI hull block's texture is drawn with (and its far-off
+/// preview, see preview::cell_colour).
+pub fn hull_tint(material: HullMaterial) -> Color {
+    match material {
+        HullMaterial::Steel => Color::srgb(0.55, 0.55, 0.6),
+        HullMaterial::Titanium => Color::srgb(0.7, 0.7, 0.75),
+        HullMaterial::Composite => Color::srgb(0.45, 0.62, 0.5),
+        HullMaterial::AbyssalAlloy => Color::srgb(0.35, 0.28, 0.45),
+    }
+}
+
 /// Spawns hull segment children for the AI ship. Returns the summed max
 /// health of everything it spawned -- the ship's hull as built.
 fn spawn_ai_hull(
@@ -521,12 +532,7 @@ fn spawn_ai_hull(
         let x = cell.grid_pos.x as f32 * 66.0;
         let y = cell.grid_pos.y as f32 * 66.0 - 33.0;
 
-        let hull_color = match cell.material {
-            HullMaterial::Steel => Color::srgb(0.55, 0.55, 0.6),
-            HullMaterial::Titanium => Color::srgb(0.7, 0.7, 0.75),
-            HullMaterial::Composite => Color::srgb(0.45, 0.62, 0.5),
-            HullMaterial::AbyssalAlloy => Color::srgb(0.35, 0.28, 0.45),
-        };
+        let hull_color = hull_tint(cell.material);
 
         let hull_entity = commands.spawn((
             (Sprite {
