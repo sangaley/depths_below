@@ -131,6 +131,26 @@ pub fn ai_ship_movement_system(
 
         if let Some(destination) = nav.destination {
             let pos = transform.translation.truncate();
+            let own_radius = collider.map(|c| c.bound_radius).unwrap_or(300.0);
+            // Room kept round your hull, wider the faster this ship is going:
+            // its velocity eases onto a new heading, so a hull at 1,500 u/s
+            // carries on a few hundred units before a swerve takes.
+            let player_obstacle = player_obstacle
+                .map(|(center, radius)| (center, radius + (velocity.0.length() * 0.3).clamp(200.0, 800.0)));
+            // A formation slot or waypoint that lands on you is taken just
+            // outside your hull instead. A patrol sweeping past a parked
+            // ship had escorts flying their slots straight through it.
+            let destination = match player_obstacle {
+                Some((center, radius)) if *behavior != AiShipBehavior::Engaging => {
+                    let keep = radius + own_radius;
+                    if destination.distance(center) < keep {
+                        center + (destination - center).normalize_or((pos - center).normalize_or(Vec2::X)) * keep
+                    } else {
+                        destination
+                    }
+                }
+                _ => destination,
+            };
             // Drive damage skews the perceived heading — the ship weaves
             // toward where its broken engines are dragging it.
             let to_dest = Vec2::from_angle(wobble_angle).rotate(destination - pos);
@@ -214,7 +234,6 @@ pub fn ai_ship_movement_system(
                 transform.rotation = transform.rotation.slerp(target_rotation, turn_blend);
             } else if dist > 5.0 {
                 // Bend the heading around any terrain blocking the way.
-                let own_radius = collider.map(|c| c.bound_radius).unwrap_or(300.0);
                 let direction = crate::ship::collision::steer_around(
                     &collider_grid,
                     &terrain,

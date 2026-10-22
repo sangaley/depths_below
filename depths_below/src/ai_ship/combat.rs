@@ -524,6 +524,17 @@ pub fn ai_distress_system(
     }
 }
 
+/// Whether a hit from `attacker` names it as the ship's attacker: never the
+/// ship itself or a friend, always the player (who has no faction here) or
+/// anything else that isn't an AI ship.
+fn counts_as_attacker(target: Entity, target_faction: Option<AiShipType>, attacker: Entity, attacker_faction: Option<AiShipType>) -> bool {
+    attacker != target
+        && match (target_faction, attacker_faction) {
+            (Some(own), Some(theirs)) => factions_hostile(own, theirs),
+            _ => true,
+        }
+}
+
 /// Process damage to AI ships — per-module penetration
 pub fn process_ai_ship_damage_system(
     mut damage_events: MessageReader<AiShipDamaged>,
@@ -548,8 +559,19 @@ pub fn process_ai_ship_damage_system(
         // attributable damage ticks (fire DoT, self-detonation) rather
         // than clearing it — a ship mid-burn from an earlier shot should
         // still remember who fired it.
-        if event.attacker.is_some() {
-            state.last_attacker = event.attacker;
+        //
+        // Only an enemy counts. A fleet-mate's stray round, a blast that
+        // caught its own side, or two hulls in formation scraping each
+        // other named a friend as the attacker, and the fleet call that
+        // follows turned the whole fleet on it -- the accused ship even
+        // answered its neighbours' call and targeted itself. A guard fleet
+        // at a starport tore itself apart at full speed, through whatever
+        // was parked in the middle.
+        let faction = |e: Entity| ai_ship_query.get(e).ok().map(|(_, &f, _)| f);
+        if let Some(attacker) = event.attacker {
+            if counts_as_attacker(event.target, faction(event.target), attacker, faction(attacker)) {
+                state.last_attacker = Some(attacker);
+            }
         }
 
         let impact_pos = event.position.unwrap_or(Vec2::ZERO);
@@ -1274,3 +1296,22 @@ mod gunnery_tests {
 // the wreck's condition. A second announcer here put up a line saying the
 // same thing for every kill, which in a swarm fight was half the stack.)
 
+
+#[cfg(test)]
+mod attacker_tests {
+    use super::*;
+
+    /// Friendly fire hurts, but it doesn't make an enemy: a fleet that
+    /// named a fleet-mate as its attacker turned on it, through anything
+    /// parked nearby.
+    #[test]
+    fn only_an_enemy_is_remembered_as_the_attacker() {
+        let [ship, mate, player] = [1, 2, 3].map(|n| Entity::from_raw_u32(n).unwrap());
+        let gilded = Some(AiShipType::GildedThrone);
+        assert!(!counts_as_attacker(ship, gilded, ship, gilded), "its own blast");
+        assert!(!counts_as_attacker(ship, gilded, mate, gilded), "a fleet-mate");
+        assert!(!counts_as_attacker(ship, Some(AiShipType::MerchantPrinces), mate, Some(AiShipType::MerchantPrinces)), "same guild");
+        assert!(counts_as_attacker(ship, gilded, player, None), "the player");
+        assert!(counts_as_attacker(ship, Some(AiShipType::MerchantPrinces), mate, Some(AiShipType::FreeHaulersCompact)), "the trade war");
+    }
+}
