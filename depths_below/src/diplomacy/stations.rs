@@ -366,6 +366,9 @@ fn faction_station_docking(
 /// Clear space between a berthed ship's hull and the nearest part of the
 /// station, platforms included.
 const BERTH_GAP: f32 = 400.0;
+/// How much further out each fallback ring of berths is, once nothing in
+/// docking reach is clear.
+const BERTH_RING: f32 = 700.0;
 
 /// Where a ship reaching `ship_reach` from its centre waits off a station.
 /// `parts` are the station's pieces as (centre, reach), the core first.
@@ -373,7 +376,11 @@ const BERTH_GAP: f32 = 400.0;
 /// and `pull` the way its planet's gravity draws a ship let go beside it.
 /// `others` is everything else solid nearby, as (centre, reach): the guard
 /// fleet holding at the station, convoys, rocks. They go their own way, so
-/// the berth only has to be clear of where they are now.
+/// the berth only has to be clear of where they are now. `within` is how far
+/// from the core's centre a berth can be and still be in docking reach: the
+/// rings inside it are all tried before any beyond it. The Hegemony's guard
+/// fleet crowding the near rings put the berth 5.1 km out, just past reach,
+/// and you couldn't dock again from where undocking left you.
 ///
 /// A station rides its planet at a couple of hundred units a second and a
 /// ship let go beside it doesn't, so the berth is on the trailing side: the
@@ -383,7 +390,7 @@ const BERTH_GAP: f32 = 400.0;
 /// platform hanging off the station's back can't sweep through it either.
 /// That line bends towards the planet as the ship falls, so the berth must
 /// also be clear along a line tilted that way.
-pub fn berth_point(parts: &[(Vec2, f32)], others: &[(Vec2, f32)], ship_reach: f32, motion: Vec2, pull: Vec2) -> Vec2 {
+pub fn berth_point(parts: &[(Vec2, f32)], others: &[(Vec2, f32)], ship_reach: f32, motion: Vec2, pull: Vec2, within: f32) -> Vec2 {
     let Some(&(core, core_reach)) = parts.first() else { return Vec2::ZERO };
     let moving = motion.length_squared() > 1e-6;
     let trailing = if moving { -motion.normalize() } else { Vec2::NEG_Y };
@@ -401,9 +408,18 @@ pub fn berth_point(parts: &[(Vec2, f32)], others: &[(Vec2, f32)], ship_reach: f3
         }) && others.iter().all(|&(centre, reach)| centre.distance(spot) >= reach + ship_reach + BERTH_GAP - 1.0)
     };
     let step = 10.0_f32.to_radians();
-    let mut spot = core + trailing * (core_reach + ship_reach + BERTH_GAP);
-    for ring in 0..4 {
-        let out = core_reach + ship_reach + BERTH_GAP + ring as f32 * 1_500.0;
+    let nearest = core_reach + ship_reach + BERTH_GAP;
+    // Four rings spread across docking reach, then three past it.
+    let rings: Vec<f32> = if within.is_finite() && within > nearest {
+        (0..4)
+            .map(|i| nearest + (within - nearest) * i as f32 / 3.0)
+            .chain((1..=3).map(|i| within + i as f32 * BERTH_RING))
+            .collect()
+    } else {
+        (0..4).map(|i| nearest + i as f32 * BERTH_RING).collect()
+    };
+    let mut spot = core + trailing * nearest;
+    for out in rings {
         // Straight behind first, then swinging out either way.
         for k in 0..=36 {
             let turn = step * ((k + 1) / 2) as f32 * if k % 2 == 0 { 1.0 } else { -1.0 };
@@ -451,10 +467,14 @@ impl StationBerths<'_, '_> {
             let collider = collider?;
             parts.push((crate::ship::collision::world_point(tf, collider.bound_center), collider.bound_radius));
         }
-        // Anything that could be where the berth is: out to the farthest a
-        // berth can be put (four rings out) plus the biggest hull around.
+        // Docking is measured between the two transforms, and the berth
+        // places the ship's collider centre, so both offsets come off.
         let core_at = core_tf.translation.truncate();
-        let look = anchor.extent + ship_reach + BERTH_GAP + 4_500.0 + 4_000.0;
+        let core_offset = parts.first().map_or(0.0, |&(centre, _)| centre.distance(core_at));
+        let within = anchor.extent + DOCK_MARGIN - core_offset - centre_offset.length() - 50.0;
+        // Anything that could be where the berth is: out to the farthest a
+        // berth can be put (the last ring out) plus the biggest hull around.
+        let look = within.max(anchor.extent + ship_reach + BERTH_GAP) + 3.0 * BERTH_RING + 4_000.0;
         let others: Vec<(Vec2, f32)> = self
             .others
             .iter()
@@ -465,7 +485,7 @@ impl StationBerths<'_, '_> {
             .bodies
             .get(anchor.planet)
             .map_or(Vec2::ZERO, |(planet, _)| planet.translation.truncate() - core_tf.translation.truncate());
-        Some(berth_point(&parts, &others, ship_reach, self.motion(anchor), pull) - centre_offset)
+        Some(berth_point(&parts, &others, ship_reach, self.motion(anchor), pull, within) - centre_offset)
     }
 
     /// Which way a station is being carried: its planet's direction along its orbit.
@@ -711,7 +731,7 @@ mod tests {
             for step in 0..72 {
                 let motion = Vec2::from_angle(step as f32 * 5.0_f32.to_radians()) * 200.0;
                 let pull = motion.perp();
-                let at = berth_point(&parts, &[], pincer, motion, pull);
+                let at = berth_point(&parts, &[], pincer, motion, pull, f32::INFINITY);
                 for &(centre, reach) in &parts {
                     assert!(
                         centre.distance(at) >= reach + pincer + BERTH_GAP - 1.0,
@@ -729,7 +749,7 @@ mod tests {
         let parts = ring(1_593.0, 475.0);
         for step in 0..72 {
             let motion = Vec2::from_angle(step as f32 * 5.0_f32.to_radians()) * 200.0;
-            let at = berth_point(&parts, &[], 1_065.0, motion, Vec2::ZERO);
+            let at = berth_point(&parts, &[], 1_065.0, motion, Vec2::ZERO, f32::INFINITY);
             assert!(at.dot(motion) < 0.0, "berth {at:?} is ahead of a station moving {motion:?}");
             // Nothing is in the way as the station leaves it behind.
             for t in 0..200 {
@@ -746,10 +766,28 @@ mod tests {
     fn the_berth_avoids_ships_holding_nearby() {
         let parts = ring(2_300.0, 0.0)[..1].to_vec();
         let motion = Vec2::X * 200.0;
-        let first = berth_point(&parts, &[], 1_065.0, motion, Vec2::ZERO);
+        let first = berth_point(&parts, &[], 1_065.0, motion, Vec2::ZERO, f32::INFINITY);
         let guard = [(first, 3_384.0)];
-        let at = berth_point(&parts, &guard, 1_065.0, motion, Vec2::ZERO);
+        let at = berth_point(&parts, &guard, 1_065.0, motion, Vec2::ZERO, f32::INFINITY);
         assert!(at.distance(first) >= 3_384.0 + 1_065.0 + BERTH_GAP - 1.0, "berth {at:?} still inside the guard at {first:?}");
+    }
+
+    /// With the nearest berths crowded, the berth still stays in docking
+    /// reach while anything inside it is clear.
+    #[test]
+    fn a_crowded_berth_stays_in_docking_reach() {
+        let parts = ring(1_593.0, 475.0);
+        let motion = Vec2::X * 200.0;
+        let within = 1_531.0 + DOCK_MARGIN - 50.0;
+        // A small ship sitting on the nearest berths behind the station: the
+        // edge of docking reach is clear, and fixed 700u rings would have
+        // jumped from 4,402 (blocked) to 5,102 (out of reach).
+        let guards = vec![(Vec2::new(-3_002.0, 0.0), 300.0)];
+        let at = berth_point(&parts, &guards, 1_009.0, motion, Vec2::ZERO, within);
+        assert!(at.length() <= within + 1.0, "berth {:.0} out, reach is {within:.0}", at.length());
+        for &(centre, reach) in parts.iter().chain(guards.iter()) {
+            assert!(centre.distance(at) >= reach + 1_009.0 + BERTH_GAP - 1.0, "berth {at:?} inside something at {centre:?}");
+        }
     }
 
     /// Every station and platform on a plan has its design on disk.

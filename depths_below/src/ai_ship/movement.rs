@@ -3,6 +3,22 @@ use bevy::prelude::*;
 use crate::components::*;
 use super::components::*;
 
+/// Top speed for harbour traffic inside the harbour.
+const HARBOUR_SPEED: f32 = 350.0;
+/// How far past a starport's hull the harbour reaches: the guard fleet
+/// patrols within 8 km of it, convoys berth 4 km off it.
+const HARBOUR_REACH: f32 = 12_000.0;
+/// Past the harbour the limit lifts gradually (u/s per unit out), so a fleet
+/// leaving it speeds up instead of lurching.
+const HARBOUR_EASE: f32 = 0.25;
+
+/// Speed limit for a ship `distance` from the centre of a starport whose hull
+/// reaches `extent`. A Gilded Throne patrol at 2,000 u/s wheeled its formation
+/// into itself and shoved hulls into whatever sat by the station.
+pub fn harbour_speed_cap(distance: f32, extent: f32) -> f32 {
+    HARBOUR_SPEED + (distance - extent - HARBOUR_REACH).max(0.0) * HARBOUR_EASE
+}
+
 /// Moves AI ships toward their nav destination, reading child Engine components for thrust.
 pub fn ai_ship_movement_system(
     time: Res<Time>,
@@ -31,6 +47,7 @@ pub fn ai_ship_movement_system(
     // The player's hull is in the way too: a fleet crossing near you flowed
     // into it, and an escort could wedge itself between the Pincer's claws.
     player: Query<(&Transform, &crate::ship::collision::Collider), (With<Ship>, Without<AiShip>)>,
+    faction_stations: Res<crate::diplomacy::stations::FactionStations>,
 ) {
     let dt = time.delta_secs();
     let player_obstacle = player.single().ok().map(|(tf, c)| {
@@ -118,6 +135,19 @@ pub fn ai_ship_movement_system(
         // Global AI pace.
         const AI_SPEED_SCALE: f32 = 0.8;
         let max_speed = total_thrust * behavior_mult * faction_mult * AI_SPEED_SCALE;
+        // Harbour traffic goes slow. A ship going about its business near a
+        // faction starport keeps to harbour speed; one fighting or running
+        // for its life doesn't.
+        let harbour_bound = matches!(
+            behavior,
+            AiShipBehavior::Patrolling | AiShipBehavior::Idle | AiShipBehavior::FollowingTradeRoute | AiShipBehavior::Salvaging
+        );
+        let max_speed = match faction_stations.post {
+            Some((_, port, extent)) if harbour_bound => {
+                max_speed.min(harbour_speed_cap(transform.translation.truncate().distance(port), extent))
+            }
+            _ => max_speed,
+        };
 
         // Frame-rate-independent smoothing fraction: closes this much of the
         // remaining gap (to a target velocity or a target angle) per second.
@@ -320,5 +350,26 @@ pub fn ai_fuel_system(
         };
 
         state.fuel = (state.fuel - fuel_consumption * consumption_mult * dt).max(0.0);
+    }
+}
+
+#[cfg(test)]
+mod harbour_tests {
+    use super::*;
+
+    /// Inside the harbour everyone keeps to harbour speed; the limit lifts
+    /// smoothly outside it, and is gone a system's width away.
+    #[test]
+    fn harbour_traffic_slows_near_the_starport() {
+        let extent = 2_300.0;
+        assert_eq!(harbour_speed_cap(0.0, extent), HARBOUR_SPEED);
+        assert_eq!(harbour_speed_cap(extent + HARBOUR_REACH, extent), HARBOUR_SPEED);
+        let mut last = HARBOUR_SPEED;
+        for step in 1..100 {
+            let cap = harbour_speed_cap(extent + HARBOUR_REACH + step as f32 * 200.0, extent);
+            assert!(cap > last && cap - last <= 200.0 * HARBOUR_EASE + 0.01, "the limit jumps at {step}");
+            last = cap;
+        }
+        assert!(harbour_speed_cap(100_000.0, extent) > 10_000.0);
     }
 }
