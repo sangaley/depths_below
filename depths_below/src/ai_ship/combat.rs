@@ -418,6 +418,7 @@ pub fn ai_distress_system(
         ),
         With<AiShip>,
     >,
+    escorts: Query<(), With<super::standing_spawns::PlayerEscort>>,
     player_query: Query<Entity, With<Ship>>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
@@ -428,21 +429,18 @@ pub fn ai_distress_system(
     // at, the rest of its fighting ships are told who, wherever they are in
     // the formation. No cooldown and no "in trouble" bar -- an escort doesn't
     // wait for its capital to be hurt. (fleet, target)
-    let mut fleet_calls: Vec<(u32, Entity)> = Vec::new();
-    for (_, _, _, behavior, target, state, member, _) in ai_ships.iter() {
-        let Some(m) = member else { continue };
-        if state.is_destroyed { continue; }
-        let call = match (behavior, target.entity) {
-            (AiShipBehavior::Engaging, Some(t)) => Some(t),
-            _ if state.last_hit_timer < 5.0 => state.last_attacker,
-            _ => None,
-        };
-        if let Some(t) = call {
-            if !fleet_calls.iter().any(|(f, _)| *f == m.fleet) {
-                fleet_calls.push((m.fleet, t));
-            }
-        }
-    }
+    let fleet_calls = fleet_calls(
+        ai_ships.iter().map(|(e, _, _, behavior, target, state, member, _)| FleetVoice {
+            fleet: member.map(|m| m.fleet),
+            behavior: *behavior,
+            target: target.entity,
+            last_attacker: state.last_attacker,
+            last_hit_timer: state.last_hit_timer,
+            destroyed: state.is_destroyed,
+            escort: escorts.contains(e),
+        }),
+        player,
+    );
 
     // PASS 1 — collect fresh broadcasts: a fighting ship, off cooldown, that's
     // actually in trouble (recently hit or hull hurt) and has a target.
@@ -522,6 +520,52 @@ pub fn ai_distress_system(
             duration: 3.0,
         });
     }
+}
+
+/// Who each fleet turns on: (fleet, target).
+///
+/// A member calls whoever it is fighting, or whoever just hit it. Two cases
+/// used to go unanswered, and a squadron watched you pick off one of its own:
+///
+/// - Only the first member's call was heard. One already busy with some
+///   other ship drowned out the one you were shooting. A call against you
+///   now outranks any other.
+/// - A member you killed outright called nobody: the dead were skipped. A
+///   wreck now calls for as long as its last hit is fresh.
+///
+/// Your own escort wing is the exception: a stray round from you into one of
+/// them doesn't turn the rest of it on you.
+struct FleetVoice {
+    fleet: Option<u32>,
+    behavior: AiShipBehavior,
+    target: Option<Entity>,
+    last_attacker: Option<Entity>,
+    last_hit_timer: f32,
+    destroyed: bool,
+    escort: bool,
+}
+
+fn fleet_calls(members: impl Iterator<Item = FleetVoice>, player: Option<Entity>) -> Vec<(u32, Entity)> {
+    let mut calls: Vec<(u32, Entity)> = Vec::new();
+    for FleetVoice { fleet, behavior, target, last_attacker, last_hit_timer, destroyed, escort } in members {
+        let Some(fleet) = fleet else { continue };
+        let hit_by = last_attacker.filter(|_| last_hit_timer < 5.0);
+        let fighting = target.filter(|_| behavior == AiShipBehavior::Engaging && !destroyed);
+        let call = if hit_by.is_some() && hit_by == player && !escort {
+            hit_by
+        } else if destroyed {
+            None
+        } else {
+            fighting.or(hit_by)
+        };
+        let Some(t) = call else { continue };
+        match calls.iter_mut().find(|(f, _)| *f == fleet) {
+            None => calls.push((fleet, t)),
+            Some(existing) if Some(t) == player && !escort => existing.1 = t,
+            Some(_) => {}
+        }
+    }
+    calls
 }
 
 /// Whether a hit from `attacker` names it as the ship's attacker: never the
@@ -1193,6 +1237,63 @@ mod cripple_tests {
             app.world().get::<AiShipState>(ship).unwrap().is_destroyed,
             "one gun of four and no engines left, and the ship did not strike"
         );
+    }
+}
+
+#[cfg(test)]
+mod fleet_call_tests {
+    use super::*;
+
+    fn voice(fleet: u32, behavior: AiShipBehavior, target: Option<Entity>) -> FleetVoice {
+        FleetVoice { fleet: Some(fleet), behavior, target, last_attacker: None, last_hit_timer: 99.0, destroyed: false, escort: false }
+    }
+
+    fn hit(mut v: FleetVoice, by: Entity, secs_ago: f32) -> FleetVoice {
+        v.last_attacker = Some(by);
+        v.last_hit_timer = secs_ago;
+        v
+    }
+
+    /// One member already scrapping with some other ship must not drown out
+    /// the one you are shooting: the whole squadron turns on you.
+    #[test]
+    fn a_squadron_answers_you_over_its_other_fights() {
+        let player = Entity::from_raw_u32(1).unwrap();
+        let other = Entity::from_raw_u32(2).unwrap();
+        let calls = fleet_calls(
+            [
+                voice(7, AiShipBehavior::Engaging, Some(other)),
+                hit(voice(7, AiShipBehavior::Patrolling, None), player, 0.5),
+                voice(7, AiShipBehavior::Patrolling, None),
+            ]
+            .into_iter(),
+            Some(player),
+        );
+        assert_eq!(calls, vec![(7, player)]);
+    }
+
+    /// Killing one outright still brings the rest -- for a few seconds.
+    #[test]
+    fn a_member_killed_outright_still_calls() {
+        let player = Entity::from_raw_u32(1).unwrap();
+        let wreck = |secs_ago| {
+            let mut v = hit(voice(3, AiShipBehavior::Dead, None), player, secs_ago);
+            v.destroyed = true;
+            v
+        };
+        assert_eq!(fleet_calls([wreck(0.25)].into_iter(), Some(player)), vec![(3, player)]);
+        let stale = fleet_calls([wreck(9.0)].into_iter(), Some(player));
+        assert!(stale.is_empty(), "an old wreck keeps calling: {stale:?}");
+    }
+
+    /// Your own escort shrugs off a stray round from you mid-fight.
+    #[test]
+    fn your_escort_forgives_a_stray_round() {
+        let player = Entity::from_raw_u32(1).unwrap();
+        let enemy = Entity::from_raw_u32(2).unwrap();
+        let mut v = hit(voice(4, AiShipBehavior::Engaging, Some(enemy)), player, 0.5);
+        v.escort = true;
+        assert_eq!(fleet_calls([v].into_iter(), Some(player)), vec![(4, enemy)]);
     }
 }
 
