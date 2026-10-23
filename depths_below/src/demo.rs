@@ -65,6 +65,13 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //                          and NO AI ships spawned — just open space and
 //                          stars, for isolating flight feel from everything
 //                          else.
+//   DEPTHS_SAVE_TRACE=1 — print what a save has to bring back (orbital clock,
+//                          planet positions, which ship each bounty points
+//                          at) at every save, and for six seconds of flight
+//                          after a load, so the two line up in the log.
+//   DEPTHS_BOUNTY=1     — accept one bounty on a ship in a neighbouring system
+//                          as soon as there is a simulation, for when no board
+//                          nearby posts one (autoplay then hunts it down).
 // ============================================================================
 
 pub struct DemoPlugin;
@@ -259,6 +266,135 @@ fn census(
             .collect();
         info!("FLEET {id}: lead {:?} at ({:.0},{:.0}) | {}", lead_b, lead.x, lead.y, parts.join(" | "));
     }
+}
+
+/// What a save has to bring back, under DEPTHS_SAVE_TRACE=1: the orbital clock,
+/// where the loaded system's planets are, and which simulated ship each
+/// accepted bounty points at.
+///
+/// Printed at every save, then on the first frame of flight after a load and
+/// once a second for six more. Flight, because orbits and the simulation only
+/// run while exploring: a load that lands docked moves nothing until launch.
+fn save_trace(
+    time: Res<Time<Real>>,
+    mut saved: MessageReader<crate::events::GameSaved>,
+    mut loaded: MessageReader<crate::events::GameLoaded>,
+    mut since_load: Local<Option<(f32, u32)>>,
+    state: Res<State<GameState>>,
+    galaxy: Res<crate::celestial::resources::GalaxyState>,
+    streaming: Res<crate::celestial::resources::SystemStreamingManager>,
+    contracts: Res<crate::contracts::ContractState>,
+    sim: Res<WorldSimulation>,
+    planets: Query<(&crate::celestial::components::CelestialBody, &Transform), With<crate::celestial::components::OrbitalPath>>,
+) {
+    use crate::celestial::components::CelestialBodyType;
+    use crate::contracts::ContractObjective;
+    let report = |when: &str| {
+        let mut worlds: Vec<String> = planets.iter()
+            .filter(|(body, _)| body.body_type == CelestialBodyType::Planet)
+            .map(|(body, tf)| format!("{}@({:.0},{:.0})", body.name, tf.translation.x, tf.translation.y))
+            .collect();
+        worlds.sort();
+        let bounties: Vec<String> = contracts.active_contracts.iter()
+            .filter_map(|c| match c.objective {
+                ContractObjective::DestroyShip { ship_type, target_id, destroyed } => Some((ship_type, target_id, destroyed)),
+                _ => None,
+            })
+            .map(|(wanted, id, destroyed)| match sim.ships.iter().find(|s| s.bounty_id == Some(id)) {
+                _ if destroyed => format!("#{id} {wanted:?}: destroyed"),
+                Some(s) => format!(
+                    "#{id} {wanted:?}: carried by a {:?} in system {}{}",
+                    s.faction,
+                    s.system_id,
+                    if s.behavior == SimBehavior::Dead { " (DEAD)" } else { "" }
+                ),
+                None => format!("#{id} {wanted:?}: NO SHIP CARRIES IT"),
+            })
+            .collect();
+        info!(
+            "SAVETRACE {when}: state={:?} system={:?} clock={:.2} sim_ships={} planets=[{}] bounties=[{}]",
+            state.get(),
+            streaming.loaded_system,
+            galaxy.galaxy_time,
+            sim.ships.len(),
+            worlds.join(" "),
+            bounties.join("; ")
+        );
+    };
+
+    for save in saved.read().filter(|e| e.success) {
+        report(&format!("save slot {}", save.slot));
+    }
+    if loaded.read().filter(|e| e.success).count() > 0 {
+        *since_load = Some((0.0, 0));
+    }
+    let Some((elapsed, printed)) = since_load.as_mut() else { return };
+    if *state.get() != GameState::Exploring {
+        return;
+    }
+    if *printed == 0 || *elapsed >= *printed as f32 {
+        report(&format!("load+{elapsed:.1}s"));
+        *printed += 1;
+    }
+    *elapsed += time.delta_secs();
+    if *printed > 6 {
+        *since_load = None;
+    }
+}
+
+/// Under DEPTHS_BOUNTY=1: take one bounty, on a ship in a neighbouring system,
+/// as soon as there is a simulation to tag in.
+///
+/// A board only posts bounties on factions near it, at the star ratings the
+/// player's standing unlocks, so whether one turns up depends on the galaxy:
+/// Haven's neighbours can hold nothing a two-star board will post, and an
+/// autoplay run then never takes one. This one is tagged the way a board tags
+/// (`tag_bounty_target`) and paid for the way accepting one is, so what
+/// follows -- the hunt, the jump, a save, a load -- runs on the real thing.
+fn take_a_bounty(
+    mut done: Local<bool>,
+    state: Res<State<GameState>>,
+    streaming: Res<crate::celestial::resources::SystemStreamingManager>,
+    mut sim: ResMut<WorldSimulation>,
+    mut contracts: ResMut<crate::contracts::ContractState>,
+    mut currency: ResMut<crate::resources::Currency>,
+) {
+    use crate::contracts::{Contract, ContractObjective, ContractStatus, ContractType, Faction};
+    if *done || *state.get() != GameState::Exploring || !sim.initialized {
+        return;
+    }
+    *done = true;
+    let mut rng = rand::thread_rng();
+    // Elsewhere if anywhere, so taking it means a jump.
+    let elsewhere = streaming.warm_systems.clone();
+    let here: Vec<u32> = streaming.loaded_system.into_iter().collect();
+    for systems in [elsewhere, here] {
+        let faction = sim.ships.iter()
+            .find(|s| systems.contains(&s.system_id) && s.behavior != SimBehavior::Dead && s.bounty_id.is_none())
+            .map(|s| s.faction);
+        let Some(faction) = faction else { continue };
+        let Some((target_id, distance)) = sim.tag_bounty_target(faction, &systems, &mut rng) else { continue };
+        let deposit = currency.credits.min(100);
+        currency.credits -= deposit;
+        let id = contracts.next_id;
+        contracts.next_id += 1;
+        contracts.active_contracts.push(Contract {
+            id,
+            faction: Faction::Navy,
+            contract_type: ContractType::DestroyShip,
+            title: format!("Bounty: {faction:?} vessel"),
+            description: "Taken by DEPTHS_BOUNTY.".into(),
+            objective: ContractObjective::DestroyShip { ship_type: faction, target_id, destroyed: false },
+            reward: 1000,
+            deposit,
+            star_rating: 3,
+            depth_zone: crate::components::ZoneType::NearOrbit,
+            status: ContractStatus::Active,
+        });
+        info!("DEPTHS_BOUNTY: took bounty #{target_id} on a {faction:?} {distance:.0} out, in one of systems {systems:?}");
+        return;
+    }
+    warn!("DEPTHS_BOUNTY: no ship anywhere near to put a bounty on");
 }
 
 /// Name every sprite sitting near the ship's origin, under DEPTHS_WHATSTHERE=1.
@@ -479,6 +615,13 @@ impl Plugin for DemoPlugin {
                     .run_if(in_state(crate::states::GameState::Exploring)),
                 );
             }
+        }
+        if std::env::var("DEPTHS_SAVE_TRACE").ok().as_deref() == Some("1") {
+            // After the orbits, so a frame's planet positions match its clock.
+            app.add_systems(Update, save_trace.after(crate::celestial::CelestialSet::Orbits));
+        }
+        if std::env::var("DEPTHS_BOUNTY").ok().as_deref() == Some("1") {
+            app.add_systems(Update, take_a_bounty);
         }
         if !full_demo && !skip_menu && !move_test && build_tab.is_none() {
             return;

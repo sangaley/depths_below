@@ -197,3 +197,61 @@ pub fn draw_orbit_paths(
         }
     }
 }
+
+#[cfg(test)]
+mod orbit_clock_tests {
+    use super::*;
+    use crate::resources::SaveData;
+
+    /// Where one planet sits with the orbital clock at `galaxy_time`. The
+    /// clock is set, not ticked -- Time's delta stays zero -- so the planet
+    /// lands exactly where that reading puts it.
+    fn planet_at(galaxy_time: f64) -> Vec2 {
+        let mut app = App::new();
+        app.init_resource::<Time>();
+        app.insert_resource(GalaxyState { galaxy_time, ..default() });
+        app.add_systems(Update, update_orbital_positions);
+        let star = app.world_mut().spawn((
+            CelestialBody {
+                body_type: CelestialBodyType::Star,
+                mass: 1.0,
+                radius: 40_000.0,
+                name: "Star".into(),
+            },
+            Transform::from_xyz(200_000.0, -50_000.0, 0.0),
+        )).id();
+        let planet = app.world_mut().spawn((
+            OrbitalPath {
+                parent: star,
+                semi_major_axis: 300_000.0,
+                eccentricity: 0.2,
+                phase: 0.7,
+                period: 2_400.0,
+                clockwise: false,
+            },
+            Transform::default(),
+        )).id();
+        app.update();
+        app.world().get::<Transform>(planet).unwrap().translation.truncate()
+    }
+
+    /// A load from the menu puts the planets back where the save left them.
+    /// The way to the menu resets GalaxyState, clock and all, so the clock the
+    /// save carries is the only record of where they were.
+    #[test]
+    fn a_saved_clock_puts_planets_back_where_they_were() {
+        let mut save = SaveData::default();
+        save.galaxy_time = 1_234.5;
+        let where_saved = planet_at(save.galaxy_time);
+
+        let json = serde_json::to_string(&save).unwrap();
+        let back: SaveData = serde_json::from_str(&json).unwrap();
+        assert_eq!(planet_at(back.galaxy_time), where_saved);
+
+        // And it matters: the reset clock put the planet half an orbit away.
+        assert!(
+            planet_at(0.0).distance(where_saved) > 100_000.0,
+            "a clock at zero puts the planet near where it was saved anyway, so this proves nothing"
+        );
+    }
+}

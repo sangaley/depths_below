@@ -1691,6 +1691,11 @@ pub struct SaveData {
     /// Work you've taken from contacts.
     #[serde(default)]
     pub jobs: Option<crate::diplomacy::jobs::Jobs>,
+    /// The orbital clock (`GalaxyState::galaxy_time`): every planet's place
+    /// on its orbit is read off it. 0 on older saves -- where every run's
+    /// clock starts, and so where loading one always put the planets.
+    #[serde(default)]
+    pub galaxy_time: f64,
 }
 
 impl Default for SaveData {
@@ -1730,6 +1735,7 @@ impl Default for SaveData {
             border_war: None,
             contacts: None,
             jobs: None,
+            galaxy_time: 0.0,
         }
     }
 }
@@ -1963,6 +1969,7 @@ mod save_tests {
         save.fuel = Some(321.0);
         save.contracts.next_id = 17;
         save.reputation.navy = 42.0;
+        save.galaxy_time = 5_432.25;
         save
     }
 
@@ -1976,16 +1983,18 @@ mod save_tests {
         assert_eq!(back.fuel, Some(321.0));
         assert_eq!(back.contracts.next_id, 17);
         assert_eq!(back.reputation.navy, 42.0);
+        assert_eq!(back.galaxy_time, 5_432.25);
     }
 
     /// A save written before those fields existed still loads, and reads as
     /// "nothing recorded" rather than as something it never said: in a
-    /// system (not the void), no fuel figure, no contracts, starting standing.
+    /// system (not the void), no fuel figure, no contracts, starting standing,
+    /// the orbital clock where every run starts it.
     #[test]
     fn a_save_from_before_them_still_loads() {
         let mut json = serde_json::to_value(with_new_fields()).unwrap();
         let obj = json.as_object_mut().unwrap();
-        for key in ["uncharted_galaxy_pos", "fuel", "contracts", "reputation", "standing", "world", "destroyed_stations"] {
+        for key in ["uncharted_galaxy_pos", "fuel", "contracts", "reputation", "standing", "world", "destroyed_stations", "galaxy_time"] {
             assert!(obj.remove(key).is_some(), "{key} is not in the save under that name");
         }
         obj["galaxy_systems"][0].as_object_mut().unwrap().remove("looted_pois");
@@ -1997,5 +2006,6 @@ mod save_tests {
         assert!(old.contracts.active_contracts.is_empty());
         assert_eq!(old.contracts.next_id, 0);
         assert_eq!(old.reputation.navy, crate::contracts::FactionReputation::default().navy);
+        assert_eq!(old.galaxy_time, 0.0);
     }
 }

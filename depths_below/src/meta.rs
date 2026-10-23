@@ -149,6 +149,7 @@ fn collect_save_data(
     war: &crate::celestial::territory::BorderWar,
     contacts: &crate::diplomacy::contacts::Contacts,
     jobs: &crate::diplomacy::jobs::Jobs,
+    galaxy_time: f64,
 ) -> SaveData {
     let position = ship_query
         .single()
@@ -258,6 +259,7 @@ fn collect_save_data(
         border_war: Some(war.clone()),
         contacts: Some(contacts.clone()),
         jobs: Some(jobs.clone()),
+        galaxy_time,
     }
 }
 
@@ -299,8 +301,8 @@ fn handle_save_request(
     discovered_locations: Res<DiscoveredLocations>,
     // Bundled to stay under Bevy's 16-param cap: local world seed + galaxy state
     // + the drifting dead, and the run state that isn't the ship (fuel,
-    // contracts, standing). This system is AT the cap; anything else new has
-    // to join a tuple too.
+    // contracts, standing, the orbital clock). This system is AT the cap;
+    // anything else new has to join a tuple too.
     world_galaxy: (
         Res<WorldState>,
         Res<GalaxyMap>,
@@ -316,6 +318,7 @@ fn handle_save_request(
         Res<crate::celestial::territory::BorderWar>,
         Res<crate::diplomacy::contacts::Contacts>,
         Res<crate::diplomacy::jobs::Jobs>,
+        Res<GalaxyState>,
     ),
     current_state: Res<State<GameState>>,
     ship_query: Query<&Transform, With<Ship>>,
@@ -328,7 +331,7 @@ fn handle_save_request(
     hull_query: Query<(&HullSegment, &Transform), PlayerBlocks>,
     crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
 ) {
-    let (world_state, galaxy_map, streaming, drifting_dead, looted, fuel, contracts, reputation, standing, sim, faction_stations, war, people, work) = &world_galaxy;
+    let (world_state, galaxy_map, streaming, drifting_dead, looted, fuel, contracts, reputation, standing, sim, faction_stations, war, people, work, spawned) = &world_galaxy;
     for event in save_events.read() {
         let save_data = collect_save_data(
             event.slot,
@@ -358,6 +361,7 @@ fn handle_save_request(
             war,
             people,
             work,
+            spawned.galaxy_time,
         );
 
         // Tier 3 customization is saved via customization_params field
@@ -735,8 +739,12 @@ fn rebuild_entities_from_save(
         for entity in members.iter() {
             commands.entity(entity).try_despawn();
         }
-        // The list only, not galaxy_time: that is the orbital clock.
         galaxy.systems.clear();
+        // The orbital clock, which every planet is placed by, comes from the
+        // save too. It was left alone: the way to the menu resets it to zero
+        // and an in-game load kept this session's, so either way the planets
+        // came back somewhere other than where the save left them.
+        galaxy.galaxy_time = save.galaxy_time;
         if let Some(cur) = streaming.loaded_system {
             let now = time.elapsed_secs_f64();
             if let Some(info) = crate::celestial::galaxy::load_system(
@@ -776,6 +784,8 @@ fn rebuild_entities_from_save(
         // and its neighbours now (a no-op for any already populated). One not
         // yet started -- a load from the menu -- is left to
         // init_world_simulation, which does the same on entering Exploring.
+        // Either way the restored bounties then need ships to point at:
+        // contracts::tracking::reattach_bounties_after_load.
         if sim.initialized {
             if let Some(cur) = streaming.loaded_system {
                 crate::ai_ship::simulation::ensure_system_population(&mut sim, &galaxy_map, cur);
