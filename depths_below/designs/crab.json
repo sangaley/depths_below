@@ -1705,7 +1705,7 @@
         -9,
         -2
       ],
-      "rotation": "North",
+      "rotation": "West",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
@@ -1716,7 +1716,7 @@
         -9,
         -1
       ],
-      "rotation": "North",
+      "rotation": "West",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
@@ -1727,7 +1727,7 @@
         -9,
         0
       ],
-      "rotation": "North",
+      "rotation": "West",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
@@ -1738,7 +1738,7 @@
         -9,
         1
       ],
-      "rotation": "North",
+      "rotation": "West",
       "custom_name": null,
       "subcomponents": null,
       "extras": null
@@ -1749,7 +1749,7 @@
         -9,
         2
       ],
-      "rotation": "North",
+      "rotation": "West",
       "custom_name": null,
       "subcomponents": null,
       "extras": null

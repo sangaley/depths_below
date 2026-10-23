@@ -1273,7 +1273,7 @@
     -10,
     1
    ],
-   "rotation": "East"
+   "rotation": "West"
   },
   {
    "module_type": "StandardEngine",
@@ -1281,7 +1281,7 @@
     -10,
     2
    ],
-   "rotation": "East"
+   "rotation": "West"
   },
   {
    "module_type": "StandardEngine",
@@ -1289,7 +1289,7 @@
     -9,
     5
    ],
-   "rotation": "East"
+   "rotation": "West"
   },
   {
    "module_type": "StandardEngine",
@@ -1297,7 +1297,7 @@
     -9,
     6
    ],
-   "rotation": "East"
+   "rotation": "West"
   },
   {
    "module_type": "StandardEngine",
@@ -1305,7 +1305,7 @@
     -10,
     -2
    ],
-   "rotation": "East"
+   "rotation": "West"
   },
   {
    "module_type": "StandardEngine",
@@ -1313,7 +1313,7 @@
     -10,
     -1
    ],
-   "rotation": "East"
+   "rotation": "West"
   },
   {
    "module_type": "StandardReactor",

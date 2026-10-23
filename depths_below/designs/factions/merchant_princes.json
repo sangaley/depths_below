@@ -1225,7 +1225,7 @@
     -9,
     -1
    ],
-   "rotation": "East"
+   "rotation": "West"
   },
   {
    "module_type": "StandardEngine",
@@ -1233,7 +1233,7 @@
     -9,
     0
    ],
-   "rotation": "East"
+   "rotation": "West"
   },
   {
    "module_type": "StandardEngine",
@@ -1241,7 +1241,7 @@
     -9,
     1
    ],
-   "rotation": "East"
+   "rotation": "West"
   },
   {
    "module_type": "StandardReactor",

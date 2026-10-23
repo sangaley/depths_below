@@ -382,3 +382,45 @@ pub fn turret_turn_speed(module_type: ModuleType) -> f32 {
         _ => 3.0,
     }
 }
+
+#[cfg(test)]
+mod engine_facing_tests {
+    /// Every saved design's main engines vent aft.
+    ///
+    /// A block's rotation names the way its exhaust points (see
+    /// `sprite_base_rotation`), and every ship builds nose-right, so a main
+    /// engine faces West. The hull-yard drew engines without the game's
+    /// half-turn, so an engine that looked right there was saved East and
+    /// flew with its exhaust pointing into the hull -- the starter pincer
+    /// and five other designs did.
+    #[test]
+    fn every_designs_main_engines_vent_aft() {
+        const MAIN: [&str; 8] = [
+            "SmallEngine", "StandardEngine", "LargeEngine", "SilentDrive",
+            "JetDrive", "EmergencyThruster", "VectorThruster", "Afterburner",
+        ];
+        let files = std::fs::read_dir("designs")
+            .expect("designs/")
+            .chain(std::fs::read_dir("designs/factions").expect("designs/factions/"))
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.extension().is_some_and(|x| x == "json"));
+        let mut checked = 0;
+        for path in files {
+            let text = std::fs::read_to_string(&path).unwrap();
+            let design: serde_json::Value = serde_json::from_str(&text).unwrap();
+            for module in design["modules"].as_array().into_iter().flatten() {
+                let kind = module["module_type"].as_str().unwrap_or("");
+                if MAIN.contains(&kind) {
+                    checked += 1;
+                    assert_eq!(
+                        module["rotation"].as_str(),
+                        Some("West"),
+                        "{} at {} in {} vents {} -- engines face aft (West)",
+                        kind, module["grid_pos"], path.display(), module["rotation"],
+                    );
+                }
+            }
+        }
+        assert!(checked > 0, "no engines found to check");
+    }
+}
