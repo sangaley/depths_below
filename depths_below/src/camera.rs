@@ -603,6 +603,9 @@ fn update_depth_vignette(
                 Without<crate::vfx::debris::Debris>,
                 Without<crate::ship::damage::HitEffect>,
                 Without<crate::ship::fire::FireOverlay>,
+                // Height shadows set their own alpha; lit to 1.0 they'd be
+                // solid black copies of every enemy gun.
+                Without<crate::vfx::block_height::HeightShadow>,
             ),
             // --- Lit by a star, not by a torch on the nose of a ship ---
             //

@@ -149,7 +149,10 @@ pub fn update_ship_roof(
 /// Weapons stand above the hull: zoomed out they stay in sight over the
 /// roof wherever they're mounted, barrels and all.
 fn stands_above(module: &Module) -> bool {
+    // Towers and masts too: whatever casts a height shadow stands taller
+    // than the plating (vfx::block_height).
     module.module_type.category() == ModuleCategory::Weapons
+        || super::block_height::block_height(module.module_type).is_some()
 }
 
 /// A weapon lifted over the roof, and the height it came from.

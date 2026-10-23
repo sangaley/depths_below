@@ -4,6 +4,7 @@ pub mod screen_effects;
 pub mod block_visuals;
 pub mod hull_seams;
 pub mod ship_roof;
+pub mod block_height;
 pub mod starfield;
 pub mod procedural_textures;
 pub mod debris;
@@ -71,6 +72,15 @@ impl Plugin for VfxPlugin {
                 (ship_roof::update_ship_roof, ship_roof::raise_weapons_over_roof).run_if(in_state(GameState::Exploring)),
             )
             .add_systems(OnExit(GameState::Exploring), (ship_roof::clear_ship_roof, ship_roof::lower_weapons))
+            // Tall blocks (towers, masts, guns) cast a shadow, so they read as
+            // standing up off the hull. Wherever ships are drawn: the berth
+            // and the builder show the ship too.
+            .add_systems(
+                PostUpdate,
+                (block_height::attach_height_shadows, block_height::place_height_shadows)
+                    .chain()
+                    .before(bevy::transform::TransformSystems::Propagate),
+            )
             .add_systems(
                 Update,
                 hull_seams::update_hull_seams.run_if(
