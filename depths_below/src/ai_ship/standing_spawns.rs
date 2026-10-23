@@ -228,6 +228,12 @@ pub fn war_fleets(
     for (_, t) in &mut state.war_clock {
         *t -= dt;
     }
+    // Only touch standing when there is something to take: a mutable borrow
+    // marks it changed, and every frame of that made the diplomacy window
+    // rebuild itself every frame.
+    if standing.provocations.is_empty() {
+        return;
+    }
     let provoked: Vec<AiShipType> = std::mem::take(&mut standing.provocations);
     let (Ok(player), Some(system_id)) = (player.single(), streaming.loaded_system) else { return };
     let player_pos = player.translation.truncate();

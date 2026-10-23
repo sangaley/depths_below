@@ -308,6 +308,8 @@ fn camera_zoom_input(
     // build_ui::scroll_item_slots). Checked here rather than via a flag
     // resource so it can't depend on which system happens to run first.
     build_panel: Query<(&ComputedNode, &bevy::ui::UiGlobalTransform), With<crate::ui::build_ui::BuildPanelRoot>>,
+    // Same for the scrolling lists in windows (diplomacy).
+    scroll_lists: Query<(&ComputedNode, &bevy::ui::UiGlobalTransform), With<crate::ui::windows::framework::ScrollsOnWheel>>,
     windows: Query<&Window>,
 ) {
     let cursor = windows.single().ok()
@@ -316,7 +318,7 @@ fn camera_zoom_input(
         cursor
             .and_then(|c| node.normalize_point(*transform, c))
             .is_some_and(|n| n.x.abs() <= 0.5 && n.y.abs() <= 0.5)
-    });
+    }) || crate::ui::windows::framework::cursor_over_scroll_list(&scroll_lists, cursor);
 
     for event in scroll_events.read() {
         if over_build_panel { continue; }

@@ -55,7 +55,8 @@ impl WindowStyle {
     pub const TITLE_BAR_HEIGHT: f32 = 28.0;
     pub const BORDER_WIDTH: f32 = 1.0;
     pub const PADDING: f32 = 8.0;
-    pub const BG_COLOR: Color = Color::srgba(0.08, 0.10, 0.16, 0.95);
+    // Solid: at 0.95 the HUD under a window showed through its text.
+    pub const BG_COLOR: Color = Color::srgba(0.08, 0.10, 0.16, 1.0);
     pub const TITLE_BG: Color = Color::srgba(0.12, 0.15, 0.22, 1.0);
     pub const TITLE_BG_HOVER: Color = Color::srgba(0.16, 0.20, 0.28, 1.0);
     pub const BORDER_COLOR: Color = Color::srgba(0.25, 0.30, 0.40, 0.8);
@@ -212,6 +213,54 @@ pub fn spawn_floating_window(
     commands.entity(window_entity).add_children(&[title_bar, border, content_entity]);
 
     content_entity
+}
+
+/// A list inside a window that scrolls on the mouse wheel. The camera leaves
+/// the wheel alone while the cursor is over one.
+#[derive(Component)]
+pub struct ScrollsOnWheel;
+
+/// Whether the cursor (physical pixels) is over any ScrollsOnWheel list.
+pub fn cursor_over_scroll_list(
+    lists: &Query<(&ComputedNode, &bevy::ui::UiGlobalTransform), With<ScrollsOnWheel>>,
+    cursor: Option<Vec2>,
+) -> bool {
+    lists.iter().any(|(node, transform)| {
+        cursor
+            .and_then(|c| node.normalize_point(*transform, c))
+            .is_some_and(|n| n.x.abs() <= 0.5 && n.y.abs() <= 0.5)
+    })
+}
+
+/// Scroll the list under the cursor.
+pub fn scroll_on_wheel(
+    mut wheel: MessageReader<bevy::input::mouse::MouseWheel>,
+    windows: Query<&Window>,
+    mut lists: Query<(&ComputedNode, &bevy::ui::UiGlobalTransform, &mut ScrollPosition), With<ScrollsOnWheel>>,
+) {
+    use bevy::input::mouse::MouseScrollUnit;
+
+    let cursor = windows.single().ok()
+        .and_then(|w| w.cursor_position().map(|p| p * w.scale_factor()));
+    let events: Vec<_> = wheel.read().map(|e| (e.unit, e.y)).collect();
+    let Some(cursor) = cursor else { return };
+    for (node, transform, mut scroll) in &mut lists {
+        let over = node.normalize_point(*transform, cursor)
+            .is_some_and(|n| n.x.abs() <= 0.5 && n.y.abs() <= 0.5);
+        if !over {
+            continue;
+        }
+        // ComputedNode is physical pixels; ScrollPosition is logical.
+        let inv = node.inverse_scale_factor;
+        let max = ((node.content_size.y - node.size.y) * inv).max(0.0);
+        for &(unit, y) in &events {
+            let step = match unit {
+                MouseScrollUnit::Line => 40.0,
+                MouseScrollUnit::Pixel => 1.0,
+            };
+            scroll.0.y = (scroll.0.y - y * step).clamp(0.0, max);
+        }
+    }
 }
 
 /// Highest stacking step a dragged window gets above its base ZIndex(10).

@@ -16,7 +16,7 @@ use crate::ai_ship::components::{faction_display_name, faction_power, factions_h
 use crate::resources::Currency;
 use crate::states::GameState;
 use crate::ui::theme::{ThemeColors, ThemeFonts, ThemeSpacing};
-use crate::ui::windows::framework::{spawn_floating_window, FloatingWindow, WindowContent};
+use crate::ui::windows::framework::{spawn_floating_window, FloatingWindow, ScrollsOnWheel};
 
 const WINDOW_ID: &str = "diplomacy";
 
@@ -160,7 +160,47 @@ fn toggle_window(
         Vec2::new(600.0, 600.0),
         Vec2::new(460.0, 56.0),
     );
-    fill(&mut commands, content, &standing, &currency);
+    // Twelve factions run taller than the screen, so the rows scroll inside
+    // the window instead of hanging off its bottom edge.
+    let rows = commands
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(4.0),
+                max_height: Val::Vh(72.0),
+                overflow: Overflow::scroll_y(),
+                ..default()
+            },
+            ScrollPosition::default(),
+            ScrollsOnWheel,
+            DiplomacyRows { shown: shown(&standing, &currency) },
+            ChildOf(content),
+        ))
+        .id();
+    fill(&mut commands, rows, &standing, &currency);
+}
+
+/// The scrolling list of factions, and the state it was last drawn from.
+#[derive(Component)]
+struct DiplomacyRows {
+    shown: String,
+}
+
+/// Everything the window shows, boiled down: the rows are rebuilt only when
+/// this changes.
+fn shown(standing: &FactionStanding, currency: &Currency) -> String {
+    let mut s = String::new();
+    for &faction in FACTIONS.iter() {
+        s += &format!("{}{:.0}", standing.tier(faction).label(), standing.value(faction));
+        for treaty in [Treaty::Tribute, Treaty::Alliance, Treaty::BreakAlliance] {
+            s.push(if treaty_available(standing, faction, treaty).is_ok() { '+' } else { '-' });
+        }
+        s.push(if currency.credits >= tribute_cost(faction) { '$' } else { '_' });
+    }
+    for e in standing.log.iter().rev().take(5) {
+        s += &format!("|{:?}{}{}", e.faction, e.delta, e.reason);
+    }
+    s
 }
 
 /// Rebuild the open window when anything it shows changes.
@@ -170,19 +210,29 @@ fn toggle_window(
 /// standing in the same frame it was closed -- standing changes most frames
 /// in a fight -- and queue new rows into an entity that was gone by the time
 /// they landed: a crash on closing the window.
+///
+/// It runs before the UI is laid out and stacked. After, the new rows had no
+/// place in the draw order yet and were drawn first, under the window's own
+/// background -- and as FactionStanding was marked changed every frame, they
+/// were new every frame: the whole list sat dim behind the window, with the
+/// toolbar showing through it.
 fn refresh_window(
     mut commands: Commands,
-    contents: Query<(Entity, &WindowContent)>,
+    mut rows: Query<(Entity, &mut DiplomacyRows)>,
     standing: Res<FactionStanding>,
     currency: Res<Currency>,
 ) {
     if !standing.is_changed() && !currency.is_changed() {
         return;
     }
-    if let Some((content, _)) = contents.iter().find(|(_, c)| c.window_id == WINDOW_ID) {
-        commands.entity(content).despawn_related::<Children>();
-        fill(&mut commands, content, &standing, &currency);
+    let Ok((rows, mut drawn)) = rows.single_mut() else { return };
+    let now = shown(&standing, &currency);
+    if drawn.shown == now {
+        return;
     }
+    drawn.shown = now;
+    commands.entity(rows).despawn_related::<Children>();
+    fill(&mut commands, rows, &standing, &currency);
 }
 
 fn press_treaty(
@@ -306,7 +356,10 @@ pub struct DiplomacyUiPlugin;
 impl Plugin for DiplomacyUiPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Update, (toggle_window, press_treaty).run_if(in_state(GameState::Exploring)))
-            .add_systems(PostUpdate, refresh_window.run_if(in_state(GameState::Exploring)));
+            .add_systems(
+                PostUpdate,
+                refresh_window.before(bevy::ui::UiSystems::Prepare).run_if(in_state(GameState::Exploring)),
+            );
     }
 }
 
@@ -341,6 +394,36 @@ mod tests {
             app.update();
         }
         assert_eq!(open(&mut app), 0, "opened, closed, opened, closed");
+    }
+
+    /// A system that only borrows standing mutably must not rebuild the
+    /// rows: rebuilt every frame, they never got a place in the draw order
+    /// and sat dim behind the window. A real change still redraws them.
+    #[test]
+    fn rows_are_rebuilt_only_when_what_they_show_changes() {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<FactionStanding>()
+            .insert_resource(Currency { credits: 100 })
+            .add_systems(Update, toggle_window)
+            .add_systems(PostUpdate, refresh_window);
+        app.world_mut().resource_mut::<ButtonInput<KeyCode>>().press(KeyCode::KeyX);
+        app.update();
+        // Nothing clears just_pressed without the input plugin.
+        app.world_mut().resource_mut::<ButtonInput<KeyCode>>().clear();
+        let first_row = |app: &mut App| {
+            app.world_mut().query_filtered::<&Children, With<DiplomacyRows>>().single(app.world()).unwrap()[0]
+        };
+        let before = first_row(&mut app);
+        for _ in 0..3 {
+            app.world_mut().resource_mut::<FactionStanding>().set_changed();
+            app.update();
+        }
+        assert_eq!(first_row(&mut app), before, "nothing shown changed");
+        app.world_mut().resource_mut::<FactionStanding>().change(AiShipType::CorpseStars, -5.0, "test");
+        app.update();
+        assert_ne!(first_row(&mut app), before, "standing moved");
     }
 
     #[test]

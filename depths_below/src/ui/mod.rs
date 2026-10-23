@@ -85,6 +85,7 @@ impl Plugin for UiPlugin {
                     windows::framework::window_close_system,
                     windows::framework::window_collapse_system,
                     windows::framework::window_button_hover_system,
+                    windows::framework::scroll_on_wheel,
                     // Tooltip
                     windows::tooltip::tooltip_system,
                     windows::tooltip::tooltip_position_system,
