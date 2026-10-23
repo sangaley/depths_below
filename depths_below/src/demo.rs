@@ -56,6 +56,8 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //                          world space and torn down by systems that only run
 //                          at the berth, so leaving that way is exactly how
 //                          they get stranded there.
+//   DEPTHS_DEBUG=1      — enable the backtick debug menu (debug.rs). A launch
+//                          without it has no debug menu at all.
 //   DEPTHS_MOVETEST=1   — bare movement sandbox: instant skip (no menu/
 //                          station flash), starter ship, manual control,
 //                          and NO AI ships spawned — just open space and

@@ -8,7 +8,8 @@ use crate::states::GameState;
 use crate::ai_ship::components::{AiShip, AiShipState, AiShipType};
 
 // ============================================================================
-// DEBUG MENU — dev tooling, ` (backtick) to toggle. Not player-facing polish:
+// DEBUG MENU — dev tooling, ` (backtick) to toggle, and only in a build
+// launched with DEPTHS_DEBUG=1. Not player-facing polish:
 // spawn ships/wrecks on demand, grant credits, repair/refuel/rearm, clear an
 // area, teleport, dump cargo, visualize hitboxes. Actions only respond while
 // the panel is open so the hotkeys can't misfire during normal play.
@@ -24,11 +25,28 @@ use crate::ai_ship::components::{AiShip, AiShipState, AiShipType};
 
 pub struct DebugPlugin;
 
+/// Whether this run was launched with the debug menu enabled:
+/// `DEPTHS_DEBUG=1`, the house style of every other dev switch (demo.rs).
+///
+/// Backtick sits right beside 1, and with the menu open 1 reveals the whole
+/// galaxy as Visited -- which also maxes the story's reach, so a playtest
+/// run that brushed the key got the endgame mirror ship a minute in. A
+/// normal launch now has no debug menu at all.
+pub fn debug_enabled() -> bool {
+    std::env::var("DEPTHS_DEBUG").ok().as_deref() == Some("1")
+}
+
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut App) {
+        // DebugTuning is read by movement, combat and damage whether or not
+        // the menu exists; its defaults are all neutral.
         app.init_resource::<DebugMenu>()
-            .init_resource::<DebugTuning>()
-            .add_systems(Update, toggle_debug_menu)
+            .init_resource::<DebugTuning>();
+        if !debug_enabled() {
+            return;
+        }
+        info!("DEPTHS_DEBUG=1: debug menu on backtick");
+        app.add_systems(Update, toggle_debug_menu)
             .add_systems(
                 Update,
                 (
