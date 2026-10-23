@@ -263,7 +263,7 @@ impl Plugin for UiPlugin {
                         .or_else(in_state(GameState::StationDocked)),
                 ),
             )
-            // Map-click warp destination + G-hold warp dash (while exploring)
+            // Map-click warp destination + the G warp dash (while exploring)
             .add_systems(
                 Update,
                 (
@@ -398,8 +398,9 @@ const fn act_mod(label: &'static str, key_disp: &'static str, key: KeyCode,
 /// stay keyboard-only, because a button cannot express "hold".
 fn toolbar_actions(game: &GameState, build: &BuildState) -> &'static [ToolbarAction] {
     use KeyCode as K;
-    const FLYING: [ToolbarAction; 10] = [
+    const FLYING: [ToolbarAction; 11] = [
         act("Map", "M", K::KeyM),
+        act("Warp", "G", K::KeyG),
         act("Systems", "N", K::KeyN),
         act("Radar", "Tab", K::Tab),
         act("Crew", "C", K::KeyC),
@@ -577,8 +578,7 @@ pub enum MapViewMode {
 }
 
 /// On the ship while a long-range warp dash is charging. Target position and
-/// fuel cost are locked in at charge-start; hold G to keep charging, release
-/// early to cancel.
+/// fuel cost are locked in at charge-start; press G again to cancel.
 #[derive(Component)]
 pub struct MapWarpCharging {
     pub charge_timer: Timer,
@@ -3122,7 +3122,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
 
                 card.spawn((
                     Text::new(if can_afford {
-                        "Close the map (M), then hold G to jump."
+                        "Close the map (M), then press G to jump."
                     } else {
                         "Not enough fuel for this jump."
                     }),
@@ -3682,7 +3682,7 @@ fn spawn_galaxy_map_overlay(
                     parent.spawn((Text::new(name), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_PRIMARY)));
                     let fuel_color = if fuel_state.current_fuel < fuel { theme::ThemeColors::ACCENT_ORANGE } else { theme::ThemeColors::TEXT_SECONDARY };
                     parent.spawn((Text::new(format!("Charge: {:.0}s   Fuel: {:.0}", charge, fuel)), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(fuel_color)));
-                    parent.spawn((Text::new("Press V to jump"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
+                    parent.spawn((Text::new("Press G to jump"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
                 }
             }
 
@@ -3811,6 +3811,8 @@ fn map_click_system(
     existing: Query<Entity, With<MapOverlay>>,
     windows: Query<&Window>,
     mut pending: ResMut<PendingWarpTarget>,
+    // One warp key: the latest pick, on either map, is where it goes.
+    mut pending_galaxy: ResMut<crate::celestial::resources::PendingGalaxyWarpTarget>,
     player_query: Query<&Transform, With<Ship>>,
     discovered: Res<DiscoveredLocations>,
     inventory: Res<Inventory>,
@@ -3844,6 +3846,7 @@ fn map_click_system(
     let map_center = current_map_center(&world_data, player_pos);
     let target = map_norm_to_world(norm, map_center, current_map_range(&world_data));
     pending.0 = Some(target);
+    pending_galaxy.0 = None;
 
     let dist = player_pos.distance(target);
     notifications.write(ShowNotification {
@@ -3874,6 +3877,7 @@ fn galaxy_map_click_system(
     existing: Query<Entity, With<MapOverlay>>,
     windows: Query<&Window>,
     mut pending: ResMut<crate::celestial::resources::PendingGalaxyWarpTarget>,
+    mut dash_target: ResMut<PendingWarpTarget>,
     galaxy_map: Res<crate::celestial::resources::GalaxyMap>,
     streaming: Res<crate::celestial::resources::SystemStreamingManager>,
     fuel_state: Res<FuelState>,
@@ -3911,6 +3915,7 @@ fn galaxy_map_click_system(
         None => (GalaxyWarpTarget::BlindPoint(clicked_pos), "uncharted space".to_string()),
     };
     pending.0 = Some(target);
+    dash_target.0 = None;
 
     let dist = streaming.current_galaxy_pos.distance(clicked_pos);
     notifications.write(ShowNotification {
@@ -3927,23 +3932,51 @@ fn galaxy_map_click_system(
     spawn_galaxy_map_overlay(&mut commands, &galaxy_map, &streaming, pending.0, &fuel_state, &standing, &war, panel_size);
 }
 
-/// G: hold to charge a warp dash toward the pending map destination. Release
-/// early to cancel. No-ops (silently, via the Without<MapWarpCharging> guard)
-/// if nothing's selected — same info notification either way explains why.
+/// The warp key: G, with V kept as a second key for the same thing.
+///
+/// There used to be two -- G dashed inside the system, V jumped to another
+/// star -- and picking the wrong one did nothing but complain. Now one key
+/// warps to wherever you last pointed: a galaxy-map pick jumps between
+/// stars (celestial::warp::warp_input_system), anything else dashes across
+/// this system (warp_dash_input). Picking on either map clears the other.
+pub(crate) fn warp_key_pressed(keyboard: &ButtonInput<KeyCode>) -> bool {
+    keyboard.any_just_pressed([KeyCode::KeyG, KeyCode::KeyV])
+}
+
+/// The warp key, dashing within the system: toward the destination clicked on
+/// the system map, or failing that whatever is targeted. Press to start the
+/// charge, press again to cancel -- the same as a jump between stars, which
+/// this leaves alone (a galaxy-map destination is set, or that drive is
+/// already charging).
 fn warp_dash_input(
     mut commands: Commands,
     keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
-    ship_query: Query<(Entity, &Transform), (With<Ship>, Without<MapWarpCharging>)>,
+    ship_query: Query<(Entity, &Transform, Has<crate::celestial::components::WarpCharging>), (With<Ship>, Without<MapWarpCharging>)>,
     mut charging_query: Query<(Entity, &mut MapWarpCharging), With<Ship>>,
     pending: Res<PendingWarpTarget>,
+    pending_galaxy: Res<crate::celestial::resources::PendingGalaxyWarpTarget>,
     selection: Res<crate::combat::targeting::selection::TargetSelection>,
     target_pos_query: Query<&GlobalTransform>,
     fuel_state: Res<FuelState>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    if keyboard.just_pressed(KeyCode::KeyG) {
-        let Ok((entity, transform)) = ship_query.single() else { return };
+    if warp_key_pressed(&keyboard) {
+        if let Ok((entity, charging)) = charging_query.single() {
+            if !charging.charge_timer.is_finished() {
+                commands.entity(entity).remove::<MapWarpCharging>();
+                notifications.write(ShowNotification {
+                    message: "Warp dash cancelled.".into(),
+                    notification_type: NotificationType::Info,
+                    duration: 2.0,
+                });
+            }
+            return;
+        }
+        let Ok((entity, transform, jump_charging)) = ship_query.single() else { return };
+        if jump_charging || pending_galaxy.0.is_some() {
+            return;
+        }
         let ship_pos = transform.translation.truncate();
 
         // Fall back to whatever's currently targeted (\\ cycles contacts).
@@ -3958,7 +3991,7 @@ fn warp_dash_input(
         });
         let Some(target) = target else {
             notifications.write(ShowNotification {
-                message: "No warp destination - target something (\\) or click the map (M).".into(),
+                message: "No warp destination - click the map (M), or target something (\\).".into(),
                 notification_type: NotificationType::Warning,
                 duration: 3.0,
             });
@@ -3998,29 +4031,14 @@ fn warp_dash_input(
         });
 
         notifications.write(ShowNotification {
-            message: format!("Warp dash charging: {:.0} fuel, {:.0}s - hold G!", fuel_cost, charge_time),
+            message: format!("Warp dash charging: {:.0} fuel, {:.0}s - G again to cancel.", fuel_cost, charge_time),
             notification_type: NotificationType::Info,
             duration: charge_time + 1.0,
         });
         return;
     }
 
-    if let Ok((entity, mut charging)) = charging_query.single_mut() {
-        // Not held means cancelled -- checked as a state, not as the release
-        // edge. This only runs in flight, so a G let go while paused or
-        // docked was never seen, and the charge finished after resuming and
-        // threw the ship across the system with nobody holding the key.
-        if !keyboard.pressed(KeyCode::KeyG) {
-            if !charging.charge_timer.is_finished() {
-                commands.entity(entity).remove::<MapWarpCharging>();
-                notifications.write(ShowNotification {
-                    message: "Warp dash cancelled.".into(),
-                    notification_type: NotificationType::Info,
-                    duration: 2.0,
-                });
-            }
-            return;
-        }
+    if let Ok((_, mut charging)) = charging_query.single_mut() {
         charging.charge_timer.tick(time.delta());
     }
 }
@@ -6243,6 +6261,66 @@ mod dash_arrival_tests {
         let got = dash_arrival_clear_of_bodies(Vec2::new(97_000.0, 0.0), 1000.0, &bodies);
         assert!(got.distance(centre) >= 20_000.0 + 1000.0, "{got}");
         assert!(got.x < centre.x, "pushed out on the near side, got {got}");
+    }
+}
+
+#[cfg(test)]
+mod one_warp_key_tests {
+    use super::*;
+    use crate::celestial::components::WarpCharging;
+    use crate::celestial::resources::{GalaxyWarpTarget, PendingGalaxyWarpTarget};
+
+    fn app() -> App {
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins)
+            .init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<PendingWarpTarget>()
+            .init_resource::<PendingGalaxyWarpTarget>()
+            .init_resource::<crate::combat::targeting::selection::TargetSelection>()
+            .init_resource::<FuelState>()
+            .init_resource::<crate::celestial::resources::GalaxyMap>()
+            .init_resource::<crate::celestial::resources::SystemStreamingManager>()
+            .add_message::<ShowNotification>()
+            .add_message::<crate::celestial::events::WarpJumpStarted>()
+            .add_systems(Update, (warp_dash_input, crate::celestial::warp::warp_input_system));
+        app.world_mut().spawn((Ship, Transform::default()));
+        app
+    }
+
+    fn press(app: &mut App, key: KeyCode) {
+        let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+        keys.release(key);
+        keys.clear();
+        keys.press(key);
+        app.update();
+        let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
+        keys.release(key);
+        keys.clear();
+    }
+
+    fn charging(app: &mut App) -> (bool, bool) {
+        let dash = app.world_mut().query_filtered::<(), With<MapWarpCharging>>().iter(app.world()).count() == 1;
+        let jump = app.world_mut().query_filtered::<(), With<WarpCharging>>().iter(app.world()).count() == 1;
+        (dash, jump)
+    }
+
+    /// A point on the system map dashes; a pick on the galaxy map jumps.
+    /// Either way it is the same key, and a second press cancels.
+    #[test]
+    fn one_key_goes_wherever_you_last_pointed() {
+        let mut app = app();
+        app.world_mut().resource_mut::<PendingWarpTarget>().0 = Some(Vec2::new(30_000.0, 0.0));
+        press(&mut app, KeyCode::KeyG);
+        assert_eq!(charging(&mut app), (true, false), "system-map point: a dash");
+        press(&mut app, KeyCode::KeyG);
+        assert_eq!(charging(&mut app), (false, false), "second press cancels");
+
+        app.world_mut().resource_mut::<PendingGalaxyWarpTarget>().0 =
+            Some(GalaxyWarpTarget::BlindPoint(Vec2::new(200_000.0, 0.0)));
+        press(&mut app, KeyCode::KeyG);
+        assert_eq!(charging(&mut app), (false, true), "galaxy pick: a jump, not a dash");
+        press(&mut app, KeyCode::KeyV);
+        assert_eq!(charging(&mut app), (false, false), "V is the same key");
     }
 }
 

@@ -619,7 +619,7 @@ fn director_brain(
 
     // ---- mid-jump ---------------------------------------------------------
     // A charging drive owns the ship. Hold G and touch nothing else: steering
-    // is fine, but any stray release cancels the charge and wastes the spin-up.
+    // is fine, but a release and a second press would cancel the charge.
     if d.warping {
         let charge_up = !warp.local_charging.is_empty();
         if charge_up {
@@ -1168,7 +1168,7 @@ fn director_brain(
             if charge_up {
                 d.jump_seen = true;
                 d.jump_for += d.dt;
-                return; // V starts the charge and it runs on its own.
+                return; // G starts the charge and it runs on its own.
             }
             if d.jump_seen {
                 d.log("jump", "arrived in a new system");
@@ -1190,6 +1190,9 @@ fn director_brain(
                 d.log("jump", "no jump available - working this system anyway");
                 d.system_dry = false;
                 d.jump_for = 0.0;
+                // Left set, it would turn every later G into a jump attempt
+                // instead of a dash: one key serves both now.
+                warp.galaxy_target.0 = None;
                 d.go(Phase::Hunt);
                 return;
             }
@@ -1245,7 +1248,7 @@ fn director_brain(
 
             if d.beat > 1.0 {
                 d.beat = 0.0;
-                d.tap(KeyCode::KeyV);
+                d.tap(KeyCode::KeyG);
             }
         }
 

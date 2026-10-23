@@ -64,12 +64,14 @@ pub(crate) fn target_galaxy_pos(galaxy_map: &GalaxyMap, target: GalaxyWarpTarget
     }
 }
 
-/// V key initiates warp charge toward whatever the galaxy map has set as
-/// the pending target (PendingGalaxyWarpTarget) — a known system, or a
-/// blind point in space with nothing confirmed there (the galaxy map is
-/// clickable anywhere, not just discovered pips — see ui/mod.rs). Press
-/// once and the charge runs on its own — no need to hold the key through an
-/// 18-second charge; press V again to cancel early. Charge time and fuel
+/// The warp key (G, or V -- `ui::warp_key_pressed`) charges a jump toward
+/// whatever the galaxy map has set as the pending target
+/// (PendingGalaxyWarpTarget) — a known system, or a blind point in space
+/// with nothing confirmed there (the galaxy map is clickable anywhere, not
+/// just discovered pips — see ui/mod.rs). With no galaxy target the same key
+/// dashes within the system instead (ui::warp_dash_input). Press once and
+/// the charge runs on its own — no need to hold the key through an
+/// 18-second charge; press again to cancel early. Charge time and fuel
 /// cost both scale with galaxy-map distance to the target.
 /// How far past a station's structure a warp drops your ship's root.
 ///
@@ -87,15 +89,15 @@ pub fn warp_input_system(
     streaming: Res<SystemStreamingManager>,
     pending: Res<PendingGalaxyWarpTarget>,
     mut fuel_state: ResMut<FuelState>,
-    ship_query: Query<Entity, (With<Ship>, Without<WarpCharging>)>,
+    ship_query: Query<(Entity, Has<crate::ui::MapWarpCharging>), (With<Ship>, Without<WarpCharging>)>,
     mut charging_query: Query<(Entity, &mut WarpCharging), With<Ship>>,
     mut notifications: MessageWriter<ShowNotification>,
     mut jump_events: MessageWriter<WarpJumpStarted>,
 ) {
-    // V starts the charge and it runs on its own from there — no need to
-    // hold the key through the whole (up to 60s) charge, unlike the G-key
-    // local dash. A second press while already charging cancels instead.
-    if keyboard.just_pressed(KeyCode::KeyV) {
+    // The key starts the charge and it runs on its own from there — no need
+    // to hold it through the whole (up to 18s) charge. A second press while
+    // already charging cancels instead.
+    if crate::ui::warp_key_pressed(&keyboard) {
         if let Ok((entity, _)) = charging_query.single() {
             commands.entity(entity).remove::<WarpCharging>();
             notifications.write(ShowNotification {
@@ -103,15 +105,10 @@ pub fn warp_input_system(
                 notification_type: NotificationType::Info,
                 duration: 2.0,
             });
-        } else if let Ok(ship_entity) = ship_query.single() {
-            let Some(target) = pending.0 else {
-                notifications.write(ShowNotification {
-                    message: "No warp destination set - open the map (M), Tab to the galaxy view, and click anywhere.".into(),
-                    notification_type: NotificationType::Warning,
-                    duration: 3.0,
-                });
-                return;
-            };
+        } else if let Ok((ship_entity, dash_charging)) = ship_query.single() {
+            // No star picked, or a dash already spinning up: the key is the
+            // local dash's (ui::warp_dash_input), and so is "no destination".
+            let Some(target) = pending.0.filter(|_| !dash_charging) else { return };
             let Some(target_pos) = target_galaxy_pos(&galaxy_map, target) else { return };
 
             let dist = streaming.current_galaxy_pos.distance(target_pos);
@@ -147,7 +144,7 @@ pub fn warp_input_system(
             });
 
             notifications.write(ShowNotification {
-                message: format!("Warp drive charging toward {}... ({:.0}s, press V again to cancel)", target_desc, charge_time),
+                message: format!("Warp drive charging toward {}... ({:.0}s, G again to cancel)", target_desc, charge_time),
                 notification_type: NotificationType::Info,
                 duration: charge_time + 1.0,
             });

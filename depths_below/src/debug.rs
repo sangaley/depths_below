@@ -576,7 +576,7 @@ fn debug_actions(
         if let Some(sys) = nearest {
             sys.discovery = SystemDiscovery::Located;
             galaxy.pending_galaxy_target.0 = Some(GalaxyWarpTarget::System(sys.id));
-            notify(&mut notifications, format!("[debug] revealed + targeted {} for warp (V to jump)", sys.name));
+            notify(&mut notifications, format!("[debug] revealed + targeted {} for warp (G to jump)", sys.name));
         }
     }
 

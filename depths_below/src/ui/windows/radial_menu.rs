@@ -268,7 +268,7 @@ pub fn radial_menu_input(
                 }
                 RadialAction::WarpCharge => {
                     notifications.write(crate::events::ShowNotification {
-                        message: "Hold V to charge warp drive.".into(),
+                        message: "Pick a destination on the map (M), then press G to warp.".into(),
                         notification_type: crate::events::NotificationType::Info,
                         duration: 3.0,
                     });
