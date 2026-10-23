@@ -91,7 +91,12 @@ impl Plugin for VfxPlugin {
                 Update,
                 (
                     starfield::spawn_starfield,
-                    starfield::update_starfield.after(starfield::spawn_starfield),
+                    // Scrolls by how far the camera moved, so it has to see
+                    // this frame's move: run before the follow and the
+                    // background lagged a frame and shuddered at speed.
+                    starfield::update_starfield
+                        .after(starfield::spawn_starfield)
+                        .after(crate::camera::camera_follow_ship),
                 ).run_if(
                     in_state(GameState::Exploring)
                         .or_else(in_state(GameState::StationDocked))

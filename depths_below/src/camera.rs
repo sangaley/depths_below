@@ -134,9 +134,58 @@ impl Plugin for CameraPlugin {
                     update_depth_vignette,
                 )
                     .chain()
+                    // After the ship has moved this frame. Unordered, the
+                    // camera ran first and drew the ship one frame of travel
+                    // behind centre -- 27 units at 1,500 u/s, 95 at 5,500 --
+                    // and that gap swung with every frame-time wobble, so at
+                    // speed the view lurched forward and back a few pixels
+                    // many times a second.
+                    .after(crate::states::ShipSet::Movement)
                     .run_if(in_state(GameState::Exploring)
                         .or_else(in_state(GameState::StationDocked))),
             );
+        // DEPTHS_CAM_TRACE=1: once a second, how far the camera sat from the
+        // ship when each frame was drawn, and how much that wobbled. Dev
+        // tooling for judder at speed; off unless asked for.
+        if std::env::var("DEPTHS_CAM_TRACE").ok().as_deref() == Some("1") {
+            app.add_systems(Last, trace_camera_lag);
+        }
+    }
+}
+
+/// Logs the spread of the camera-to-ship offset along the ship's travel, per
+/// second. A camera that follows in step holds it near zero; one that runs
+/// before the ship moves on some frames and after it on others swings by a
+/// frame's worth of travel -- the stutter you see at speed.
+fn trace_camera_lag(
+    time: Res<Time<Real>>,
+    ship: Query<(&Transform, &crate::components::Velocity), With<Ship>>,
+    camera: Query<&Transform, (With<MainCamera>, Without<Ship>)>,
+    mut window: Local<(f32, f32, f32, f32, u32)>,
+) {
+    let (Ok((ship_tf, vel)), Ok(cam)) = (ship.single(), camera.single()) else { return };
+    let speed = vel.0.length();
+    let along = if speed > 1.0 {
+        (cam.translation.truncate() - ship_tf.translation.truncate()).dot(vel.0 / speed)
+    } else {
+        0.0
+    };
+    let (elapsed, lo, hi, top_speed, frames) = &mut *window;
+    if *frames == 0 {
+        *lo = along;
+        *hi = along;
+    }
+    *lo = lo.min(along);
+    *hi = hi.max(along);
+    *top_speed = top_speed.max(speed);
+    *frames += 1;
+    *elapsed += time.delta_secs();
+    if *elapsed >= 1.0 {
+        info!(
+            "[CAM] speed {:.0} u/s, camera-ship offset along travel {:.1}..{:.1} (wobble {:.1} u) over {} frames",
+            top_speed, lo, hi, *hi - *lo, frames
+        );
+        *window = (0.0, 0.0, 0.0, 0.0, 0);
     }
 }
 
@@ -431,7 +480,7 @@ fn free_look_input(
 }
 
 /// Smoothly follows the ship with the camera, applies zoom and shake
-fn camera_follow_ship(
+pub(crate) fn camera_follow_ship(
     time: Res<Time>,
     camera_state: Res<CameraState>,
     ship_query: Query<&Transform, (With<Ship>, Without<MainCamera>)>,

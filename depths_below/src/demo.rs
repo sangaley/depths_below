@@ -58,6 +58,9 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //                          world space and torn down by systems that only run
 //                          at the berth, so leaving that way is exactly how
 //                          they get stranded there.
+//   DEPTHS_CAM_TRACE=1  — once a second, log how far the camera sat from the
+//                          ship along its travel, and how much that wobbled
+//                          (camera.rs). For judder at speed.
 //   DEPTHS_DEBUG=1      — enable the backtick debug menu (debug.rs). A launch
 //                          without it has no debug menu at all.
 //   DEPTHS_MOVETEST=1   — bare movement sandbox: instant skip (no menu/
