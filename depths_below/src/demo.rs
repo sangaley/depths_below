@@ -32,6 +32,12 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //                          window itself shows nothing; for unattended runs.
 //   DEPTHS_START_SYSTEM=<id|Faction|haunt>[:fleet|:capital] — jump there a few seconds in.
 //   DEPTHS_ZOOM=<z> — hold the camera at that zoom (1.8 default, 20 furthest out).
+//   DEPTHS_ZOOM_RAMP=<from>:<to>:<secs>[:<delay>] — ease the zoom from one value
+//                          to another over <secs> of real time, starting
+//                          <delay> real seconds after launch. For filming.
+//   DEPTHS_HIDE_UI=1 — hide every UI root (HUD, markers, cursor): world only.
+//   DEPTHS_SHOTS_AFTER=<secs> — with DEPTHS_SHOTS, don't start capturing
+//                          until that many real seconds after launch.
 //   DEPTHS_KEYS=<script> — tap keys at set times, e.g. "3:KeyM,5:F7,8:Escape".
 //                          "6:Minus~3" HOLDS a key for 3s instead -- needed
 //                          for anything read with `pressed` rather than
@@ -482,6 +488,31 @@ impl Plugin for DemoPlugin {
                 cam.zoom = z.clamp(cam.min_zoom, cam.max_zoom);
                 cam.user_zoomed = true;
             });
+        }
+        // DEPTHS_ZOOM_RAMP=<from>:<to>:<secs>[:<delay>] -- a pull-back or
+        // push-in for footage, eased and geometric (equal steps feel equal).
+        if let Some((from, to, secs, delay)) = std::env::var("DEPTHS_ZOOM_RAMP").ok().and_then(|v| {
+            let n: Vec<f32> = v.split(':').filter_map(|p| p.parse().ok()).collect();
+            (n.len() >= 3).then(|| (n[0], n[1], n[2].max(0.01), n.get(3).copied().unwrap_or(0.0)))
+        }) {
+            app.add_systems(Update, move |time: Res<Time<Real>>, mut cam: ResMut<crate::camera::CameraState>| {
+                let t = ((time.elapsed_secs() - delay) / secs).clamp(0.0, 1.0);
+                let eased = t * t * (3.0 - 2.0 * t);
+                cam.zoom = (from * (to / from).powf(eased)).clamp(cam.min_zoom, cam.max_zoom);
+                cam.user_zoomed = true;
+            });
+        }
+        // DEPTHS_HIDE_UI=1 -- the world alone, for footage.
+        if std::env::var("DEPTHS_HIDE_UI").ok().as_deref() == Some("1") {
+            app.add_systems(
+                PostUpdate,
+                (|mut roots: Query<&mut Visibility, (With<Node>, Without<ChildOf>)>| {
+                    for mut v in &mut roots {
+                        *v = Visibility::Hidden;
+                    }
+                })
+                .before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate),
+            );
         }
         // DEPTHS_START_SYSTEM=<where>[:fleet] -- jump there a few seconds in.
         // <where> is a system id, a faction's type name (its capital: the
@@ -1021,6 +1052,8 @@ pub struct CapturePlugin;
 #[derive(Resource)]
 struct CaptureState {
     every: Option<f32>,
+    /// DEPTHS_SHOTS_AFTER: real seconds before periodic capture starts.
+    after: f32,
     since: f32,
     index: u32,
     dir: String,
@@ -1037,7 +1070,8 @@ impl Plugin for CapturePlugin {
         if every.is_some() {
             info!("capture: every {}s into {}  (F7 for one now)", every.unwrap(), dir);
         }
-        app.insert_resource(CaptureState { every, since: 0.0, index: 0, dir })
+        let after = std::env::var("DEPTHS_SHOTS_AFTER").ok().and_then(|v| v.parse::<f32>().ok()).unwrap_or(0.0);
+        app.insert_resource(CaptureState { every, after, since: 0.0, index: 0, dir })
             .add_systems(Update, capture_frames);
         if let Ok(script) = std::env::var("DEPTHS_KEYS") {
             let events = parse_script(&script);
@@ -1064,6 +1098,7 @@ impl Plugin for CapturePlugin {
 fn capture_frames(
     mut commands: Commands,
     time: Res<Time>,
+    real: Res<Time<Real>>,
     keys: Res<ButtonInput<KeyCode>>,
     mut st: ResMut<CaptureState>,
     offscreen: Option<Res<OffscreenTarget>>,
@@ -1071,6 +1106,7 @@ fn capture_frames(
     let on_demand = keys.just_pressed(KeyCode::F7);
 
     let periodic = match st.every {
+        Some(_) if real.elapsed_secs() < st.after => false,
         Some(every) => {
             st.since += time.delta_secs();
             if st.since >= every {
