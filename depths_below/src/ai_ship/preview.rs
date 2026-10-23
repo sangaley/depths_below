@@ -46,7 +46,7 @@ pub struct PreviewImages {
 
 /// Average colour of each hull texture (sRGB, opaque pixels only), measured
 /// from assets/sprites/hull/*.png. Re-measure if the art changes.
-fn texture_average(material: crate::components::HullMaterial, layer: crate::components::HullLayer) -> [f32; 3] {
+pub(crate) fn texture_average(material: crate::components::HullMaterial, layer: crate::components::HullLayer) -> [f32; 3] {
     use crate::components::{HullLayer, HullMaterial};
     if layer == HullLayer::Hallway {
         return [67.0, 73.0, 84.0];

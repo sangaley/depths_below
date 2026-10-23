@@ -5,9 +5,9 @@
 //! reading as a ship. Past ROOF_FROM zoom a roof of hull plating fades in over
 //! every enclosed cell -- decks, corridors, and the rooms and machinery inside
 //! -- while whatever touches open space stays on top: guns, engines, plates,
-//! the hull's own edge. The tiles pick their seams the way hull_seams does, so
-//! the plating joins up, and each one only stands while something stands under
-//! it: shoot a hole and the roof opens there too.
+//! the hull's own edge. The roof is one flat plate in the hull's colour, so
+//! the ship reads as a single solid structure, and each cell of it only stands
+//! while something stands under it: shoot a hole and the roof opens there too.
 //!
 //! The roof exists only while it can be seen. Zoomed in there are no tiles
 //! at all.
@@ -25,8 +25,6 @@ const ROOF_FROM: f32 = 3.5;
 const ROOF_SOLID: f32 = 5.5;
 /// Above modules (0.2-0.4), damage overlays (0.35) and crew (0.6).
 const ROOF_Z: f32 = 0.7;
-/// A shade under the skin, so the outline still reads against the deck.
-const ROOF_SHADE: f32 = 0.82;
 
 /// One cell of the roof, a child of the ship.
 #[derive(Component)]
@@ -63,7 +61,6 @@ pub fn roof_cells(hull: &[(IVec2, HullLayer)], modules: &[Vec<IVec2>]) -> HashSe
 #[allow(clippy::too_many_arguments)]
 pub fn update_ship_roof(
     mut commands: Commands,
-    assets: Res<AssetServer>,
     camera: Res<CameraState>,
     ships: Query<Entity, With<Ship>>,
     hull: Query<(&HullSegment, &ChildOf), (Without<HullDestroyed>, Without<OwnedByAiShip>)>,
@@ -115,26 +112,15 @@ pub fn update_ship_roof(
         }
     }
     let material = counts.into_iter().max_by_key(|(_, n)| *n).map_or(HullMaterial::Steel, |(m, _)| m);
-    let outer: HashSet<IVec2> = mine_hull.iter().filter(|(s, _)| s.hull_layer == HullLayer::Outer).map(|(s, _)| s.grid_position).collect();
 
+    // One flat plate in the hull's own colour (its texture, averaged), not
+    // the plate texture tiled: that is shaded across each tile, and repeated
+    // over a whole deck it read as corrugated sheet instead of one hull.
+    let [r, g, b] = crate::ai_ship::preview::texture_average(material, HullLayer::Outer);
+    let plate = Color::srgba(r / 255.0, g / 255.0, b / 255.0, alpha);
     for cell in roof {
-        // Seams like hull_seams: the plating joins the roof beside it and the
-        // skin it meets, and frames itself where there's nothing.
-        let mut mask = 0u8;
-        for (bit, step) in [(1u8, IVec2::Y), (2, IVec2::NEG_Y), (4, IVec2::NEG_X), (8, IVec2::X)] {
-            let n = cell + step;
-            if roof_has(&cells, &footprints, n, &outer) {
-                mask |= bit;
-            }
-        }
-        let shade = Color::srgba(ROOF_SHADE, ROOF_SHADE, ROOF_SHADE * 1.02, alpha);
         commands.spawn((
-            Sprite {
-                image: assets.load(crate::sprite_map::hull_layer_sprite_variant(material, HullLayer::Outer, mask)),
-                color: shade,
-                custom_size: Some(Vec2::splat(crate::building::GRID_SIZE)),
-                ..default()
-            },
+            Sprite::from_color(plate, Vec2::splat(crate::building::GRID_SIZE)),
             Transform::from_translation(grid_to_local(cell).extend(ROOF_Z)),
             RoofTile,
             ChildOf(ship),
@@ -148,11 +134,6 @@ pub fn clear_ship_roof(mut commands: Commands, tiles: Query<Entity, With<RoofTil
     for tile in tiles.iter() {
         commands.entity(tile).try_despawn();
     }
-}
-
-/// Is there ship at this cell for the roof to join onto?
-fn roof_has(hull: &[(IVec2, HullLayer)], modules: &[Vec<IVec2>], cell: IVec2, outer: &HashSet<IVec2>) -> bool {
-    outer.contains(&cell) || hull.iter().any(|(c, _)| *c == cell) || modules.iter().any(|m| m.contains(&cell))
 }
 
 #[cfg(test)]
