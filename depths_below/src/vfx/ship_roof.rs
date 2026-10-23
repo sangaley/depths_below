@@ -1,17 +1,20 @@
-//! Zoomed out, your ship shows its plating, not its insides.
+//! Zoomed out, your ship reads as its parts, Cosmoteer's way.
 //!
 //! Close up the ship is a cutaway: decks, rooms, crew walking the halls. From
-//! far out all of that is noise the size of a pixel, and the ship stopped
-//! reading as a ship. Past ROOF_FROM zoom a roof of hull plating fades in over
-//! every enclosed cell -- decks, corridors, and the rooms and machinery inside
-//! -- while whatever touches open space stays on top: guns, engines, plates,
-//! the hull's own edge. The roof is laid in riveted plates of the hull's
-//! colour, so the ship reads as one solid structure with a surface, and each
-//! cell of it only stands while something stands under it: shoot a hole and
-//! the roof opens there too.
+//! far out the decks and the crew on them are noise the size of a pixel. Past
+//! ROOF_FROM zoom the bare floors -- corridors and deck cells with nothing
+//! built on them -- are covered in light riveted deck plates, and the
+//! hull's skin and armour take a darker shade, so the ship is a dark frame
+//! around light decking with every part standing out on it.
 //!
-//! The roof exists only while it can be seen. Zoomed in there are no tiles
-//! at all.
+//! Every part stays on show. This used to roof over the machinery too, in one
+//! grey of the hull's colour: the ship read as a solid slab and you couldn't
+//! tell a reactor from a gun from a cargo hold. Cosmoteer never covers its
+//! parts -- each one shows its own top -- and that is what you look at here:
+//! the module art itself, reactors glowing, engines and guns where they sit.
+//!
+//! Tiles only stand while something stands under them: shoot a hole and the
+//! deck opens there too. Zoomed in there are no tiles at all.
 
 use bevy::platform::collections::{HashMap, HashSet};
 use bevy::prelude::*;
@@ -27,35 +30,69 @@ const ROOF_SOLID: f32 = 5.5;
 /// Above modules (0.2-0.4), damage overlays (0.35) and crew (0.6).
 const ROOF_Z: f32 = 0.7;
 
-/// One cell of the roof, a child of the ship.
+/// One cell of the roof, a child of the ship: deck plating or the armour
+/// shade. Carries its alpha when fully zoomed out.
 #[derive(Component)]
-pub struct RoofTile;
+pub struct RoofTile(pub f32);
+
+/// The decking over bare floors: lighter than the hull it covers, so the
+/// insides read as one clean surface the parts stand on (Cosmoteer's light
+/// corridor roofs) rather than as more of the same grey as the skin.
+const DECK_LIGHTEN: f32 = 1.3;
+
+/// How dark the armour frame goes: a black shade at this alpha over the
+/// outer hull and the armour plates.
+const FRAME_SHADE: f32 = 0.38;
+
+/// Just over the hull (0.1) and the modules (0.2): covers the outer skin and
+/// the armour plates, under everything that stands above them.
+const FRAME_Z: f32 = 0.25;
+
+/// Armour plates: part of the frame, not parts to pick out.
+fn is_armour(module: crate::components::ModuleType) -> bool {
+    use crate::components::ModuleType::*;
+    matches!(
+        module,
+        ArmorPlate | CornerArmorPlate | StaggeredArmorPlate | AblativeArmor | HullReinforcePlate
+    )
+}
 
 /// How solid the roof is at a zoom.
 pub fn roof_alpha(zoom: f32) -> f32 {
     ((zoom - ROOF_FROM) / (ROOF_SOLID - ROOF_FROM)).clamp(0.0, 1.0)
 }
 
-/// Which cells the roof covers: every enclosed cell, and none that an
-/// outboard module (one touching open space) or a weapon stands on. Each
-/// module is its footprint and whether it stands above the hull (a weapon).
+/// Which cells the deck plating covers: every interior floor cell -- a hull
+/// cell that is not the outer skin -- with no part standing on it. Parts are
+/// never covered; each module is its footprint and whether it stands above
+/// the hull (kept for callers, all modules show now).
 pub fn roof_cells(hull: &[(IVec2, HullLayer)], modules: &[(Vec<IVec2>, bool)]) -> HashSet<IVec2> {
-    let mut occupied: HashSet<IVec2> = hull.iter().map(|(c, _)| *c).collect();
-    for (cells, _) in modules {
-        occupied.extend(cells.iter().copied());
-    }
-    let open = |c: IVec2| [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y].iter().any(|d| !occupied.contains(&(c + *d)));
-    let mut outboard: HashSet<IVec2> = HashSet::default();
-    let mut roof: HashSet<IVec2> = hull.iter().filter(|(_, l)| *l != HullLayer::Outer).map(|(c, _)| *c).collect();
-    for (cells, above) in modules {
-        if *above || cells.iter().any(|c| open(*c)) {
-            outboard.extend(cells.iter().copied());
-        } else {
-            roof.extend(cells.iter().copied());
+    let built: HashSet<IVec2> = modules.iter().flat_map(|(cells, _)| cells.iter().copied()).collect();
+    hull.iter()
+        .filter(|(c, layer)| *layer != HullLayer::Outer && !built.contains(c))
+        .map(|(c, _)| *c)
+        .collect()
+}
+
+/// The darker frame: the outer skin wherever no part sits on it, and every
+/// armour plate's footprint.
+pub fn frame_cells(hull: &[(IVec2, HullLayer)], modules: &[(Vec<IVec2>, bool, bool)]) -> HashSet<IVec2> {
+    let built: HashSet<IVec2> = modules
+        .iter()
+        .filter(|(_, _, armour)| !armour)
+        .flat_map(|(cells, _, _)| cells.iter().copied())
+        .collect();
+    let mut frame: HashSet<IVec2> = hull
+        .iter()
+        .filter(|(c, layer)| *layer == HullLayer::Outer && !built.contains(c))
+        .map(|(c, _)| *c)
+        .collect();
+    for (cells, _, armour) in modules {
+        if *armour {
+            frame.extend(cells.iter().copied());
         }
     }
-    roof.retain(|c| !outboard.contains(c));
-    roof
+    frame
 }
 
 /// Lay the roof when it comes into view or the ship changes under it, and take
@@ -68,14 +105,14 @@ pub fn update_ship_roof(
     ships: Query<Entity, With<Ship>>,
     hull: Query<(&HullSegment, &ChildOf), (Without<HullDestroyed>, Without<OwnedByAiShip>)>,
     modules: Query<(&Module, &ChildOf), (Without<DestroyedModule>, Without<OwnedByAiShip>)>,
-    mut tiles: Query<(Entity, &mut Sprite), With<RoofTile>>,
+    mut tiles: Query<(Entity, &mut Sprite, &RoofTile)>,
     mut last: Local<Option<(Entity, usize, usize)>>,
 ) {
     let alpha = roof_alpha(camera.zoom);
     let Ok(ship) = ships.single() else { return };
     if alpha <= 0.0 {
         if last.is_some() {
-            for (tile, _) in tiles.iter() {
+            for (tile, _, _) in tiles.iter() {
                 commands.entity(tile).try_despawn();
             }
             *last = None;
@@ -87,27 +124,30 @@ pub fn update_ship_roof(
     let key = (ship, mine_hull.len(), mine_modules.len());
     // Tiles cleared from outside (clear_ship_roof) are laid again too.
     if *last == Some(key) && !tiles.is_empty() {
-        for (_, mut sprite) in tiles.iter_mut() {
-            if (sprite.color.alpha() - alpha).abs() > 0.001 {
-                sprite.color.set_alpha(alpha);
+        for (_, mut sprite, tile) in tiles.iter_mut() {
+            let want = alpha * tile.0;
+            if (sprite.color.alpha() - want).abs() > 0.001 {
+                sprite.color.set_alpha(want);
             }
         }
         return;
     }
     *last = Some(key);
-    for (tile, _) in tiles.iter() {
+    for (tile, _, _) in tiles.iter() {
         commands.entity(tile).try_despawn();
     }
 
     let cells: Vec<(IVec2, HullLayer)> = mine_hull.iter().map(|(s, _)| (s.grid_position, s.hull_layer)).collect();
-    let footprints: Vec<(Vec<IVec2>, bool)> = mine_modules
+    let footprints: Vec<(Vec<IVec2>, bool, bool)> = mine_modules
         .iter()
         .map(|m| {
             let cells = ShipGrid::cells_for(m.grid_position, m.size, m.rotation, footprints::footprint_override(m.module_type)).to_vec();
-            (cells, stands_above(m))
+            (cells, stands_above(m), is_armour(m.module_type))
         })
         .collect();
-    let roof = roof_cells(&cells, &footprints);
+    let parts: Vec<(Vec<IVec2>, bool)> = footprints.iter().map(|(c, above, _)| (c.clone(), *above)).collect();
+    let roof = roof_cells(&cells, &parts);
+    let frame = frame_cells(&cells, &footprints);
     // The ship's skin, cell by cell; the roof is the commonest of it.
     let skin: HashMap<IVec2, HullMaterial> = mine_hull.iter().map(|(s, _)| (s.grid_position, s.material)).collect();
     let mut counts: Vec<(HullMaterial, usize)> = Vec::new();
@@ -130,7 +170,7 @@ pub fn update_ship_roof(
         let q = cell.rem_euclid(IVec2::splat(2));
         // Image rows run top-down; grid y runs up.
         let rect = Rect::new(q.x as f32 * 128.0, (1 - q.y) as f32 * 128.0, q.x as f32 * 128.0 + 128.0, (2 - q.y) as f32 * 128.0);
-        let tone = plate_tone(plate);
+        let tone = plate_tone(plate) * DECK_LIGHTEN;
         commands.spawn((
             Sprite {
                 image: image.clone(),
@@ -140,7 +180,19 @@ pub fn update_ship_roof(
                 ..default()
             },
             Transform::from_translation(grid_to_local(cell).extend(ROOF_Z)),
-            RoofTile,
+            RoofTile(1.0),
+            ChildOf(ship),
+        ));
+    }
+    for cell in frame {
+        commands.spawn((
+            Sprite {
+                color: Color::srgba(0.0, 0.0, 0.0, FRAME_SHADE * alpha),
+                custom_size: Some(Vec2::splat(crate::building::GRID_SIZE)),
+                ..default()
+            },
+            Transform::from_translation(grid_to_local(cell).extend(FRAME_Z)),
+            RoofTile(FRAME_SHADE),
             ChildOf(ship),
         ));
     }
@@ -243,8 +295,9 @@ mod tests {
         assert_eq!(plate_tone(IVec2::new(-4, 9)), plate_tone(IVec2::new(-4, 9)));
     }
 
+    /// Decks are plated over; parts never are -- each shows its own top.
     #[test]
-    fn enclosed_rooms_are_roofed_and_outboard_guns_are_not() {
+    fn bare_decks_are_plated_and_every_part_shows() {
         // A 5x3 box: outer skin around a 3x1 interior.
         let mut hull = Vec::new();
         for x in 0..5 {
@@ -257,9 +310,27 @@ mod tests {
         let gun = (vec![IVec2::new(5, 1)], true);
         let roof = roof_cells(&hull, &[reactor, gun]);
         assert!(roof.contains(&IVec2::new(1, 1)) && roof.contains(&IVec2::new(3, 1)), "the corridor");
-        assert!(roof.contains(&IVec2::new(2, 1)), "the reactor inside");
+        assert!(!roof.contains(&IVec2::new(2, 1)), "the reactor shows its own top");
         assert!(!roof.contains(&IVec2::new(5, 1)), "the gun on the bow");
-        assert!(!roof.contains(&IVec2::new(0, 1)), "the skin is already plating");
+        assert!(!roof.contains(&IVec2::new(0, 1)), "the skin is the frame, not deck");
+    }
+
+    /// The frame is the bare outer skin and the armour plates, not the parts
+    /// mounted on the skin.
+    #[test]
+    fn the_skin_and_armour_make_the_dark_frame() {
+        let hull = vec![
+            (IVec2::new(0, 0), HullLayer::Outer),
+            (IVec2::new(1, 0), HullLayer::Outer),
+            (IVec2::new(2, 0), HullLayer::Hallway),
+        ];
+        let engine = (vec![IVec2::new(1, 0)], false, false);
+        let plate = (vec![IVec2::new(3, 0)], false, true);
+        let frame = frame_cells(&hull, &[engine, plate]);
+        assert!(frame.contains(&IVec2::new(0, 0)), "bare skin");
+        assert!(!frame.contains(&IVec2::new(1, 0)), "the engine on the skin shows");
+        assert!(frame.contains(&IVec2::new(3, 0)), "the armour plate");
+        assert!(!frame.contains(&IVec2::new(2, 0)), "the deck");
     }
 
     #[test]
@@ -275,6 +346,7 @@ mod tests {
         let quarters = (vec![IVec2::new(1, 1)], false);
         let roof = roof_cells(&hull, &[turret, quarters]);
         assert!(!roof.contains(&IVec2::new(2, 2)), "the turret in the middle");
-        assert!(roof.contains(&IVec2::new(1, 1)), "the quarters beside it");
+        assert!(!roof.contains(&IVec2::new(1, 1)), "the quarters beside it");
+        assert!(roof.contains(&IVec2::new(3, 3)), "the bare deck beside both");
     }
 }
