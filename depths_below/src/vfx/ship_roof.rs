@@ -5,9 +5,10 @@
 //! reading as a ship. Past ROOF_FROM zoom a roof of hull plating fades in over
 //! every enclosed cell -- decks, corridors, and the rooms and machinery inside
 //! -- while whatever touches open space stays on top: guns, engines, plates,
-//! the hull's own edge. The roof is one flat plate in the hull's colour, so
-//! the ship reads as a single solid structure, and each cell of it only stands
-//! while something stands under it: shoot a hole and the roof opens there too.
+//! the hull's own edge. The roof is laid in riveted plates of the hull's
+//! colour, so the ship reads as one solid structure with a surface, and each
+//! cell of it only stands while something stands under it: shoot a hole and
+//! the roof opens there too.
 //!
 //! The roof exists only while it can be seen. Zoomed in there are no tiles
 //! at all.
@@ -18,7 +19,7 @@ use bevy::prelude::*;
 use crate::ai_ship::components::OwnedByAiShip;
 use crate::building::{footprints, grid_to_local, ShipGrid};
 use crate::camera::CameraState;
-use crate::components::{DestroyedModule, HullDestroyed, HullLayer, HullMaterial, HullSegment, Module, Ship};
+use crate::components::{DestroyedModule, HullDestroyed, HullLayer, HullMaterial, HullSegment, Module, ModuleCategory, Ship};
 
 /// Zoom where the roof starts to show, and where it's solid.
 const ROOF_FROM: f32 = 3.5;
@@ -36,17 +37,18 @@ pub fn roof_alpha(zoom: f32) -> f32 {
 }
 
 /// Which cells the roof covers: every enclosed cell, and none that an
-/// outboard module (one touching open space) stands on.
-pub fn roof_cells(hull: &[(IVec2, HullLayer)], modules: &[Vec<IVec2>]) -> HashSet<IVec2> {
+/// outboard module (one touching open space) or a weapon stands on. Each
+/// module is its footprint and whether it stands above the hull (a weapon).
+pub fn roof_cells(hull: &[(IVec2, HullLayer)], modules: &[(Vec<IVec2>, bool)]) -> HashSet<IVec2> {
     let mut occupied: HashSet<IVec2> = hull.iter().map(|(c, _)| *c).collect();
-    for cells in modules {
+    for (cells, _) in modules {
         occupied.extend(cells.iter().copied());
     }
     let open = |c: IVec2| [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y].iter().any(|d| !occupied.contains(&(c + *d)));
     let mut outboard: HashSet<IVec2> = HashSet::default();
     let mut roof: HashSet<IVec2> = hull.iter().filter(|(_, l)| *l != HullLayer::Outer).map(|(c, _)| *c).collect();
-    for cells in modules {
-        if cells.iter().any(|c| open(*c)) {
+    for (cells, above) in modules {
+        if *above || cells.iter().any(|c| open(*c)) {
             outboard.extend(cells.iter().copied());
         } else {
             roof.extend(cells.iter().copied());
@@ -61,6 +63,7 @@ pub fn roof_cells(hull: &[(IVec2, HullLayer)], modules: &[Vec<IVec2>]) -> HashSe
 #[allow(clippy::too_many_arguments)]
 pub fn update_ship_roof(
     mut commands: Commands,
+    assets: Res<AssetServer>,
     camera: Res<CameraState>,
     ships: Query<Entity, With<Ship>>,
     hull: Query<(&HullSegment, &ChildOf), (Without<HullDestroyed>, Without<OwnedByAiShip>)>,
@@ -97,9 +100,12 @@ pub fn update_ship_roof(
     }
 
     let cells: Vec<(IVec2, HullLayer)> = mine_hull.iter().map(|(s, _)| (s.grid_position, s.hull_layer)).collect();
-    let footprints: Vec<Vec<IVec2>> = mine_modules
+    let footprints: Vec<(Vec<IVec2>, bool)> = mine_modules
         .iter()
-        .map(|m| ShipGrid::cells_for(m.grid_position, m.size, m.rotation, footprints::footprint_override(m.module_type)).to_vec())
+        .map(|m| {
+            let cells = ShipGrid::cells_for(m.grid_position, m.size, m.rotation, footprints::footprint_override(m.module_type)).to_vec();
+            (cells, stands_above(m))
+        })
         .collect();
     let roof = roof_cells(&cells, &footprints);
     // The ship's skin, cell by cell; the roof is the commonest of it.
@@ -113,19 +119,98 @@ pub fn update_ship_roof(
     }
     let material = counts.into_iter().max_by_key(|(_, n)| *n).map_or(HullMaterial::Steel, |(m, _)| m);
 
-    // One flat plate in the hull's own colour (its texture, averaged), not
-    // the plate texture tiled: that is shaded across each tile, and repeated
-    // over a whole deck it read as corrugated sheet instead of one hull.
-    let [r, g, b] = crate::ai_ship::preview::texture_average(material, HullLayer::Outer);
-    let plate = Color::srgba(r / 255.0, g / 255.0, b / 255.0, alpha);
+    // Laid in plates of 2x2 cells (tools/art/gen_roof_panels.py): flat in
+    // the hull's colour with a seam and rivets round each plate, and each
+    // plate a shade off its neighbours. Tiling the hull texture itself shaded
+    // every cell top to bottom and read as corrugated sheet; one flat colour
+    // read as no surface at all.
+    let image = assets.load(roof_path(material));
     for cell in roof {
+        let plate = cell.div_euclid(IVec2::splat(2));
+        let q = cell.rem_euclid(IVec2::splat(2));
+        // Image rows run top-down; grid y runs up.
+        let rect = Rect::new(q.x as f32 * 128.0, (1 - q.y) as f32 * 128.0, q.x as f32 * 128.0 + 128.0, (2 - q.y) as f32 * 128.0);
+        let tone = plate_tone(plate);
         commands.spawn((
-            Sprite::from_color(plate, Vec2::splat(crate::building::GRID_SIZE)),
+            Sprite {
+                image: image.clone(),
+                rect: Some(rect),
+                color: Color::srgba(tone, tone, tone, alpha),
+                custom_size: Some(Vec2::splat(crate::building::GRID_SIZE)),
+                ..default()
+            },
             Transform::from_translation(grid_to_local(cell).extend(ROOF_Z)),
             RoofTile,
             ChildOf(ship),
         ));
     }
+}
+
+/// Weapons stand above the hull: zoomed out they stay in sight over the
+/// roof wherever they're mounted, barrels and all.
+fn stands_above(module: &Module) -> bool {
+    module.module_type.category() == ModuleCategory::Weapons
+}
+
+/// A weapon lifted over the roof, and the height it came from.
+#[derive(Component)]
+pub struct RaisedOverRoof(f32);
+
+/// Above the roof.
+const RAISED_Z: f32 = ROOF_Z + 0.05;
+
+/// While the roof shows, the ship's weapons ride above it; zoomed back in
+/// they return to their own height (under the crew who man them).
+pub fn raise_weapons_over_roof(
+    mut commands: Commands,
+    camera: Res<CameraState>,
+    ships: Query<Entity, With<Ship>>,
+    mut weapons: Query<(Entity, &Module, &ChildOf, &mut Transform, Option<&RaisedOverRoof>), Without<OwnedByAiShip>>,
+) {
+    let up = roof_alpha(camera.zoom) > 0.0;
+    let Ok(ship) = ships.single() else { return };
+    for (entity, module, parent, mut tf, raised) in weapons.iter_mut() {
+        if parent.parent() != ship || !stands_above(module) {
+            continue;
+        }
+        match (up, raised) {
+            (true, None) => {
+                commands.entity(entity).try_insert(RaisedOverRoof(tf.translation.z));
+                tf.translation.z = RAISED_Z;
+            }
+            (false, Some(RaisedOverRoof(z))) => {
+                tf.translation.z = *z;
+                commands.entity(entity).try_remove::<RaisedOverRoof>();
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Off the flight screen weapons go back to their own height.
+pub fn lower_weapons(mut commands: Commands, mut raised: Query<(Entity, &mut Transform, &RaisedOverRoof)>) {
+    for (entity, mut tf, RaisedOverRoof(z)) in raised.iter_mut() {
+        tf.translation.z = *z;
+        commands.entity(entity).try_remove::<RaisedOverRoof>();
+    }
+}
+
+/// The roof plate texture for a hull material.
+fn roof_path(material: HullMaterial) -> &'static str {
+    match material {
+        HullMaterial::Steel => "sprites/hull/roof_steel.png",
+        HullMaterial::Titanium => "sprites/hull/roof_titanium.png",
+        HullMaterial::Composite => "sprites/hull/roof_composite.png",
+        HullMaterial::AbyssalAlloy => "sprites/hull/roof_abyssal.png",
+    }
+}
+
+/// Each plate a shade lighter or darker than the next (0.93 to 1.05), the
+/// same every time for the same plate.
+pub fn plate_tone(plate: IVec2) -> f32 {
+    let h = (plate.x as u32).wrapping_mul(0x9E37_79B1) ^ (plate.y as u32).wrapping_mul(0x85EB_CA77);
+    let h = (h ^ (h >> 15)).wrapping_mul(0x2C1B_3C6D);
+    0.93 + 0.12 * ((h >> 8) & 0xFF) as f32 / 255.0
 }
 
 /// Off the flight screen (docked, building, paused) the roof comes off;
@@ -148,6 +233,14 @@ mod tests {
     }
 
     #[test]
+    fn neighbouring_plates_differ_and_each_stays_the_same() {
+        let tones: Vec<f32> = (0..8).map(|x| plate_tone(IVec2::new(x, 3))).collect();
+        assert!(tones.iter().all(|t| (0.93..=1.05).contains(t)));
+        assert!(tones.windows(2).any(|w| (w[0] - w[1]).abs() > 0.01), "plates all the same shade");
+        assert_eq!(plate_tone(IVec2::new(-4, 9)), plate_tone(IVec2::new(-4, 9)));
+    }
+
+    #[test]
     fn enclosed_rooms_are_roofed_and_outboard_guns_are_not() {
         // A 5x3 box: outer skin around a 3x1 interior.
         let mut hull = Vec::new();
@@ -157,12 +250,28 @@ mod tests {
                 hull.push((IVec2::new(x, y), if edge { HullLayer::Outer } else { HullLayer::Hallway }));
             }
         }
-        let reactor = vec![IVec2::new(2, 1)];
-        let gun = vec![IVec2::new(5, 1)];
+        let reactor = (vec![IVec2::new(2, 1)], false);
+        let gun = (vec![IVec2::new(5, 1)], true);
         let roof = roof_cells(&hull, &[reactor, gun]);
         assert!(roof.contains(&IVec2::new(1, 1)) && roof.contains(&IVec2::new(3, 1)), "the corridor");
         assert!(roof.contains(&IVec2::new(2, 1)), "the reactor inside");
         assert!(!roof.contains(&IVec2::new(5, 1)), "the gun on the bow");
         assert!(!roof.contains(&IVec2::new(0, 1)), "the skin is already plating");
+    }
+
+    #[test]
+    fn a_weapon_inside_the_hull_stays_in_sight() {
+        let mut hull = Vec::new();
+        for x in 0..5 {
+            for y in 0..5 {
+                let edge = x == 0 || x == 4 || y == 0 || y == 4;
+                hull.push((IVec2::new(x, y), if edge { HullLayer::Outer } else { HullLayer::Hallway }));
+            }
+        }
+        let turret = (vec![IVec2::new(2, 2)], true);
+        let quarters = (vec![IVec2::new(1, 1)], false);
+        let roof = roof_cells(&hull, &[turret, quarters]);
+        assert!(!roof.contains(&IVec2::new(2, 2)), "the turret in the middle");
+        assert!(roof.contains(&IVec2::new(1, 1)), "the quarters beside it");
     }
 }
