@@ -12,6 +12,18 @@ use crate::states::GameState;
 #[derive(Component)]
 pub struct MainCamera;
 
+/// DEPTHS_NO_DARK=1: a filming switch -- everything lit, as it is at Haven,
+/// instead of fading out past the flashlight's reach.
+fn no_dark() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("DEPTHS_NO_DARK").ok().as_deref() == Some("1"))
+}
+
+/// Where the camera looks instead of the ship. A filming aid only
+/// (DEPTHS_CAM_AT in demo.rs); None in play.
+#[derive(Resource, Default)]
+pub struct CameraPin(pub Option<Vec2>);
+
 /// Camera zoom and shake state
 #[derive(Resource)]
 pub struct CameraState {
@@ -118,6 +130,7 @@ impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app
             .init_resource::<CameraState>()
+            .init_resource::<CameraPin>()
             .add_systems(Startup, (spawn_camera, spawn_light_cone_visual))
             .add_systems(
                 Update,
@@ -485,6 +498,7 @@ fn free_look_input(
 pub(crate) fn camera_follow_ship(
     time: Res<Time>,
     camera_state: Res<CameraState>,
+    pin: Option<Res<CameraPin>>,
     ship_query: Query<&Transform, (With<Ship>, Without<MainCamera>)>,
     mut camera_query: Query<(&mut Transform, &mut Projection), (With<MainCamera>, Without<Ship>)>,
 ) {
@@ -493,9 +507,10 @@ pub(crate) fn camera_follow_ship(
     let Projection::Orthographic(ref mut projection) = *projection else { return };
 
     // Target position with shake offset and free-look pan
+    let look_at = pin.and_then(|p| p.0).unwrap_or(ship_transform.translation.truncate());
     let target = Vec3::new(
-        ship_transform.translation.x + camera_state.shake_offset.x + camera_state.free_look_offset.x,
-        ship_transform.translation.y + camera_state.shake_offset.y + camera_state.free_look_offset.y,
+        look_at.x + camera_state.shake_offset.x + camera_state.free_look_offset.x,
+        look_at.y + camera_state.shake_offset.y + camera_state.free_look_offset.y,
         cam_transform.translation.z,
     );
 
@@ -768,7 +783,7 @@ fn update_depth_vignette(
         // which at a 54m test-undock still fully suppressed the system and
         // made it look broken; 20 is enough to avoid a jarring blackout the
         // instant you undock without hiding the effect from normal play.
-        if depth < 20.0 {
+        if depth < 20.0 || no_dark() {
             continue;
         }
 
@@ -816,7 +831,7 @@ fn update_depth_vignette(
     // actually flies) — revealed by sweeping the light cone across them
     // instead, with a soft angular falloff at the cone's edge.
     for (mut sprite, global_transform) in bg_planet_query.iter_mut() {
-        if depth < 20.0 {
+        if depth < 20.0 || no_dark() {
             sprite.color.set_alpha(1.0);
             continue;
         }

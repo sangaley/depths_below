@@ -30,12 +30,22 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //   DEPTHS_OFFSCREEN=1  — render into an image instead of the window, so
 //                          capture works however buried the window is. The
 //                          window itself shows nothing; for unattended runs.
-//   DEPTHS_START_SYSTEM=<id|Faction|haunt>[:fleet|:capital] — jump there a few seconds in.
+//   DEPTHS_START_SYSTEM=<id|Faction|haunt>[:fleet|:capital|:approach] — jump there a few
+//                          seconds in (:approach parks ~12 km out from the capital's
+//                          starport, the station between you and its world).
+//   DEPTHS_SHOW_SHIPS=1 — every AI ship drawn whole (no hidden interior), with the
+//                          zoomed-out roof the player's ship has; faction stations
+//                          in their textures' own colours, untinted.
+//   DEPTHS_FLY_TO=station — autopilot to the nearest station: turn, burn, brake,
+//                          press F. For filming an approach and docking.
 //   DEPTHS_ZOOM=<z> — hold the camera at that zoom (1.8 default, 20 furthest out).
 //   DEPTHS_ZOOM_RAMP=<from>:<to>:<secs>[:<delay>] — ease the zoom from one value
 //                          to another over <secs> of real time, starting
 //                          <delay> real seconds after launch. For filming.
 //   DEPTHS_HIDE_UI=1 — hide every UI root (HUD, markers, cursor): world only.
+//   DEPTHS_CAM_AT=<x>,<y> | station[>d] — point the camera there instead of at
+//                          the ship ("station": the nearest station core; ">d"
+//                          slides d units toward its world).
 //   DEPTHS_SHOTS_AFTER=<secs> — with DEPTHS_SHOTS, don't start capturing
 //                          until that many real seconds after launch.
 //   DEPTHS_KEYS=<script> — tap keys at set times, e.g. "3:KeyM,5:F7,8:Escape".
@@ -502,6 +512,36 @@ impl Plugin for DemoPlugin {
                 cam.user_zoomed = true;
             });
         }
+        // DEPTHS_CAM_AT=<x>,<y> | station -- film something other than the ship.
+        if let Ok(spec) = std::env::var("DEPTHS_CAM_AT") {
+            if let Some(rest) = spec.trim().strip_prefix("station") {
+                // The nearest station core: the system's own, or one parked by
+                // DEPTHS_STATION_TEST. "station>8000" slides 8 km toward its
+                // world, to get the world into the frame behind it.
+                let toward_world: f32 = rest.strip_prefix('>').and_then(|v| v.parse().ok()).unwrap_or(0.0);
+                app.add_systems(Update, move |cores: Query<&GlobalTransform, With<crate::diplomacy::stations::StationCore>>,
+                                              bodies: Query<(&GlobalTransform, &crate::celestial::components::CelestialBody)>,
+                                              ship: Query<&Transform, With<crate::components::Ship>>,
+                                              mut pin: ResMut<crate::camera::CameraPin>| {
+                    let at = ship.single().map(|t| t.translation.truncate()).unwrap_or(Vec2::ZERO);
+                    pin.0 = cores.iter()
+                        .map(|t| t.translation().truncate())
+                        .min_by(|a, b| a.distance(at).total_cmp(&b.distance(at)))
+                        .map(|station| {
+                            let world = bodies
+                                .iter()
+                                .map(|(t, b)| (t.translation().truncate(), b.radius))
+                                .min_by(|a, b| (a.0.distance(station) - a.1).total_cmp(&(b.0.distance(station) - b.1)));
+                            match world {
+                                Some((centre, _)) if toward_world != 0.0 => station + (centre - station).normalize_or(Vec2::ZERO) * toward_world,
+                                _ => station,
+                            }
+                        });
+                });
+            } else if let Some((x, y)) = spec.split_once(',').and_then(|(x, y)| Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?))) {
+                app.insert_resource(crate::camera::CameraPin(Some(Vec2::new(x, y))));
+            }
+        }
         // DEPTHS_HIDE_UI=1 -- the world alone, for footage.
         if std::env::var("DEPTHS_HIDE_UI").ok().as_deref() == Some("1") {
             app.add_systems(
@@ -569,6 +609,7 @@ impl Plugin for DemoPlugin {
                                 *stage = match to_fleet.as_str() {
                                     "fleet" => 1,
                                     "capital" => 3,
+                                    "approach" => 6,
                                     _ => 2,
                                 };
                                 *since = 0.0;
@@ -618,6 +659,32 @@ impl Plugin for DemoPlugin {
                                     info!("DEPTHS_START_SYSTEM: parked on the night side of {}", body.name);
                                 }
                             }
+                            // ":approach": well out from the starport on the far side
+                            // from its world, so flying in has the world behind it.
+                            6 if *since >= 3.0 && streaming.loaded_system == Some(id) => {
+                                let Some((world, _)) = worlds.iter().next() else {
+                                    if *since > 10.0 {
+                                        *stage = 2;
+                                    }
+                                    return;
+                                };
+                                let Some((_, port, extent)) = faction_stations.post.filter(|p| p.0 == id) else {
+                                    if *since > 10.0 {
+                                        warn!("DEPTHS_START_SYSTEM: system {id} has no starport");
+                                        *stage = 2;
+                                    }
+                                    return;
+                                };
+                                *stage = 2;
+                                let out = (port - world.translation.truncate()).normalize_or(Vec2::X);
+                                let park = port + out * (extent + 12_000.0) + out.perp() * 3_000.0;
+                                if let Ok((mut tf, mut v, _)) = ship.single_mut() {
+                                    tf.translation.x = park.x;
+                                    tf.translation.y = park.y;
+                                    v.0 = Vec2::ZERO;
+                                    info!("DEPTHS_START_SYSTEM: parked 12 km out from the starport, facing in");
+                                }
+                            }
                             // Then onto the starport's berth once it has
                             // materialised (the spot above is only a guess at
                             // where its platforms aren't), and hold there the
@@ -649,6 +716,40 @@ impl Plugin for DemoPlugin {
                     .run_if(in_state(crate::states::GameState::Exploring)),
                 );
             }
+        }
+        if std::env::var("DEPTHS_SHOW_SHIPS").ok().as_deref() == Some("1") {
+            app.add_systems(Update, (
+                show_ships_whole.after(crate::ai_ship::interior::conceal_new_ai_interiors),
+                crate::vfx::ship_roof::update_ai_roofs,
+            ));
+        }
+        if std::env::var("DEPTHS_FLY_TO").ok().as_deref() == Some("station") {
+            app.add_systems(PreUpdate, fly_to_station.after(bevy::input::InputSystems));
+        }
+        // DEPTHS_DUMP_GALAXY=<file>: write every system (name, map position,
+        // holder, holder's map colour) as JSON once the galaxy exists.
+        if let Ok(path) = std::env::var("DEPTHS_DUMP_GALAXY") {
+            app.add_systems(Update, move |galaxy: Res<crate::celestial::resources::GalaxyMap>, mut done: Local<bool>| {
+                if *done || galaxy.systems.is_empty() {
+                    return;
+                }
+                *done = true;
+                let rows: Vec<String> = galaxy.systems.iter().map(|s| {
+                    let (holder, rgb) = match s.faction {
+                        Some(f) => {
+                            let c = crate::ai_ship::components::faction_map_color(f).to_srgba();
+                            (format!("{:?}", f), [c.red, c.green, c.blue])
+                        }
+                        None => ("Haven".to_string(), [1.0, 1.0, 1.0]),
+                    };
+                    format!(
+                        "{{\"id\":{},\"name\":\"{}\",\"x\":{},\"y\":{},\"holder\":\"{}\",\"rgb\":[{},{},{}]}}",
+                        s.id, s.name, s.galaxy_pos.x, s.galaxy_pos.y, holder, rgb[0], rgb[1], rgb[2]
+                    )
+                }).collect();
+                let _ = std::fs::write(&path, format!("[{}]", rows.join(",")));
+                info!("DEPTHS_DUMP_GALAXY: {} systems to {}", rows.len(), path);
+            });
         }
         if std::env::var("DEPTHS_SAVE_TRACE").ok().as_deref() == Some("1") {
             // After the orbits, so a frame's planet positions match its clock.
@@ -1043,6 +1144,97 @@ fn play_scripted_keys(
         script.held.push((key, now + hold));
         script.next += 1;
     }
+}
+
+/// On a station part already shown whole.
+#[derive(Component)]
+struct SkinShown;
+
+/// DEPTHS_SHOW_SHIPS=1: every AI ship shown whole. An AI hull hides its
+/// insides until breached; in the prologue everything is out in the open.
+/// Faction stations also drop their material tint, so a reskin shows true.
+fn show_ships_whole(
+    mut commands: Commands,
+    stations: Query<(), With<crate::diplomacy::FactionStation>>,
+    mut parts: Query<
+        (Entity, &crate::ai_ship::components::OwnedByAiShip, &mut Sprite, Has<crate::components::HullSegment>, Option<&crate::ai_ship::interior::Concealed>),
+        Without<SkinShown>,
+    >,
+) {
+    for (entity, owner, mut sprite, hull, concealed) in &mut parts {
+        let station = stations.contains(owner.root);
+        if !station && concealed.is_none() {
+            commands.entity(entity).insert(SkinShown);
+            continue;
+        }
+        let color = if hull && station { Color::WHITE } else { concealed.map_or(sprite.color, |c| c.0) };
+        sprite.color = color;
+        commands
+            .entity(entity)
+            .insert((crate::components::BaseSpriteColor(color), SkinShown))
+            .remove::<crate::ai_ship::interior::Concealed>();
+    }
+}
+
+/// DEPTHS_FLY_TO=station: fly to the nearest station the way a player would --
+/// nose on it, burn, ease off as the gap closes, brake, then F to dock.
+fn fly_to_station(
+    time: Res<Time<Real>>,
+    state: Res<State<GameState>>,
+    mut keyboard: ResMut<ButtonInput<KeyCode>>,
+    mut input: ResMut<crate::resources::InputState>,
+    ship: Query<(&Transform, &crate::components::Velocity), With<crate::components::Ship>>,
+    cores: Query<(&GlobalTransform, &crate::diplomacy::stations::StationAnchor), With<crate::diplomacy::stations::StationCore>>,
+    mut last_f: Local<f32>,
+    mut last_log: Local<f32>,
+) {
+    // What to hold this frame; everything else of ours is let go, so a held
+    // key stays one press rather than a fresh one every frame.
+    let mut want_keys: Vec<KeyCode> = Vec::new();
+    let mut apply = |keyboard: &mut ButtonInput<KeyCode>, want_keys: &[KeyCode]| {
+        for key in [KeyCode::KeyW, KeyCode::ShiftLeft, KeyCode::KeyF] {
+            if want_keys.contains(&key) {
+                keyboard.press(key);
+            } else if keyboard.pressed(key) {
+                keyboard.release(key);
+            }
+        }
+    };
+    if *state.get() != GameState::Exploring {
+        apply(&mut keyboard, &want_keys);
+        return;
+    }
+    let Ok((tf, vel)) = ship.single() else { return };
+    let pos = tf.translation.truncate();
+    let Some((at, extent)) = cores
+        .iter()
+        .map(|(t, a)| (t.translation().truncate(), a.extent))
+        .min_by(|a, b| a.0.distance(pos).total_cmp(&b.0.distance(pos)))
+    else {
+        apply(&mut keyboard, &want_keys);
+        return;
+    };
+    let to = at - pos;
+    let gap = (to.length() - extent).max(0.0);
+    input.gamepad_aim = Some(to.normalize_or(Vec2::X));
+    // Closing speed wanted for this gap: brisk far out, a crawl alongside.
+    let want = (gap * 0.45).clamp(60.0, 1_300.0);
+    let closing = vel.0.dot(to.normalize_or(Vec2::X));
+    if time.elapsed_secs() - *last_log > 2.0 {
+        *last_log = time.elapsed_secs();
+        info!("FLY_TO: gap {gap:.0} (centre {:.0}, reach {extent:.0}) closing {closing:.0} want {want:.0} speed {:.0}", to.length(), vel.0.length());
+    }
+    if gap < 1_800.0 && vel.0.length() < 140.0 {
+        if time.elapsed_secs() - *last_f > 1.5 {
+            *last_f = time.elapsed_secs();
+            want_keys.push(KeyCode::KeyF);
+        }
+    } else if closing < want - 60.0 {
+        want_keys.push(KeyCode::KeyW);
+    } else if closing > want + 120.0 || (gap < 1_800.0 && vel.0.length() >= 140.0) {
+        want_keys.push(KeyCode::ShiftLeft);
+    }
+    apply(&mut keyboard, &want_keys);
 }
 
 /// Marker so the capture plugin can be added unconditionally and cost nothing

@@ -134,6 +134,13 @@ const SPAWN_RANGE: f32 = 40_000.0;
 const DESPAWN_RANGE: f32 = 55_000.0;
 /// Clear water between the planet's surface and the station's hull.
 const PLANET_GAP: f32 = 6_000.0;
+
+/// PLANET_GAP, or DEPTHS_STATION_GAP: a filming switch to bring a station in
+/// close enough that its world shares the frame.
+fn planet_gap() -> f32 {
+    static GAP: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
+    *GAP.get_or_init(|| std::env::var("DEPTHS_STATION_GAP").ok().and_then(|v| v.parse().ok()).unwrap_or(PLANET_GAP))
+}
 /// How far past the station's own hull you can dock from.
 pub const DOCK_MARGIN: f32 = 3_500.0;
 
@@ -153,7 +160,13 @@ fn design_extent(faction: AiShipType, key: &str) -> f32 {
 }
 
 fn anchor_point(planet_pos: Vec2, anchor: &StationAnchor) -> Vec2 {
-    let out = (planet_pos - anchor.star).normalize_or(Vec2::X);
+    let mut out = (planet_pos - anchor.star).normalize_or(Vec2::X);
+    // DEPTHS_STATION_DAYSIDE=1: a filming switch -- the station on its world's
+    // lit side, between it and the star, instead of in its shadow.
+    static DAYSIDE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *DAYSIDE.get_or_init(|| std::env::var("DEPTHS_STATION_DAYSIDE").ok().as_deref() == Some("1")) {
+        out = -out;
+    }
     planet_pos + out * anchor.out + anchor.around
 }
 
@@ -220,7 +233,7 @@ fn sync_faction_stations(
     let core_anchor = StationAnchor {
         planet,
         star: system.local_center,
-        out: body.radius + PLANET_GAP + extent,
+        out: body.radius + planet_gap() + extent,
         around: Vec2::ZERO,
         extent,
     };

@@ -251,6 +251,105 @@ pub fn lower_weapons(mut commands: Commands, mut raised: Query<(Entity, &mut Tra
 }
 
 /// The roof plate texture for a hull material.
+/// A roof or frame tile laid over an AI ship (DEPTHS_SHOW_SHIPS, filming the
+/// prologue): the same zoomed-out look the player's ship has. Kept apart from
+/// RoofTile, which update_ship_roof clears whenever the player's ship changes.
+#[derive(Component)]
+pub struct AiRoofTile(pub f32);
+
+/// On an AI ship whose roof is laid, with the block counts it was laid for.
+#[derive(Component)]
+pub struct AiRoofLaid(usize, usize);
+
+/// Lay the zoomed-out roof on every AI ship, and fade it with the zoom.
+#[allow(clippy::type_complexity)]
+pub fn update_ai_roofs(
+    mut commands: Commands,
+    assets: Res<AssetServer>,
+    camera: Res<CameraState>,
+    roots: Query<(Entity, Option<&AiRoofLaid>), With<crate::ai_ship::components::AiShip>>,
+    hull: Query<(&HullSegment, &OwnedByAiShip), Without<HullDestroyed>>,
+    modules: Query<(&Module, &OwnedByAiShip), Without<DestroyedModule>>,
+    mut tiles: Query<(Entity, &mut Sprite, &AiRoofTile, &ChildOf)>,
+) {
+    let alpha = roof_alpha(camera.zoom);
+    for (_, mut sprite, tile, _) in tiles.iter_mut() {
+        let want = alpha * tile.0;
+        if (sprite.color.alpha() - want).abs() > 0.001 {
+            sprite.color.set_alpha(want);
+        }
+    }
+    let mut hull_by: HashMap<Entity, Vec<&HullSegment>> = HashMap::new();
+    for (h, owner) in hull.iter() {
+        hull_by.entry(owner.root).or_default().push(h);
+    }
+    let mut mods_by: HashMap<Entity, Vec<&Module>> = HashMap::new();
+    for (m, owner) in modules.iter() {
+        mods_by.entry(owner.root).or_default().push(m);
+    }
+    for (root, laid) in roots.iter() {
+        let hulls = hull_by.get(&root).map(|v| v.as_slice()).unwrap_or(&[]);
+        let mods = mods_by.get(&root).map(|v| v.as_slice()).unwrap_or(&[]);
+        if hulls.is_empty() || laid.is_some_and(|l| l.0 == hulls.len() && l.1 == mods.len()) {
+            continue;
+        }
+        for (tile, _, _, parent) in tiles.iter() {
+            if parent.parent() == root {
+                commands.entity(tile).try_despawn();
+            }
+        }
+        let cells: Vec<(IVec2, HullLayer)> = hulls.iter().map(|s| (s.grid_position, s.hull_layer)).collect();
+        let footprints: Vec<(Vec<IVec2>, bool, bool)> = mods
+            .iter()
+            .map(|m| {
+                let cells = ShipGrid::cells_for(m.grid_position, m.size, m.rotation, footprints::footprint_override(m.module_type)).to_vec();
+                (cells, stands_above(m), is_armour(m.module_type))
+            })
+            .collect();
+        let parts: Vec<(Vec<IVec2>, bool)> = footprints.iter().map(|(c, above, _)| (c.clone(), *above)).collect();
+        let mut counts: Vec<(HullMaterial, usize)> = Vec::new();
+        for s in hulls {
+            match counts.iter_mut().find(|(k, _)| *k == s.material) {
+                Some((_, n)) => *n += 1,
+                None => counts.push((s.material, 1)),
+            }
+        }
+        let material = counts.into_iter().max_by_key(|(_, n)| *n).map_or(HullMaterial::Steel, |(m, _)| m);
+        let image = assets.load(roof_path(material));
+        for cell in roof_cells(&cells, &parts) {
+            let plate = cell.div_euclid(IVec2::splat(2));
+            let q = cell.rem_euclid(IVec2::splat(2));
+            let rect = Rect::new(q.x as f32 * 128.0, (1 - q.y) as f32 * 128.0, q.x as f32 * 128.0 + 128.0, (2 - q.y) as f32 * 128.0);
+            let tone = plate_tone(plate) * DECK_LIGHTEN;
+            commands.spawn((
+                Sprite {
+                    image: image.clone(),
+                    rect: Some(rect),
+                    color: Color::srgba(tone, tone, tone, alpha),
+                    custom_size: Some(Vec2::splat(crate::building::GRID_SIZE)),
+                    ..default()
+                },
+                Transform::from_translation(grid_to_local(cell).extend(ROOF_Z)),
+                AiRoofTile(1.0),
+                ChildOf(root),
+            ));
+        }
+        for cell in frame_cells(&cells, &footprints) {
+            commands.spawn((
+                Sprite {
+                    color: Color::srgba(0.0, 0.0, 0.0, FRAME_SHADE * alpha),
+                    custom_size: Some(Vec2::splat(crate::building::GRID_SIZE)),
+                    ..default()
+                },
+                Transform::from_translation(grid_to_local(cell).extend(FRAME_Z)),
+                AiRoofTile(FRAME_SHADE),
+                ChildOf(root),
+            ));
+        }
+        commands.entity(root).try_insert(AiRoofLaid(hulls.len(), mods.len()));
+    }
+}
+
 fn roof_path(material: HullMaterial) -> &'static str {
     match material {
         HullMaterial::Steel => "sprites/hull/roof_steel.png",

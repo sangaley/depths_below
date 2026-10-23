@@ -89,32 +89,49 @@ pub fn init_world_simulation(
         // DEPTHS_MOVETEST_FLEET=<Faction>:<Kind> (Patrol, BattleGroup, Convoy,
         // StationGuard, Raiders): one whole fleet of that kind, 9 km off and
         // crossing ahead of you, for watching formations and fleet fights.
-        if let Ok(spec) = std::env::var("DEPTHS_MOVETEST_FLEET") {
+        // Several, separated by ';', alternate sides and meet head-on in the
+        // middle -- two enemies make a battle to film.
+        if let Ok(specs) = std::env::var("DEPTHS_MOVETEST_FLEET") {
             use super::fleet::FleetKind;
-            let (f, k) = spec.split_once(':').unwrap_or((spec.as_str(), "Patrol"));
-            let kind = match k {
-                "BattleGroup" => FleetKind::BattleGroup,
-                "Convoy" => FleetKind::Convoy,
-                "StationGuard" => FleetKind::StationGuard,
-                "Raiders" => FleetKind::Raiders,
-                _ => FleetKind::Patrol,
-            };
-            let faction = faction_named(f).unwrap_or(AiShipType::TerranHegemony);
-            let mut rng = rand::thread_rng();
-            let mut held = super::fleet::Held::new();
-            match super::fleet::compose(faction, kind, &mut rng, &mut held) {
-                Some(classes) => {
-                    let at = Vec2::new(9_000.0, 4_000.0);
-                    let (mut fleet, members) = super::fleet::new_fleet(
-                        faction, kind, &classes, 0, at, Vec2::ZERO, 40_000.0, &mut rng,
-                    );
-                    fleet.heading = std::f32::consts::PI;
-                    fleet.destination = Vec2::new(-30_000.0, 4_000.0);
-                    fleet.route = vec![Vec2::new(-30_000.0, 4_000.0), Vec2::new(30_000.0, 4_000.0)];
-                    info!("MOVETEST: {:?} {:?} fleet of {}: {:?}", faction, kind, members.len(), classes);
-                    sim.add_fleet(fleet, members);
+            for (i, spec) in specs.split(';').filter(|s| !s.trim().is_empty()).enumerate() {
+                let (f, k) = spec.split_once(':').unwrap_or((spec, "Patrol"));
+                let kind = match k.trim() {
+                    "BattleGroup" => FleetKind::BattleGroup,
+                    "Convoy" => FleetKind::Convoy,
+                    "StationGuard" => FleetKind::StationGuard,
+                    "Raiders" => FleetKind::Raiders,
+                    _ => FleetKind::Patrol,
+                };
+                let faction = faction_named(f.trim()).unwrap_or(AiShipType::TerranHegemony);
+                let mut rng = rand::thread_rng();
+                let mut held = super::fleet::Held::new();
+                // Even: from the east heading west (the original single fleet);
+                // odd: from the west heading east, a little offset.
+                // DEPTHS_MOVETEST_FLEET_AT=<x>,<y>: meet there instead, starting
+                // close enough to be at it within seconds -- for filming.
+                let meet = std::env::var("DEPTHS_MOVETEST_FLEET_AT").ok()
+                    .and_then(|v| v.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?))));
+                let (centre, reach) = meet.map_or((Vec2::new(0.0, 4_000.0), 9_000.0), |m| (m, 3_200.0));
+                let east = i % 2 == 0;
+                let y = centre.y + (i / 2) as f32 * 2_500.0 + if east { 0.0 } else { 600.0 };
+                let (start, heading, far) = if east {
+                    (Vec2::new(centre.x + reach, y), std::f32::consts::PI, Vec2::new(centre.x - 30_000.0, y))
+                } else {
+                    (Vec2::new(centre.x - reach, y), 0.0, Vec2::new(centre.x + 30_000.0, y))
+                };
+                match super::fleet::compose(faction, kind, &mut rng, &mut held) {
+                    Some(classes) => {
+                        let (mut fleet, members) = super::fleet::new_fleet(
+                            faction, kind, &classes, 0, start, Vec2::ZERO, 40_000.0, &mut rng,
+                        );
+                        fleet.heading = heading;
+                        fleet.destination = far;
+                        fleet.route = vec![far, start];
+                        info!("MOVETEST: {:?} {:?} fleet of {}: {:?}", faction, kind, members.len(), classes);
+                        sim.add_fleet(fleet, members);
+                    }
+                    None => warn!("MOVETEST: {:?} can't crew a {:?}", faction, kind),
                 }
-                None => warn!("MOVETEST: {:?} can't crew a {:?}", faction, kind),
             }
         }
 
@@ -126,9 +143,13 @@ pub fn init_world_simulation(
         // lands hits. Remove once the diagnosis is confirmed.
         if let Ok(count) = std::env::var("DEPTHS_AI_VS_AI_TEST").unwrap_or_default().parse::<usize>() {
             let factions = [AiShipType::TerranHegemony, AiShipType::RecursiveKingdom, AiShipType::BrokenChoir, AiShipType::GildedThrone];
+            // DEPTHS_AI_VS_AI_AT=<x>,<y>: hold the fight away from you, to film it.
+            let centre = std::env::var("DEPTHS_AI_VS_AI_AT").ok()
+                .and_then(|v| v.split_once(',').and_then(|(x, y)| Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?))))
+                .unwrap_or(Vec2::ZERO);
             for i in 0..count {
                 let angle = (i as f32 / count as f32) * std::f32::consts::TAU;
-                let pos = Vec2::new(angle.cos(), angle.sin()) * 400.0;
+                let pos = centre + Vec2::new(angle.cos(), angle.sin()) * 400.0;
                 sim.ships.push(SimulatedShip::patrolling(
                     0, factions[i % factions.len()], pos, pos, 2000.0, 0.0,
                 ));

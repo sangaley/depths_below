@@ -146,6 +146,9 @@ pub enum Phase {
 #[derive(Resource)]
 pub struct Director {
     pub phase: Phase,
+    /// DEPTHS_AUTOPLAY_PHASE=<Phase>@<secs>: idle until then, then start in
+    /// that phase -- to film one behaviour (Home: fly in and dock) alone.
+    forced_start: Option<(Phase, f32)>,
     phase_elapsed: f32,
     run_elapsed: f32,
     /// Keys held down this frame.
@@ -328,6 +331,17 @@ impl Plugin for AutoplayPlugin {
         let target = env_f32("DEPTHS_AUTOPLAY_TARGET", 15000.0) as u32;
         let mut director = Director {
             phase: Phase::Boot,
+            forced_start: std::env::var("DEPTHS_AUTOPLAY_PHASE").ok().and_then(|v| {
+                let (name, at) = v.split_once('@').unwrap_or((v.as_str(), "0"));
+                let phase = match name {
+                    "Home" => Phase::Home,
+                    "Hunt" => Phase::Hunt,
+                    "Jump" => Phase::Jump,
+                    "Launch" => Phase::Launch,
+                    _ => return None,
+                };
+                Some((phase, at.parse().unwrap_or(0.0)))
+            }),
             phase_elapsed: 0.0,
             run_elapsed: 0.0,
             held: HashSet::new(),
@@ -672,6 +686,14 @@ fn director_brain(
         }
         GameState::Loading | GameState::GameOver => return,
         _ => {}
+    }
+
+    if let Some((phase, at)) = d.forced_start {
+        if d.run_elapsed < at {
+            return;
+        }
+        d.forced_start = None;
+        d.go(phase);
     }
 
     // ---- phase logic ------------------------------------------------------

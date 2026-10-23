@@ -292,7 +292,9 @@ pub fn generate_galaxy_on_enter(
     if !galaxy_map.systems.is_empty() {
         return;
     }
-    let seed = rand::random::<u64>();
+    // DEPTHS_GALAXY_SEED: the same galaxy every launch -- for filming one
+    // place across several runs.
+    let seed = std::env::var("DEPTHS_GALAXY_SEED").ok().and_then(|v| v.parse().ok()).unwrap_or_else(rand::random::<u64>);
     *galaxy_map = generate_galaxy_map(seed);
     streaming.loaded_system = Some(0);
     streaming.current_galaxy_pos = Vec2::ZERO;
