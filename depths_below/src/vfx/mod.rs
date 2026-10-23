@@ -66,8 +66,11 @@ impl Plugin for VfxPlugin {
             // only, and gated internally on the live tile count, so it costs
             // an archetype scan on the frames where nothing was built or shot.
             // Zoomed out, the ship shows plating instead of its insides.
-            .add_systems(Update, ship_roof::update_ship_roof.run_if(in_state(GameState::Exploring)))
-            .add_systems(OnExit(GameState::Exploring), ship_roof::clear_ship_roof)
+            .add_systems(
+                Update,
+                (ship_roof::update_ship_roof, ship_roof::raise_weapons_over_roof).run_if(in_state(GameState::Exploring)),
+            )
+            .add_systems(OnExit(GameState::Exploring), (ship_roof::clear_ship_roof, ship_roof::lower_weapons))
             .add_systems(
                 Update,
                 hull_seams::update_hull_seams.run_if(
