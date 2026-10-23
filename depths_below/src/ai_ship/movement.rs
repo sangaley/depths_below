@@ -19,6 +19,47 @@ pub fn harbour_speed_cap(distance: f32, extent: f32) -> f32 {
     HARBOUR_SPEED + (distance - extent - HARBOUR_REACH).max(0.0) * HARBOUR_EASE
 }
 
+/// Top speed per square root of thrust-per-block. A ship's speed comes from
+/// how much engine it has for its size, like the player's thrust over mass.
+/// It used to be the raw sum of its engines' thrust, which never looked at
+/// the hull: the fleet classes carry 5-16 engines, and a 160-block raider
+/// with five of them ran at 2,500 u/s -- 3,300 fleeing -- and a throne barge
+/// at 5,800. The root squeezes the range: a heavy hull with little engine is
+/// slow, a light one with lots is quick, and neither is absurd.
+const AI_SPEED_PER_ROOT_TPB: f32 = 180.0;
+
+/// No AI ship goes faster than this, whatever it's doing.
+const AI_MAX_SPEED: f32 = 1_100.0;
+
+/// Base speed for a ship with `thrust` from its live engines over `blocks`.
+/// The faction's character is applied softened (its root): the old
+/// multipliers were tuned against raw thrust and would stretch the range
+/// back out.
+pub fn ai_top_speed(thrust: f32, blocks: usize, faction_mult: f32) -> f32 {
+    let per_block = thrust / blocks.max(1) as f32;
+    AI_SPEED_PER_ROOT_TPB * per_block.max(0.0).sqrt() * faction_mult.max(0.0).sqrt()
+}
+
+/// How fast an AI ship can swing its nose round, in rad/s, by size. Small
+/// ships turn quicker than big ones; nothing whips about. Turning used to
+/// ease toward the target heading with no limit at all, so whenever the
+/// heading it wanted changed -- a target circling, a formation slot moving,
+/// a swerve round a rock -- the ship snapped across in a fraction of a
+/// second, and a ship fighting at close range jittered left and right. The
+/// player's own hull turns ~0.86 rad/s.
+pub fn ai_turn_rate(blocks: usize) -> f32 {
+    (19.0 / (blocks.max(1) as f32).sqrt()).clamp(0.35, 1.8)
+}
+
+/// Turn `rotation` toward `target_angle`, easing in but never faster than
+/// `max_rate` rad/s.
+fn turn_toward(rotation: Quat, target_angle: f32, blend: f32, max_rate: f32, dt: f32) -> Quat {
+    let current = rotation.to_euler(EulerRot::ZYX).0;
+    let diff = (target_angle - current + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+    let step = (diff * blend).clamp(-max_rate * dt, max_rate * dt);
+    Quat::from_rotation_z(current + step)
+}
+
 /// Moves AI ships toward their nav destination, reading child Engine components for thrust.
 pub fn ai_ship_movement_system(
     time: Res<Time>,
@@ -132,9 +173,9 @@ pub fn ai_ship_movement_system(
             AiShipType::FreeHaulersCompact => 0.8, // pushing a load
         };
 
-        // Global AI pace.
-        const AI_SPEED_SCALE: f32 = 0.8;
-        let max_speed = total_thrust * behavior_mult * faction_mult * AI_SPEED_SCALE;
+        let blocks = children.len();
+        let max_speed = (ai_top_speed(total_thrust, blocks, faction_mult) * behavior_mult).min(AI_MAX_SPEED);
+        let turn_rate = ai_turn_rate(blocks);
         // Harbour traffic goes slow. A ship going about its business near a
         // faction starport keeps to harbour speed; one fighting or running
         // for its life doesn't.
@@ -260,8 +301,7 @@ pub fn ai_ship_movement_system(
 
                 // Face the player — you're fine with this, and it reads natural
                 // for a ship holding station and trading fire.
-                let target_rotation = Quat::from_rotation_z(direction.y.atan2(direction.x));
-                transform.rotation = transform.rotation.slerp(target_rotation, turn_blend);
+                transform.rotation = turn_toward(transform.rotation, direction.y.atan2(direction.x), turn_blend, turn_rate, dt);
             } else if dist > 5.0 {
                 // Bend the heading around any terrain blocking the way.
                 let direction = crate::ship::collision::steer_around(
@@ -288,8 +328,7 @@ pub fn ai_ship_movement_system(
 
                 // Update rotation to face movement direction
                 let target_angle = direction.y.atan2(direction.x);
-                let target_rotation = Quat::from_rotation_z(target_angle);
-                transform.rotation = transform.rotation.slerp(target_rotation, turn_blend);
+                transform.rotation = turn_toward(transform.rotation, target_angle, turn_blend, turn_rate, dt);
             } else {
                 // Near destination, slow down
                 velocity.0 *= (1.0 - 3.0 * dt).max(0.0);
@@ -371,5 +410,46 @@ mod harbour_tests {
             last = cap;
         }
         assert!(harbour_speed_cap(100_000.0, extent) > 10_000.0);
+    }
+}
+
+#[cfg(test)]
+mod ai_speed_tests {
+    use super::*;
+
+    /// The Silence's five-engine Listener: 160 blocks, 2000 thrust, the
+    /// fastest faction. It ran at 2,560 u/s; it stays the quickest thing out
+    /// there but under the ceiling, and fleeing (x1.3) too.
+    #[test]
+    fn the_fastest_raider_stays_under_the_ceiling() {
+        let engage = ai_top_speed(2000.0, 161, 1.6);
+        assert!(engage > 600.0 && engage * 1.3 <= AI_MAX_SPEED * 1.2, "{engage}");
+    }
+
+    /// A barge of 1,444 blocks with fifteen engines is not a racer.
+    #[test]
+    fn a_big_hull_is_slower_than_a_light_one_with_the_same_engines() {
+        let barge = ai_top_speed(6000.0, 1444, 1.2);
+        let courier = ai_top_speed(2000.0, 164, 1.2);
+        assert!(barge < courier, "{barge} vs {courier}");
+        assert!(barge < 600.0, "barge {barge}");
+    }
+
+    #[test]
+    fn small_ships_turn_quicker_but_nothing_whips_round() {
+        assert!(ai_turn_rate(150) > ai_turn_rate(1500));
+        assert!(ai_turn_rate(10) <= 1.8 && ai_turn_rate(100_000) >= 0.35);
+    }
+
+    /// A half-turn target is reached at the capped rate, not in one frame.
+    #[test]
+    fn a_turn_is_capped_per_second() {
+        let dt = 1.0 / 60.0;
+        let mut rot = Quat::IDENTITY;
+        for _ in 0..30 {
+            rot = turn_toward(rot, std::f32::consts::PI * 0.9, 1.0, 1.0, dt);
+        }
+        let angle = rot.to_euler(EulerRot::ZYX).0;
+        assert!((angle - 0.5).abs() < 0.02, "half a second at 1 rad/s turns 0.5 rad, got {angle}");
     }
 }
