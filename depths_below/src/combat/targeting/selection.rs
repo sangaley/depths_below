@@ -178,7 +178,7 @@ pub fn draw_target_bracket(
 ) {
     // Despawn old brackets
     for entity in existing_brackets.iter() {
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
 
     let Some(target) = selection.target else { return };

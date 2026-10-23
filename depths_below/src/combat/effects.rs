@@ -73,7 +73,7 @@ pub(super) fn animate_floating_damage(
         text_color.0.set_alpha(alpha);
 
         if dmg.timer.is_finished() {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
         }
     }
 }

@@ -80,7 +80,7 @@ pub fn fire_laser_system(
 
     // Despawn old beam visuals
     for entity in existing_beams.iter() {
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
 
     let Ok((player_ship, _ship_transform, ship_physics)) = ship_query.single() else { return };
@@ -648,7 +648,7 @@ pub fn update_ion_pulses(
 
         // Dead pulse
         if pulse.current_energy <= 0.0 {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
             continue;
         }
 
@@ -676,7 +676,7 @@ pub fn update_ion_pulses(
             if shield.is_up() && dist_to_ship < shield.radius {
                 shield.absorb(5.0 * energy_ratio);
                 spawn_hit_effect(&mut commands, pulse_pos, Color::srgb(0.5, 0.8, 1.0), 14.0);
-                commands.entity(entity).despawn();
+                commands.entity(entity).try_despawn();
                 continue 'pulses;
             }
 
@@ -708,7 +708,7 @@ pub fn update_ion_pulses(
                             attacker: Some(pulse.owner),
                         });
                     }
-                    commands.entity(entity).despawn();
+                    commands.entity(entity).try_despawn();
                     continue 'pulses;
                 }
             }
@@ -738,7 +738,7 @@ pub fn update_ion_pulses(
             spawn_hit_effect(&mut commands, pulse_pos, Color::srgb(0.6, 0.4, 1.0), 16.0);
             spawn_floating_damage(&mut commands, pulse_pos, 5.0 * energy_ratio, Color::srgb(0.5, 0.3, 0.9));
 
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
             break;
         }
     }
@@ -1117,6 +1117,6 @@ pub fn emp_detonation(
             duration: 3.0,
         });
 
-        commands.entity(missile_entity).despawn();
+        commands.entity(missile_entity).try_despawn();
     }
 }

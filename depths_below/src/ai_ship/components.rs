@@ -48,6 +48,38 @@ pub enum AiShipType {
     /// It does not want to kill you. It wants you to become one. The largest
     /// and hardest kill in the game.
     Shepherd,
+    // --- Trading factions: full factions (standing, stations, territory)
+    // with no real fleet of their own. Their allies fight for them.
+    /// Trade across parallel universes, sell weapons to both sides of a war,
+    /// and are whispered to collapse universes to make scarcity. Luxuries
+    /// and deep stock; hired Gilded Throne escorts.
+    MerchantPrinces,
+    /// Independent haulers, miners and salvagers who refuse the Princes'
+    /// monopoly. Bulk goods, fuel, scrap and ammo, cheap and plain; patched
+    /// ships that shoot back, and the Terran Hegemony at their side.
+    FreeHaulersCompact,
+}
+
+impl AiShipType {
+    /// A trading faction: no warfleet of its own, defended by its ally.
+    pub fn is_trading(self) -> bool {
+        matches!(self, AiShipType::MerchantPrinces | AiShipType::FreeHaulersCompact)
+    }
+
+    /// The combat faction that fights for a trading faction: escorts its
+    /// convoys, guards its stations, and answers when it's attacked.
+    pub fn ally(self) -> Option<AiShipType> {
+        match self {
+            AiShipType::MerchantPrinces => Some(AiShipType::GildedThrone),
+            AiShipType::FreeHaulersCompact => Some(AiShipType::TerranHegemony),
+            _ => None,
+        }
+    }
+
+    /// Whether `self` fights for `other`: the same faction, or `other`'s ally.
+    pub fn defends(self, other: AiShipType) -> bool {
+        self == other || other.ally() == Some(self)
+    }
 }
 
 /// The faction's name as the player should ever see it.
@@ -68,6 +100,8 @@ pub fn faction_display_name(ship_type: AiShipType) -> &'static str {
         RecursiveKingdom => "Recursive Kingdom",
         EternalHegemony => "Eternal Hegemony",
         Shepherd => "The Shepherd",
+        MerchantPrinces => "Merchant Princes",
+        FreeHaulersCompact => "Free Haulers' Compact",
     }
 }
 
@@ -242,8 +276,25 @@ pub struct AiShipWreck {
 // WORLD SIMULATION - Off-screen faction tracking
 // ============================================================================
 
+/// What a ship lost before it went off-screen: the blocks shot away (by
+/// grid position, hull cells and module anchors) and its hull integrity.
+/// It comes back with the same holes. Blocks only scratched heal; blocks
+/// gone stay gone.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Wounds {
+    pub hull: Vec<IVec2>,
+    pub modules: Vec<IVec2>,
+    pub integrity: f32,
+}
+
+impl Wounds {
+    pub fn is_empty(&self) -> bool {
+        self.hull.is_empty() && self.modules.is_empty()
+    }
+}
+
 /// A simulated (off-screen) AI ship tracked by position only
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct SimulatedShip {
     /// Which star system this ship belongs to — gates whether
     /// tick_world_simulation actually ticks it (Hot/Warm systems only, see
@@ -280,6 +331,86 @@ pub struct SimulatedShip {
     /// a lane of traffic has fast and slow movers in it instead of a rank of
     /// identical dots.
     pub cruise: f32,
+    /// Which hull from the faction's roster (ai_ship::roster) this ship is;
+    /// None flies the faction's original design. Rolled once when the system
+    /// is populated and kept for the ship's life, so the frigate you lost
+    /// track of is still a frigate when you find it again.
+    pub class: Option<&'static str>,
+    /// Stable identity, so a spawned ship finds its own entry again when it
+    /// despawns or dies. 0 = not issued (test and debug ships), which falls
+    /// back to the old nearest-of-the-same-faction guess.
+    pub id: u32,
+    /// Damage it carried off-screen; restored when it spawns again.
+    pub wounds: Option<Wounds>,
+    /// The fleet it flies with (`WorldSimulation::fleets`), 0 for none.
+    pub fleet: u32,
+    /// Its place in the fleet's formation, relative to the fleet's centre
+    /// with +x along the fleet's heading.
+    pub slot: Vec2,
+}
+
+/// A SimulatedShip as a save holds it. The class key is a `&'static str`
+/// from a roster in the game and a plain string on disk, interned back on
+/// load (a key no roster has any more flies the faction's original design).
+#[derive(Deserialize)]
+struct SavedShip {
+    system_id: u32,
+    faction: AiShipType,
+    position: Vec2,
+    velocity: Vec2,
+    health: f32,
+    fuel: f32,
+    behavior: SimBehavior,
+    home_zone: Vec2,
+    patrol_radius: f32,
+    #[serde(default)]
+    bounty_id: Option<u32>,
+    destination: Vec2,
+    cruise: f32,
+    #[serde(default)]
+    class: Option<String>,
+    #[serde(default)]
+    id: u32,
+    #[serde(default)]
+    wounds: Option<Wounds>,
+    #[serde(default)]
+    fleet: u32,
+    #[serde(default)]
+    slot: Vec2,
+}
+
+impl<'de> Deserialize<'de> for SimulatedShip {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        SavedShip::deserialize(d).map(Into::into)
+    }
+}
+
+impl From<SavedShip> for SimulatedShip {
+    fn from(s: SavedShip) -> Self {
+        SimulatedShip {
+            system_id: s.system_id,
+            faction: s.faction,
+            position: s.position,
+            velocity: s.velocity,
+            health: s.health,
+            fuel: s.fuel,
+            behavior: match s.behavior {
+                SimBehavior::Fighting(_) => SimBehavior::Patrolling,
+                b => b,
+            },
+            home_zone: s.home_zone,
+            patrol_radius: s.patrol_radius,
+            spawned: false,
+            bounty_id: s.bounty_id,
+            destination: s.destination,
+            cruise: s.cruise,
+            class: s.class.as_deref().and_then(crate::ai_ship::roster::intern),
+            id: s.id,
+            wounds: s.wounds,
+            fleet: s.fleet,
+            slot: s.slot,
+        }
+    }
 }
 
 impl SimulatedShip {
@@ -307,7 +438,60 @@ impl SimulatedShip {
             bounty_id: None,
             destination: position,
             cruise,
+            class: None,
+            id: 0,
+            wounds: None,
+            fleet: 0,
+            slot: Vec2::ZERO,
         }
+    }
+}
+
+/// The roster class an AI ship was spawned as (see ai_ship::roster).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct AiShipClass(pub &'static str);
+
+/// Ties a spawned AI ship back to its SimulatedShip entry by `id`.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct SimShipId(pub u32);
+
+/// The hull integrity a wounded ship comes back with, applied once on its
+/// first frame (AiShipState is only recomputed when it next takes a hit).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct SpawnIntegrity(pub f32);
+
+/// An AI ship from the world a load is leaving. It is hidden and moved far
+/// out of everything at once, and despawned a few frames later: messages
+/// that name it (damage, collisions) live for two frames, and a system acting
+/// on one after the ship was gone was a crash.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct LeftByLoad {
+    pub frames: u8,
+}
+
+/// The story's doppelganger: wears the player's design, so it is never folded
+/// into the simulation as an ordinary ship of its faction.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct MirrorShip;
+
+/// Everything about the off-screen world that goes into a save.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct SavedWorld {
+    pub ships: Vec<SimulatedShip>,
+    pub next_ship_id: u32,
+    pub next_bounty_id: u32,
+    #[serde(default)]
+    pub fleets: Vec<super::fleet::SimFleet>,
+    #[serde(default)]
+    pub next_fleet_id: u32,
+}
+
+impl SavedWorld {
+    fn snapshot_ships(&self) -> Vec<SimulatedShip> {
+        self.ships.iter().cloned().map(|mut s| {
+            s.spawned = false;
+            s
+        }).collect()
     }
 }
 
@@ -317,7 +501,7 @@ impl SimulatedShip {
 #[derive(Component, Clone, Copy)]
 pub struct BountyTarget(pub u32);
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum SimBehavior {
     Roaming,
     Fighting(usize), // index of opponent in sim list
@@ -332,23 +516,106 @@ pub enum SimBehavior {
 #[derive(Resource)]
 pub struct WorldSimulation {
     pub ships: Vec<SimulatedShip>,
+    /// Ships that travel, fight and spawn together (ai_ship::fleet). A ship
+    /// names its fleet by id; a fleet's members are the ships that do.
+    pub fleets: Vec<super::fleet::SimFleet>,
     pub tick_timer: Timer,
     pub initialized: bool,
     next_bounty_id: u32,
+    next_ship_id: u32,
+    next_fleet_id: u32,
 }
 
 impl Default for WorldSimulation {
     fn default() -> Self {
         Self {
             ships: Vec::new(),
+            fleets: Vec::new(),
             tick_timer: Timer::from_seconds(2.0, TimerMode::Repeating),
             initialized: false,
             next_bounty_id: 1,
+            next_ship_id: 1,
+            next_fleet_id: 1,
         }
     }
 }
 
 impl WorldSimulation {
+    /// The world as it stands, for a save. Nothing is mid-spawn in a save:
+    /// every ship is written as off-screen, where it will be found again.
+    pub fn snapshot(&self) -> SavedWorld {
+        SavedWorld {
+            ships: self
+                .ships
+                .iter()
+                .cloned()
+                .map(|mut s| {
+                    s.spawned = false;
+                    if matches!(s.behavior, SimBehavior::Fighting(_)) {
+                        s.behavior = SimBehavior::Patrolling;
+                    }
+                    s
+                })
+                .collect(),
+            next_ship_id: self.next_ship_id,
+            next_bounty_id: self.next_bounty_id,
+            fleets: self.fleets.clone(),
+            next_fleet_id: self.next_fleet_id,
+        }
+    }
+
+    /// Put a saved world back. Marks the simulation started, so it isn't
+    /// rolled again on entering Exploring.
+    pub fn restore(&mut self, saved: &SavedWorld) {
+        self.ships = saved.snapshot_ships();
+        let max_id = self.ships.iter().map(|s| s.id).max().unwrap_or(0);
+        self.next_ship_id = saved.next_ship_id.max(max_id + 1);
+        let max_bounty = self.ships.iter().filter_map(|s| s.bounty_id).max().unwrap_or(0);
+        self.next_bounty_id = saved.next_bounty_id.max(max_bounty + 1);
+        self.fleets = saved.fleets.clone();
+        let max_fleet = self.fleets.iter().map(|f| f.id).max().unwrap_or(0);
+        self.next_fleet_id = saved.next_fleet_id.max(max_fleet + 1);
+        // A ship whose fleet didn't make it into the save flies alone.
+        let known: Vec<u32> = self.fleets.iter().map(|f| f.id).collect();
+        for ship in &mut self.ships {
+            if ship.fleet != 0 && !known.contains(&ship.fleet) {
+                ship.fleet = 0;
+            }
+        }
+        self.initialized = true;
+    }
+
+    /// Add a ship, issuing it an id.
+    pub fn add(&mut self, mut ship: SimulatedShip) {
+        ship.id = self.next_ship_id;
+        self.next_ship_id += 1;
+        self.ships.push(ship);
+    }
+
+    /// Add a fleet and its members, issuing ids. Each member is placed at its
+    /// formation slot round the fleet's position. Returns the fleet's id.
+    pub fn add_fleet(&mut self, mut fleet: super::fleet::SimFleet, members: Vec<SimulatedShip>) -> u32 {
+        fleet.id = self.next_fleet_id;
+        self.next_fleet_id += 1;
+        for mut ship in members {
+            ship.fleet = fleet.id;
+            ship.position = fleet.slot_position(ship.slot);
+            ship.destination = fleet.destination;
+            ship.system_id = fleet.system_id;
+            self.add(ship);
+        }
+        let id = fleet.id;
+        self.fleets.push(fleet);
+        id
+    }
+
+    pub fn fleet(&self, id: u32) -> Option<&super::fleet::SimFleet> {
+        if id == 0 {
+            return None;
+        }
+        self.fleets.iter().find(|f| f.id == id)
+    }
+
     /// Picks a random living, untagged ship belonging to `faction` and tags
     /// it as a bounty target. Returns (bounty_id, spawn distance from origin)
     /// so the contract can use the target's real position for its reward and
@@ -518,6 +785,20 @@ pub fn faction_territories() -> Vec<FactionTerritory> {
             radius: 80_000.0,
             ship_count: 1,
         },
+        // The trading guilds: traffic, not warships. Their convoys run long
+        // routes, so the territory is wide.
+        FactionTerritory {
+            faction: AiShipType::MerchantPrinces,
+            center: Vec2::ZERO,
+            radius: 20_000.0,
+            ship_count: 5,
+        },
+        FactionTerritory {
+            faction: AiShipType::FreeHaulersCompact,
+            center: Vec2::ZERO,
+            radius: 20_000.0,
+            ship_count: 5,
+        },
     ]
 }
 
@@ -535,6 +816,8 @@ pub fn faction_power(faction: AiShipType) -> f32 {
         AiShipType::BrokenChoir => 1.0,        // Already damaged
         AiShipType::RecursiveKingdom => 0.5,      // Weak individually
         AiShipType::TheSilence => 0.1,       // No weapons
+        AiShipType::MerchantPrinces => 0.4,  // Freight; their escorts are the Throne's
+        AiShipType::FreeHaulersCompact => 0.6, // Freight that shoots back
     }
 }
 
@@ -559,6 +842,8 @@ pub fn faction_map_color(faction: AiShipType) -> bevy::prelude::Color {
         AiShipType::TerranHegemony => Color::srgb(0.65, 0.7, 0.8),       // steel blue-gray
         AiShipType::GildedThrone => Color::srgb(0.4, 0.45, 0.65),    // slate blue
         AiShipType::RecursiveKingdom => Color::srgb(0.95, 0.55, 0.2),     // rusty orange
+        AiShipType::MerchantPrinces => Color::srgb(0.5, 0.75, 0.4),     // guild green
+        AiShipType::FreeHaulersCompact => Color::srgb(0.8, 0.45, 0.3),   // rust red
     }
 }
 
@@ -587,6 +872,8 @@ pub fn crew_fill_fraction(faction: AiShipType) -> f32 {
         AiShipType::TheSilence => 1.1,       // skeleton crew (no weapons anyway)
         AiShipType::RecursiveKingdom => 1.15,     // scrappy, but now mans all its guns
         AiShipType::BrokenChoir => 1.1,        // ghost ship, still staffs the guns
+        AiShipType::MerchantPrinces => 1.1,     // freighter crews, the guns are an afterthought
+        AiShipType::FreeHaulersCompact => 1.2,  // every hand pulls a trigger when it comes to it
     }
 }
 
@@ -622,7 +909,18 @@ pub fn faction_fights(faction: AiShipType) -> bool {
 pub fn factions_hostile(a: AiShipType, b: AiShipType) -> bool {
     use AiShipType::*;
     if a == b { return false; } // same faction = allies
+    // A trading faction and the faction that fights for it never fight.
+    if a.ally() == Some(b) || b.ally() == Some(a) { return false; }
     match (a, b) {
+        // The trade war: the two guilds, and each one's ally against the
+        // other guild. (The Hegemony and the Throne stay allied with each
+        // other: a proxy war, fought through clients.)
+        (MerchantPrinces, FreeHaulersCompact) | (FreeHaulersCompact, MerchantPrinces) => true,
+        (GildedThrone, FreeHaulersCompact) | (FreeHaulersCompact, GildedThrone) => true,
+        (TerranHegemony, MerchantPrinces) | (MerchantPrinces, TerranHegemony) => true,
+        // Pirates prey on traders.
+        (RecursiveKingdom, MerchantPrinces) | (MerchantPrinces, RecursiveKingdom) => true,
+        (RecursiveKingdom, FreeHaulersCompact) | (FreeHaulersCompact, RecursiveKingdom) => true,
         // Bosses are hostile to everything, including each other — rampaging
         // apex threats, not aligned with any faction's politics.
         (Shepherd, _) | (_, Shepherd) => true,
@@ -671,3 +969,56 @@ pub struct AiGunneryLog {
 
 /// Ricochets against one target before the crew changes ammunition.
 pub const RICOCHETS_BEFORE_SWITCH: u32 = 4;
+
+#[cfg(test)]
+mod saved_world_tests {
+    use super::*;
+
+    fn ship(id: u32, class: Option<&'static str>) -> SimulatedShip {
+        let mut s = SimulatedShip::patrolling(3, AiShipType::TerranHegemony, Vec2::new(10.0, 20.0), Vec2::ZERO, 5000.0, 90.0);
+        s.id = id;
+        s.class = class;
+        s
+    }
+
+    /// A save keeps every ship's class, damage and fate, and its class comes
+    /// back as the roster's own key.
+    #[test]
+    fn a_world_survives_a_save() {
+        let mut sim = WorldSimulation::default();
+        let mut a = ship(0, Some("bulwark"));
+        a.wounds = Some(Wounds { hull: vec![IVec2::new(1, 2)], modules: vec![], integrity: 0.4 });
+        a.spawned = true;
+        a.behavior = SimBehavior::Fighting(7);
+        sim.add(a);
+        let mut dead = ship(0, None);
+        dead.behavior = SimBehavior::Dead;
+        sim.add(dead);
+
+        let json = serde_json::to_string(&sim.snapshot()).unwrap();
+        let saved: SavedWorld = serde_json::from_str(&json).unwrap();
+        let mut back = WorldSimulation::default();
+        back.restore(&saved);
+
+        assert!(back.initialized);
+        assert_eq!(back.ships.len(), 2);
+        let a = &back.ships[0];
+        assert_eq!(a.class, crate::ai_ship::roster::intern("bulwark"));
+        assert!(!a.spawned, "nothing is on screen in a fresh load");
+        assert_eq!(a.behavior, SimBehavior::Patrolling, "a fight's opponent index means nothing after a load");
+        assert_eq!(a.wounds.as_ref().unwrap().integrity, 0.4);
+        assert_eq!(back.ships[1].behavior, SimBehavior::Dead);
+        // New ships keep counting from where the save left off.
+        back.add(ship(0, None));
+        assert!(back.ships[2].id > back.ships[1].id);
+    }
+
+    /// A class no roster has any more flies its faction's original design
+    /// rather than failing the whole load.
+    #[test]
+    fn an_unknown_class_loads_as_the_original_design() {
+        let json = serde_json::to_string(&ship(1, Some("bulwark"))).unwrap().replace("bulwark", "retired_hull");
+        let back: SimulatedShip = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.class, None);
+    }
+}

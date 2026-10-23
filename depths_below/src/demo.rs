@@ -30,6 +30,8 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //   DEPTHS_OFFSCREEN=1  — render into an image instead of the window, so
 //                          capture works however buried the window is. The
 //                          window itself shows nothing; for unattended runs.
+//   DEPTHS_START_SYSTEM=<id|Faction|haunt>[:fleet|:capital] — jump there a few seconds in.
+//   DEPTHS_ZOOM=<z> — hold the camera at that zoom (1.8 default, 20 furthest out).
 //   DEPTHS_KEYS=<script> — tap keys at set times, e.g. "3:KeyM,5:F7,8:Escape".
 //                          "6:Minus~3" HOLDS a key for 3s instead -- needed
 //                          for anything read with `pressed` rather than
@@ -144,6 +146,9 @@ fn open_build_tab(
 fn census(
     time: Res<Time>,
     mut next: Local<f32>,
+    mut dumped: Local<bool>,
+    mut last_holdings: Local<String>,
+    galaxy: Res<crate::celestial::resources::GalaxyMap>,
     ai: Query<(), With<AiShip>>,
     owned: Query<(), With<crate::ai_ship::components::OwnedByAiShip>>,
     hull: Query<&ChildOf, With<crate::components::HullSegment>>,
@@ -151,12 +156,46 @@ fn census(
     navs: Query<&crate::crew::navigation::NavGrid>,
     dead: Res<crate::crew::burial::DriftingDead>,
     concealed: Query<(), With<crate::ai_ship::interior::Concealed>>,
+    fleets: Query<(
+        &Transform,
+        &crate::ai_ship::fleet::FleetMember,
+        &crate::ai_ship::components::AiShipBehavior,
+        &crate::ai_ship::components::AiShipState,
+        Has<crate::ai_ship::fleet::CivilianHull>,
+        Has<crate::ai_ship::standing_spawns::PlayerEscort>,
+    )>,
+    player: Query<&Transform, With<crate::components::Ship>>,
+    previews: Query<(&Transform, &Sprite), With<crate::ai_ship::preview::Preview>>,
 ) {
     *next -= time.delta_secs();
     if *next > 0.0 {
         return;
     }
     *next = 1.0;
+    // Who holds how much, whenever it changes: borders move (territory),
+    // and a load must put them back where the save had them.
+    if !galaxy.systems.is_empty() {
+        let line = crate::celestial::territory::TERRITORIAL
+            .iter()
+            .map(|f| format!("{f:?}={}", galaxy.systems.iter().filter(|s| s.faction == Some(*f)).count()))
+            .collect::<Vec<_>>()
+            .join(" ");
+        if *last_holdings != line {
+            info!("HOLDINGS {line}");
+            *last_holdings = line;
+        }
+    }
+    // The territory map, once, when the galaxy exists.
+    if !*dumped && !galaxy.systems.is_empty() {
+        *dumped = true;
+        for sys in &galaxy.systems {
+            let borders = crate::celestial::territory::border_factions(&galaxy, sys.id);
+            info!(
+                "TERRITORY {:>2} {:<9} owner={:?} capital={} haunt={:?} danger={:.1} borders={:?}",
+                sys.id, sys.name, sys.faction, sys.capital, sys.haunt, sys.danger_tier, borders
+            );
+        }
+    }
     let roots: std::collections::HashSet<Entity> = ai_roots.iter().collect();
     let ai_hull = hull.iter().filter(|c| roots.contains(&c.parent())).count();
     let nav_cells: usize = navs.iter().map(|n| n.cells.len()).sum();
@@ -172,6 +211,54 @@ fn census(
         concealed.iter().count(),
         dead.bodies.len()
     );
+    // Far ships drawn as pictures: how many, and the nearest.
+    if let Ok(you) = player.single() {
+        let you = you.translation.truncate();
+        let nearest = previews
+            .iter()
+            .map(|(t, s)| (t.translation.truncate().distance(you), s.color.alpha()))
+            .min_by(|a, b| a.0.total_cmp(&b.0));
+        if let Some((d, a)) = nearest {
+            info!("PREVIEWS {} nearest {:.0} alpha {:.2}", previews.iter().count(), d, a);
+        }
+    }
+    // Each live fleet: where its leader is, and how far each escort sits
+    // from its slot (turned with the leader), and what it is doing.
+    let mut ids: Vec<u32> = fleets.iter().map(|(_, m, ..)| m.fleet).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    for id in ids {
+        // An escort forms up on you.
+        if let (Some((_, _, b, _, _, true)), Ok(you)) = (fleets.iter().find(|(_, m, ..)| m.fleet == id), player.single()) {
+            let parts: Vec<String> = fleets
+                .iter()
+                .filter(|(_, m, ..)| m.fleet == id)
+                .map(|(tf, m, b, ..)| {
+                    let want = you.translation.truncate() + (you.rotation * m.slot.extend(0.0)).truncate();
+                    format!("{:?} off={:.0}", b, tf.translation.truncate().distance(want))
+                })
+                .collect();
+            let _ = b;
+            info!("ESCORT {id}: {}", parts.join(" | "));
+            continue;
+        }
+        let members: Vec<_> = fleets.iter().filter(|(_, m, ..)| m.fleet == id).collect();
+        let Some((lead_tf, _, lead_b, _, _, _)) = members.iter().find(|(_, m, ..)| m.leader) else {
+            info!("FLEET {id}: no live leader, {} members", members.len());
+            continue;
+        };
+        let lead = lead_tf.translation.truncate();
+        let parts: Vec<String> = members
+            .iter()
+            .filter(|(_, m, ..)| !m.leader)
+            .map(|(tf, m, b, st, civ, _)| {
+                let want = lead + (lead_tf.rotation * m.slot.extend(0.0)).truncate();
+                let off = tf.translation.truncate().distance(want);
+                format!("{}{:?} off={:.0}{}", if *civ { "civ " } else { "" }, b, off, if st.is_destroyed { " DEAD" } else { "" })
+            })
+            .collect();
+        info!("FLEET {id}: lead {:?} at ({:.0},{:.0}) | {}", lead_b, lead.x, lead.y, parts.join(" | "));
+    }
 }
 
 /// Name every sprite sitting near the ship's origin, under DEPTHS_WHATSTHERE=1.
@@ -247,6 +334,151 @@ impl Plugin for DemoPlugin {
         }
         if std::env::var("DEPTHS_CENSUS").ok().as_deref() == Some("1") {
             app.add_systems(Update, census);
+        }
+        // DEPTHS_ZOOM=<z>: hold the camera at this zoom (scripted key holds
+        // don't reach the zoom in an offscreen run). 1.8 is the default; 20
+        // the furthest out.
+        if let Some(z) = std::env::var("DEPTHS_ZOOM").ok().and_then(|v| v.parse::<f32>().ok()) {
+            app.add_systems(Update, move |mut cam: ResMut<crate::camera::CameraState>| {
+                cam.zoom = z.clamp(cam.min_zoom, cam.max_zoom);
+                cam.user_zoomed = true;
+            });
+        }
+        // DEPTHS_START_SYSTEM=<where>[:fleet] -- jump there a few seconds in.
+        // <where> is a system id, a faction's type name (its capital: the
+        // galaxy is rolled fresh each run, so ids don't carry over), or
+        // "haunt" (the Shepherd's system). With ":fleet", then park 12 km
+        // off one of its fleets (the arrival berth is kept clear of them).
+        if let Ok(spec) = std::env::var("DEPTHS_START_SYSTEM") {
+            let (place, to_fleet) = match spec.split_once(':') {
+                Some((p, rest)) => (p.to_string(), rest.to_string()),
+                None => (spec.clone(), String::new()),
+            };
+            {
+                app.add_systems(
+                    Update,
+                    (move |time: Res<Time<Real>>,
+                           mut stage: Local<u8>,
+                           mut since: Local<f32>,
+                           mut target: Local<Option<u32>>,
+                           game_state: Res<State<crate::states::GameState>>,
+                           galaxy: Res<crate::celestial::resources::GalaxyMap>,
+                           mut jumps: MessageWriter<crate::celestial::events::WarpJumpStarted>,
+                           sim: Res<crate::ai_ship::components::WorldSimulation>,
+                           streaming: Res<crate::celestial::resources::SystemStreamingManager>,
+                           mut ship: Query<(&mut Transform, &mut crate::components::Velocity, Option<&crate::ship::collision::Collider>), With<crate::components::Ship>>,
+                           worlds: Query<(&Transform, &crate::celestial::components::CelestialBody), (With<crate::celestial::capital_worlds::CapitalWorld>, Without<crate::components::Ship>)>,
+                           faction_stations: Res<crate::diplomacy::stations::FactionStations>,
+                           berths: crate::diplomacy::stations::StationBerths| {
+                        *since += time.delta_secs();
+                        // Only runs in flight, so a changed state means it docked.
+                        let away = game_state.is_changed();
+                        if target.is_none() && !galaxy.systems.is_empty() {
+                            *target = place.parse::<u32>().ok().or_else(|| {
+                                if place == "haunt" {
+                                    galaxy.systems.iter().find(|s| s.haunt == Some(crate::ai_ship::components::AiShipType::Shepherd)).map(|s| s.id)
+                                } else {
+                                    crate::celestial::territory::TERRITORIAL
+                                        .iter()
+                                        .find(|f| format!("{f:?}") == place)
+                                        .and_then(|f| crate::celestial::territory::capital_of(&galaxy, *f))
+                                }
+                            });
+                            if target.is_none() {
+                                warn!("DEPTHS_START_SYSTEM: no system matches {place:?}");
+                                *stage = 2;
+                            }
+                        }
+                        let Some(id) = *target else { return };
+                        match *stage {
+                            0 if *since >= 3.0 => {
+                                info!("DEPTHS_START_SYSTEM: jumping to system {id}");
+                                jumps.write(crate::celestial::events::WarpJumpStarted {
+                                    target: crate::celestial::resources::GalaxyWarpTarget::System(id),
+                                });
+                                *stage = match to_fleet.as_str() {
+                                    "fleet" => 1,
+                                    "capital" => 3,
+                                    _ => 2,
+                                };
+                                *since = 0.0;
+                            }
+                            1 if *since >= 2.0 && streaming.loaded_system == Some(id) => {
+                                *stage = 2;
+                                let alive = |f: &crate::ai_ship::fleet::SimFleet| {
+                                    sim.ships.iter().any(|s| s.fleet == f.id && s.behavior != crate::ai_ship::components::SimBehavior::Dead)
+                                };
+                                let fleets: Vec<_> = sim.fleets.iter().filter(|f| f.system_id == id && alive(f)).collect();
+                                let Some(fleet) = fleets.get((time.elapsed_secs() * 1000.0) as usize % fleets.len().max(1)) else {
+                                    warn!("DEPTHS_START_SYSTEM: system {id} has no fleets");
+                                    return;
+                                };
+                                if let Ok((mut tf, mut v, _)) = ship.single_mut() {
+                                    let at = fleet.position + Vec2::new(12_000.0, 0.0);
+                                    tf.translation.x = at.x;
+                                    tf.translation.y = at.y;
+                                    v.0 = Vec2::ZERO;
+                                    info!("DEPTHS_START_SYSTEM: parked 12 km off a {:?} {:?} (fleet {})", fleet.faction, fleet.kind, fleet.id);
+                                }
+                            }
+                            // ":capital": the capital world's night side, near its starport.
+                            3 if *since >= 3.0 && streaming.loaded_system == Some(id) => {
+                                let Some((world, body)) = worlds.iter().next() else {
+                                    if *since > 10.0 {
+                                        warn!("DEPTHS_START_SYSTEM: system {id} has no capital world");
+                                        *stage = 2;
+                                    }
+                                    return;
+                                };
+                                *stage = 4;
+                                *since = 0.0;
+                                let star = galaxy.systems.iter().find(|s| s.id == id).map_or(Vec2::ZERO, |s| s.local_center);
+                                let at = world.translation.truncate();
+                                let out = (at - star).normalize_or(Vec2::X);
+                                // Beside its starport (in docking reach), which
+                                // stands off the world's night side.
+                                let park = match faction_stations.post.filter(|p| p.0 == id) {
+                                    Some((_, port, extent)) => port + out.perp() * (extent + 1_500.0),
+                                    None => at + out * (body.radius + 2_500.0) + out.perp() * 4_000.0,
+                                };
+                                if let Ok((mut tf, mut v, _)) = ship.single_mut() {
+                                    tf.translation.x = park.x;
+                                    tf.translation.y = park.y;
+                                    v.0 = Vec2::ZERO;
+                                    info!("DEPTHS_START_SYSTEM: parked on the night side of {}", body.name);
+                                }
+                            }
+                            // Then onto the starport's berth once it has
+                            // materialised (the spot above is only a guess at
+                            // where its platforms aren't), and hold there the
+                            // way a player keeps station, until docking. The
+                            // berth trails the station, so a ship left to
+                            // itself would be out of docking reach in seconds.
+                            4 | 5 => {
+                                if away || (*stage == 5 && *since > 60.0) {
+                                    *stage = 2;
+                                    return;
+                                }
+                                let Ok((mut tf, mut v, collider)) = ship.single_mut() else { return };
+                                if let Some(at) = berths.berth_for(None, &tf, collider) {
+                                    tf.translation.x = at.x;
+                                    tf.translation.y = at.y;
+                                    v.0 = Vec2::ZERO;
+                                    if *stage == 4 {
+                                        *stage = 5;
+                                        *since = 0.0;
+                                        info!("DEPTHS_START_SYSTEM: holding at the starport's berth");
+                                    }
+                                } else if *since > 10.0 {
+                                    *stage = 2;
+                                }
+                            }
+                            _ => {}
+                        }
+                    })
+                    .run_if(in_state(crate::states::GameState::Exploring)),
+                );
+            }
         }
         if !full_demo && !skip_menu && !move_test && build_tab.is_none() {
             return;
@@ -666,7 +898,11 @@ impl Plugin for CapturePlugin {
             info!("DEPTHS_KEYS: {} scripted presses", events.len());
             app.insert_resource(ScriptedKeys { events, ..default() }).add_systems(
                 PreUpdate,
-                play_scripted_keys.after(bevy::input::InputSystems),
+                // Before the F token is armed from the keyboard, or a
+                // scripted F lands a frame the docking handlers never see.
+                play_scripted_keys
+                    .after(bevy::input::InputSystems)
+                    .before(crate::resources::refresh_interact_press),
             );
         }
         if std::env::var("DEPTHS_OFFSCREEN").ok().as_deref() == Some("1") {

@@ -540,15 +540,38 @@ pub struct MarketEvents {
     pub active: Vec<MarketEvent>,
     /// Seconds until the next shortage roll.
     pub next_roll: f32,
+    /// Docked at a faction station: its name and the terms your standing
+    /// gets you (diplomacy::stations). None at an ordinary station.
+    pub dock_terms: Option<DockTerms>,
+}
+
+/// What a faction station charges you, from your standing with it.
+#[derive(Clone, Debug)]
+pub struct DockTerms {
+    /// Whose station; None for a free port (an ownerless station).
+    pub faction: Option<crate::ai_ship::components::AiShipType>,
+    pub name: String,
+    /// Your standing with them, as the diplomacy window names it.
+    pub standing: &'static str,
+    /// Multiplies what you pay: goods and services.
+    pub buy: f32,
+    /// Multiplies what they pay you for cargo.
+    pub sell: f32,
 }
 
 impl Default for MarketEvents {
     fn default() -> Self {
-        Self { active: Vec::new(), next_roll: 120.0 }
+        Self { active: Vec::new(), next_roll: 120.0, dock_terms: None }
     }
 }
 
 impl MarketEvents {
+    /// What services cost at the station you're docked at, on top of its
+    /// own discounts: your standing's terms at a faction station, else 1.
+    pub fn service_multiplier(&self) -> f32 {
+        self.dock_terms.as_ref().map_or(1.0, |t| t.buy)
+    }
+
     pub fn multiplier(&self, station_idx: usize, item: ItemType) -> f32 {
         self.active
             .iter()
@@ -560,9 +583,13 @@ impl MarketEvents {
 
 /// Sell price including any active shortage at this station.
 pub fn live_item_price(events: &MarketEvents, station_idx: usize, item: ItemType) -> u32 {
-    ((station_item_price(station_idx, item) as f32) * events.multiplier(station_idx, item))
-        .round()
-        .max(1.0) as u32
+    let terms = events.dock_terms.as_ref().map_or(1.0, |t| t.sell);
+    (shelf_price(events, station_idx, item) * terms).round().max(1.0) as u32
+}
+
+/// The station's own sell price with any shortage, before your terms.
+fn shelf_price(events: &MarketEvents, station_idx: usize, item: ItemType) -> f32 {
+    (station_item_price(station_idx, item) as f32) * events.multiplier(station_idx, item)
 }
 
 /// Per-unit BUY price at a station: 1.5x its (live) sell price. The
@@ -572,8 +599,12 @@ pub fn live_item_price(events: &MarketEvents, station_idx: usize, item: ItemType
 /// Shortages raise the local buy price too: scarce goods cost more
 /// everywhere they're scarce.
 pub fn live_item_buy_price(events: &MarketEvents, station_idx: usize, item: ItemType) -> u32 {
-    let sell = live_item_price(events, station_idx, item);
-    (sell * 3 / 2).max(sell + 2)
+    let sell = shelf_price(events, station_idx, item).round().max(1.0) as u32;
+    let base = (sell * 3 / 2).max(sell + 2);
+    let terms = events.dock_terms.as_ref().map_or(1.0, |t| t.buy);
+    // Never below what they'd pay you for it, or buy-and-resell at one
+    // counter would print money on good terms.
+    ((base as f32 * terms).round() as u32).max(live_item_price(events, station_idx, item) + 1)
 }
 
 #[derive(Resource, Serialize, Deserialize, Clone)]
@@ -1581,6 +1612,17 @@ pub struct SystemSaveData {
     /// celestial::resources::LootedPois). Empty on older saves.
     #[serde(default)]
     pub looted_pois: Vec<u32>,
+    /// Who holds it now, and whether it's their capital: borders move
+    /// (celestial::territory). None on older saves: the generated owner stands.
+    #[serde(default)]
+    pub held: Option<HeldBy>,
+}
+
+/// A system's owner as saved.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct HeldBy {
+    pub owner: Option<crate::ai_ship::components::AiShipType>,
+    pub capital: bool,
 }
 
 #[derive(Resource, Serialize, Deserialize)]
@@ -1629,6 +1671,26 @@ pub struct SaveData {
     /// Standing with the contract factions. The starting standing on older saves.
     #[serde(default)]
     pub reputation: crate::contracts::FactionReputation,
+    /// Your standing with each AI faction (diplomacy). None on older saves,
+    /// which load with the lore's starting standing.
+    #[serde(default)]
+    pub standing: Option<crate::diplomacy::FactionStanding>,
+    /// Every faction ship in the galaxy: class, position, health, damage,
+    /// alive or dead. None on older saves, which roll their fleets afresh.
+    #[serde(default)]
+    pub world: Option<crate::ai_ship::components::SavedWorld>,
+    /// Systems whose faction station you destroyed.
+    #[serde(default)]
+    pub destroyed_stations: Vec<u32>,
+    /// The border war's standing: every contested system's shares.
+    #[serde(default)]
+    pub border_war: Option<crate::celestial::territory::BorderWar>,
+    /// The people you've met at faction starports, and what they think of you.
+    #[serde(default)]
+    pub contacts: Option<crate::diplomacy::contacts::Contacts>,
+    /// Work you've taken from contacts.
+    #[serde(default)]
+    pub jobs: Option<crate::diplomacy::jobs::Jobs>,
 }
 
 impl Default for SaveData {
@@ -1662,6 +1724,12 @@ impl Default for SaveData {
             fuel: None,
             contracts: crate::contracts::ContractState::default(),
             reputation: crate::contracts::FactionReputation::default(),
+            standing: None,
+            world: None,
+            destroyed_stations: Vec::new(),
+            border_war: None,
+            contacts: None,
+            jobs: None,
         }
     }
 }
@@ -1889,6 +1957,7 @@ mod save_tests {
             last_updated: 12.0,
             resource_fraction_remaining: 0.5,
             looted_pois: vec![0, 2],
+            held: Some(HeldBy { owner: Some(crate::ai_ship::components::AiShipType::TerranHegemony), capital: true }),
         }];
         save.uncharted_galaxy_pos = Some(Vec2::new(1_200_000.0, -40_000.0));
         save.fuel = Some(321.0);
@@ -1916,7 +1985,7 @@ mod save_tests {
     fn a_save_from_before_them_still_loads() {
         let mut json = serde_json::to_value(with_new_fields()).unwrap();
         let obj = json.as_object_mut().unwrap();
-        for key in ["uncharted_galaxy_pos", "fuel", "contracts", "reputation"] {
+        for key in ["uncharted_galaxy_pos", "fuel", "contracts", "reputation", "standing", "world", "destroyed_stations"] {
             assert!(obj.remove(key).is_some(), "{key} is not in the save under that name");
         }
         obj["galaxy_systems"][0].as_object_mut().unwrap().remove("looted_pois");

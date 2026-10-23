@@ -2,7 +2,8 @@ use bevy::prelude::*;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
-use crate::ai_ship::components::{faction_power, AiShipType};
+#[cfg(test)]
+use crate::ai_ship::components::faction_power;
 use super::components::StarSystemMember;
 use super::resources::{GalaxyMap, StarSystemDef, StarSystemInfo, SystemDiscovery, SystemStreamingManager};
 
@@ -81,6 +82,8 @@ pub fn haven_def() -> StarSystemDef {
         local_center: HAVEN_LOCAL_CENTER,
         seed: HAVEN_SEED,
         faction: None,
+        capital: false,
+        haunt: None,
         danger_tier: 0.0,
         discovery: SystemDiscovery::Visited,
         last_updated: 0.0,
@@ -159,33 +162,13 @@ const CONSTELLATION_SPREAD: f32 = 520_000.0;
 const CONSTELLATION_REACH: f32 = 0.82;
 const MAX_PLACEMENT_ATTEMPTS: u32 = 200;
 
-/// All 10 factions ordered weakest-to-strongest by faction_power. Used only
-/// to bias WHICH systems are near vs. far (a placement heuristic for
-/// pacing) — danger_tier itself is fixed per system once assigned, not a
-/// continuous distance formula (that's exactly what this feature replaces).
-fn faction_roster() -> Vec<AiShipType> {
-    vec![
-        AiShipType::TheSilence,
-        AiShipType::RecursiveKingdom,
-        AiShipType::BrokenChoir,
-        AiShipType::StellarPreserve,
-        AiShipType::SynthesisCollective,
-        AiShipType::GildedThrone,
-        AiShipType::CorpseStars,
-        AiShipType::TerranHegemony,
-        AiShipType::EternalHegemony,
-        AiShipType::Shepherd,
-    ]
-}
-
 /// Generates the persistent galaxy layout. System 0 is always Haven's home
 /// system (fixed at galaxy-space origin, safe, pre-visited). The rest are
 /// scattered via rejection sampling with a minimum separation so the map
-/// doesn't clump, then sorted by distance from Haven so faction assignment
-/// can bias weak-near/strong-far for pacing.
+/// doesn't clump, then sorted by distance from Haven so territory
+/// (celestial::territory) can deal capitals weak-near/strong-far for pacing.
 pub fn generate_galaxy_map(galaxy_seed: u64) -> GalaxyMap {
     let mut rng = StdRng::seed_from_u64(galaxy_seed);
-    let roster = faction_roster();
 
     // Constellations, not an even scatter. The old layout sampled uniform
     // area density across the whole disc with a flat 400,000 separation,
@@ -264,7 +247,6 @@ pub fn generate_galaxy_map(galaxy_seed: u64) -> GalaxyMap {
 
     for (rank, pos) in non_haven.into_iter().enumerate() {
         let id = (rank + 1) as u32;
-        let faction = roster[(rank * roster.len()) / SYSTEM_COUNT];
 
         let mut local_center = Vec2::ZERO;
         for _ in 0..MAX_PLACEMENT_ATTEMPTS {
@@ -285,14 +267,18 @@ pub fn generate_galaxy_map(galaxy_seed: u64) -> GalaxyMap {
             galaxy_pos: pos,
             local_center,
             seed: rng.gen::<u64>(),
-            faction: Some(faction),
-            danger_tier: faction_power(faction),
+            // Dealt by celestial::territory::assign_territory below.
+            faction: None,
+            capital: false,
+            haunt: None,
+            danger_tier: 0.0,
             discovery: SystemDiscovery::Unknown,
             last_updated: 0.0,
             resource_fraction_remaining: 1.0,
         });
     }
 
+    super::territory::assign_territory(&mut systems);
     GalaxyMap { systems, galaxy_seed }
 }
 
@@ -659,8 +645,8 @@ mod galaxy_tests {
             let map = generate_galaxy_map(seed);
             let mut seen = [0usize; (MAX_TIER as usize) + 1];
             for sys in &map.systems {
-                let danger = sys.faction.map(faction_power).unwrap_or(0.0);
-                seen[tier_for_danger(danger) as usize] += 1;
+                // The system's own danger: its owner's, or its haunting boss's.
+                seen[tier_for_danger(sys.danger_tier) as usize] += 1;
             }
             for tier in 0..=MAX_TIER as usize {
                 assert!(

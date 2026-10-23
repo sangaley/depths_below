@@ -154,7 +154,7 @@ pub fn move_detached_sections(
                 let pos = transform.translation.truncate();
                 super::spawn_explosion(&mut commands, &fx, pos, 90.0, Color::srgb(1.0, 0.5, 0.1));
 
-                commands.entity(entity).despawn();
+                commands.entity(entity).try_despawn();
                 // This section is gone; don't fall through to the ammo
                 // cook-off below and queue a second despawn for the same
                 // entity. A severed reactor section usually has ammo aboard
@@ -174,7 +174,7 @@ pub fn move_detached_sections(
                 notification_type: NotificationType::Warning,
                 duration: 2.0,
             });
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
         }
     }
 }
@@ -206,7 +206,7 @@ pub fn debris_collision(
                 super::spawn_floating_damage(&mut commands, section_pos, impact_damage, Color::srgb(0.7, 0.5, 0.2));
 
                 // Destroy the debris on impact
-                commands.entity(section_entity).despawn();
+                commands.entity(section_entity).try_despawn();
                 break;
             }
         }

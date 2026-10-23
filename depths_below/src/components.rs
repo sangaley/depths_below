@@ -2368,6 +2368,57 @@ pub struct DockingMenuSelection(pub usize, pub usize);
 #[derive(Component)]
 pub struct DockingServiceItem(pub usize);
 
+/// The station window's tabs. Faction starports show Bar and Comm
+/// directory beside the Market; free ports show the Market only.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum DockTab {
+    #[default]
+    Market,
+    Bar,
+    Comm,
+}
+
+impl DockTab {
+    pub const ALL: [DockTab; 3] = [DockTab::Market, DockTab::Bar, DockTab::Comm];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            DockTab::Market => "Market",
+            DockTab::Bar => "Bar",
+            DockTab::Comm => "Comm directory",
+        }
+    }
+}
+
+/// On the station window: which tab is open, whether tabs exist here (a
+/// faction starport), and the comm directory's selected contact.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct DockTabState {
+    pub tab: DockTab,
+    pub tabs: bool,
+    pub contact: usize,
+}
+
+/// The card around a service row (DockingServiceItem of the same index).
+#[derive(Component, Clone, Copy, Debug)]
+pub struct DockingRowCard(pub usize);
+
+/// A tab's content panel in the station window.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct DockTabPanel(pub DockTab);
+
+/// A tab's button in the station window's tab bar.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct DockTabButton(pub DockTab);
+
+/// The station window's key-hint line, which changes with the tab.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct DockFooterHint;
+
+/// The station window's cargo list, redrawn as the hold changes.
+#[derive(Component)]
+pub struct DockHoldList;
+
 // ============================================================================
 // ABYSSAL HORROR COMPONENTS
 // ============================================================================

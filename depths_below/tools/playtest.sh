@@ -47,30 +47,42 @@ disown "$WAKE" 2>/dev/null || true
 sleep 3
 
 echo "[playtest] running '$LABEL' for ${SECS}s"
+# DEPTHS_MUTE=1: playtests run silent; pass DEPTHS_MUTE=0 after it to hear one.
 # caffeinate -di: without it the display sleeps during a long session and the
 # render target stops producing content -- every captured frame comes back
 # solid black and looks exactly like a rendering regression. It is not.
 # `env` is required: caffeinate treats the first token as its command, so
 # inline VAR=value assignments would be swallowed.
-caffeinate -di env DEPTHS_SKIP_MENU=1 DEPTHS_SHOTS=6 DEPTHS_OFFSCREEN=1 DEPTHS_SHOTS_DIR="$OUT" "$@" \
+caffeinate -di env DEPTHS_MUTE=1 DEPTHS_SKIP_MENU=1 DEPTHS_SHOTS=6 DEPTHS_OFFSCREEN=1 DEPTHS_SHOTS_DIR="$OUT" "$@" \
   cargo run >"$LOG" 2>&1 &
 RUNNER=$!
 disown "$RUNNER" 2>/dev/null || true   # keep job control quiet on kill
 
-# The binary is a child of cargo; find it so we can stop exactly that one.
+# Find the game among what this script started -- never by name: matching
+# 'target/debug/depths_below' by name found whichever game was oldest on the
+# machine, the one the user was playing, and killed it at the end. On macOS
+# caffeinate runs its command in its own process and `cargo run` execs the
+# binary, so the pid started below usually IS the game; check it as well as
+# everything under it.
+descendants() { local c; for c in $(pgrep -P "$1"); do echo "$c"; descendants "$c"; done; }
 GAME=""
-for _ in $(seq 1 40); do
+for _ in $(seq 1 600); do
   sleep 1
-  GAME="$(pgrep -P "$RUNNER" -f 'target/debug/depths_below' | head -1)"
+  for pid in "$RUNNER" $(descendants "$RUNNER"); do
+    case "$(ps -o command= -p "$pid" 2>/dev/null)" in
+      target/debug/depths_below*|*/target/debug/depths_below*) GAME="$pid"; break ;;
+    esac
+  done
   [ -n "$GAME" ] && break
 done
-[ -z "$GAME" ] && GAME="$(pgrep -f 'target/debug/depths_below' | head -1)"
+[ -z "$GAME" ] && echo "[playtest] never saw the game start; stopping only what this script began"
 
 START=$(date +%s)
 sleep "$SECS"
 ALIVE=$(( $(date +%s) - START ))
 
 if [ -n "$GAME" ]; then kill "$GAME" 2>/dev/null; sleep 2; kill -9 "$GAME" 2>/dev/null; fi
+for pid in $(descendants "$RUNNER"); do kill "$pid" 2>/dev/null; done
 kill "$RUNNER" 2>/dev/null; wait "$RUNNER" 2>/dev/null
 
 kill "$WAKE" 2>/dev/null

@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::combat::shields::ShipShield;
 use crate::components::*;
@@ -33,12 +33,24 @@ pub fn update_ai_power(
     module_query: Query<(&Module, &OwnedByAiShip, Option<&ModuleEfficiency>)>,
     hull_query: Query<(&HullSegment, &OwnedByAiShip)>,
 ) {
+    // Sort every block by its ship once. Walking every block in the world
+    // once PER SHIP cost ships x blocks a frame: nothing with eight small
+    // hulls, a stall with eight capitals.
+    let mut by_ship: HashMap<Entity, (Vec<(&Module, Option<&ModuleEfficiency>)>, Vec<IVec2>)> = HashMap::new();
+    for (module, owned, eff) in module_query.iter() {
+        by_ship.entry(owned.root).or_default().0.push((module, eff));
+    }
+    for (hull, owned) in hull_query.iter() {
+        by_ship.entry(owned.root).or_default().1.push(hull.grid_position);
+    }
+
     for (ai_root, ship_type, shield) in ai_ships.iter() {
-        let mut conductive_tiles: HashSet<IVec2> = HashSet::new();
+        let Some((modules, hull)) = by_ship.get(&ai_root) else { continue };
+        let mut conductive_tiles: HashSet<IVec2> = hull.iter().copied().collect();
         let mut power_sources: Vec<IVec2> = Vec::new();
 
-        for (module, owned, _eff) in module_query.iter() {
-            if owned.root != ai_root || module.health <= 0.0 {
+        for (module, _eff) in modules {
+            if module.health <= 0.0 {
                 continue;
             }
             let footprint = crate::building::footprints::footprint_override(module.module_type);
@@ -49,14 +61,7 @@ pub fn update_ai_power(
                 conductive_tiles.insert(*cell);
             }
             if module.power_generation > 0.0 {
-                for cell in cells {
-                    power_sources.push(cell);
-                }
-            }
-        }
-        for (hull, owned) in hull_query.iter() {
-            if owned.root == ai_root {
-                conductive_tiles.insert(hull.grid_position);
+                power_sources.extend(cells);
             }
         }
 
@@ -86,11 +91,11 @@ pub fn update_ai_power(
         if shield.is_some_and(|s| s.enabled) {
             total_consumption += crate::combat::shields::SHIELD_UPKEEP_POWER;
         }
-        for (module, owned, eff) in module_query.iter() {
-            if owned.root != ai_root || !module.is_active {
+        for (module, eff) in modules {
+            if !module.is_active {
                 continue;
             }
-            let efficiency = effective_efficiency(module, eff);
+            let efficiency = effective_efficiency(module, *eff);
             if module.power_generation > 0.0 {
                 total_generation += module.power_generation * efficiency * super::components::power_output_multiplier(*ship_type);
                 continue;

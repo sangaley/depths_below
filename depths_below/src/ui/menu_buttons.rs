@@ -515,7 +515,10 @@ pub fn apply_audio_settings(settings: Res<GameSettings>, mut global: ResMut<Glob
     if !settings.is_changed() {
         return;
     }
-    let effective = if settings.muted { 0.0 } else { settings.master_volume };
+    // DEPTHS_MUTE=1: automated runs are silent whatever the saved settings
+    // say, so a test playing in the background never reaches the speakers.
+    let forced = std::env::var("DEPTHS_MUTE").ok().as_deref() == Some("1");
+    let effective = if settings.muted || forced { 0.0 } else { settings.master_volume };
     global.volume = Volume::Linear(effective);
 }
 

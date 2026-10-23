@@ -74,7 +74,7 @@ pub fn ai_weapon_fire_system(
         // so every AI shot resolved as unspecialised regardless.
         Option<&crate::building::customization::tuning::SelectedAmmo>,
     )>,
-    player_query: Query<&Transform, With<Ship>>,
+    player_query: Query<(Entity, &Transform), With<Ship>>,
     target_transform_query: Query<&Transform>,
     // Ship hit detection (combat/projectiles.rs) centers on the shield's
     // world_center — the blocks' centroid, not the root, since the root is
@@ -88,6 +88,7 @@ pub fn ai_weapon_fire_system(
     // Target velocity, for lead prediction. Player and AI ships both carry it.
     velocity_query: Query<&Velocity>,
     mut fired_events: MessageWriter<WeaponFired>,
+    standing: Res<crate::diplomacy::FactionStanding>,
 ) {
     // DEPTHS_MOVETEST_ENEMY spawns a target dummy that's shot-free by
     // default (for testing movement/damage-model in isolation). Set
@@ -98,7 +99,7 @@ pub fn ai_weapon_fire_system(
         return;
     }
 
-    let player_pos = player_query.single().ok().map(|t| t.translation.truncate());
+    let player = player_query.single().ok();
 
     for (ai_entity, ai_transform, ship_type, behavior, mut ai_target, children, ai_power, state) in ai_ships.iter_mut() {
         if !ship_may_fire(behavior, state) {
@@ -113,6 +114,23 @@ pub fn ai_weapon_fire_system(
         if ai_power.is_some_and(|p| p.power_balance < 0.0) {
             continue;
         }
+
+        // Standing: a faction that isn't Hostile holds fire on you unless you
+        // shot first (the brain applies the same rule when picking targets;
+        // this also covers the no-target fallback below).
+        let may_shoot_player = player.is_some_and(|(p, _)| {
+            standing.attacks_player(*ship_type)
+                || state.last_attacker == Some(p)
+                // Its fleet (or a ship of its faction it answered) is
+                // fighting you: it fights you too.
+                || (state.alert_timer > 0.0 && state.alert_target == Some(p))
+        });
+        if !may_shoot_player && ai_target.entity.is_some() && ai_target.entity == player.map(|(p, _)| p) {
+            continue;
+        }
+        let player_pos = player
+            .filter(|_| may_shoot_player)
+            .map(|(_, t)| t.translation.truncate());
 
         // Centre-of-mass of whoever the brain picked, re-read fresh every
         // frame. Falls back to the last-known snapshot (target despawned
@@ -211,13 +229,16 @@ pub fn ai_weapon_fire_system(
                 continue;
             }
 
-            // Only fire if the target is within weapon range
-            if dist_to_target > weapon.range {
+            // Each gun shoots from where it actually is...
+            let muzzle = weapon_gt.translation().truncate();
+
+            // ...and is in range from there. Measured from the ship's centre
+            // this was the same thing on a small hull, but a capital or a
+            // station is kilometres across, and its outer batteries sat
+            // silent with the enemy well inside their reach.
+            if dist_to_target.min(muzzle.distance(centroid)) > weapon.range {
                 continue;
             }
-
-            // Each gun shoots from where it actually is.
-            let muzzle = weapon_gt.translation().truncate();
 
             // ...and only if its mount can bear. The player's guns have always
             // been held to this (is_in_firing_arc in new_projectiles); the AI
@@ -385,7 +406,16 @@ const DISTRESS_COOLDOWN: f32 = 12.0;
 pub fn ai_distress_system(
     time: Res<Time>,
     mut ai_ships: Query<
-        (Entity, &Transform, &AiShipType, &AiShipBehavior, &AiShipTarget, &mut AiShipState),
+        (
+            Entity,
+            &Transform,
+            &AiShipType,
+            &AiShipBehavior,
+            &AiShipTarget,
+            &mut AiShipState,
+            Option<&super::fleet::FleetMember>,
+            Has<super::fleet::CivilianHull>,
+        ),
         With<AiShip>,
     >,
     player_query: Query<Entity, With<Ship>>,
@@ -394,11 +424,39 @@ pub fn ai_distress_system(
     let dt = time.delta_secs();
     let player = player_query.single().ok();
 
+    // A fleet fights as one: when any member is fighting, or is being shot
+    // at, the rest of its fighting ships are told who, wherever they are in
+    // the formation. No cooldown and no "in trouble" bar -- an escort doesn't
+    // wait for its capital to be hurt. (fleet, target)
+    let mut fleet_calls: Vec<(u32, Entity)> = Vec::new();
+    for (_, _, _, behavior, target, state, member, _) in ai_ships.iter() {
+        let Some(m) = member else { continue };
+        if state.is_destroyed { continue; }
+        let call = match (behavior, target.entity) {
+            (AiShipBehavior::Engaging, Some(t)) => Some(t),
+            _ if state.last_hit_timer < 5.0 => state.last_attacker,
+            _ => None,
+        };
+        if let Some(t) = call {
+            if !fleet_calls.iter().any(|(f, _)| *f == m.fleet) {
+                fleet_calls.push((m.fleet, t));
+            }
+        }
+    }
+
     // PASS 1 — collect fresh broadcasts: a fighting ship, off cooldown, that's
     // actually in trouble (recently hit or hull hurt) and has a target.
     let mut broadcasts: Vec<(Entity, AiShipType, Vec2, Entity)> = Vec::new();
-    for (e, tf, ftype, behavior, target, state) in ai_ships.iter() {
+    for (e, tf, ftype, behavior, target, state, _, civilian) in ai_ships.iter() {
         if state.is_destroyed { continue; }
+        // A civilian hull doesn't fight, but it does call for help when
+        // it's hit: its escort, its faction's ships, and a trader's ally.
+        if civilian && state.distress_cooldown <= 0.0 && state.last_hit_timer < 5.0 {
+            if let Some(attacker) = state.last_attacker {
+                broadcasts.push((e, *ftype, tf.translation.truncate(), attacker));
+                continue;
+            }
+        }
         if *behavior != AiShipBehavior::Engaging { continue; }
         if state.distress_cooldown > 0.0 { continue; }
         if !faction_fights(*ftype) { continue; }
@@ -411,7 +469,7 @@ pub fn ai_distress_system(
     // PASS 2 — tick every ship's timers, stamp caller cooldowns, and alert
     // nearby same-faction fighters onto the caller's target.
     let mut player_backup_called = false;
-    for (e, tf, ftype, _behavior, _target, mut state) in ai_ships.iter_mut() {
+    for (e, tf, ftype, _behavior, _target, mut state, member, civilian) in ai_ships.iter_mut() {
         state.alert_timer = (state.alert_timer - dt).max(0.0);
         state.distress_cooldown = (state.distress_cooldown - dt).max(0.0);
         if state.is_destroyed { continue; }
@@ -420,7 +478,15 @@ pub fn ai_distress_system(
             state.distress_cooldown = DISTRESS_COOLDOWN;
         }
 
-        if !faction_fights(*ftype) { continue; }
+        if !faction_fights(*ftype) || civilian { continue; }
+        // A fleet's call reaches all of it, before any stranger's.
+        if let Some(&(_, t)) = member.and_then(|m| fleet_calls.iter().find(|(f, _)| *f == m.fleet)) {
+            if t != e {
+                state.alert_target = Some(t);
+                state.alert_timer = state.alert_timer.max(ALERT_DURATION);
+                continue;
+            }
+        }
         let pos = tf.translation.truncate();
         // Whether this ship was already answering a call before this frame —
         // used so the "reinforcements!" warning fires once per NEW recruit,
@@ -430,9 +496,12 @@ pub fn ai_distress_system(
         // Answer the nearest same-faction call within earshot (never one's own).
         let mut nearest: Option<(f32, Entity)> = None;
         for (be, bfaction, bpos, btgt) in &broadcasts {
-            if *be == e || *bfaction != *ftype { continue; }
+            if *be == e || !ftype.defends(*bfaction) { continue; }
             let d = pos.distance(*bpos);
-            if d > DISTRESS_RADIUS { continue; }
+            // A trader's ally answers from twice as far: it's what the
+            // trader pays it for.
+            let reach = if *bfaction != *ftype { DISTRESS_RADIUS * 2.0 } else { DISTRESS_RADIUS };
+            if d > reach { continue; }
             if nearest.map_or(true, |(nd, _)| d < nd) {
                 nearest = Some((d, *btgt));
             }
@@ -453,6 +522,17 @@ pub fn ai_distress_system(
             duration: 3.0,
         });
     }
+}
+
+/// Whether a hit from `attacker` names it as the ship's attacker: never the
+/// ship itself or a friend, always the player (who has no faction here) or
+/// anything else that isn't an AI ship.
+fn counts_as_attacker(target: Entity, target_faction: Option<AiShipType>, attacker: Entity, attacker_faction: Option<AiShipType>) -> bool {
+    attacker != target
+        && match (target_faction, attacker_faction) {
+            (Some(own), Some(theirs)) => factions_hostile(own, theirs),
+            _ => true,
+        }
 }
 
 /// Process damage to AI ships — per-module penetration
@@ -479,8 +559,19 @@ pub fn process_ai_ship_damage_system(
         // attributable damage ticks (fire DoT, self-detonation) rather
         // than clearing it — a ship mid-burn from an earlier shot should
         // still remember who fired it.
-        if event.attacker.is_some() {
-            state.last_attacker = event.attacker;
+        //
+        // Only an enemy counts. A fleet-mate's stray round, a blast that
+        // caught its own side, or two hulls in formation scraping each
+        // other named a friend as the attacker, and the fleet call that
+        // follows turned the whole fleet on it -- the accused ship even
+        // answered its neighbours' call and targeted itself. A guard fleet
+        // at a starport tore itself apart at full speed, through whatever
+        // was parked in the middle.
+        let faction = |e: Entity| ai_ship_query.get(e).ok().map(|(_, &f, _)| f);
+        if let Some(attacker) = event.attacker {
+            if counts_as_attacker(event.target, faction(event.target), attacker, faction(attacker)) {
+                state.last_attacker = Some(attacker);
+            }
         }
 
         let impact_pos = event.position.unwrap_or(Vec2::ZERO);
@@ -672,15 +763,18 @@ fn is_engine_module(module: &Module) -> bool {
 /// the game (wreck.rs scores loot by how intact the hull still is).
 pub fn check_ai_cripple(
     mut ai_ships: Query<
-        (Entity, &Transform, &AiShipType, &Children, &mut AiShipState, Option<&BountyTarget>, Option<&AiLoadout>),
+        (Entity, &Transform, &AiShipType, &Children, &mut AiShipState, Option<&BountyTarget>, Option<&AiLoadout>, Has<crate::diplomacy::FactionStation>),
         (With<AiShip>, Without<ReactorMeltdown>),
     >,
     module_query: Query<(&Module, &OwnedByAiShip)>,
     mut destroyed_events: MessageWriter<AiShipDestroyed>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    for (entity, transform, ship_type, children, mut state, bounty, loadout) in ai_ships.iter_mut() {
+    for (entity, transform, ship_type, children, mut state, bounty, loadout, station) in ai_ships.iter_mut() {
         if state.is_destroyed { continue; }
+        // A station has no engines by design, and an unarmed one (the
+        // Silence's Monastery) no guns: neither has anything to strike.
+        if station && loadout.is_none_or(|l| l.guns == 0) { continue; }
 
         let (guns_alive, guns_total) = subsystem_tally(entity, children, &module_query, is_weapon_module);
         let (engines_alive, engines_total) = subsystem_tally(entity, children, &module_query, is_engine_module);
@@ -1034,6 +1128,8 @@ fn angle_proof_round(faction: AiShipType) -> KineticAmmoType {
         SynthesisCollective | CorpseStars | TheSilence => KineticAmmoType::HESH,
         // Gravity does not care what angle you hit at.
         EternalHegemony | Shepherd => KineticAmmoType::Singularity,
+        // Freight: whatever the hold had in it.
+        MerchantPrinces | FreeHaulersCompact => KineticAmmoType::HESH,
     }
 }
 
@@ -1200,3 +1296,22 @@ mod gunnery_tests {
 // the wreck's condition. A second announcer here put up a line saying the
 // same thing for every kill, which in a swarm fight was half the stack.)
 
+
+#[cfg(test)]
+mod attacker_tests {
+    use super::*;
+
+    /// Friendly fire hurts, but it doesn't make an enemy: a fleet that
+    /// named a fleet-mate as its attacker turned on it, through anything
+    /// parked nearby.
+    #[test]
+    fn only_an_enemy_is_remembered_as_the_attacker() {
+        let [ship, mate, player] = [1, 2, 3].map(|n| Entity::from_raw_u32(n).unwrap());
+        let gilded = Some(AiShipType::GildedThrone);
+        assert!(!counts_as_attacker(ship, gilded, ship, gilded), "its own blast");
+        assert!(!counts_as_attacker(ship, gilded, mate, gilded), "a fleet-mate");
+        assert!(!counts_as_attacker(ship, Some(AiShipType::MerchantPrinces), mate, Some(AiShipType::MerchantPrinces)), "same guild");
+        assert!(counts_as_attacker(ship, gilded, player, None), "the player");
+        assert!(counts_as_attacker(ship, Some(AiShipType::MerchantPrinces), mate, Some(AiShipType::FreeHaulersCompact)), "the trade war");
+    }
+}

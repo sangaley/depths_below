@@ -10,11 +10,40 @@ use crate::ship::spawn_module;
 
 use super::components::*;
 use super::layouts;
+use super::roster;
 
 /// Faction designs, loaded once per run. designs/factions/<slug>.json wins;
 /// missing files are converted from the built-in layouts and self-exported
 /// so every faction ship exists as editable JSON after the first encounter.
 static DESIGN_CACHE: OnceLock<Mutex<HashMap<AiShipType, Blueprint>>> = OnceLock::new();
+
+/// Class designs (designs/factions/<slug>/<key>.json), loaded once per run.
+/// `None` records a class whose file is missing, so it is reported once and
+/// then quietly flies the faction's original design.
+static CLASS_CACHE: OnceLock<Mutex<HashMap<(AiShipType, &'static str), Option<Blueprint>>>> = OnceLock::new();
+
+/// The design for one class of a faction, or its original design when the
+/// class is None or its file can't be read. Never writes a file: a class that
+/// fails to load is a mistake to fix, not something to paper over on disk.
+fn class_design(ship_type: AiShipType, class: Option<&'static str>) -> Blueprint {
+    let Some(key) = class else { return faction_design(ship_type) };
+    let cache = CLASS_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    let loaded = {
+        let mut cache = cache.lock().unwrap();
+        cache
+            .entry((ship_type, key))
+            .or_insert_with(|| {
+                let path = format!("designs/factions/{}/{}.json", layouts::design_slug(ship_type), key);
+                let design = blueprint::load_design_file(&path);
+                if design.is_none() {
+                    warn!("Ship class {} could not be loaded; flying the faction's original design", path);
+                }
+                design
+            })
+            .clone()
+    };
+    loaded.unwrap_or_else(|| faction_design(ship_type))
+}
 
 /// A copy of the player's own ship, held aside for the one enemy that is meant
 /// to be built from it.
@@ -53,7 +82,9 @@ pub fn spawn_mirror_ship(
     asset_server: &AssetServer,
 ) -> Option<Entity> {
     let design = mirror_slot().lock().ok()?.clone()?;
-    Some(spawn_ai_ship_with_design(ship_type, position, commands, registry, asset_server, Some(design)))
+    let root = spawn_ai_ship_with_design(ship_type, position, commands, registry, asset_server, Some(design));
+    commands.entity(root).insert(MirrorShip);
+    Some(root)
 }
 
 fn faction_design(ship_type: AiShipType) -> Blueprint {
@@ -120,10 +151,12 @@ fn ship_tint(ship_type: AiShipType) -> Color {
         AiShipType::TerranHegemony => Color::srgb(0.45, 0.45, 0.5),    // steel gray - battleship
         AiShipType::GildedThrone => Color::srgb(0.2, 0.2, 0.25),   // dark tactical
         AiShipType::RecursiveKingdom => Color::srgb(0.7, 0.4, 0.15),    // rusty orange
+        AiShipType::MerchantPrinces => Color::srgb(0.4, 0.55, 0.35),    // guild green
+        AiShipType::FreeHaulersCompact => Color::srgb(0.6, 0.35, 0.22), // rust
     }
 }
 
-/// Spawns a complete AI ship at the given position.
+/// Spawns a complete AI ship of a class picked from the faction's roster.
 /// Returns the root entity.
 pub fn spawn_ai_ship(
     ship_type: AiShipType,
@@ -132,7 +165,110 @@ pub fn spawn_ai_ship(
     registry: &ModuleRegistry,
     asset_server: &AssetServer,
 ) -> Entity {
-    spawn_ai_ship_with_design(ship_type, position, commands, registry, asset_server, None)
+    let class = roster::roll(ship_type, &mut rand::thread_rng(), |_| true).map(|c| c.key);
+    spawn_ai_ship_class(ship_type, class, position, commands, registry, asset_server)
+}
+
+/// Spawns one ship of a given class (None = the faction's original design).
+pub fn spawn_ai_ship_class(
+    ship_type: AiShipType,
+    class: Option<&'static str>,
+    position: Vec2,
+    commands: &mut Commands,
+    registry: &ModuleRegistry,
+    asset_server: &AssetServer,
+) -> Entity {
+    spawn_ai_ship_wounded(ship_type, class, None, position, commands, registry, asset_server)
+}
+
+/// The design a ship of this class is built from (None = the faction's own).
+pub fn built_design(ship_type: AiShipType, class: Option<&'static str>) -> Blueprint {
+    class_design(ship_type, class)
+}
+
+/// Hull cells + modules in a class's design: what one of these costs the
+/// live-ship budget. Cached; called for every spawn candidate.
+pub fn design_blocks(ship_type: AiShipType, class: Option<&'static str>) -> usize {
+    static SIZES: OnceLock<Mutex<HashMap<(AiShipType, Option<&'static str>), usize>>> = OnceLock::new();
+    let sizes = SIZES.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(&n) = sizes.lock().unwrap().get(&(ship_type, class)) {
+        return n;
+    }
+    let design = class_design(ship_type, class);
+    let n = design.hull_cells.len() + design.modules.len();
+    sizes.lock().unwrap().insert((ship_type, class), n);
+    n
+}
+
+/// How far a class's hull reaches from the ship's position, in world units:
+/// its farthest cell, plus one. Cells sit at grid_pos x 66 from the root,
+/// uncentred, so this is from the root, not the hull's middle. What a
+/// formation spaces ships by. Cached.
+pub fn design_extent(ship_type: AiShipType, class: Option<&'static str>) -> f32 {
+    static EXTENTS: OnceLock<Mutex<HashMap<(AiShipType, Option<&'static str>), f32>>> = OnceLock::new();
+    let extents = EXTENTS.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(&r) = extents.lock().unwrap().get(&(ship_type, class)) {
+        return r;
+    }
+    let design = class_design(ship_type, class);
+    let r = if design.hull_cells.is_empty() {
+        300.0
+    } else {
+        design.hull_cells.iter().map(|c| c.grid_pos.as_vec2().length()).fold(0.0_f32, f32::max) * 66.0 + 66.0
+    };
+    extents.lock().unwrap().insert((ship_type, class), r);
+    r
+}
+
+/// A class's design with the blocks it lost before going off-screen taken out.
+pub fn wounded_design(built: &Blueprint, wounds: &Wounds) -> Blueprint {
+    let mut design = built.clone();
+    design.hull_cells.retain(|c| !wounds.hull.contains(&c.grid_pos));
+    design.modules.retain(|m| !wounds.modules.contains(&m.grid_pos));
+    design
+}
+
+/// Spawns a ship of a class carrying the damage it left with. Every "how
+/// much is left" ratio still divides by the ship as BUILT, so a battleship
+/// that came back with half its guns reads as half-armed, not fully armed.
+pub fn spawn_ai_ship_wounded(
+    ship_type: AiShipType,
+    class: Option<&'static str>,
+    wounds: Option<&Wounds>,
+    position: Vec2,
+    commands: &mut Commands,
+    registry: &ModuleRegistry,
+    asset_server: &AssetServer,
+) -> Entity {
+    let built = class_design(ship_type, class);
+    let wounds = wounds.filter(|w| !w.is_empty());
+    let design = wounds.map_or_else(|| built.clone(), |w| wounded_design(&built, w));
+    let root = spawn_ai_ship_with_design(ship_type, position, commands, registry, asset_server, Some(design));
+    if let Some(w) = wounds {
+        let (health_mult, _) = faction_difficulty(ship_type);
+        commands.entity(root).insert((built_loadout(&built, health_mult), SpawnIntegrity(w.integrity)));
+    }
+    if let Some(key) = class {
+        commands.entity(root).insert(AiShipClass(key));
+        if super::roster::find(ship_type, key).is_some_and(|c| c.role == super::roster::ClassRole::Civilian) {
+            commands.entity(root).insert(super::fleet::CivilianHull);
+        }
+    }
+    root
+}
+
+/// The loadout of a design as built: guns, engines, and the hull health it
+/// starts with (the same per-cell health spawn_ai_hull gives).
+fn built_loadout(design: &Blueprint, health_mult: f32) -> AiLoadout {
+    AiLoadout {
+        guns: design.modules.iter().filter(|m| super::combat::is_weapon_type(m.module_type)).count() as u32,
+        engines: design.modules.iter().filter(|m| super::combat::is_engine_type(m.module_type)).count() as u32,
+        hull_max: design
+            .hull_cells
+            .iter()
+            .map(|c| c.material.health_multiplier() * 100.0 * health_mult)
+            .sum(),
+    }
 }
 
 /// As `spawn_ai_ship`, but optionally wearing a design that is not this
@@ -172,6 +308,7 @@ pub fn spawn_ai_ship_with_design(
         AiShipType::TerranHegemony => AiShipBehavior::Patrolling,
         AiShipType::GildedThrone => AiShipBehavior::Patrolling,
         AiShipType::RecursiveKingdom => AiShipBehavior::Patrolling,
+        AiShipType::MerchantPrinces | AiShipType::FreeHaulersCompact => AiShipBehavior::Patrolling,
     };
 
     let fuel = match ship_type {
@@ -185,6 +322,8 @@ pub fn spawn_ai_ship_with_design(
         AiShipType::TerranHegemony => 1000.0,
         AiShipType::GildedThrone => 700.0,
         AiShipType::RecursiveKingdom => 150.0,
+        AiShipType::MerchantPrinces => 900.0,
+        AiShipType::FreeHaulersCompact => 1100.0,
     };
 
     // Compute initial rotation: face toward first waypoint (or default to 0 = facing right)
@@ -245,7 +384,7 @@ pub fn spawn_ai_ship_with_design(
     // applies to every source of a hull: the authored layouts, the exported
     // files, and a mirror design wearing the player's own ship.
     let mut hull_cells = design.hull_cells.clone();
-    crate::ship::lay_hallways(&mut hull_cells, &design.modules);
+    crate::ship::lay_hallways_with(registry, &mut hull_cells, &design.modules);
 
     // Spawn hull segments as children
     let hull_max = spawn_ai_hull(commands, asset_server, root, &hull_cells, health_mult);
@@ -365,6 +504,17 @@ fn roll_crew_complement(rng: &mut impl Rng, floor: u32, typical: u32, ceiling: u
     sample.round() as u32
 }
 
+/// The tint an AI hull block's texture is drawn with (and its far-off
+/// preview, see preview::cell_colour).
+pub fn hull_tint(material: HullMaterial) -> Color {
+    match material {
+        HullMaterial::Steel => Color::srgb(0.55, 0.55, 0.6),
+        HullMaterial::Titanium => Color::srgb(0.7, 0.7, 0.75),
+        HullMaterial::Composite => Color::srgb(0.45, 0.62, 0.5),
+        HullMaterial::AbyssalAlloy => Color::srgb(0.35, 0.28, 0.45),
+    }
+}
+
 /// Spawns hull segment children for the AI ship. Returns the summed max
 /// health of everything it spawned -- the ship's hull as built.
 fn spawn_ai_hull(
@@ -382,12 +532,7 @@ fn spawn_ai_hull(
         let x = cell.grid_pos.x as f32 * 66.0;
         let y = cell.grid_pos.y as f32 * 66.0 - 33.0;
 
-        let hull_color = match cell.material {
-            HullMaterial::Steel => Color::srgb(0.55, 0.55, 0.6),
-            HullMaterial::Titanium => Color::srgb(0.7, 0.7, 0.75),
-            HullMaterial::Composite => Color::srgb(0.45, 0.62, 0.5),
-            HullMaterial::AbyssalAlloy => Color::srgb(0.35, 0.28, 0.45),
-        };
+        let hull_color = hull_tint(cell.material);
 
         let hull_entity = commands.spawn((
             (Sprite {
@@ -423,4 +568,30 @@ fn spawn_ai_hull(
         hull_max += health;
     }
     hull_max
+}
+
+#[cfg(test)]
+mod wound_tests {
+    use super::*;
+
+    /// A wounded ship is its design minus exactly the blocks it lost.
+    #[test]
+    fn a_wounded_design_is_missing_only_what_was_lost() {
+        let built = built_design(AiShipType::TerranHegemony, crate::ai_ship::roster::intern("bulwark"));
+        let lost_cell = built.hull_cells[5].grid_pos;
+        let lost_module = built.modules[3].grid_pos;
+        let wounds = Wounds { hull: vec![lost_cell], modules: vec![lost_module], integrity: 0.9 };
+        let hurt = wounded_design(&built, &wounds);
+        assert_eq!(hurt.hull_cells.len(), built.hull_cells.len() - 1);
+        assert!(hurt.modules.len() < built.modules.len());
+        assert!(hurt.hull_cells.iter().all(|c| c.grid_pos != lost_cell));
+        assert!(hurt.modules.iter().all(|m| m.grid_pos != lost_module));
+    }
+
+    #[test]
+    fn the_budget_counts_blocks_not_ships() {
+        let skiff = design_blocks(AiShipType::Shepherd, crate::ai_ship::roster::intern("lamb"));
+        let boss = design_blocks(AiShipType::Shepherd, crate::ai_ship::roster::intern("the_shepherd"));
+        assert!(boss > skiff * 10, "a boss costs far more than an attendant ({boss} vs {skiff})");
+    }
 }

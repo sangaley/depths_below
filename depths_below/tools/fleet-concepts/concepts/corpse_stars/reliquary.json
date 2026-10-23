@@ -1,0 +1,11633 @@
+{
+ "name": "cs_reliquary",
+ "hull_cells": [
+  {
+   "grid_pos": [
+    -44,
+    0
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -43,
+    0
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -42,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -42,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -42,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -41,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -41,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -41,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -40,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -40,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -40,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -40,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -40,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -39,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -39,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -39,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -39,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -39,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -38,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -38,
+    -2
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -38,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -38,
+    0
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -38,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -38,
+    2
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -38,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -37,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -37,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -37,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -37,
+    0
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -37,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -37,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -37,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -36,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -36,
+    -3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -36,
+    -2
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -36,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -36,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -36,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -36,
+    2
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -36,
+    3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -36,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -35,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -35,
+    -3
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -35,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -35,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -35,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -35,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -35,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -35,
+    3
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -35,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -34,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -34,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -34,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -34,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -34,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -34,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -34,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -34,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -34,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -33,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -33,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -33,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -32,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -32,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -32,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -31,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -31,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -31,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -30,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -30,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -30,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -29,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -29,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -29,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -28,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -28,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -28,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -28,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -28,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -28,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -28,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -28,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -28,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -27,
+    -7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -27,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -27,
+    -5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -27,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -27,
+    -3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -27,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -27,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -27,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -27,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -27,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -27,
+    3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -27,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -27,
+    5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -27,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -27,
+    7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -26,
+    -7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -26,
+    -6
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -26,
+    -5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -26,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -26,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -26,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -26,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -26,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -26,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -26,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -26,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -26,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -26,
+    5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -26,
+    6
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -26,
+    7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -25,
+    -7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -25,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -25,
+    -5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -25,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -25,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -25,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -25,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -25,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -25,
+    5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -25,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -25,
+    7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -24,
+    -7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -24,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -24,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -24,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -24,
+    7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -23,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -23,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -23,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -22,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -22,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -22,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -21,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -21,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -21,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -21,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -21,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -21,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -21,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -21,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -21,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -20,
+    -7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -20,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -20,
+    -5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -20,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -20,
+    -3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -20,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -20,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -20,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -20,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -20,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -20,
+    3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -20,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -20,
+    5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -20,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -20,
+    7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    -10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    -9
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    -8
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    -7
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    -6
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    -5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    6
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    7
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    8
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    9
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -19,
+    10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    -10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    -9
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    -7
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    -5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    7
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    9
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -18,
+    10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -17,
+    -10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -17,
+    -9
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -17,
+    -8
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -17,
+    -7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -17,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -17,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -17,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -17,
+    7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -17,
+    8
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -17,
+    9
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -17,
+    10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -16,
+    -10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -16,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -16,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -16,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -16,
+    10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -15,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -15,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -15,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -14,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -14,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -14,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -14,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -14,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -14,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -14,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -14,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -14,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -13,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -13,
+    -5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -13,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -13,
+    -3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -13,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -13,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -13,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -13,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -13,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -13,
+    3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -13,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -13,
+    5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -13,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -12,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -12,
+    -5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -12,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -12,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -12,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -12,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -12,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -12,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -12,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -12,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -12,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -12,
+    5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -12,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -11,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -11,
+    -5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -11,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -11,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -11,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -11,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -11,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -11,
+    5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -11,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -10,
+    -19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -10,
+    -18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -10,
+    -17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -10,
+    -16
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -10,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -10,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -10,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -10,
+    16
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -10,
+    17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -10,
+    18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -10,
+    19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -9,
+    -19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -9,
+    -18
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -9,
+    -17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -9,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -9,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -9,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -9,
+    17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -9,
+    18
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -9,
+    19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -8,
+    -19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -8,
+    -18
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -8,
+    -17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -8,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -8,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -8,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -8,
+    17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -8,
+    18
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -8,
+    19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    -27
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    -26
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    -25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    -24
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    -20
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    -19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    -18
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    -17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    18
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    20
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    24
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    26
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -7,
+    27
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    -27
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    -26
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    -25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    -20
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    -19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    -18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    -13
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    -11
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    11
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    12
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    13
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    20
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    26
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -6,
+    27
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -27
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -26
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -20
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -13
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -12
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -11
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -3
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    3
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    11
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    12
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    13
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    20
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    26
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -5,
+    27
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -36
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -35
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -34
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -28
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -26
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -21
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -14
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -12
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -11
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -4
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    2
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    4
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    11
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    12
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    14
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    21
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    26
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    28
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    34
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    35
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -4,
+    36
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -38
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -37
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -36
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -35
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -34
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -28
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -26
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -21
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -14
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -5
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -3
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -2
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    3
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    5
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    12
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    14
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    21
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    26
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    28
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    34
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    35
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    36
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    37
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -3,
+    38
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -40
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -39
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -38
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -37
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -36
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -35
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -34
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -28
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -26
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -21
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -14
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -4
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    3
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    12
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    14
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    21
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    26
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    28
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    34
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    35
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    36
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    37
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    38
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    39
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -2,
+    40
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -42
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -41
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -40
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -39
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -38
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -37
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -36
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -35
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -34
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -33
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -32
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -31
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -30
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -29
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -28
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -26
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -24
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -23
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -22
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -21
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -19
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -16
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -15
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -14
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -12
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -11
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -9
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -8
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -6
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -5
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -2
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    2
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    3
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    5
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    6
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    8
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    9
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    11
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    12
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    14
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    15
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    16
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    19
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    21
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    22
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    23
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    24
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    26
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    28
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    29
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    30
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    31
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    32
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    33
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    34
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    35
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    36
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    37
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    38
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    39
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    40
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    41
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    -1,
+    42
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -44
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -43
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -42
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -41
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -40
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -39
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -38
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -37
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -36
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -35
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -34
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -33
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -32
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -31
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -30
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -29
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -28
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -26
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -25
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -24
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -23
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -22
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -21
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -18
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -17
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -16
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -15
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -14
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -12
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -11
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -10
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -9
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -7
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -6
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    2
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    6
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    7
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    9
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    10
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    11
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    12
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    14
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    15
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    16
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    17
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    18
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    21
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    22
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    23
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    24
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    25
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    26
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    28
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    29
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    30
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    31
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    32
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    33
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    34
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    35
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    36
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    37
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    38
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    39
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    40
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    41
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    42
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    43
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    0,
+    44
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -42
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -41
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -40
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -39
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -38
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -37
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -36
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -35
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -34
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -33
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -32
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -31
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -30
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -29
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -28
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -26
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -24
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -23
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -22
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -21
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -19
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -16
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -15
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -14
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -12
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -11
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -9
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -8
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -6
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -5
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -3
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    2
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    5
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    6
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    8
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    9
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    11
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    12
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    14
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    15
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    16
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    19
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    21
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    22
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    23
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    24
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    26
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    28
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    29
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    30
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    31
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    32
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    33
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    34
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    35
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    36
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    37
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    38
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    39
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    40
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    41
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    1,
+    42
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -40
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -39
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -38
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -37
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -36
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -35
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -34
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -28
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -26
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -21
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -14
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -3
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    4
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    12
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    14
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    21
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    26
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    28
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    34
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    35
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    36
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    37
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    38
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    39
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    2,
+    40
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -38
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -37
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -36
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -35
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -34
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -28
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -26
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -21
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -14
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -5
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -3
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    2
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    3
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    5
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    12
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    14
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    21
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    26
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    28
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    34
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    35
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    36
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    37
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    3,
+    38
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -36
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -35
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -34
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -28
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -26
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -21
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -14
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -12
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -11
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -4
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -2
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    4
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    11
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    12
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    13
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    14
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    20
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    21
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    26
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    27
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    28
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    34
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    35
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    4,
+    36
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    -27
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    -26
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    -25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    -20
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    -19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    -18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    -13
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    -12
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    -11
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    -3
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    3
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    11
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    12
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    13
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    20
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    26
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    5,
+    27
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    -27
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    -26
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    -25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    -20
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    -19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    -18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    -13
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    -12
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    -11
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    11
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    12
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    13
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    20
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    26
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    6,
+    27
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    -27
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    -26
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    -25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    -24
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    -20
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    -19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    -18
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    -17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    18
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    19
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    20
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    24
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    25
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    26
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    7,
+    27
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    8,
+    -19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    8,
+    -18
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    8,
+    -17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    8,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    8,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    8,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    8,
+    17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    8,
+    18
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    8,
+    19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    9,
+    -19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    9,
+    -18
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    9,
+    -17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    9,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    9,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    9,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    9,
+    17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    9,
+    18
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    9,
+    19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    10,
+    -19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    10,
+    -18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    10,
+    -17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    10,
+    -16
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    10,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    10,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    10,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    10,
+    16
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    10,
+    17
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    10,
+    18
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    10,
+    19
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    11,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    11,
+    -5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    11,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    11,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    11,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    11,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    11,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    11,
+    5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    11,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    12,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    12,
+    -5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    12,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    12,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    12,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    12,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    12,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    12,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    12,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    12,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    12,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    12,
+    5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    12,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    13,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    13,
+    -5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    13,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    13,
+    -3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    13,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    13,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    13,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    13,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    13,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    13,
+    3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    13,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    13,
+    5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    13,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    14,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    14,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    14,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    14,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    14,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    14,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    14,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    14,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    14,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    15,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    15,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    15,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    16,
+    -10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    16,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    16,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    16,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    16,
+    10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    17,
+    -10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    17,
+    -9
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    17,
+    -8
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    17,
+    -7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    17,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    17,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    17,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    17,
+    7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    17,
+    8
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    17,
+    9
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    17,
+    10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    -10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    -9
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    -8
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    -7
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    -5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    7
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    8
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    9
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    18,
+    10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    -10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    -9
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    -8
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    -7
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    -6
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    -5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    6
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    7
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    8
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    9
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    19,
+    10
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    20,
+    -7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    20,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    20,
+    -5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    20,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    20,
+    -3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    20,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    20,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    20,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    20,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    20,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    20,
+    3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    20,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    20,
+    5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    20,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    20,
+    7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    21,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    21,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    21,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    21,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    21,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    21,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    21,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    21,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    21,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    22,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    22,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    22,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    23,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    23,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    23,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    24,
+    -7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    24,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    24,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    24,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    24,
+    7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    25,
+    -7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    25,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    25,
+    -5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    25,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    25,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    25,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    25,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    25,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    25,
+    5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    25,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    25,
+    7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    26,
+    -7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    26,
+    -6
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    26,
+    -5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    26,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    26,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    26,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    26,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    26,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    26,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    26,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    26,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    26,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    26,
+    5
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    26,
+    6
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    26,
+    7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    27,
+    -7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    27,
+    -6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    27,
+    -5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    27,
+    -4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    27,
+    -3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    27,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    27,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    27,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    27,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    27,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    27,
+    3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    27,
+    4
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    27,
+    5
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    27,
+    6
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    27,
+    7
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    28,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    28,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    28,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    28,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    28,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    28,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    28,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    28,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    28,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    29,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    29,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    29,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    30,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    30,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    30,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    31,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    31,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    31,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    32,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    32,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    32,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    33,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    33,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    33,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    34,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    34,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    34,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    34,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    34,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    34,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    34,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    34,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    34,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    35,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    35,
+    -3
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    35,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    35,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    35,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    35,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    35,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    35,
+    3
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    35,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    36,
+    -4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    36,
+    -3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    36,
+    -2
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    36,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    36,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    36,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    36,
+    2
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    36,
+    3
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    36,
+    4
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    37,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    37,
+    -2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    37,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    37,
+    0
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    37,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    37,
+    2
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    37,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    38,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    38,
+    -2
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    38,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    38,
+    0
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    38,
+    1
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    38,
+    2
+   ],
+   "layer": "Inner",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    38,
+    3
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    39,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    39,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    39,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    39,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    39,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    40,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    40,
+    -1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    40,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    40,
+    1
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    40,
+    2
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    41,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    41,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    41,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    42,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    42,
+    0
+   ],
+   "layer": "Hallway",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    42,
+    1
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    43,
+    0
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  },
+  {
+   "grid_pos": [
+    44,
+    0
+   ],
+   "layer": "Outer",
+   "material": "AbyssalAlloy"
+  }
+ ],
+ "modules": [
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    37,
+    4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    39,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    41,
+    2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    43,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    4,
+    37
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    3,
+    39
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    2,
+    41
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    1,
+    43
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    -4,
+    37
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    -37,
+    -4
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    4,
+    -37
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    -3,
+    39
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    -39,
+    -3
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    3,
+    -39
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    -2,
+    41
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    -41,
+    -2
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    2,
+    -41
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    -1,
+    43
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    -43,
+    -1
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    1,
+    -43
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    -37,
+    4
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    -4,
+    -37
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    37,
+    -4
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    -39,
+    3
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    -3,
+    -39
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    39,
+    -3
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    -41,
+    2
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    -2,
+    -41
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    41,
+    -2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    -43,
+    1
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    -1,
+    -43
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "AngledArmorPlate",
+   "grid_pos": [
+    43,
+    -1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "IonDisruptor",
+   "grid_pos": [
+    10,
+    -18
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "IonDisruptor",
+   "grid_pos": [
+    -1,
+    -38
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "IonDisruptor",
+   "grid_pos": [
+    -18,
+    10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "IonDisruptor",
+   "grid_pos": [
+    1,
+    -38
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "IonDisruptor",
+   "grid_pos": [
+    -18,
+    -10
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "IonDisruptor",
+   "grid_pos": [
+    -1,
+    38
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "IonDisruptor",
+   "grid_pos": [
+    38,
+    -1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "IonDisruptor",
+   "grid_pos": [
+    -38,
+    -1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "IonDisruptor",
+   "grid_pos": [
+    10,
+    18
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "IonDisruptor",
+   "grid_pos": [
+    1,
+    38
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "IonDisruptor",
+   "grid_pos": [
+    38,
+    1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "IonDisruptor",
+   "grid_pos": [
+    -38,
+    1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "IonDisruptor",
+   "grid_pos": [
+    -10,
+    -18
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "IonDisruptor",
+   "grid_pos": [
+    18,
+    10
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "IonDisruptor",
+   "grid_pos": [
+    18,
+    -10
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "IonDisruptor",
+   "grid_pos": [
+    -10,
+    18
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "EMPPulse",
+   "grid_pos": [
+    36,
+    -2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "EMPPulse",
+   "grid_pos": [
+    2,
+    36
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "EMPPulse",
+   "grid_pos": [
+    7,
+    26
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "EMPPulse",
+   "grid_pos": [
+    26,
+    7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "EMPPulse",
+   "grid_pos": [
+    7,
+    -26
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "EMPPulse",
+   "grid_pos": [
+    2,
+    -36
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "EMPPulse",
+   "grid_pos": [
+    26,
+    -7
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "EMPPulse",
+   "grid_pos": [
+    36,
+    2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "EMPPulse",
+   "grid_pos": [
+    -36,
+    -2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "EMPPulse",
+   "grid_pos": [
+    -26,
+    7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "EMPPulse",
+   "grid_pos": [
+    -2,
+    36
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "EMPPulse",
+   "grid_pos": [
+    -7,
+    26
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "EMPPulse",
+   "grid_pos": [
+    -26,
+    -7
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "EMPPulse",
+   "grid_pos": [
+    -7,
+    -26
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "EMPPulse",
+   "grid_pos": [
+    -2,
+    -36
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "EMPPulse",
+   "grid_pos": [
+    -36,
+    2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "HeavyMissile",
+   "grid_pos": [
+    6,
+    12
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "HeavyMissile",
+   "grid_pos": [
+    -12,
+    -6
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "HeavyMissile",
+   "grid_pos": [
+    12,
+    -6
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "HeavyMissile",
+   "grid_pos": [
+    -6,
+    -12
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "HeavyMissile",
+   "grid_pos": [
+    -12,
+    6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "HeavyMissile",
+   "grid_pos": [
+    6,
+    -12
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "HeavyMissile",
+   "grid_pos": [
+    12,
+    6
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "HeavyMissile",
+   "grid_pos": [
+    -6,
+    12
+   ],
+   "rotation": "West"
+  },
+  {
+   "module_type": "CryoStorage",
+   "grid_pos": [
+    3,
+    -5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CryoStorage",
+   "grid_pos": [
+    -5,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CryoStorage",
+   "grid_pos": [
+    1,
+    5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CryoStorage",
+   "grid_pos": [
+    5,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CryoStorage",
+   "grid_pos": [
+    -3,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CryoStorage",
+   "grid_pos": [
+    -5,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CryoStorage",
+   "grid_pos": [
+    -3,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CryoStorage",
+   "grid_pos": [
+    -3,
+    -5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CryoStorage",
+   "grid_pos": [
+    3,
+    5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CryoStorage",
+   "grid_pos": [
+    -5,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CryoStorage",
+   "grid_pos": [
+    -1,
+    -5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CryoStorage",
+   "grid_pos": [
+    3,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CryoStorage",
+   "grid_pos": [
+    5,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CryoStorage",
+   "grid_pos": [
+    3,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CryoStorage",
+   "grid_pos": [
+    5,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "CryoStorage",
+   "grid_pos": [
+    -3,
+    5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ReinforcedVault",
+   "grid_pos": [
+    2,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ReinforcedVault",
+   "grid_pos": [
+    2,
+    4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ReinforcedVault",
+   "grid_pos": [
+    -1,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ReinforcedVault",
+   "grid_pos": [
+    -4,
+    2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ReinforcedVault",
+   "grid_pos": [
+    4,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ReinforcedVault",
+   "grid_pos": [
+    -2,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ReinforcedVault",
+   "grid_pos": [
+    -2,
+    -4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MemoryCore",
+   "grid_pos": [
+    4,
+    4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MemoryCore",
+   "grid_pos": [
+    -4,
+    4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MemoryCore",
+   "grid_pos": [
+    35,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MemoryCore",
+   "grid_pos": [
+    -35,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MemoryCore",
+   "grid_pos": [
+    -3,
+    -35
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MemoryCore",
+   "grid_pos": [
+    4,
+    -4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MemoryCore",
+   "grid_pos": [
+    3,
+    -35
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MemoryCore",
+   "grid_pos": [
+    -3,
+    35
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MemoryCore",
+   "grid_pos": [
+    35,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MemoryCore",
+   "grid_pos": [
+    3,
+    35
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MemoryCore",
+   "grid_pos": [
+    -35,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MemoryCore",
+   "grid_pos": [
+    -4,
+    -4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BridgeWing",
+   "grid_pos": [
+    -1,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "StandardReactor",
+   "grid_pos": [
+    2,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "StandardReactor",
+   "grid_pos": [
+    3,
+    2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "StandardReactor",
+   "grid_pos": [
+    -2,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "StandardReactor",
+   "grid_pos": [
+    -3,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -1,
+    8
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -30,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    1,
+    -30
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -30,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -2,
+    -38
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    1,
+    8
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -8,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -2,
+    38
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -8,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    38,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -1,
+    -8
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -38,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -1,
+    30
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    8,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    1,
+    -8
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    2,
+    -38
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    30,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    30,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    8,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    1,
+    30
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    2,
+    38
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -38,
+    2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    38,
+    2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoBay",
+   "grid_pos": [
+    -1,
+    -30
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ShieldEmitter",
+   "grid_pos": [
+    -3,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ShieldEmitter",
+   "grid_pos": [
+    23,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ShieldEmitter",
+   "grid_pos": [
+    -23,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ShieldEmitter",
+   "grid_pos": [
+    3,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ShieldEmitter",
+   "grid_pos": [
+    -1,
+    23
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ShieldEmitter",
+   "grid_pos": [
+    -23,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ShieldEmitter",
+   "grid_pos": [
+    23,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ShieldEmitter",
+   "grid_pos": [
+    1,
+    23
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ShieldEmitter",
+   "grid_pos": [
+    -1,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ShieldEmitter",
+   "grid_pos": [
+    1,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ShieldEmitter",
+   "grid_pos": [
+    -1,
+    -23
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ShieldEmitter",
+   "grid_pos": [
+    1,
+    -23
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    -21,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    -1,
+    -21
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    -1,
+    21
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    1,
+    21
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    1,
+    -5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    -21,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    1,
+    -21
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    5,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    21,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    -5,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    21,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "OxygenScrubber",
+   "grid_pos": [
+    -1,
+    5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    1,
+    28
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    12,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -1,
+    14
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    14,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    14,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -28,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -28,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -1,
+    26
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    1,
+    -12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -1,
+    -26
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -1,
+    -14
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -26,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    1,
+    12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -26,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    1,
+    -28
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -1,
+    28
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    26,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -1,
+    -12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    26,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    1,
+    14
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    1,
+    26
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -1,
+    12
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    1,
+    -26
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    28,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    28,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -14,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    1,
+    -14
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -14,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -1,
+    -28
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -12,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    -12,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BasicQuarters",
+   "grid_pos": [
+    12,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    -16,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    -1,
+    16
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    -16,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    -1,
+    -16
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    1,
+    16
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    1,
+    -16
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    16,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BatteryBank",
+   "grid_pos": [
+    16,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MedBay",
+   "grid_pos": [
+    -19,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MedBay",
+   "grid_pos": [
+    19,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MedBay",
+   "grid_pos": [
+    19,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MedBay",
+   "grid_pos": [
+    -19,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MedBay",
+   "grid_pos": [
+    -1,
+    -19
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MedBay",
+   "grid_pos": [
+    -1,
+    19
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MedBay",
+   "grid_pos": [
+    1,
+    -19
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MedBay",
+   "grid_pos": [
+    1,
+    19
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LargeReactor",
+   "grid_pos": [
+    35,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LargeReactor",
+   "grid_pos": [
+    35,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LargeReactor",
+   "grid_pos": [
+    -1,
+    -35
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LargeReactor",
+   "grid_pos": [
+    -1,
+    36
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LargeReactor",
+   "grid_pos": [
+    1,
+    -35
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LargeReactor",
+   "grid_pos": [
+    1,
+    36
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LargeReactor",
+   "grid_pos": [
+    -36,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LargeReactor",
+   "grid_pos": [
+    -36,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Railgun",
+   "grid_pos": [
+    0,
+    -37
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Railgun",
+   "grid_pos": [
+    37,
+    0
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Railgun",
+   "grid_pos": [
+    -38,
+    0
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Railgun",
+   "grid_pos": [
+    0,
+    38
+   ],
+   "rotation": "East"
+  }
+ ],
+ "created_at": "fleet-concepts (hand-drawn)",
+ "version": 2
+}

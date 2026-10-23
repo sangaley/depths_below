@@ -84,7 +84,7 @@ pub(super) fn projectile_movement(
         // Tick lifetime
         projectile.lifetime.tick(time.delta());
         if projectile.lifetime.is_finished() {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
         }
     }
 }
@@ -232,7 +232,7 @@ pub(super) fn projectile_collision(
             }
 
             if hit_any {
-                commands.entity(proj_entity).despawn();
+                commands.entity(proj_entity).try_despawn();
             }
         } else {
             // Non-player projectile (AI ship or creature) -> player shield
@@ -257,7 +257,7 @@ pub(super) fn projectile_collision(
                         if shield.covers_arc(hit_dir) {
                             shield.absorb(projectile.damage);
                             spawn_hit_effect(&mut commands, proj_pos, Color::srgb(0.5, 0.8, 1.0), 16.0);
-                            commands.entity(proj_entity).despawn();
+                            commands.entity(proj_entity).try_despawn();
                             continue;
                         }
                     }
@@ -384,7 +384,7 @@ pub(super) fn projectile_collision(
                         duration: 2.0,
                     });
 
-                    commands.entity(proj_entity).despawn();
+                    commands.entity(proj_entity).try_despawn();
                     hit_player = true;
                 }
             }
@@ -418,7 +418,7 @@ pub(super) fn projectile_collision(
                             {
                                 shield.absorb(projectile.damage);
                                 spawn_hit_effect(&mut commands, proj_pos, Color::srgb(0.5, 0.8, 1.0), 16.0);
-                                commands.entity(proj_entity).despawn();
+                                commands.entity(proj_entity).try_despawn();
                                 break;
                             }
                         }
@@ -455,7 +455,7 @@ pub(super) fn projectile_collision(
 
                         spawn_hit_effect(&mut commands, block_pos, Color::srgb(1.0, 0.5, 0.2), 16.0);
 
-                        commands.entity(proj_entity).despawn();
+                        commands.entity(proj_entity).try_despawn();
                         break;
                     }
                 }

@@ -25,9 +25,22 @@ pub enum Faction {
 impl Faction {
     pub fn name(&self) -> &'static str {
         match self {
-            Faction::ResearchInstitute => "Research Institute",
-            Faction::Navy => "Navy",
-            Faction::SalvageGuild => "Salvage Guild",
+            Faction::ResearchInstitute => "Stellar Preserve",
+            Faction::Navy => "Terran Hegemony",
+            Faction::SalvageGuild => "Free Haulers' Compact",
+        }
+    }
+
+    /// The real faction behind the board's name: the Navy is the
+    /// Hegemony's, the Salvage Guild the Compact's, the Research Institute
+    /// the Preserve's. Work for them counts with that faction
+    /// (diplomacy::jobs::standing_from_contracts).
+    pub fn real(&self) -> crate::ai_ship::components::AiShipType {
+        use crate::ai_ship::components::AiShipType;
+        match self {
+            Faction::ResearchInstitute => AiShipType::StellarPreserve,
+            Faction::Navy => AiShipType::TerranHegemony,
+            Faction::SalvageGuild => AiShipType::FreeHaulersCompact,
         }
     }
 

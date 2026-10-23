@@ -365,7 +365,7 @@ pub fn refresh_player_shield_skin(
     *last_hash = hash;
     // drop the previous skin sprite(s) for the player ship, then rebuild
     for (e, p) in skin_query.iter() {
-        if p.parent() == ship { commands.entity(e).despawn(); }
+        if p.parent() == ship { commands.entity(e).try_despawn(); }
     }
     spawn_shield_skin(&mut commands, &mut images, ship, &cells, true);
 }
@@ -406,6 +406,8 @@ pub fn attach_ai_shields(
                 AiShipType::TheSilence => 12.0,
                 AiShipType::BrokenChoir => 6.0,        // half-dead ghost ships
                 AiShipType::RecursiveKingdom => 4.0,      // junk ships, paper shields
+                AiShipType::MerchantPrinces => 18.0,      // a guild pays for its cargo's safety
+                AiShipType::FreeHaulersCompact => 10.0,   // whatever was salvaged and still works
             };
             base * AI_SHIELD_HP_MULT
         };

@@ -47,8 +47,13 @@ pub struct StarSystemDef {
     /// units) — unrelated to `galaxy_pos`.
     pub local_center: Vec2,
     pub seed: u64,
-    /// None = safe (Haven's system only, for now).
+    /// Who holds it (celestial::territory). None = nobody's: Haven.
     pub faction: Option<AiShipType>,
+    /// Its owner rules from here.
+    pub capital: bool,
+    /// A boss that haunts it (the Eternal Hegemony or the Shepherd hold no
+    /// ground; they haunt the deepest systems). Its danger is the boss's.
+    pub haunt: Option<AiShipType>,
     /// == faction_power(faction), or 0.0 if safe. Cached here rather than
     /// recomputed from `faction` every time so danger_tier is one field to
     /// read wherever it's needed (spawner.rs, map UI color-coding).

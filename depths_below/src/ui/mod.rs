@@ -147,7 +147,8 @@ impl Plugin for UiPlugin {
             .add_systems(OnExit(GameState::StationDocked), despawn_docking_menu)
             .add_systems(
                 Update,
-                docking_menu_input
+                (docking_menu_input, highlight_dock_rows)
+                    .chain()
                     .run_if(in_state(GameState::Docked).or_else(in_state(GameState::StationDocked))),
             )
             // Game event notifications (while exploring)
@@ -396,7 +397,7 @@ const fn act_mod(label: &'static str, key_disp: &'static str, key: KeyCode,
 /// stay keyboard-only, because a button cannot express "hold".
 fn toolbar_actions(game: &GameState, build: &BuildState) -> &'static [ToolbarAction] {
     use KeyCode as K;
-    const FLYING: [ToolbarAction; 9] = [
+    const FLYING: [ToolbarAction; 10] = [
         act("Map", "M", K::KeyM),
         act("Systems", "N", K::KeyN),
         act("Radar", "Tab", K::Tab),
@@ -406,6 +407,7 @@ fn toolbar_actions(game: &GameState, build: &BuildState) -> &'static [ToolbarAct
         act("Ping", "Z", K::KeyZ),
         act("Dock", "F", K::KeyF),
         act("Tow", "Y", K::KeyY),
+        act("Diplomacy", "X", K::KeyX),
     ];
     // Crew belongs here as much as Hire does: the tutorial's second-to-last
     // step tells the player to manage crew while docked, and until this button
@@ -3410,7 +3412,10 @@ fn toggle_galaxy_view(
     pending: Res<PendingWarpTarget>,
     fuel_state: Res<FuelState>,
     windows: Query<&Window>,
+    // Bundled: this system is at Bevy's 16-param cap.
+    politics: (Res<crate::diplomacy::FactionStanding>, Res<crate::celestial::territory::BorderWar>),
 ) {
+    let (standing, war) = politics;
     let Ok(entity) = existing.single() else { return };
     if !keyboard.just_pressed(KeyCode::Tab) {
         return;
@@ -3431,7 +3436,7 @@ fn toggle_galaxy_view(
         MapViewMode::Galaxy => {
             let (win_w, win_h) = windows.single().map(|w| (w.width(), w.height())).unwrap_or((1280.0, 800.0));
             let panel_size = (win_w.min(win_h) * 0.85).max(200.0);
-            spawn_galaxy_map_overlay(&mut commands, &galaxy_map, &streaming, pending_galaxy.0, &fuel_state, panel_size);
+            spawn_galaxy_map_overlay(&mut commands, &galaxy_map, &streaming, pending_galaxy.0, &fuel_state, &standing, &war, panel_size);
         }
     }
 }
@@ -3460,9 +3465,12 @@ fn spawn_galaxy_map_overlay(
     streaming: &crate::celestial::resources::SystemStreamingManager,
     pending: Option<crate::celestial::resources::GalaxyWarpTarget>,
     fuel_state: &FuelState,
+    standing: &crate::diplomacy::FactionStanding,
+    war: &crate::celestial::territory::BorderWar,
     panel_size: f32,
 ) {
     use crate::celestial::resources::SystemDiscovery;
+    use crate::ai_ship::components::{faction_display_name, faction_map_color};
 
     commands.spawn((
         (Node {
@@ -3498,21 +3506,44 @@ fn spawn_galaxy_map_overlay(
                 GalaxyMapPanel,
             )).with_children(|map| {
                 for sys in &galaxy_map.systems {
+                    // Colored by WHOSE territory it is, not a generic danger
+                    // bucket (faction_map_color). The charts know who holds
+                    // a system you've only located, so its pip carries the
+                    // owner's colour too, dimmed; a visited one is full size.
+                    let owner_color = match sys.faction {
+                        None => Color::srgb(0.3, 0.9, 1.0), // Haven
+                        Some(faction) => faction_map_color(faction),
+                    };
                     let (size, color) = match sys.discovery {
                         SystemDiscovery::Unknown => continue,
-                        SystemDiscovery::Located => (6.0, theme::ThemeColors::TEXT_MUTED),
-                        SystemDiscovery::Visited => {
-                            // Colored by WHOSE territory it is, not a
-                            // generic danger bucket — see
-                            // ai_ship::components::faction_map_color.
-                            let color = match sys.faction {
-                                None => Color::srgb(0.3, 0.9, 1.0), // Haven
-                                Some(faction) => crate::ai_ship::components::faction_map_color(faction),
-                            };
-                            (10.0, color)
-                        }
+                        SystemDiscovery::Located => (7.0, owner_color.with_alpha(0.45)),
+                        SystemDiscovery::Visited => (10.0, owner_color),
                     };
                     let (x, y) = galaxy_to_map_px(sys.galaxy_pos, panel_size);
+                    // A capital wears a ring in its owner's colour; a haunted
+                    // system a red one, wider -- the boss is what matters there.
+                    // Contested: a rival holds a real share (a quarter or more).
+                    let contested = war.contest(sys.id).is_some_and(|c| c.claims.iter().any(|(_, share)| *share >= 25.0));
+                    for (ring, ring_color, show) in [
+                        (size + 8.0, owner_color, sys.capital),
+                        (size + 14.0, Color::srgb(0.95, 0.15, 0.15), sys.haunt.is_some()),
+                        (size + 20.0, Color::srgb(0.95, 0.75, 0.2), contested),
+                    ] {
+                        if show {
+                            map.spawn((
+                                Node {
+                                    position_type: PositionType::Absolute,
+                                    left: Val::Px(x - ring / 2.0),
+                                    top: Val::Px(y - ring / 2.0),
+                                    width: Val::Px(ring),
+                                    height: Val::Px(ring),
+                                    border: UiRect::all(Val::Px(2.0)),
+                                    ..default()
+                                },
+                                BorderColor::all(ring_color),
+                            ));
+                        }
+                    }
                     map.spawn((
                         Node {
                             position_type: PositionType::Absolute,
@@ -3570,24 +3601,14 @@ fn spawn_galaxy_map_overlay(
                 width: Val::Px(panel_size),
                 ..default()
             }).with_children(|legend| {
-                use crate::ai_ship::components::{faction_display_name, faction_map_color, AiShipType};
                 // Labels come from faction_display_name so the legend can never
-                // drift out of step with the roster.
-                let factions = [
-                    AiShipType::RecursiveKingdom,
-                    AiShipType::BrokenChoir,
-                    AiShipType::StellarPreserve,
-                    AiShipType::SynthesisCollective,
-                    AiShipType::TheSilence,
-                    AiShipType::GildedThrone,
-                    AiShipType::CorpseStars,
-                    AiShipType::TerranHegemony,
-                    AiShipType::EternalHegemony,
-                    AiShipType::Shepherd,
-                ];
+                // drift out of step with the roster. Only the factions that
+                // hold ground have a colour on the map; the bosses haunt.
                 let mut entries: Vec<(Color, &str)> = vec![(Color::srgb(0.3, 0.9, 1.0), "Haven")];
-                entries.extend(factions.iter().map(|f| (faction_map_color(*f), faction_display_name(*f))));
-                entries.push((theme::ThemeColors::TEXT_MUTED, "Located (unknown)"));
+                entries.extend(
+                    crate::celestial::territory::TERRITORIAL.iter().map(|f| (faction_map_color(*f), faction_display_name(*f))),
+                );
+                entries.push((Color::WHITE.with_alpha(0.45), "Located (dim)"));
                 let entries: &[(Color, &str)] = &entries;
                 for (color, label) in entries {
                     legend.spawn(Node {
@@ -3606,9 +3627,8 @@ fn spawn_galaxy_map_overlay(
             });
         });
 
-        // Sidebar: simple discovery-progress readout for now — per-system
-        // detail (name/faction/danger/click-to-warp) lands in Phase 5 once
-        // discovery mechanics exist to gate it.
+        // Sidebar: discovery progress, the warp target's owner and what it
+        // thinks of you, and who is at war along which border.
         parent.spawn((
             Node {
                 flex_direction: FlexDirection::Column,
@@ -3664,6 +3684,112 @@ fn spawn_galaxy_map_overlay(
                     parent.spawn((Text::new("Press V to jump"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
                 }
             }
+
+            // The warp target's place in the galaxy: whose it is, whether
+            // it's their capital, who it borders, and what haunts it.
+            if let Some(crate::celestial::resources::GalaxyWarpTarget::System(id)) = pending {
+                if let Some(sys) = galaxy_map.systems.iter().find(|s| s.id == id) {
+                    let caption = |p: &mut ChildSpawnerCommands, text: String, color: Color| {
+                        p.spawn((Text::new(text), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(color)));
+                    };
+                    match sys.faction {
+                        None => caption(parent, "Nobody's space".into(), theme::ThemeColors::TEXT_SECONDARY),
+                        Some(owner) => {
+                            let tier = standing.tier(owner);
+                            let what = if sys.capital { "capital" } else { "space" };
+                            caption(parent, format!("{} {what}", faction_display_name(owner)), faction_map_color(owner));
+                            caption(parent, format!("They count you {}", tier.label()), theme::ThemeColors::TEXT_SECONDARY);
+                        }
+                    }
+                    // A capital is a world: its name, its people, what it makes.
+                    if let (true, Some(owner)) = (sys.capital, sys.faction) {
+                        let (people, makes) = crate::celestial::capital_worlds::capital_blurb(owner);
+                        caption(
+                            parent,
+                            format!("{}: {people}; makes {makes}", crate::celestial::capital_worlds::capital_world_name(&sys.name)),
+                            theme::ThemeColors::TEXT_SECONDARY,
+                        );
+                    }
+                    let borders = crate::celestial::territory::border_factions(galaxy_map, id);
+                    if !borders.is_empty() {
+                        let names: Vec<&str> = borders.iter().map(|f| faction_display_name(*f)).collect();
+                        caption(parent, format!("Borders: {}", names.join(", ")), theme::ThemeColors::TEXT_MUTED);
+                    }
+                    if let Some(boss) = sys.haunt {
+                        caption(parent, format!("Haunted by {}", faction_display_name(boss)), Color::srgb(0.95, 0.3, 0.3));
+                    }
+                    if let Some(contest) = war.contest(id) {
+                        for (claimant, share) in contest.claims.iter().filter(|(_, share)| *share >= 1.0) {
+                            caption(
+                                parent,
+                                format!("Contested: {} holds {:.0}%", faction_display_name(*claimant), share),
+                                Color::srgb(0.95, 0.75, 0.2),
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Wars along the borders you know of: two factions at war whose
+            // territories touch at a system you've at least located.
+            let mut wars: Vec<(crate::ai_ship::components::AiShipType, crate::ai_ship::components::AiShipType)> = Vec::new();
+            for sys in galaxy_map.systems.iter().filter(|s| s.discovery != SystemDiscovery::Unknown) {
+                let Some(owner) = sys.faction else { continue };
+                for other in crate::celestial::territory::border_factions(galaxy_map, sys.id) {
+                    let pair = if (owner as u8) < (other as u8) { (owner, other) } else { (other, owner) };
+                    if crate::ai_ship::components::factions_hostile(owner, other) && !wars.contains(&pair) {
+                        wars.push(pair);
+                    }
+                }
+            }
+            if !wars.is_empty() {
+                parent.spawn((
+                    Text::new("AT WAR"),
+                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                    TextColor(theme::ThemeColors::TEXT_MUTED),
+                    Node { margin: UiRect::top(Val::Px(theme::ThemeSpacing::SM)), ..default() },
+                ));
+                for (a, b) in wars.iter().take(10) {
+                    parent.spawn((
+                        Text::new(format!("{} - {}", faction_display_name(*a), faction_display_name(*b))),
+                        TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                        TextColor(theme::ThemeColors::TEXT_SECONDARY),
+                    ));
+                }
+            }
+            // Systems that changed hands lately, on your charts.
+            let news: Vec<String> = war
+                .news
+                .iter()
+                .rev()
+                .filter_map(|(id, _, to)| {
+                    let sys = galaxy_map.systems.iter().find(|s| s.id == *id)?;
+                    (sys.discovery != SystemDiscovery::Unknown)
+                        .then(|| format!("{} fell to the {}", sys.name, faction_display_name(*to)))
+                })
+                .take(5)
+                .collect();
+            if !news.is_empty() {
+                parent.spawn((
+                    Text::new("RECENT"),
+                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                    TextColor(theme::ThemeColors::TEXT_MUTED),
+                    Node { margin: UiRect::top(Val::Px(theme::ThemeSpacing::SM)), ..default() },
+                ));
+                for line in news {
+                    parent.spawn((
+                        Text::new(line),
+                        TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                        TextColor(theme::ThemeColors::TEXT_SECONDARY),
+                    ));
+                }
+            }
+            parent.spawn((
+                Text::new("Ring: capital   Red: haunted   Amber: contested"),
+                TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                TextColor(theme::ThemeColors::TEXT_MUTED),
+                Node { margin: UiRect::top(Val::Px(theme::ThemeSpacing::SM)), ..default() },
+            ));
 
             parent.spawn((Text::new("Press M to close"), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(theme::ThemeColors::TEXT_MUTED)));
         });
@@ -3751,6 +3877,8 @@ fn galaxy_map_click_system(
     streaming: Res<crate::celestial::resources::SystemStreamingManager>,
     fuel_state: Res<FuelState>,
     mut notifications: MessageWriter<ShowNotification>,
+    standing: Res<crate::diplomacy::FactionStanding>,
+    war: Res<crate::celestial::territory::BorderWar>,
 ) {
     use crate::celestial::resources::{GalaxyWarpTarget, SystemDiscovery};
 
@@ -3795,7 +3923,7 @@ fn galaxy_map_click_system(
     }
     let (win_w, win_h) = windows.single().map(|w| (w.width(), w.height())).unwrap_or((1280.0, 800.0));
     let panel_size = (win_w.min(win_h) * 0.85).max(200.0);
-    spawn_galaxy_map_overlay(&mut commands, &galaxy_map, &streaming, pending.0, &fuel_state, panel_size);
+    spawn_galaxy_map_overlay(&mut commands, &galaxy_map, &streaming, pending.0, &fuel_state, &standing, &war, panel_size);
 }
 
 /// G: hold to charge a warp dash toward the pending map destination. Release
@@ -4956,161 +5084,310 @@ fn spawn_docking_menu(
     let crew_count = crew_query.iter().count();
     // Escape leaves a settlement berth, but at a station it only closes this
     // menu (handle_menu_input) -- the hint has to say which.
-    let escape_hint = if *state.get() == GameState::StationDocked { "ESC: Close" } else { "ESC: Undock" };
+    let escape_hint = if *state.get() == GameState::StationDocked { "Esc  close" } else { "Esc  undock" };
     let station_idx = ship_query.single().ok()
         .and_then(|t| stations.nearest_index(t.translation.truncate()))
         .unwrap_or(0);
-    let far = distance_price_multiplier_for(station_idx, &galaxy);
+    let far = distance_price_multiplier_for(station_idx, &galaxy) * market.service_multiplier();
     let services = get_docking_services(&hull_state, &oxygen_state, &fuel_state, &weapon_query, crew_count, staffing_state.total_berths, &inventory, station_idx, &market, far);
 
+    // Who the station belongs to decides its colours and whether it has the
+    // Bar and Comm directory tabs (a faction starport does; a free port has
+    // only its market).
+    let owner = market.dock_terms.as_ref().and_then(|t| t.faction);
+    let accent = owner.map_or(theme::ThemeColors::ACCENT_CYAN, crate::ai_ship::components::faction_map_color);
+    let s_type = crate::world::station_types::station_type(station_idx);
+    let name = market.dock_terms.as_ref().map_or_else(
+        || crate::world::home_base::station_display_name(station_idx),
+        |t| t.name.clone(),
+    );
+    let kind = crate::world::station_types::station_type_name(s_type);
+    let subtitle = match (owner, &market.dock_terms) {
+        (Some(f), _) => format!("{} starport", crate::ai_ship::components::faction_display_name(f)),
+        (None, Some(_)) => format!("Free port  |  {kind}"),
+        (None, None) => kind.to_string(),
+    };
+    let standing_chip: Option<(String, Color)> = market.dock_terms.as_ref().map(|t| {
+        let color = match t.standing {
+            "Allied" => theme::ThemeColors::ACCENT_GREEN,
+            "Friendly" => theme::ThemeColors::STATUS_OK,
+            "Neutral" => theme::ThemeColors::TEXT_SECONDARY,
+            "Unfriendly" => theme::ThemeColors::ACCENT_ORANGE,
+            "Free Port" => theme::ThemeColors::ACCENT_CYAN,
+            _ => theme::ThemeColors::ACCENT_RED,
+        };
+        (t.standing.to_uppercase(), color)
+    });
+
+    // Station identity: discounts were baked silently into prices; say them.
+    let discounts = crate::world::station_types::service_discounts(s_type);
+    let mut perks = Vec::new();
+    if let Some(terms) = &market.dock_terms {
+        perks.push(if terms.faction.is_some() {
+            format!("You pay x{:.2}, they pay you x{:.2}", terms.buy, terms.sell)
+        } else if terms.buy <= 1.0 && terms.sell >= 1.0 {
+            "Ordinary prices for now; they rise after your first hours out".to_string()
+        } else {
+            format!("No one's protection: you pay x{:.2}, they pay you x{:.2}", terms.buy, terms.sell)
+        });
+    }
+    if discounts.fuel < 1.0 { perks.push(format!("Fuel -{:.0}%", (1.0 - discounts.fuel) * 100.0)); }
+    if discounts.hull_repair < 1.0 { perks.push(format!("Repairs -{:.0}%", (1.0 - discounts.hull_repair) * 100.0)); }
+    if discounts.ammo < 1.0 { perks.push(format!("Ammo -{:.0}%", (1.0 - discounts.ammo) * 100.0)); }
+
+    let caption = |text: String| (
+        Text::new(text),
+        TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+        TextColor(theme::ThemeColors::TEXT_MUTED),
+    );
+
+    // A dimmed backdrop (the ship and the station stay visible behind it),
+    // and the window centred on it.
     commands.spawn((
         (Node {
                 width: Val::Percent(100.0),
                 height: Val::Percent(100.0),
                 justify_content: JustifyContent::Center,
                 align_items: AlignItems::Center,
-                flex_direction: FlexDirection::Column,
-                row_gap: Val::Px(8.0),
                 ..default()
-            }, BackgroundColor(theme::ThemeColors::BG_VOID), ZIndex(100)),
+            }, BackgroundColor(Color::srgba(0.0, 0.01, 0.03, 0.72)), ZIndex(100)),
         DockingOverlay,
         DockingMenuSelection(0, 0),
-    )).with_children(|parent| {
-        let s_type = crate::world::station_types::station_type(station_idx);
-        // "HAVEN STATION - SHIPYARD", but "VESPER TRADE HUB" rather than
-        // "VESPER TRADE HUB - TRADE HUB": most names already end in the type.
-        let name = crate::world::home_base::station_display_name(station_idx);
-        let kind = crate::world::station_types::station_type_name(s_type);
-        let title = if name.ends_with(kind) {
-            name.to_uppercase()
-        } else {
-            format!("{} - {}", name.to_uppercase(), kind.to_uppercase())
-        };
-        parent.spawn((Text::new(title), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H1), ..default() }, TextColor(theme::ThemeColors::ACCENT_CYAN)));
-
-        // Station identity subtitle — discounts were already silently baked
-        // into displayed prices with nothing explaining why; this states it
-        // plainly. discounts < 1.0 is a genuine price cut (service_discounts
-        // multiplies cost), so only surface the ones actually below 1.0.
-        let discounts = crate::world::station_types::service_discounts(
-            crate::world::station_types::station_type(station_idx),
-        );
-        let mut perks = Vec::new();
-        if discounts.fuel < 1.0 { perks.push(format!("Fuel -{:.0}%", (1.0 - discounts.fuel) * 100.0)); }
-        if discounts.hull_repair < 1.0 { perks.push(format!("Repairs -{:.0}%", (1.0 - discounts.hull_repair) * 100.0)); }
-        if discounts.ammo < 1.0 { perks.push(format!("Ammo -{:.0}%", (1.0 - discounts.ammo) * 100.0)); }
-        if !perks.is_empty() {
-            parent.spawn((
-                Text::new(perks.join("  *  ")),
-                TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
-                TextColor(theme::ThemeColors::TEXT_MUTED),
-            ));
-        }
-
-        // Tagged so it can be refreshed. Spawned once and never updated, this
-        // froze at whatever the balance was when the menu opened — a live run
-        // showed "Credits: 750" in the menu while the HUD read 21, which is
-        // the worst possible place to lie about money.
-        parent.spawn((
-            Text::new(format!("Credits: {}", currency.credits)),
-            TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() },
-            TextColor(theme::ThemeColors::ACCENT_YELLOW),
-            DockingCreditsText,
-        ));
-
-        // Cargo hold — was invisible inside this menu entirely (only
-        // visible via the Map overlay, which doesn't even open while
-        // docked) even though half this menu is about what to do with it.
-        // Static snapshot at open time — the menu doesn't otherwise
-        // rebuild live, matching how the rest of this screen already works.
-        if !inventory.items.is_empty() {
-            parent.spawn((
-                Text::new("CARGO HOLD"),
-                TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
-                TextColor(theme::ThemeColors::TEXT_MUTED),
-            ));
-            parent.spawn(Node {
-                flex_direction: FlexDirection::Row,
-                flex_wrap: FlexWrap::Wrap,
-                column_gap: Val::Px(theme::ThemeSpacing::SM),
-                row_gap: Val::Px(theme::ThemeSpacing::XS),
+        DockTabState { tab: DockTab::Market, tabs: owner.is_some(), contact: 0 },
+    )).with_children(|backdrop| {
+        backdrop.spawn((
+            Node {
+                width: Val::Px(1040.0),
+                // A fixed size: the window used to shrink and grow to each
+                // tab's contents and jump on screen as you switched.
+                height: Val::Px(620.0),
+                max_width: Val::Percent(94.0),
+                max_height: Val::Percent(88.0),
+                flex_direction: FlexDirection::Column,
+                border: UiRect::all(Val::Px(theme::ThemeBorders::DEFAULT)),
+                overflow: Overflow::clip(),
                 ..default()
-            }).with_children(|cargo| {
-                for (item_type, count) in inventory.items.iter() {
-                    cargo.spawn((
-                        Node {
-                            padding: UiRect::new(Val::Px(theme::ThemeSpacing::SM), Val::Px(theme::ThemeSpacing::SM), Val::Px(theme::ThemeSpacing::XS), Val::Px(theme::ThemeSpacing::XS)),
-                            ..default()
-                        },
-                        BackgroundColor(theme::ThemeColors::BG_CARD),
-                    )).with_children(|card| {
-                        card.spawn((
-                            Text::new(format!("{} x{}", item_type.name(), count)),
-                            TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() },
-                            TextColor(theme::ThemeColors::TEXT_SECONDARY),
+            },
+            BackgroundColor(theme::ThemeColors::BG_PANEL),
+            BorderColor::all(theme::ThemeColors::BORDER_BRIGHT),
+        )).with_children(|window| {
+            // The owner's colour, across the top.
+            window.spawn((Node { height: Val::Px(3.0), width: Val::Percent(100.0), ..default() }, BackgroundColor(accent)));
+
+            // Header: name and owner; standing and credits.
+            window.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::SpaceBetween,
+                align_items: AlignItems::Center,
+                padding: UiRect::new(Val::Px(18.0), Val::Px(18.0), Val::Px(12.0), Val::Px(10.0)),
+                column_gap: Val::Px(16.0),
+                ..default()
+            }).with_children(|header| {
+                header.spawn(Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(2.0), flex_shrink: 1.0, ..default() })
+                    .with_children(|names| {
+                        names.spawn((Text::new(name.to_uppercase()), TextFont { font_size: FontSize::Px(theme::ThemeFonts::H2), ..default() }, TextColor(theme::ThemeColors::TEXT_TITLE)));
+                        names.spawn((Text::new(subtitle), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() }, TextColor(theme::ThemeColors::TEXT_SECONDARY)));
+                    });
+                header.spawn(Node { flex_direction: FlexDirection::Row, align_items: AlignItems::Center, column_gap: Val::Px(14.0), flex_shrink: 0.0, ..default() })
+                    .with_children(|right| {
+                        if let Some((label, color)) = &standing_chip {
+                            right.spawn((
+                                Node { padding: UiRect::axes(Val::Px(8.0), Val::Px(3.0)), border: UiRect::all(Val::Px(1.0)), ..default() },
+                                BackgroundColor(color.with_alpha(0.12)),
+                                BorderColor::all(color.with_alpha(0.7)),
+                            )).with_children(|chip| {
+                                chip.spawn((Text::new(label.clone()), TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() }, TextColor(*color)));
+                            });
+                        }
+                        right.spawn((
+                            Text::new(format!("Credits: {}", currency.credits)),
+                            TextFont { font_size: FontSize::Px(theme::ThemeFonts::H3), ..default() },
+                            TextColor(theme::ThemeColors::ACCENT_YELLOW),
+                            DockingCreditsText,
                         ));
                     });
-                }
             });
-        }
-        parent.spawn((Text::new(""), TextFont { font_size: FontSize::Px(8.0), ..default() }, TextColor(Color::WHITE)));
 
-        // Row order/numbering must stay exactly as-is — docking_menu_input
-        // (below) matches on these indices by number throughout its ~550
-        // lines, so this groups the EXISTING order visually rather than
-        // reordering rows into cleaner categories (Repair Modules sits
-        // between Sell/Buy in the source order, hence "Trade & Upkeep"
-        // rather than a pure "Trade" label).
-        for (group_start, group_label) in [(0usize, "Services"), (5, "Trade & Upkeep"), (8, "")] {
-            if !group_label.is_empty() {
-                parent.spawn((
-                    Text::new(group_label.to_uppercase()),
-                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
-                    TextColor(theme::ThemeColors::TEXT_MUTED),
-                    Node { margin: UiRect::top(Val::Px(theme::ThemeSpacing::SM)), ..default() },
-                ));
-            }
-            let group_end = match group_start { 0 => 5, 5 => 8, _ => services.len() };
-            for i in group_start..group_end {
-                let service = &services[i];
-                let cursor = if i == 0 { "> " } else { "  " };
-                // A price on a greyed row read as a charge: "Repair Hull
-                // [1c]" at 0% damage, "Hire Crew [3200c]" with every berth full.
-                let cost_str = if service.cost > 0 && service.available {
-                    format!(" [{}c]", service.cost)
-                } else {
-                    String::new()
-                };
-
-                let color = if !service.available {
-                    Color::srgb(0.4, 0.4, 0.4)
-                } else if i == 0 {
-                    Color::WHITE
-                } else {
-                    Color::srgb(0.8, 0.8, 0.8)
-                };
-
-                parent.spawn((
-                    Text::new(format!("{}{}{}\n", cursor, service.name, cost_str)),
-                    TextFont { font_size: FontSize::Px(20.0), ..default() },
-                    TextColor(color),
-                    DockingServiceItem(i),
-                )).with_children(|section| {
-                    section.spawn((
-                        TextSpan::new(format!("    {}", service.description)),
-                        TextFont { font_size: FontSize::Px(14.0), ..default() },
-                        TextColor(Color::srgb(0.6, 0.6, 0.7)),
-                    ));
+            // Tabs, at a faction starport.
+            if owner.is_some() {
+                window.spawn((
+                    Node {
+                        flex_direction: FlexDirection::Row,
+                        align_items: AlignItems::FlexEnd,
+                        column_gap: Val::Px(2.0),
+                        padding: UiRect::horizontal(Val::Px(14.0)),
+                        border: UiRect::bottom(Val::Px(1.0)),
+                        ..default()
+                    },
+                    BorderColor::all(theme::ThemeColors::BORDER_DEFAULT),
+                )).with_children(|bar| {
+                    for tab in DockTab::ALL {
+                        bar.spawn((
+                            Node { padding: UiRect::axes(Val::Px(16.0), Val::Px(7.0)), border: UiRect::bottom(Val::Px(2.0)), ..default() },
+                            BackgroundColor(theme::ThemeColors::BG_CARD),
+                            BorderColor::all(Color::NONE),
+                            DockTabButton(tab),
+                        )).with_children(|b| {
+                            b.spawn((Text::new(tab.label()), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY), ..default() }, TextColor(theme::ThemeColors::TEXT_SECONDARY)));
+                        });
+                    }
+                    bar.spawn((Node { margin: UiRect::left(Val::Auto), padding: UiRect::bottom(Val::Px(8.0)), ..default() }, ))
+                        .with_children(|hint| { hint.spawn(caption("Q / E  switch tab".into())); });
                 });
             }
-        }
 
-        parent.spawn((Text::new(""), TextFont { font_size: FontSize::Px(8.0), ..default() }, TextColor(Color::WHITE)));
+            // Body: the open tab, and your ship beside it.
+            window.spawn(Node {
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(16.0),
+                padding: UiRect::all(Val::Px(14.0)),
+                min_height: Val::Px(0.0),
+                flex_grow: 1.0,
+                flex_shrink: 1.0,
+                overflow: Overflow::clip_y(),
+                ..default()
+            }).with_children(|body| {
+                // The market: the service rows, as cards. Row order and
+                // numbering must stay exactly as-is -- docking_menu_input
+                // matches on these indices throughout.
+                body.spawn((
+                    Node { flex_direction: FlexDirection::Column, flex_grow: 1.0, row_gap: Val::Px(5.0), ..default() },
+                    DockTabPanel(DockTab::Market),
+                )).with_children(|list| {
+                    for (group_start, group_label) in [(0usize, "Services"), (5, "Trade & upkeep"), (8, "")] {
+                        if !group_label.is_empty() {
+                            list.spawn((
+                                Text::new(group_label.to_uppercase()),
+                                TextFont { font_size: FontSize::Px(theme::ThemeFonts::CAPTION), ..default() },
+                                TextColor(theme::ThemeColors::TEXT_MUTED),
+                                Node { margin: UiRect::top(Val::Px(if group_start == 0 { 0.0 } else { 6.0 })), ..default() },
+                            ));
+                        }
+                        let group_end = match group_start { 0 => 5, 5 => 8, _ => services.len() };
+                        for i in group_start..group_end {
+                            let service = &services[i];
+                            let color = if !service.available { theme::ThemeColors::TEXT_MUTED } else { theme::ThemeColors::TEXT_PRIMARY };
+                            list.spawn((
+                                Node {
+                                    padding: UiRect::new(Val::Px(12.0), Val::Px(12.0), Val::Px(6.0), Val::Px(6.0)),
+                                    border: UiRect::left(Val::Px(3.0)),
+                                    ..default()
+                                },
+                                BackgroundColor(theme::ThemeColors::BG_CARD),
+                                BorderColor::all(Color::NONE),
+                                DockingRowCard(i),
+                            )).with_children(|card| {
+                                card.spawn((
+                                    Text::new(service_title(service.name, service.cost, service.available)),
+                                    TextFont { font_size: FontSize::Px(16.0), ..default() },
+                                    TextColor(color),
+                                    DockingServiceItem(i),
+                                )).with_children(|section| {
+                                    section.spawn((
+                                        TextSpan::new(service_detail(&service.description)),
+                                        TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() },
+                                        TextColor(theme::ThemeColors::TEXT_SECONDARY),
+                                    ));
+                                });
+                            });
+                        }
+                    }
+                });
+                // The Bar and the Comm directory: filled by diplomacy::dock_tabs.
+                if owner.is_some() {
+                    for tab in [DockTab::Bar, DockTab::Comm] {
+                        body.spawn((
+                            Node { display: Display::None, flex_direction: FlexDirection::Column, flex_grow: 1.0, row_gap: Val::Px(8.0), ..default() },
+                            DockTabPanel(tab),
+                        ));
+                    }
+                }
 
-        // Was srgb(0.25) on the near-black backdrop -- about 1.5:1, the
-        // controls line was effectively invisible.
-        parent.spawn((Text::new(format!("Up/Down: Select | Left/Right: cargo choice | Enter: Purchase | {escape_hint}")), TextFont { font_size: FontSize::Px(14.0), ..default() }, TextColor(theme::ThemeColors::TEXT_SECONDARY)));
+                // Your ship, and what's in the hold.
+                body.spawn(Node { flex_direction: FlexDirection::Column, width: Val::Px(270.0), flex_shrink: 0.0, row_gap: Val::Px(10.0), ..default() })
+                    .with_children(|side| {
+                        let card = |side: &mut ChildSpawnerCommands, title: &str, lines: Vec<(String, Color)>| {
+                            side.spawn((
+                                Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), padding: UiRect::all(Val::Px(10.0)), ..default() },
+                                BackgroundColor(theme::ThemeColors::BG_CARD),
+                            )).with_children(|c| {
+                                c.spawn(caption(title.to_uppercase()));
+                                for (line, color) in lines {
+                                    c.spawn((Text::new(line), TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() }, TextColor(color)));
+                                }
+                            });
+                        };
+                        let pct = |v: f32| format!("{:.0}%", v * 100.0);
+                        card(side, "Your ship", vec![
+                            (format!("Hull       {}", pct(hull_state.hull_integrity)), if hull_state.hull_integrity < 0.5 { theme::ThemeColors::ACCENT_RED } else { theme::ThemeColors::ACCENT_GREEN }),
+                            (format!("Fuel       {:.0} / {:.0}", fuel_state.current_fuel, fuel_state.max_fuel), theme::ThemeColors::ACCENT_ORANGE),
+                            (format!("Oxygen     {:.0} / {:.0}", oxygen_state.current_oxygen, oxygen_state.max_oxygen), theme::ThemeColors::ACCENT_CYAN),
+                            (format!("Crew       {} / {}", crew_count, staffing_state.total_berths), theme::ThemeColors::TEXT_PRIMARY),
+                        ]);
+                        // Filled by diplomacy::dock_tabs::refresh_dock_hold, so
+                        // what you buy or are handed shows straight away.
+                        side.spawn((
+                            Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), padding: UiRect::all(Val::Px(10.0)), ..default() },
+                            BackgroundColor(theme::ThemeColors::BG_CARD),
+                        )).with_children(|c| {
+                            c.spawn(caption("CARGO HOLD".to_string()));
+                            c.spawn((Node { flex_direction: FlexDirection::Column, row_gap: Val::Px(3.0), ..default() }, DockHoldList));
+                        });
+                        if !perks.is_empty() {
+                            card(side, "Terms", perks.iter().map(|p| (p.clone(), theme::ThemeColors::TEXT_SECONDARY)).collect());
+                        }
+                    });
+            });
+
+            // Keys.
+            window.spawn((
+                Node {
+                    padding: UiRect::axes(Val::Px(18.0), Val::Px(8.0)),
+                    border: UiRect::top(Val::Px(1.0)),
+                    ..default()
+                },
+                BackgroundColor(theme::ThemeColors::BG_CARD),
+                BorderColor::all(theme::ThemeColors::BORDER_SUBTLE),
+            )).with_children(|footer| {
+                footer.spawn((
+                    Text::new(format!("Up/Down  select    Left/Right  cargo choice    Enter  buy    {escape_hint}")),
+                    TextFont { font_size: FontSize::Px(theme::ThemeFonts::BODY_SMALL), ..default() },
+                    TextColor(theme::ThemeColors::TEXT_SECONDARY),
+                    DockFooterHint,
+                ));
+            });
+        });
     });
+}
+
+/// A service card's first line: its name, and its price when it has one.
+fn service_title(name: &str, cost: u32, available: bool) -> String {
+    if cost > 0 && available {
+        format!("{name}  -  {cost} cr")
+    } else {
+        name.to_string()
+    }
+}
+
+/// A service card's second line.
+fn service_detail(description: &str) -> String {
+    format!("\n{description}")
+}
+
+/// The selected service card is lit; the rest sit back.
+fn highlight_dock_rows(
+    menu: Query<&DockingMenuSelection, With<DockingOverlay>>,
+    mut cards: Query<(&DockingRowCard, &mut BackgroundColor, &mut BorderColor)>,
+) {
+    let Ok(selection) = menu.single() else { return };
+    for (card, mut bg, mut border) in cards.iter_mut() {
+        let on = card.0 == selection.0;
+        let want_bg = if on { theme::ThemeColors::BG_ELEVATED } else { theme::ThemeColors::BG_CARD };
+        if bg.0 != want_bg {
+            bg.0 = want_bg;
+            *border = BorderColor::all(if on { theme::ThemeColors::ACCENT_CYAN } else { Color::NONE });
+        }
+    }
 }
 
 /// Top of the right-hand HUD column (contract tracker, then notifications):
@@ -5216,7 +5493,7 @@ fn docking_menu_input(
     crew_art: (Res<AssetServer>, Res<crate::crew::animation::CrewAtlases>),
     keyboard: Res<ButtonInput<KeyCode>>,
     mut commands: Commands,
-    mut menu_query: Query<&mut DockingMenuSelection, With<DockingOverlay>>,
+    mut menu_query: Query<(&mut DockingMenuSelection, Option<&DockTabState>), With<DockingOverlay>>,
     // Grouped: this system is at Bevy's 16-param cap (see the note above), so
     // the credits readout rides along with the service rows it sits beside.
     mut menu_text: (
@@ -5259,7 +5536,11 @@ fn docking_menu_input(
         }
     }
 
-    let Ok(mut selection) = menu_query.single_mut() else { return };
+    let Ok((mut selection, tabs)) = menu_query.single_mut() else { return };
+    // The Bar and the Comm directory have their own keys (dock_tabs).
+    if tabs.is_some_and(|t| t.tab != DockTab::Market) {
+        return;
+    }
 
     let station_idx = ship_query.single().ok()
         .and_then(|t| stations.nearest_index(t.translation.truncate()))
@@ -5268,7 +5549,7 @@ fn docking_menu_input(
     // get_docking_services / the refresh block below. That now includes the
     // distance multiplier: quote one price and charge another and the menu is
     // lying, which is worse than it being cheap.
-    let far = distance_price_multiplier_for(station_idx, &galaxy);
+    let far = distance_price_multiplier_for(station_idx, &galaxy) * market.service_multiplier();
     let discounts = crate::world::station_types::service_discounts(
         crate::world::station_types::station_type(station_idx),
     );
@@ -5809,21 +6090,21 @@ fn docking_menu_input(
         if idx >= service_info.len() { continue; }
         let (name, desc, cost, available) = &service_info[idx];
 
-        let cursor = if idx == new_idx { "> " } else { "  " };
-        let cost_str = if *cost > 0 && *available { format!(" [{}c]", cost) } else { String::new() };
+        // The selected card is lit by highlight_dock_rows; the text only
+        // says what the row is and what it costs.
         let color = if !available {
-            Color::srgb(0.4, 0.4, 0.4)
+            theme::ThemeColors::TEXT_MUTED
         } else if idx == new_idx {
             Color::WHITE
         } else {
-            Color::srgb(0.8, 0.8, 0.8)
+            theme::ThemeColors::TEXT_PRIMARY
         };
 
-        text.0 = format!("{}{}{}\n", cursor, name, cost_str);
+        text.0 = service_title(name, *cost, *available);
         text_color.0 = color;
         for child in children.iter() {
             if let Ok(mut span) = span_query.get_mut(child) {
-                span.0 = format!("    {}", desc);
+                span.0 = service_detail(desc);
             }
         }
     }
@@ -6381,5 +6662,53 @@ mod module_repair_tests {
     #[test]
     fn no_credits_fixes_nothing() {
         assert!(plan_module_repair(&[(0, 50.0)], 0, 5.0).iter().all(|a| *a == 0.0));
+    }
+}
+
+#[cfg(test)]
+mod galaxy_map_tests {
+    use super::*;
+    use crate::celestial::resources::{GalaxyWarpTarget, SystemDiscovery, SystemStreamingManager};
+
+    fn texts(app: &mut App) -> Vec<String> {
+        let mut q = app.world_mut().query::<&Text>();
+        q.iter(app.world()).map(|t| t.0.clone()).collect()
+    }
+
+    /// The map tells you whose space a system is, what they think of you,
+    /// who it borders and what haunts it, and lists the wars it knows of.
+    #[test]
+    fn the_galaxy_map_shows_territory() {
+        let mut map = crate::celestial::galaxy::generate_galaxy_map(42);
+        for s in &mut map.systems {
+            s.discovery = SystemDiscovery::Located;
+        }
+        let haunted = map.systems.iter().find(|s| s.haunt.is_some()).unwrap().id;
+        let owner = map.systems.iter().find(|s| s.id == haunted).unwrap().faction.unwrap();
+        let standing = crate::diplomacy::FactionStanding::default();
+
+        let mut app = App::new();
+        app.add_plugins(MinimalPlugins);
+        let streaming = SystemStreamingManager::default();
+        let fuel = FuelState::default();
+        {
+            let world = app.world_mut();
+            let mut commands = world.commands();
+            let war = crate::celestial::territory::BorderWar::default();
+            spawn_galaxy_map_overlay(&mut commands, &map, &streaming, Some(GalaxyWarpTarget::System(haunted)), &fuel, &standing, &war, 600.0);
+        }
+        app.update();
+        let all = texts(&mut app);
+        let has = |needle: &str| all.iter().any(|t| t.contains(needle));
+        let name = crate::ai_ship::components::faction_display_name(owner);
+        assert!(has(name), "owner {name} not shown: {all:?}");
+        assert!(has("They count you"), "standing not shown: {all:?}");
+        assert!(has("Haunted by"), "haunt not shown: {all:?}");
+        assert!(has("AT WAR"), "no wars listed: {all:?}");
+        // One capital ring per territorial faction, and a red ring per haunt.
+        let mut rings = app.world_mut().query::<&Node>();
+        let ringed = rings.iter(app.world()).filter(|n| n.border.left == Val::Px(2.0)).count();
+        let haunts = map.systems.iter().filter(|s| s.haunt.is_some()).count();
+        assert_eq!(ringed, crate::celestial::territory::TERRITORIAL.len() + haunts);
     }
 }

@@ -26,6 +26,7 @@ mod audio;
 mod debug;
 mod gamepad;
 mod tutorial;
+mod diplomacy;
 
 use states::GameState;
 use events::EventsPlugin;
@@ -110,6 +111,7 @@ fn main() {
         .add_plugins(GameAudioPlugin)
         .add_plugins(GamepadPlugin)
         .add_plugins(TutorialPlugin)
+        .add_plugins(diplomacy::DiplomacyPlugin)
         .add_plugins(narrative::NarrativePlugin)
         .add_plugins(ship::towing::TowingPlugin)
 

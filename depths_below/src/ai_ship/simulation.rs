@@ -11,15 +11,19 @@ use super::spawner;
 /// distances up to ~8,160 (85% of their longest weapon's range, see
 /// ai_ship::movement). 10,000 means a ship materializes as a real entity
 /// before the player is even in its weapon range, instead of after.
-const RENDER_DISTANCE: f32 = 10_000.0;
+pub const RENDER_DISTANCE: f32 = 10_000.0;
 
-/// How many AI hulls may exist as real entities at once.
+/// How many AI blocks (hull cells + modules) may exist as real entities at once.
 ///
-/// Each one is a full ship — hull cells, modules, decking, crew — so this is
-/// a frame-time budget, not a gameplay limit: everything past it stays in the
-/// simulation, still moving and still fighting, and materialises as soon as a
-/// slot frees. Nearest to the player wins the slot.
-const MAX_LIVE_AI_HULLS: usize = 8;
+/// A frame-time budget, not a gameplay limit: everything past it stays in the
+/// simulation, still moving and still fighting, and materialises as soon as
+/// room frees. Nearest to the player first.
+///
+/// It counted ships (8) when every ship was about a hundred blocks. Classes
+/// now run from a 70-block skiff to a 2,300-block boss, so a ship count was
+/// either a thin swarm or a frame-rate cliff. 6,000 is about what eight of the
+/// old mid-size hulls cost, and holds a whole swarm or a few capitals.
+const MAX_LIVE_AI_BLOCKS: usize = 6_000;
 /// Distance at which spawned entities get converted back to simulation. Was
 /// 3500 — well inside the new ~8,160 max standoff distance, so a ship
 /// holding a long-range fight would get yanked back to an abstract
@@ -57,20 +61,61 @@ pub fn init_world_simulation(
             // DEPTHS_MOVETEST_ENEMY_FACTION overrides the dummy's faction for
             // behavior-tree testing (e.g. "The Silence", "Terran Hegemony") — defaults
             // to Broken Choir for the original damage-model testing use case.
-            let faction = match std::env::var("DEPTHS_MOVETEST_ENEMY_FACTION").ok().as_deref() {
-                Some("StellarPreserve") => AiShipType::StellarPreserve,
-                Some("SynthesisCollective") => AiShipType::SynthesisCollective,
-                Some("CorpseStars") => AiShipType::CorpseStars,
-                Some("TheSilence") => AiShipType::TheSilence,
-                Some("TerranHegemony") => AiShipType::TerranHegemony,
-                Some("GildedThrone") => AiShipType::GildedThrone,
-                Some("RecursiveKingdom") => AiShipType::RecursiveKingdom,
-                _ => AiShipType::BrokenChoir,
-            };
-            sim.ships.push(SimulatedShip::patrolling(
+            let faction = std::env::var("DEPTHS_MOVETEST_ENEMY_FACTION")
+                .ok()
+                .and_then(|f| faction_named(&f))
+                .unwrap_or(AiShipType::BrokenChoir);
+            let mut dummy = SimulatedShip::patrolling(
                 0, faction, Vec2::new(500.0, 0.0), Vec2::new(500.0, 0.0), 2000.0, 0.0,
-            ));
-            info!("MOVETEST: single non-shooting {:?} dummy spawned at (500, 0) for damage-model testing", faction);
+            );
+            // DEPTHS_MOVETEST_ENEMY_CLASS=<key> picks a roster class (ai_ship::roster),
+            // e.g. "bulwark"; unset flies the faction's original design.
+            if let Ok(key) = std::env::var("DEPTHS_MOVETEST_ENEMY_CLASS") {
+                dummy.class = super::roster::find(faction, &key).map(|c| c.key);
+                if dummy.class.is_none() {
+                    warn!("MOVETEST: {:?} has no class {:?}", faction, key);
+                }
+                // Classes run up to a hundred cells long; at 500 units one
+                // would be born inside the player's own hull and be thrown
+                // out of frame by the collision push.
+                dummy.position = Vec2::new(3200.0, 0.0);
+                dummy.home_zone = dummy.position;
+                dummy.destination = dummy.position;
+            }
+            info!("MOVETEST: single non-shooting {:?} {:?} dummy spawned at (500, 0) for damage-model testing", faction, dummy.class);
+            sim.add(dummy);
+        }
+
+        // DEPTHS_MOVETEST_FLEET=<Faction>:<Kind> (Patrol, BattleGroup, Convoy,
+        // StationGuard, Raiders): one whole fleet of that kind, 9 km off and
+        // crossing ahead of you, for watching formations and fleet fights.
+        if let Ok(spec) = std::env::var("DEPTHS_MOVETEST_FLEET") {
+            use super::fleet::FleetKind;
+            let (f, k) = spec.split_once(':').unwrap_or((spec.as_str(), "Patrol"));
+            let kind = match k {
+                "BattleGroup" => FleetKind::BattleGroup,
+                "Convoy" => FleetKind::Convoy,
+                "StationGuard" => FleetKind::StationGuard,
+                "Raiders" => FleetKind::Raiders,
+                _ => FleetKind::Patrol,
+            };
+            let faction = faction_named(f).unwrap_or(AiShipType::TerranHegemony);
+            let mut rng = rand::thread_rng();
+            let mut held = super::fleet::Held::new();
+            match super::fleet::compose(faction, kind, &mut rng, &mut held) {
+                Some(classes) => {
+                    let at = Vec2::new(9_000.0, 4_000.0);
+                    let (mut fleet, members) = super::fleet::new_fleet(
+                        faction, kind, &classes, 0, at, Vec2::ZERO, 40_000.0, &mut rng,
+                    );
+                    fleet.heading = std::f32::consts::PI;
+                    fleet.destination = Vec2::new(-30_000.0, 4_000.0);
+                    fleet.route = vec![Vec2::new(-30_000.0, 4_000.0), Vec2::new(30_000.0, 4_000.0)];
+                    info!("MOVETEST: {:?} {:?} fleet of {}: {:?}", faction, kind, members.len(), classes);
+                    sim.add_fleet(fleet, members);
+                }
+                None => warn!("MOVETEST: {:?} can't crew a {:?}", faction, kind),
+            }
         }
 
         // TEMP [AI_VS_AI_DIAGNOSTIC]: spawns a tight cluster of guaranteed
@@ -124,6 +169,25 @@ pub fn init_world_simulation(
     info!("World simulation initialized with {} AI vessels", sim.ships.len());
 }
 
+/// A faction by its type name, as the test switches spell it.
+fn faction_named(name: &str) -> Option<AiShipType> {
+    Some(match name {
+        "StellarPreserve" => AiShipType::StellarPreserve,
+        "SynthesisCollective" => AiShipType::SynthesisCollective,
+        "CorpseStars" => AiShipType::CorpseStars,
+        "TheSilence" => AiShipType::TheSilence,
+        "TerranHegemony" => AiShipType::TerranHegemony,
+        "GildedThrone" => AiShipType::GildedThrone,
+        "RecursiveKingdom" => AiShipType::RecursiveKingdom,
+        "EternalHegemony" => AiShipType::EternalHegemony,
+        "Shepherd" => AiShipType::Shepherd,
+        "BrokenChoir" => AiShipType::BrokenChoir,
+        "MerchantPrinces" => AiShipType::MerchantPrinces,
+        "FreeHaulersCompact" => AiShipType::FreeHaulersCompact,
+        _ => return None,
+    })
+}
+
 /// Spawns a system's faction population the FIRST time it's ever loaded
 /// (Hot or Warm) — persistence-safe: if any SimulatedShip already carries
 /// this system_id (from an earlier visit, however depleted by combat since
@@ -135,7 +199,9 @@ pub fn ensure_system_population(sim: &mut WorldSimulation, galaxy_map: &crate::c
         return;
     }
     if let Some(system) = galaxy_map.systems.iter().find(|s| s.id == system_id) {
+        let borders = crate::celestial::territory::border_factions(galaxy_map, system_id);
         spawn_system_faction_population(sim, system);
+        spawn_visitors(sim, system, &borders);
     }
 }
 
@@ -152,67 +218,177 @@ fn spawn_system_faction_population(sim: &mut WorldSimulation, system: &crate::ce
 
     // How many, and arranged how.
     //
-    // This used to drop `ship_count` ships uniformly inside ONE disc of
-    // radius*0.8 around a single point, which gave every system the same
-    // shape: a single clump of four-to-eight dots, most of them outside the
-    // 10,000-unit materialisation bubble, none of them anywhere in
-    // particular. Reported as "way too low and way too close to each other".
+    // A system's population is a set of FLEETS (ai_ship::fleet): patrols,
+    // battle groups, convoys, a station guard, raiders -- whatever the
+    // faction's lore fields. It used to be loners, pairs and packs of random
+    // classes, so a capital flew alone as often as not and a hauler fought
+    // like a warship.
     //
-    // Now the population is split into ELEMENTS — lone ships, pairs, and
-    // packs of three to five — and each element is placed in its own distance
-    // band. A pack flies in close company; the bands put some elements on top
-    // of the faction's holdings and others out at the edge of the territory,
-    // so the spacing between them is genuinely uneven rather than uniform.
-    //
-    // And not all in one place. Every element used to be placed round the one
-    // faction cluster point, 14-18 km of territory in a system a million units
-    // across: wherever you met them, you met all of them, and everywhere else
-    // was empty. Reported as "only in a single pack and not spread around".
-    // Elements now spread over several holdings (see `faction_holdings`), the
-    // cluster point keeping the largest share.
+    // Fleets spread over several holdings (see `faction_holdings`), the
+    // cluster point keeping the largest share, each fleet in its own distance
+    // band round its holding: a single clump was reported as "only in a
+    // single pack and not spread around".
     let holdings = faction_holdings(system, &mut rng);
-    let count = system_ship_count(template.ship_count, system.danger_tier);
-    // Fixed shares, not a roll per element: with packs of up to five, a roll
-    // could still put fourteen of eighteen ships in one holding.
-    for (&home, quota) in holdings.iter().zip(holding_quotas(count, holdings.len())) {
+    // The danger the faction itself brings (a haunted system's danger is the
+    // boss's, and the boss brings its own ships).
+    let count = system_ship_count(template.ship_count, super::components::faction_power(faction));
+    // A capital is where a faction keeps its strength.
+    let count = if system.capital { (count as f32 * CAPITAL_SHARE).round() as usize } else { count };
+    // How many of each capped role this system already holds.
+    let mut held = super::fleet::Held::new();
+    let has_station = crate::diplomacy::stations::station_plan(faction).is_some();
+    let mut guarded = false;
+    // Fleets placed so far, (centre, reach): a new one is set down clear of
+    // them, never through another's formation.
+    let mut placed_fleets: Vec<(Vec2, f32)> = Vec::new();
+    // Fixed shares, not a roll per fleet: one holding mustn't take them all.
+    for (h, (&home, quota)) in holdings.iter().zip(holding_quotas(count, holdings.len())).enumerate() {
         let mut placed = 0usize;
         while placed < quota {
-            // Weighted so loners and pairs are common and a real pack is an event.
-            let roll = rng.gen::<f32>();
-            let size = if roll < 0.40 { 1 } else if roll < 0.70 { 2 } else { rng.gen_range(3..=5) };
-            let size = size.min(quota - placed);
+            use super::fleet::FleetKind;
+            // One guard per station; a convoy needs somewhere to run to.
+            let Some((kind, classes)) = super::fleet::roll_fleet(faction, &mut rng, &mut held, |k| match k {
+                FleetKind::StationGuard => has_station && !guarded,
+                FleetKind::Convoy => holdings.len() > 1,
+                _ => true,
+            }) else {
+                break;
+            };
 
+            let reach = classes
+                .iter()
+                .map(|&(f, c)| super::spawner::design_extent(f, c))
+                .fold(0.0_f32, f32::max)
+                * (classes.len() as f32 + 1.0)
+                + 1_000.0;
             // Three bands rather than a uniform draw: uniform-in-a-disc actually
             // concentrates toward the rim, which is the opposite of varied.
-            let band = match rng.gen_range(0..3) {
-                0 => rng.gen_range(0.10..0.30),
-                1 => rng.gen_range(0.35..0.60),
-                _ => rng.gen_range(0.65..0.95),
-            };
-            let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-            let anchor = home + Vec2::new(angle.cos(), angle.sin()) * (template.radius * band);
-
-            // One speed for the element, so a pack holds formation instead of
-            // smearing out over the first leg.
-            let cruise = rng.gen_range(55.0..130.0);
-            let destination = patrol_waypoint(&mut rng, home, template.radius);
-
-            for _ in 0..size {
-                let spread = if size == 1 { 0.0 } else { rng.gen_range(120.0..420.0) };
-                let a = rng.gen_range(0.0..std::f32::consts::TAU);
-                let pos = anchor + Vec2::new(a.cos(), a.sin()) * spread;
-                let mut ship = SimulatedShip::patrolling(
-                    system.id,
-                    faction,
-                    pos,
-                    home,
-                    template.radius,
-                    cruise * rng.gen_range(0.92..1.08),
-                );
-                ship.destination = destination;
-                sim.ships.push(ship);
+            // A few tries for a spot clear of every fleet already placed.
+            let mut angle = 0.0;
+            let mut anchor = home;
+            for _ in 0..12 {
+                let band = match rng.gen_range(0..3) {
+                    0 => rng.gen_range(0.10..0.30),
+                    1 => rng.gen_range(0.35..0.60),
+                    _ => rng.gen_range(0.65..0.95),
+                };
+                angle = rng.gen_range(0.0..std::f32::consts::TAU);
+                anchor = home + Vec2::new(angle.cos(), angle.sin()) * (template.radius * band);
+                if placed_fleets.iter().all(|&(c, r)| c.distance(anchor) > r + reach) {
+                    break;
+                }
             }
-            placed += size;
+            placed_fleets.push((anchor, reach));
+            let (mut fleet, members) = super::fleet::new_fleet(
+                faction, kind, &classes, system.id, anchor, home, template.radius, &mut rng,
+            );
+            match kind {
+                FleetKind::Convoy => {
+                    // Out to another holding and back.
+                    let other = holdings[(h + rng.gen_range(1..holdings.len())) % holdings.len()];
+                    fleet.route = vec![home, other];
+                    fleet.leg = 1;
+                    fleet.destination = other;
+                    fleet.home_zone = (home + other) * 0.5;
+                    fleet.patrol_radius = home.distance(other) * 0.5 + template.radius;
+                }
+                FleetKind::StationGuard => {
+                    // Until the station's place is known (it rides a planet;
+                    // see tick_world_simulation), it holds the cluster point.
+                    guarded = true;
+                    fleet.home_zone = holdings[0];
+                    fleet.position = holdings[0] + Vec2::from_angle(angle) * 3_000.0;
+                    fleet.patrol_radius = GUARD_RADIUS;
+                    fleet.destination = patrol_waypoint(&mut rng, fleet.home_zone, fleet.patrol_radius);
+                }
+                FleetKind::Raiders => {
+                    // Ranging wide, after whatever's worth robbing.
+                    fleet.patrol_radius = template.radius * 2.0;
+                    fleet.destination = patrol_waypoint(&mut rng, home, fleet.patrol_radius);
+                }
+                _ => {
+                    fleet.destination = patrol_waypoint(&mut rng, home, template.radius);
+                }
+            }
+            placed += members.len();
+            sim.add_fleet(fleet, members);
+        }
+    }
+
+    // A capital keeps a home fleet: a battle group that holds by its starport
+    // and never leaves (a trading faction's is its ally's).
+    if system.capital && has_station {
+        let flier = faction.ally().filter(|_| faction.is_trading()).unwrap_or(faction);
+        let mut home_held = super::fleet::Held::new();
+        if let Some(hulls) = super::fleet::compose(flier, super::fleet::FleetKind::BattleGroup, &mut rng, &mut home_held) {
+            let at = holdings[0] + Vec2::new(0.0, 6_000.0);
+            let (mut fleet, members) = super::fleet::new_fleet(
+                faction, super::fleet::FleetKind::StationGuard, &hulls, system.id, at, holdings[0], HOME_FLEET_RADIUS, &mut rng,
+            );
+            fleet.destination = patrol_waypoint(&mut rng, holdings[0], HOME_FLEET_RADIUS);
+            sim.add_fleet(fleet, members);
+        }
+    }
+}
+
+/// How far a capital's home fleet ranges round its starport.
+const HOME_FLEET_RADIUS: f32 = 14_000.0;
+
+/// How far a station guard ranges from its post, past the station's hull.
+const GUARD_RADIUS: f32 = 8_000.0;
+
+/// How much busier a faction's capital is than its other systems.
+const CAPITAL_SHARE: f32 = 1.4;
+
+/// The fleets a system holds that aren't its owner's: patrols from the
+/// factions it borders (neighbours meet at border systems), and the boss
+/// that haunts it, if one does.
+fn spawn_visitors(sim: &mut WorldSimulation, system: &crate::celestial::resources::StarSystemDef, borders: &[AiShipType]) {
+    use super::fleet::FleetKind;
+    let mut rng = rand::thread_rng();
+    // Out on the open bearings, away from the owner's cluster point and its
+    // stations: the edge of the system, where a border is.
+    let edge = |rng: &mut rand::rngs::ThreadRng| {
+        system.local_center + Vec2::from_angle(rng.gen_range(0.0..std::f32::consts::TAU)) * rng.gen_range(OPEN_HOLDING_RANGE)
+    };
+    let stations: Vec<Vec2> = crate::world::home_base::station_sites(system).iter().map(|s| s.pos).collect();
+    for &neighbour in borders {
+        let Some(template) = faction_territories().into_iter().find(|t| t.faction == neighbour) else { continue };
+        let mut held = super::fleet::Held::new();
+        for _ in 0..rng.gen_range(1..=2) {
+            let Some((kind, hulls)) = super::fleet::roll_fleet(neighbour, &mut rng, &mut held, |k| {
+                matches!(k, FleetKind::Patrol | FleetKind::Raiders | FleetKind::Convoy)
+            }) else {
+                break;
+            };
+            let home = clear_of_stations(edge(&mut rng), &stations);
+            let (mut fleet, members) =
+                super::fleet::new_fleet(neighbour, kind, &hulls, system.id, home, home, template.radius * 1.5, &mut rng);
+            if kind == FleetKind::Convoy {
+                // A convoy crossing the border: through the system and out.
+                let far = clear_of_stations(edge(&mut rng), &stations);
+                fleet.route = vec![home, far];
+                fleet.leg = 1;
+                fleet.home_zone = (home + far) * 0.5;
+                fleet.patrol_radius = home.distance(far) * 0.5 + template.radius;
+                fleet.destination = far;
+            } else {
+                fleet.destination = patrol_waypoint(&mut rng, home, fleet.patrol_radius);
+            }
+            sim.add_fleet(fleet, members);
+        }
+    }
+    if let Some(boss) = system.haunt {
+        // The boss's battle group, ranging the whole system, and a patrol of
+        // its own.
+        for kind in [FleetKind::BattleGroup, FleetKind::Patrol] {
+            let mut held = super::fleet::Held::new();
+            let Some(hulls) = super::fleet::compose(boss, kind, &mut rng, &mut held) else { continue };
+            let home = clear_of_stations(edge(&mut rng), &stations);
+            let (mut fleet, members) =
+                super::fleet::new_fleet(boss, kind, &hulls, system.id, home, system.local_center, OPEN_HOLDING_RANGE.end, &mut rng);
+            fleet.destination = patrol_waypoint(&mut rng, system.local_center, fleet.patrol_radius);
+            sim.add_fleet(fleet, members);
         }
     }
 }
@@ -287,7 +463,7 @@ fn clear_of_stations(mut pos: Vec2, stations: &[Vec2]) -> Vec2 {
 ///
 /// Roughly double what it was (2.2x, 6-40): spread over a system's holdings,
 /// that left a whole system with seven or eight hostiles on the map, and the
-/// playtester wanted more. Only MAX_LIVE_AI_HULLS are ever full entities at
+/// playtester wanted more. Only MAX_LIVE_AI_BLOCKS worth are ever full entities at
 /// once, so the rest cost a position update each.
 pub fn system_ship_count(template_count: usize, danger_tier: f32) -> usize {
     let scale = 1.0 + (danger_tier / 100.0).clamp(0.0, 2.0);
@@ -305,18 +481,32 @@ const ARRIVE_RADIUS: f32 = 450.0;
 /// legs inside the territory. The mix is the point: traffic that only ever
 /// visited stations would read as a conveyor belt, and traffic that never did
 /// is the random walk this replaced.
-fn next_waypoint(rng: &mut impl Rng, ship: &SimulatedShip, anchors: &[(Vec2, f32)]) -> Vec2 {
+fn next_waypoint(rng: &mut impl Rng, home_zone: Vec2, patrol_radius: f32, anchors: &[(Vec2, f32)]) -> Vec2 {
     if !anchors.is_empty() && rng.gen::<f32>() < 0.4 {
         let (anchor, structure) = anchors[rng.gen_range(0..anchors.len())];
         let angle = rng.gen_range(0.0..std::f32::consts::TAU);
         let standoff = structure + rng.gen_range(600.0..2200.0);
         let want = anchor + Vec2::new(angle.cos(), angle.sin()) * standoff;
         // Only if it is somewhere this ship is allowed to be.
-        if want.distance(ship.home_zone) <= ship.patrol_radius {
+        if want.distance(home_zone) <= patrol_radius {
             return want;
         }
     }
-    patrol_waypoint(rng, ship.home_zone, ship.patrol_radius)
+    patrol_waypoint(rng, home_zone, patrol_radius)
+}
+
+/// Where a fleet goes next: a convoy's next stop, a guard's next leg round
+/// its post, anyone else's next patrol leg.
+fn next_fleet_waypoint(rng: &mut impl Rng, fleet: &mut super::fleet::SimFleet, anchors: &[(Vec2, f32)]) -> Vec2 {
+    use super::fleet::FleetKind;
+    match fleet.kind {
+        FleetKind::Convoy if !fleet.route.is_empty() => {
+            fleet.leg = (fleet.leg + 1) % fleet.route.len();
+            fleet.route[fleet.leg]
+        }
+        FleetKind::StationGuard => patrol_waypoint(rng, fleet.home_zone, fleet.patrol_radius),
+        _ => next_waypoint(rng, fleet.home_zone, fleet.patrol_radius, anchors),
+    }
 }
 
 /// A point worth flying to inside a territory, for a ship with no better idea.
@@ -342,6 +532,8 @@ pub fn tick_world_simulation(
     mut sim: ResMut<WorldSimulation>,
     streaming: Res<crate::celestial::resources::SystemStreamingManager>,
     stations: Res<crate::world::home_base::SystemStations>,
+    faction_stations: Res<crate::diplomacy::stations::FactionStations>,
+    player: Query<&Transform, With<Ship>>,
 ) {
     sim.tick_timer.tick(time.delta());
     if !sim.tick_timer.just_finished() {
@@ -350,6 +542,7 @@ pub fn tick_world_simulation(
 
     let dt = sim.tick_timer.duration().as_secs_f32();
     let mut rng = rand::thread_rng();
+    let player_pos = player.single().ok().map(|t| t.translation.truncate());
 
     // What is worth being near, in the system the player is actually in.
     // Patrols and raiders both gravitate to the same places a player does,
@@ -363,15 +556,24 @@ pub fn tick_world_simulation(
         streaming.loaded_system == Some(system_id) || streaming.warm_systems.contains(&system_id)
     };
 
-    // Collect positions for interaction checks
-    let positions: Vec<(usize, AiShipType, Vec2, f32)> = sim.ships.iter().enumerate()
-        .filter(|(_, s)| !s.spawned && s.behavior != SimBehavior::Dead && is_active_system(s.system_id))
-        .map(|(i, s)| (i, s.faction, s.position, s.health))
+    let sim: &mut WorldSimulation = &mut sim;
+    let fleet_ids: std::collections::HashSet<u32> = sim.fleets.iter().map(|f| f.id).collect();
+    // A fleet with a member on screen is flown by the real ships, not here.
+    let live_fleets: std::collections::HashSet<u32> =
+        sim.ships.iter().filter(|s| s.spawned && s.fleet != 0).map(|s| s.fleet).collect();
+    let manned_fleets: std::collections::HashSet<u32> = sim
+        .ships
+        .iter()
+        .filter(|s| s.fleet != 0 && s.behavior != SimBehavior::Dead)
+        .map(|s| s.fleet)
         .collect();
 
-    // Phase 1: Move off-screen ships
+    // Phase 1: Move off-screen ships that fly alone.
     for ship in sim.ships.iter_mut() {
         if ship.spawned || ship.behavior == SimBehavior::Dead || !is_active_system(ship.system_id) {
+            continue;
+        }
+        if fleet_ids.contains(&ship.fleet) {
             continue;
         }
 
@@ -384,10 +586,10 @@ pub fn tick_world_simulation(
         let to_dest = ship.destination - ship.position;
         let remaining = to_dest.length();
         if remaining <= ARRIVE_RADIUS {
-            ship.destination = next_waypoint(&mut rng, ship, &anchors);
+            ship.destination = next_waypoint(&mut rng, ship.home_zone, ship.patrol_radius, &anchors);
         } else {
             // Turn toward the bearing rather than snapping to it, so a course
-            // change reads as a turn and packs stay roughly in company.
+            // change reads as a turn.
             let want = to_dest / remaining * ship.cruise;
             ship.velocity = (ship.velocity * 0.75 + want * 0.25).clamp_length_max(ship.cruise);
         }
@@ -407,73 +609,127 @@ pub fn tick_world_simulation(
         }
     }
 
-    // Phase 2: Off-screen encounters between factions
-    for i in 0..positions.len() {
-        for j in (i + 1)..positions.len() {
-            let (idx_a, faction_a, pos_a, _health_a) = positions[i];
-            let (idx_b, faction_b, pos_b, _health_b) = positions[j];
-
-            let dist = pos_a.distance(pos_b);
-            if dist > 500.0 { continue; }
-
-            // Check hostility
-            if factions_hostile(faction_a, faction_b) {
-                // Simulated combat: both take damage proportional to opponent strength
-                let dmg_a = faction_power(faction_b) * 0.05 * dt;
-                let dmg_b = faction_power(faction_a) * 0.05 * dt;
-
-                // Bounty targets never die to off-screen faction combat — a
-                // health floor above zero instead of the normal 0.0 clamp.
-                // Without this a tagged ship could be quietly killed by a
-                // rival faction before the player ever reaches it, leaving
-                // an active bounty contract permanently unfinishable.
-                if let Some(ship_a) = sim.ships.get_mut(idx_a) {
-                    if !ship_a.spawned {
-                        let floor = if ship_a.bounty_id.is_some() { 0.05 } else { 0.0 };
-                        ship_a.health = (ship_a.health - dmg_a).max(floor);
-                        ship_a.behavior = SimBehavior::Fighting(idx_b);
-                        if ship_a.health <= floor && floor == 0.0 {
-                            ship_a.behavior = SimBehavior::Dead;
-                        }
+    // Phase 1b: Move fleets, as one point; the members ride their slots.
+    // The loaded system's station rides a planet, so its guard and its
+    // convoys are pointed at wherever it is now.
+    let post = faction_stations.post;
+    for fleet in sim.fleets.iter_mut() {
+        if !is_active_system(fleet.system_id) || live_fleets.contains(&fleet.id) || !manned_fleets.contains(&fleet.id) {
+            continue;
+        }
+        use super::fleet::FleetKind;
+        if let Some((_, at, extent)) = post.filter(|p| p.0 == fleet.system_id) {
+            match fleet.kind {
+                FleetKind::StationGuard => {
+                    fleet.home_zone = at;
+                    // The larger of the two: a capital's home fleet ranges wider.
+                    fleet.patrol_radius = fleet.patrol_radius.max(extent + GUARD_RADIUS);
+                    // Posted before anyone knew where the station would be:
+                    // take station there, out of sight, rather than crossing
+                    // half a system to get to it.
+                    let unseen = |p: Vec2| player_pos.map_or(true, |pp| pp.distance(p) > RENDER_DISTANCE * 1.5);
+                    let post_at = at + Vec2::from_angle(fleet.heading) * (extent + 3_000.0);
+                    if fleet.position.distance(at) > 30_000.0 && unseen(fleet.position) && unseen(post_at) {
+                        fleet.position = post_at;
+                        fleet.destination = patrol_waypoint(&mut rng, at, fleet.patrol_radius);
                     }
                 }
-                if let Some(ship_b) = sim.ships.get_mut(idx_b) {
-                    if !ship_b.spawned {
-                        let floor = if ship_b.bounty_id.is_some() { 0.05 } else { 0.0 };
-                        ship_b.health = (ship_b.health - dmg_b).max(floor);
-                        ship_b.behavior = SimBehavior::Fighting(idx_a);
-                        if ship_b.health <= floor && floor == 0.0 {
-                            ship_b.behavior = SimBehavior::Dead;
-                        }
+                FleetKind::Convoy if fleet.route.len() >= 2 => {
+                    // The near end of the run is the station's berth, off its hull.
+                    let berth = at + (fleet.route[1] - at).normalize_or(Vec2::X) * (extent + 4_000.0);
+                    if fleet.leg == 0 {
+                        fleet.destination = berth;
                     }
+                    fleet.route[0] = berth;
                 }
+                _ => {}
             }
         }
-    }
 
-    // Phase 3: Respawn dead ships after a delay (represented by health recovery)
+        let to_dest = fleet.destination - fleet.position;
+        let remaining = to_dest.length();
+        if remaining <= ARRIVE_RADIUS {
+            fleet.destination = next_fleet_waypoint(&mut rng, fleet, &anchors);
+        } else {
+            let want = to_dest / remaining * fleet.cruise;
+            fleet.velocity = (fleet.velocity * 0.75 + want * 0.25).clamp_length_max(fleet.cruise);
+        }
+        fleet.position += fleet.velocity * dt;
+        if fleet.velocity.length() > 1.0 {
+            fleet.heading = fleet.velocity.to_angle();
+        }
+        if fleet.position.distance(fleet.home_zone) > fleet.patrol_radius {
+            fleet.destination = match fleet.kind {
+                // A convoy strayed off its run heads for its next stop.
+                FleetKind::Convoy if !fleet.route.is_empty() => fleet.route[fleet.leg],
+                _ => patrol_waypoint(&mut rng, fleet.home_zone, fleet.patrol_radius * 0.6),
+            };
+        }
+    }
     for ship in sim.ships.iter_mut() {
-        if ship.behavior == SimBehavior::Dead {
-            // After "death", reset after some time (simulated by fuel as timer)
-            ship.fuel -= 0.01;
-            if ship.fuel <= -0.5 {
-                // Respawn at home zone
-                let angle = rng.gen_range(0.0..std::f32::consts::TAU);
-                let dist = rng.gen_range(0.0..1500.0);
-                ship.position = ship.home_zone + Vec2::new(angle.cos() * dist, angle.sin() * dist);
-                ship.health = 1.0;
-                ship.fuel = 1.0;
-                ship.behavior = SimBehavior::Patrolling;
-                ship.spawned = false;
-                // This is a fresh respawn, not the same hull a completed
-                // bounty was hunting — clear the old tag so the faction's
-                // ship pool is eligible for new bounties again. Without
-                // this, a single-ship faction (the bosses) could only ever
-                // be offered as a bounty once, permanently.
-                ship.bounty_id = None;
+        if ship.spawned || ship.behavior == SimBehavior::Dead || ship.fleet == 0 {
+            continue;
+        }
+        if let Some(fleet) = sim.fleets.iter().find(|f| f.id == ship.fleet) {
+            if live_fleets.contains(&fleet.id) {
+                continue;
             }
+            ship.position = fleet.slot_position(ship.slot);
+            ship.velocity = fleet.velocity;
+            ship.destination = fleet.destination;
         }
     }
+
+    // Phase 2: Off-screen fights, weighed by each side's strength.
+    super::fleet::resolve_battles(&mut sim.ships, &is_active_system, dt);
+
+    // Phase 3: The dead come back after a while: a lone ship by itself, a
+    // fleet only once all of it is gone. A fleet that lost two of five
+    // stays three strong; that's damage that sticks.
+    for ship in sim.ships.iter_mut() {
+        if ship.behavior != SimBehavior::Dead {
+            continue;
+        }
+        // The countdown (fuel doubles as the timer).
+        ship.fuel -= 0.01;
+        if fleet_ids.contains(&ship.fleet) || ship.fuel > -0.5 {
+            continue;
+        }
+        // Respawn at home zone
+        let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+        let dist = rng.gen_range(0.0..1500.0);
+        ship.position = ship.home_zone + Vec2::new(angle.cos() * dist, angle.sin() * dist);
+        revive(ship);
+    }
+    for fleet in sim.fleets.iter_mut() {
+        let mut members = sim.ships.iter().filter(|s| s.fleet == fleet.id).peekable();
+        if members.peek().is_none() || !members.all(|s| s.behavior == SimBehavior::Dead && s.fuel <= -0.5) {
+            continue;
+        }
+        let angle = rng.gen_range(0.0..std::f32::consts::TAU);
+        fleet.position = fleet.home_zone + Vec2::from_angle(angle) * rng.gen_range(0.0..1500.0);
+        fleet.velocity = Vec2::ZERO;
+        fleet.destination = fleet.position;
+        for ship in sim.ships.iter_mut().filter(|s| s.fleet == fleet.id) {
+            ship.position = fleet.slot_position(ship.slot);
+            revive(ship);
+        }
+    }
+}
+
+/// A fresh hull where a dead one was: full health and fuel, no wounds.
+fn revive(ship: &mut SimulatedShip) {
+    ship.health = 1.0;
+    ship.fuel = 1.0;
+    ship.behavior = SimBehavior::Patrolling;
+    ship.spawned = false;
+    ship.wounds = None;
+    ship.velocity = Vec2::ZERO;
+    // This is a fresh respawn, not the same hull a completed bounty was
+    // hunting — clear the old tag so the faction's ship pool is eligible
+    // for new bounties again. Without this, a single-ship faction (the
+    // bosses) could only ever be offered as a bounty once, permanently.
+    ship.bounty_id = None;
 }
 
 /// Periodically send a small hostile wing after the player. They seed just
@@ -508,32 +764,29 @@ pub fn spawn_raider_waves(
         1 => AiShipType::GildedThrone,  // tactical mercs
         _ => AiShipType::BrokenChoir,     // erratic ghost ships
     };
-    let count = match faction {
-        AiShipType::RecursiveKingdom => rng.gen_range(3..=5),
-        _ => rng.gen_range(2..=3),
+    // A raid is a raider fleet: it comes in together, on one bearing, and
+    // goes back into the simulation together if you outrun it.
+    let mut held = super::fleet::Held::new();
+    let Some(classes) = super::fleet::compose(faction, super::fleet::FleetKind::Raiders, &mut rng, &mut held) else {
+        return;
     };
-
     let approach_angle = rng.gen_range(0.0..std::f32::consts::TAU);
-    for i in 0..count {
-        // Wide spacing: each ship comes in on its own bearing and range so
-        // the wave arrives as a loose pincer, not a clump.
-        let jitter = (i as f32 - count as f32 / 2.0) * 0.45 + rng.gen_range(-0.1..0.1);
-        let angle = approach_angle + jitter;
-        let dist = rng.gen_range(2200.0..3200.0);
-        let pos = player_pos + Vec2::new(angle.cos(), angle.sin()) * dist;
-        let mut raider = SimulatedShip::patrolling(
-            streaming.loaded_system.unwrap_or(0),
-            faction,
-            pos,
-            player_pos,
-            5000.0,
-            rng.gen_range(70.0..110.0),
-        );
-        // A raid is the one case that already knows where it is going.
-        raider.velocity = (player_pos - pos).normalize_or_zero() * 60.0;
-        raider.destination = player_pos;
-        sim.ships.push(raider);
-    }
+    let at = player_pos + Vec2::from_angle(approach_angle) * rng.gen_range(2_800.0..3_600.0);
+    let (mut fleet, members) = super::fleet::new_fleet(
+        faction,
+        super::fleet::FleetKind::Raiders,
+        &classes,
+        streaming.loaded_system.unwrap_or(0),
+        at,
+        player_pos,
+        5_000.0,
+        &mut rng,
+    );
+    // A raid is the one fleet that already knows where it is going.
+    fleet.heading = (player_pos - at).to_angle();
+    fleet.destination = player_pos;
+    fleet.velocity = (player_pos - at).normalize_or_zero() * 60.0;
+    sim.add_fleet(fleet, members);
 
     notifications.write(crate::events::ShowNotification {
         message: "Hostile contacts inbound on radar!".into(),
@@ -549,47 +802,117 @@ pub fn spawn_raider_waves(
 #[derive(Component)]
 pub struct SimSettled;
 
-/// Spawn/despawn real entities based on player proximity
+/// Spawn/despawn real entities based on player proximity.
+///
+/// A fleet comes and goes whole: it materialises when any member is in range
+/// and all of it fits the block budget, and goes back into the simulation
+/// only once every member has left. Half a battle group popping in, or an
+/// escort left behind as its capital vanished, is what this replaced.
+#[allow(clippy::too_many_arguments)]
 pub fn sync_simulation_entities(
     mut commands: Commands,
     mut sim: ResMut<WorldSimulation>,
     registry: Res<ModuleRegistry>,
     asset_server: Res<AssetServer>,
+    streaming: Res<crate::celestial::resources::SystemStreamingManager>,
     ship_query: Query<&Transform, With<Ship>>,
-    ai_ships: Query<(Entity, &Transform, &AiShipType, &AiShipState, Option<&BountyTarget>, Has<SimSettled>), With<AiShip>>,
+    // Faction stations live outside the simulation (diplomacy::stations):
+    // they neither use the block budget nor despawn with distance here.
+    ai_ships: Query<
+        (
+            Entity,
+            &Transform,
+            &AiShipType,
+            &AiShipState,
+            Option<&BountyTarget>,
+            Has<SimSettled>,
+            Option<&SimShipId>,
+            (Option<&AiShipClass>, Has<MirrorShip>, Option<&Children>, Option<&super::fleet::FleetMember>),
+        ),
+        (With<AiShip>, Without<crate::diplomacy::FactionStation>, Without<LeftByLoad>),
+    >,
+    blocks: Query<
+        (Option<&crate::components::HullSegment>, Option<&crate::components::Module>),
+        (
+            Or<(With<crate::components::HullSegment>, With<crate::components::Module>)>,
+            Without<crate::components::HullDestroyed>,
+            Without<crate::components::DestroyedModule>,
+        ),
+    >,
 ) {
     let Ok(player_transform) = ship_query.single() else { return };
     let player_pos = player_transform.translation.truncate();
+    let block_count = |children: Option<&Children>| {
+        children.map_or(0, |c| c.iter().filter(|e| blocks.contains(*e)).count())
+    };
+    let sim: &mut WorldSimulation = &mut sim;
+    let mut rng = rand::thread_rng();
 
-    // Spawn ships that entered render distance, NEAREST FIRST and only up to
-    // the budget.
-    //
-    // An AI ship is not a sprite: it is a hull, its modules, its decking and
-    // its crew, the same as the player's. A dozen inside the bubble at once is
-    // thousands of entities. The population was small enough that this never
-    // came up; now that a system can field forty, the bubble needs a ceiling
-    // or a busy system turns into a slideshow the moment you fly into the
-    // middle of it. The rest stay simulated and keep moving — they are still
-    // there, still fighting each other, just not built yet.
-    // Living hulls only. Wrecks keep their AiShip component, and counting
-    // them meant a system where the player had won a few fights could never
-    // spawn another ship -- including a bounty target sitting 1.5 km away.
-    let live = ai_ships.iter().filter(|(_, _, _, state, _, _)| !state.is_destroyed).count();
-    if live < MAX_LIVE_AI_HULLS {
-        let mut candidates: Vec<(usize, f32)> = sim
-            .ships
-            .iter()
-            .enumerate()
-            .filter(|(_, s)| !s.spawned && s.behavior != SimBehavior::Dead)
-            .map(|(i, s)| (i, s.position.distance(player_pos)))
-            .filter(|(_, d)| *d < RENDER_DISTANCE)
-            .collect();
-        candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+    // Spawn what entered render distance, nearest first, while the block
+    // budget allows. Living hulls only: a wreck's blocks are a pile of
+    // salvage, not a ship the frame has to fly and fight.
+    let mut live_blocks: usize = ai_ships
+        .iter()
+        .filter(|(_, _, _, state, ..)| !state.is_destroyed)
+        .map(|(.., (_, _, children, _))| block_count(children))
+        .sum();
+    let any_live = ai_ships.iter().any(|(_, _, _, state, ..)| !state.is_destroyed);
 
-        for (index, _) in candidates.into_iter().take(MAX_LIVE_AI_HULLS - live) {
-            let Some(sim_ship) = sim.ships.get_mut(index) else { continue };
-            let root = spawner::spawn_ai_ship(
+    // A fleet is one candidate; a ship that flies alone is its own.
+    struct Group {
+        fleet: u32,
+        members: Vec<usize>,
+        dist: f32,
+        cost: usize,
+    }
+    let live_fleets: std::collections::HashSet<u32> =
+        sim.ships.iter().filter(|s| s.spawned && s.fleet != 0).map(|s| s.fleet).collect();
+    let mut groups: Vec<Group> = Vec::new();
+    let mut fleet_group: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
+    for (i, s) in sim.ships.iter().enumerate() {
+        if s.spawned || s.behavior == SimBehavior::Dead {
+            continue;
+        }
+        let lost = s.wounds.as_ref().map_or(0, |w| w.hull.len() + w.modules.len());
+        let cost = super::spawner::design_blocks(s.faction, s.class).saturating_sub(lost);
+        let fleet = if sim.fleet(s.fleet).is_some() { s.fleet } else { 0 };
+        let g = if fleet != 0 {
+            *fleet_group.entry(fleet).or_insert_with(|| {
+                groups.push(Group { fleet, members: Vec::new(), dist: f32::MAX, cost: 0 });
+                groups.len() - 1
+            })
+        } else {
+            groups.push(Group { fleet, members: Vec::new(), dist: f32::MAX, cost: 0 });
+            groups.len() - 1
+        };
+        let group = &mut groups[g];
+        group.members.push(i);
+        group.cost += cost;
+        // A fleet that's already partly on screen brings the rest at once.
+        let d = if live_fleets.contains(&fleet) { 0.0 } else { s.position.distance(player_pos) };
+        group.dist = group.dist.min(d);
+    }
+    groups.retain(|g| g.dist < RENDER_DISTANCE);
+    groups.sort_by(|a, b| a.dist.total_cmp(&b.dist));
+
+    let mut spawned_any = any_live;
+    for group in groups {
+        // Nearest first; one that doesn't fit waits rather than letting a
+        // farther, smaller one jump the queue. The first always fits, or a
+        // fleet bigger than the budget could never appear.
+        if spawned_any && live_blocks + group.cost > MAX_LIVE_AI_BLOCKS {
+            break;
+        }
+        let fleet = sim.fleet(group.fleet).cloned();
+        // The leader: its first living member (the capital, the lead hauler),
+        // unless one is already on screen leading it.
+        let leader = (!live_fleets.contains(&group.fleet)).then(|| group.members[0]);
+        for &index in &group.members {
+            let sim_ship = &mut sim.ships[index];
+            let root = spawner::spawn_ai_ship_wounded(
                 sim_ship.faction,
+                sim_ship.class,
+                sim_ship.wounds.as_ref(),
                 sim_ship.position,
                 &mut commands,
                 &registry,
@@ -598,67 +921,342 @@ pub fn sync_simulation_entities(
             if let Some(id) = sim_ship.bounty_id {
                 commands.entity(root).insert(BountyTarget(id));
             }
+            if sim_ship.id != 0 {
+                commands.entity(root).insert(SimShipId(sim_ship.id));
+            }
+            // Off-screen fighting wears a ship down too, not only lost blocks.
+            let integrity = sim_ship.wounds.as_ref().map_or(1.0, |w| w.integrity).min(sim_ship.health);
+            if integrity < 0.999 {
+                commands.entity(root).insert(SpawnIntegrity(integrity));
+            }
+            if let Some(fleet) = &fleet {
+                // An escort forms up on you, not on a leader of its own.
+                let escort = fleet.mission == super::fleet::Mission::Escort;
+                let is_leader = leader == Some(index) && !escort;
+                commands.entity(root).insert(super::fleet::FleetMember {
+                    fleet: fleet.id,
+                    slot: sim_ship.slot,
+                    leader: is_leader,
+                });
+                if escort {
+                    commands.entity(root).insert(super::standing_spawns::PlayerEscort);
+                }
+                if matches!(fleet.mission, super::fleet::Mission::Hunt { .. }) {
+                    commands.entity(root).insert(super::standing_spawns::Hunter);
+                }
+                if is_leader {
+                    let waypoints = leader_waypoints(fleet, &mut rng);
+                    commands.entity(root).insert(AiShipNav {
+                        destination: waypoints.first().copied(),
+                        waypoints,
+                        ..default()
+                    });
+                }
+            }
             sim_ship.spawned = true;
         }
+        live_blocks += group.cost;
+        spawned_any = true;
     }
 
-    // Despawn LIVE ships that left render distance, convert back to
-    // simulation. Destroyed ships are deliberately excluded from this: they
-    // become real, permanent wrecks (see ai_ship::wreck::ai_ship_death_system)
-    // instead of being despawned and replaced with an abstract simulated
-    // "dead" entry — so the player can fly away and come back later to
-    // actually scavenge the hull they shot up, instead of it vanishing the
-    // moment they're out of range.
-    for (entity, transform, ship_type, state, bounty, settled) in ai_ships.iter() {
-        // Bounty-tagged ships are matched back to their exact sim entry by
-        // id — the faction-only match below is ambiguous whenever more than
-        // one ship of the same faction is spawned at once, which would risk
-        // flagging the wrong sim ship (possibly the actual bounty target) as
-        // dead/despawned.
+    // A fleet stays on screen while any of it is within range.
+    let near_fleets: std::collections::HashSet<u32> = ai_ships
+        .iter()
+        .filter(|(_, tf, _, state, ..)| {
+            !state.is_destroyed && tf.translation.truncate().distance(player_pos) <= DESPAWN_DISTANCE
+        })
+        .filter_map(|(.., (_, _, _, member))| member.map(|m| m.fleet))
+        .collect();
+    // Where each fleet's members were when they left, to set it down there.
+    let mut regroup: std::collections::HashMap<u32, Vec<Vec2>> = std::collections::HashMap::new();
+
+    // Live ships that left render distance go back into the simulation;
+    // destroyed ones settle their entry once and stay as real wrecks.
+    for (entity, transform, ship_type, state, bounty, settled, sim_id, (class, mirror, children, member)) in ai_ships.iter() {
+        // Which entry is this ship? By its id, then its bounty tag. A ship
+        // with neither (a debug spawn, the tutorial's raider) has no entry,
+        // and must not claim a stranger's: the old "first of its faction"
+        // guess swapped ships' records whenever two were on screen.
+        let entry = |sim: &mut WorldSimulation| -> Option<usize> {
+            if let Some(id) = sim_id {
+                sim.ships.iter().position(|s| s.id == id.0)
+            } else if let Some(bounty) = bounty {
+                sim.ships.iter().position(|s| s.bounty_id == Some(bounty.0))
+            } else {
+                None
+            }
+        };
+
         if state.is_destroyed {
             if settled {
                 continue;
             }
-            // One-time sim bookkeeping so this faction slot frees up for
-            // future spawns — doesn't touch the real (now-wreck) entity.
-            // Without a bounty id, the nearest spawned ship of its faction is
-            // the best guess at which entry it was.
-            let wreck_at = transform.translation.truncate();
-            let sim_ship = if let Some(bounty) = bounty {
-                sim.ships.iter_mut().find(|s| s.bounty_id == Some(bounty.0))
-            } else {
-                sim.ships
-                    .iter_mut()
-                    .filter(|s| s.spawned && s.faction == *ship_type)
-                    .min_by(|a, b| a.position.distance(wreck_at).total_cmp(&b.position.distance(wreck_at)))
-            };
-            if let Some(sim_ship) = sim_ship {
-                sim_ship.behavior = SimBehavior::Dead;
-                sim_ship.health = 0.0;
-                sim_ship.spawned = false;
+            if let Some(i) = entry(sim) {
+                let ship = &mut sim.ships[i];
+                ship.behavior = SimBehavior::Dead;
+                ship.health = 0.0;
+                ship.spawned = false;
+                ship.wounds = None;
             }
             commands.entity(entity).try_insert(SimSettled);
             continue;
         }
 
         let pos = transform.translation.truncate();
-        let dist = pos.distance(player_pos);
+        if pos.distance(player_pos) <= DESPAWN_DISTANCE {
+            continue;
+        }
+        if member.is_some_and(|m| near_fleets.contains(&m.fleet)) {
+            continue;
+        }
+        // The doppelganger wears the player's design; it is not a ship of its
+        // faction to file away, and it does not come back.
+        // try_: a load clears every live AI ship the same frame, and a second
+        // despawn of the same entity is a crash.
+        if mirror {
+            commands.entity(entity).try_despawn();
+            continue;
+        }
+        let class_key = class.map(|c| c.0);
+        let wounds = wounds_of(*ship_type, class_key, state.hull_integrity, children, &blocks);
+        commands.entity(entity).try_despawn();
 
-        if dist > DESPAWN_DISTANCE {
-            commands.entity(entity).despawn();
-
-            let sim_ship = if let Some(bounty) = bounty {
-                sim.ships.iter_mut().find(|s| s.bounty_id == Some(bounty.0))
-            } else {
-                sim.ships.iter_mut().find(|s| s.spawned && s.faction == *ship_type)
-            };
-            if let Some(sim_ship) = sim_ship {
-                sim_ship.position = pos;
-                sim_ship.health = state.hull_integrity;
-                sim_ship.spawned = false;
-                sim_ship.behavior = SimBehavior::Patrolling;
+        match entry(sim) {
+            Some(i) => {
+                let ship = &mut sim.ships[i];
+                ship.position = pos;
+                ship.health = state.hull_integrity;
+                ship.spawned = false;
+                ship.behavior = SimBehavior::Patrolling;
+                ship.wounds = wounds;
+                if ship.fleet != 0 {
+                    regroup.entry(ship.fleet).or_default().push(pos);
+                }
+            }
+            None => {
+                // Adopt it: a stray ship becomes an ordinary member of the
+                // system it is in, damage and all, and is there when you
+                // come back.
+                let system_id = streaming.loaded_system.unwrap_or(0);
+                let mut ship = SimulatedShip::patrolling(system_id, *ship_type, pos, pos, 6_000.0, 80.0);
+                ship.class = class_key;
+                ship.health = state.hull_integrity;
+                ship.wounds = wounds;
+                sim.add(ship);
             }
         }
+    }
+
+    // A fleet that left goes back to being one point where its ships were,
+    // and they take up their slots round it again.
+    for (fleet_id, positions) in regroup {
+        let centre = positions.iter().copied().sum::<Vec2>() / positions.len() as f32;
+        let Some(fleet) = sim.fleets.iter_mut().find(|f| f.id == fleet_id) else { continue };
+        fleet.position = centre;
+        let fleet = fleet.clone();
+        for ship in sim.ships.iter_mut().filter(|s| s.fleet == fleet_id && !s.spawned && s.behavior != SimBehavior::Dead) {
+            ship.position = fleet.slot_position(ship.slot);
+        }
+    }
+}
+
+/// The course a fleet's leader flies on screen: a convoy's run from its next
+/// stop, a guard's circuit round its post, anyone else's next leg and a few
+/// more round home.
+fn leader_waypoints(fleet: &super::fleet::SimFleet, rng: &mut impl Rng) -> Vec<Vec2> {
+    use super::fleet::FleetKind;
+    match fleet.kind {
+        FleetKind::Convoy if !fleet.route.is_empty() => {
+            let n = fleet.route.len();
+            (0..n).map(|k| fleet.route[(fleet.leg + k) % n]).collect()
+        }
+        FleetKind::StationGuard => (0..4)
+            .map(|i| {
+                let angle = fleet.heading + std::f32::consts::TAU * i as f32 / 4.0;
+                fleet.home_zone + Vec2::from_angle(angle) * (fleet.patrol_radius * 0.7)
+            })
+            .collect(),
+        _ => std::iter::once(fleet.destination)
+            .chain((0..3).map(|_| patrol_waypoint(rng, fleet.home_zone, fleet.patrol_radius)))
+            .collect(),
+    }
+}
+
+/// A system changed hands. The loser's fleets there that are off-screen
+/// fall back to its nearest remaining system; the winner sends a garrison (a
+/// patrol, and a guard for the station it will put up). Fleets on screen
+/// stay and fight it out. A system nobody has populated yet needs nothing:
+/// it is populated for its new owner when it first loads.
+pub fn fleets_change_hands(
+    mut flips: MessageReader<crate::celestial::territory::SystemChangedHands>,
+    mut sim: ResMut<WorldSimulation>,
+    galaxy: Res<crate::celestial::resources::GalaxyMap>,
+) {
+    use super::fleet::FleetKind;
+    let sim: &mut WorldSimulation = &mut sim;
+    let mut rng = rand::thread_rng();
+    for flip in flips.read() {
+        if !sim.ships.iter().any(|s| s.system_id == flip.system_id) {
+            continue;
+        }
+        let Some(lost) = galaxy.systems.iter().find(|s| s.id == flip.system_id) else { continue };
+        if let Some(loser) = flip.from {
+            let refuge = galaxy
+                .systems
+                .iter()
+                .filter(|s| s.faction == Some(loser) && s.id != flip.system_id)
+                .min_by(|a, b| a.galaxy_pos.distance(lost.galaxy_pos).total_cmp(&b.galaxy_pos.distance(lost.galaxy_pos)));
+            if let Some(refuge) = refuge {
+                let live: std::collections::HashSet<u32> =
+                    sim.ships.iter().filter(|s| s.spawned && s.fleet != 0).map(|s| s.fleet).collect();
+                let home = crate::celestial::galaxy::faction_cluster_center(refuge);
+                for fleet in sim.fleets.iter_mut() {
+                    if fleet.system_id != flip.system_id || fleet.faction != loser || live.contains(&fleet.id) {
+                        continue;
+                    }
+                    let at = home + Vec2::from_angle(rng.gen_range(0.0..std::f32::consts::TAU)) * rng.gen_range(3_000.0..12_000.0);
+                    fleet.system_id = refuge.id;
+                    fleet.position = at;
+                    fleet.home_zone = home;
+                    fleet.destination = at;
+                    fleet.route.clear();
+                    if fleet.kind == FleetKind::Convoy {
+                        fleet.kind = FleetKind::Patrol;
+                    }
+                    let fleet = fleet.clone();
+                    for ship in sim.ships.iter_mut().filter(|s| s.fleet == fleet.id) {
+                        ship.system_id = refuge.id;
+                        ship.home_zone = home;
+                        ship.position = fleet.slot_position(ship.slot);
+                    }
+                }
+            }
+        }
+        let Some(template) = faction_territories().into_iter().find(|t| t.faction == flip.to) else { continue };
+        let home = crate::celestial::galaxy::faction_cluster_center(lost);
+        let mut held = super::fleet::Held::new();
+        let guard = crate::diplomacy::stations::station_plan(flip.to).is_some();
+        for kind in [FleetKind::Patrol, FleetKind::StationGuard] {
+            if kind == FleetKind::StationGuard && !guard {
+                continue;
+            }
+            let Some(hulls) = super::fleet::compose(flip.to, kind, &mut rng, &mut held) else { continue };
+            let at = home + Vec2::from_angle(rng.gen_range(0.0..std::f32::consts::TAU)) * rng.gen_range(3_000.0..12_000.0);
+            let radius = if kind == FleetKind::StationGuard { GUARD_RADIUS } else { template.radius };
+            let (mut fleet, members) = super::fleet::new_fleet(flip.to, kind, &hulls, flip.system_id, at, home, radius, &mut rng);
+            fleet.destination = patrol_waypoint(&mut rng, home, radius);
+            sim.add_fleet(fleet, members);
+        }
+    }
+}
+
+/// Keep the records of on-screen ships current: where they are, how hurt,
+/// what they've lost, and where their fleet is. Once a second.
+///
+/// A ship's record used to hold where it was when it materialised until it
+/// left again, so a save taken mid-encounter put every on-screen ship back
+/// where it had appeared (a battle group reloaded five kilometres behind
+/// itself), and a bounty marker pointed at a ship's arrival point.
+pub fn track_live_ships(
+    time: Res<Time>,
+    mut next: Local<f32>,
+    mut sim: ResMut<WorldSimulation>,
+    ships: Query<
+        (
+            &Transform,
+            &AiShipType,
+            &AiShipState,
+            &SimShipId,
+            Option<&AiShipClass>,
+            Option<&Children>,
+            Option<&super::fleet::FleetMember>,
+        ),
+        (With<AiShip>, Without<LeftByLoad>, Without<crate::diplomacy::FactionStation>),
+    >,
+    blocks: Query<
+        (Option<&crate::components::HullSegment>, Option<&crate::components::Module>),
+        (
+            Or<(With<crate::components::HullSegment>, With<crate::components::Module>)>,
+            Without<crate::components::HullDestroyed>,
+            Without<crate::components::DestroyedModule>,
+        ),
+    >,
+) {
+    *next -= time.delta_secs();
+    if *next > 0.0 {
+        return;
+    }
+    *next = 1.0;
+    let sim: &mut WorldSimulation = &mut sim;
+    let index: std::collections::HashMap<u32, usize> =
+        sim.ships.iter().enumerate().map(|(i, s)| (s.id, i)).collect();
+    for (tf, ship_type, state, id, class, children, member) in ships.iter() {
+        if state.is_destroyed {
+            continue;
+        }
+        let Some(&i) = index.get(&id.0) else { continue };
+        let pos = tf.translation.truncate();
+        let ship = &mut sim.ships[i];
+        if !ship.spawned {
+            continue;
+        }
+        ship.position = pos;
+        ship.health = state.hull_integrity;
+        ship.wounds = wounds_of(*ship_type, class.map(|c| c.0), state.hull_integrity, children, &blocks);
+        if let Some(m) = member.filter(|m| m.leader) {
+            if let Some(fleet) = sim.fleets.iter_mut().find(|f| f.id == m.fleet) {
+                fleet.position = pos;
+                fleet.heading = tf.rotation.to_euler(EulerRot::ZYX).0;
+            }
+        }
+    }
+}
+
+/// What a live ship has lost against the design it was built from: the hull
+/// cells and module anchors no longer there. None for an unhurt ship.
+fn wounds_of(
+    faction: AiShipType,
+    class: Option<&'static str>,
+    integrity: f32,
+    children: Option<&Children>,
+    blocks: &Query<
+        (Option<&crate::components::HullSegment>, Option<&crate::components::Module>),
+        (
+            Or<(With<crate::components::HullSegment>, With<crate::components::Module>)>,
+            Without<crate::components::HullDestroyed>,
+            Without<crate::components::DestroyedModule>,
+        ),
+    >,
+) -> Option<Wounds> {
+    let mut hull = std::collections::HashSet::new();
+    let mut modules = std::collections::HashSet::new();
+    for child in children.into_iter().flat_map(|c| c.iter()) {
+        if let Ok((h, m)) = blocks.get(child) {
+            if let Some(h) = h {
+                hull.insert(h.grid_position);
+            }
+            if let Some(m) = m {
+                modules.insert(m.grid_position);
+            }
+        }
+    }
+    let built = super::spawner::built_design(faction, class);
+    let wounds = Wounds {
+        hull: built.hull_cells.iter().map(|c| c.grid_pos).filter(|p| !hull.contains(p)).collect(),
+        modules: built.modules.iter().map(|m| m.grid_pos).filter(|p| !modules.contains(p)).collect(),
+        integrity,
+    };
+    (!wounds.is_empty() || integrity < 0.999).then_some(wounds)
+}
+
+/// A wounded ship's integrity, set on its first frame back.
+pub fn apply_spawn_integrity(
+    mut commands: Commands,
+    mut ships: Query<(Entity, &mut AiShipState, &SpawnIntegrity)>,
+) {
+    for (entity, mut state, integrity) in ships.iter_mut() {
+        state.hull_integrity = integrity.0;
+        commands.entity(entity).remove::<SpawnIntegrity>();
     }
 }
 
@@ -684,6 +1282,8 @@ mod population_tests {
             local_center: Vec2::ZERO,
             seed: 1,
             faction: Some(AiShipType::RecursiveKingdom),
+            capital: false,
+            haunt: None,
             danger_tier: 60.0,
             discovery: crate::celestial::resources::SystemDiscovery::Visited,
             last_updated: 0.0,
@@ -703,15 +1303,18 @@ mod population_tests {
              nearest and furthest) — that is the single clump this replaced"
         );
 
-        // Clustering: for each ship, how far is its nearest neighbour? A mix
-        // means some are in company and some are genuinely alone.
+        // Clustering, between fleets: how far is each fleet from its nearest
+        // neighbour? A mix means some move in company and some are alone.
+        // (Inside a fleet the spacing is the formation's, by design.)
+        let centres: Vec<Vec2> = sim.fleets.iter().map(|f| f.position).collect();
+        assert!(centres.len() >= 5, "only {} fleets", centres.len());
         let mut nearest: Vec<f32> = Vec::new();
-        for (i, a) in ships.iter().enumerate() {
-            let d = ships
+        for (i, a) in centres.iter().enumerate() {
+            let d = centres
                 .iter()
                 .enumerate()
                 .filter(|(j, _)| *j != i)
-                .map(|(_, b)| a.position.distance(b.position))
+                .map(|(_, b)| a.distance(*b))
                 .fold(f32::MAX, f32::min);
             nearest.push(d);
         }
@@ -719,18 +1322,63 @@ mod population_tests {
         let tightest = nearest[0];
         let loneliest = nearest[nearest.len() - 1];
         println!(
-            "nearest-neighbour spread: {:.0} .. {:.0} (median {:.0}) over {} ships",
-            tightest, loneliest, nearest[nearest.len() / 2], ships.len()
+            "fleet nearest-neighbour spread: {:.0} .. {:.0} (median {:.0}) over {} fleets",
+            tightest, loneliest, nearest[nearest.len() / 2], centres.len()
         );
-        // Scale-free: what matters is that the spacing VARIES, not the units.
-        // A uniform scatter gives every ship much the same nearest neighbour;
-        // packs-and-loners gives a wide ratio between the tightest and the
-        // most isolated.
         assert!(
-            loneliest > tightest * 4.0,
-            "spacing is uniform — tightest neighbour {tightest:.0}, loneliest {loneliest:.0}. \
-             That is the even scatter this replaced, not packs and loners"
+            loneliest > tightest * 1.5,
+            "spacing is uniform — tightest neighbour {tightest:.0}, loneliest {loneliest:.0}"
         );
+        // Packs and smaller groups: fleet sizes vary, and some are three or
+        // more. (A lone ship is about one fleet in twelve, too rare to demand
+        // in every roll.)
+        let sizes: Vec<usize> = sim
+            .fleets
+            .iter()
+            .map(|f| sim.ships.iter().filter(|s| s.fleet == f.id).count())
+            .collect();
+        assert!(sizes.iter().min() < sizes.iter().max(), "every fleet is the same size: {sizes:?}");
+        assert!(sizes.iter().any(|&n| n >= 3), "no pack of three or more: {sizes:?}");
+
+        // And no fleet is set down through another's formation.
+        for (i, a) in sim.ships.iter().enumerate() {
+            for b in &sim.ships[i + 1..] {
+                if a.fleet == b.fleet {
+                    continue;
+                }
+                let clear = a.position.distance(b.position)
+                    - crate::ai_ship::spawner::design_extent(a.faction, a.class)
+                    - crate::ai_ship::spawner::design_extent(b.faction, b.class);
+                assert!(clear > 0.0, "ships of two fleets overlap by {:.0}", -clear);
+            }
+        }
+    }
+
+    /// A capital keeps a home fleet: a battle group (a capital ship and its
+    /// escorts) posted at its starport, besides the ordinary station guard.
+    #[test]
+    fn a_capital_keeps_a_home_fleet() {
+        let galaxy = crate::celestial::galaxy::generate_galaxy_map(42);
+        let capital = galaxy
+            .systems
+            .iter()
+            .find(|s| s.capital && s.faction == Some(AiShipType::TerranHegemony))
+            .expect("the Hegemony has a capital");
+        let mut sim = WorldSimulation::default();
+        spawn_system_faction_population(&mut sim, capital);
+        let guards: Vec<_> = sim.fleets.iter().filter(|f| f.kind == super::super::fleet::FleetKind::StationGuard).collect();
+        let led_by_a_capital = guards.iter().any(|f| {
+            sim.ships.iter().any(|s| {
+                s.fleet == f.id && super::super::fleet::role_of(s.faction, s.class) == super::super::roster::ClassRole::Capital
+            })
+        });
+        assert!(led_by_a_capital, "no home fleet with a capital ship at the Hegemony's capital");
+
+        // An ordinary system of the same faction has none.
+        let outpost = galaxy.systems.iter().find(|s| !s.capital && s.faction == Some(AiShipType::TerranHegemony)).unwrap();
+        let mut sim = WorldSimulation::default();
+        spawn_system_faction_population(&mut sim, outpost);
+        assert!(sim.fleets.iter().filter(|f| f.kind == super::super::fleet::FleetKind::StationGuard).count() <= 1);
     }
 
     /// Spread over the system, not one territory: several holdings occupied,
@@ -744,9 +1392,15 @@ mod population_tests {
             spawn_system_faction_population(&mut sim, system);
             let mut homes: Vec<(Vec2, usize)> = Vec::new();
             for ship in &sim.ships {
-                match homes.iter_mut().find(|(h, _)| h.distance(ship.home_zone) < 1.0) {
+                // A convoy's home is the stop its run starts from; its
+                // home_zone is the middle of the run.
+                let home = sim
+                    .fleet(ship.fleet)
+                    .and_then(|f| f.route.first().copied())
+                    .unwrap_or(ship.home_zone);
+                match homes.iter_mut().find(|(h, _)| h.distance(home) < 1.0) {
                     Some((_, n)) => *n += 1,
-                    None => homes.push((ship.home_zone, 1)),
+                    None => homes.push((home, 1)),
                 }
             }
             assert!(homes.len() >= 3, "{}: ships in only {} holdings", system.name, homes.len());
@@ -795,7 +1449,7 @@ mod population_tests {
             let to_dest = ship.destination - ship.position;
             let remaining = to_dest.length();
             if remaining <= ARRIVE_RADIUS {
-                ship.destination = next_waypoint(&mut rng, &ship, &[]);
+                ship.destination = next_waypoint(&mut rng, ship.home_zone, ship.patrol_radius, &[]);
             } else {
                 let want = to_dest / remaining * ship.cruise;
                 ship.velocity = (ship.velocity * 0.75 + want * 0.25).clamp_length_max(ship.cruise);
@@ -825,6 +1479,7 @@ mod wreck_bookkeeping_tests {
         app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()));
         app.insert_resource(crate::building::registry::build_registry());
         app.init_resource::<WorldSimulation>();
+        app.init_resource::<crate::celestial::resources::SystemStreamingManager>();
         app.add_systems(Update, sync_simulation_entities);
         app.world_mut().spawn((Ship, Transform::default()));
         app
@@ -836,22 +1491,23 @@ mod wreck_bookkeeping_tests {
         s
     }
 
-    /// One wreck marks one simulated ship dead, once -- not a living ship of
-    /// the same faction every frame after.
+    fn add_spawned(app: &mut App, x: f32) -> u32 {
+        let mut sim = app.world_mut().resource_mut::<WorldSimulation>();
+        let mut ship = SimulatedShip::patrolling(0, AiShipType::RecursiveKingdom, Vec2::new(x, 0.0), Vec2::ZERO, 500.0, 100.0);
+        ship.spawned = true;
+        sim.add(ship);
+        sim.ships.last().unwrap().id
+    }
+
+    /// One wreck marks its own simulated ship dead, once -- not a living ship
+    /// of the same faction every frame after.
     #[test]
     fn a_wreck_settles_one_entry_once() {
         let mut app = app();
-        {
-            let mut sim = app.world_mut().resource_mut::<WorldSimulation>();
-            for x in [100.0, 3_000.0] {
-                let mut ship = SimulatedShip::patrolling(0, AiShipType::RecursiveKingdom, Vec2::new(x, 0.0), Vec2::ZERO, 500.0, 100.0);
-                ship.spawned = true;
-                sim.ships.push(ship);
-            }
-        }
-        // The wreck of the ship at x=100, and the living one at x=3000.
-        app.world_mut().spawn((AiShip, AiShipType::RecursiveKingdom, state(true), Transform::from_xyz(100.0, 0.0, 0.0)));
-        app.world_mut().spawn((AiShip, AiShipType::RecursiveKingdom, state(false), Transform::from_xyz(3_000.0, 0.0, 0.0)));
+        let wrecked = add_spawned(&mut app, 100.0);
+        let living = add_spawned(&mut app, 3_000.0);
+        app.world_mut().spawn((AiShip, AiShipType::RecursiveKingdom, state(true), SimShipId(wrecked), Transform::from_xyz(100.0, 0.0, 0.0)));
+        app.world_mut().spawn((AiShip, AiShipType::RecursiveKingdom, state(false), SimShipId(living), Transform::from_xyz(3_000.0, 0.0, 0.0)));
         for _ in 0..5 {
             app.update();
         }
@@ -859,5 +1515,190 @@ mod wreck_bookkeeping_tests {
         let dead = sim.ships.iter().filter(|s| s.behavior == SimBehavior::Dead).count();
         assert_eq!(dead, 1, "the wreck took a living ship's entry with it");
         assert!(sim.ships[1].spawned, "the living ship lost its entry");
+    }
+
+    /// A wreck with no entry (a debug spawn, the tutorial's raider) settles
+    /// nobody's: the old nearest-of-its-faction guess killed a stranger.
+    #[test]
+    fn an_untracked_wreck_touches_no_entry() {
+        let mut app = app();
+        add_spawned(&mut app, 100.0);
+        app.world_mut().spawn((AiShip, AiShipType::RecursiveKingdom, state(true), Transform::from_xyz(120.0, 0.0, 0.0)));
+        for _ in 0..3 {
+            app.update();
+        }
+        let sim = app.world().resource::<WorldSimulation>();
+        assert!(sim.ships.iter().all(|s| s.behavior != SimBehavior::Dead));
+    }
+
+    /// An untracked ship that leaves range joins the simulation instead of
+    /// overwriting another ship's record.
+    #[test]
+    fn an_untracked_ship_is_adopted_when_it_leaves() {
+        let mut app = app();
+        let tracked = add_spawned(&mut app, 100.0);
+        app.world_mut().spawn((AiShip, AiShipType::RecursiveKingdom, state(false), Transform::from_xyz(50_000.0, 0.0, 0.0)));
+        app.update();
+        let sim = app.world().resource::<WorldSimulation>();
+        assert_eq!(sim.ships.len(), 2, "the stray was adopted");
+        let first = sim.ships.iter().find(|s| s.id == tracked).unwrap();
+        assert!(first.spawned && first.position.x == 100.0, "the tracked ship's record was left alone");
+        assert!(sim.ships.iter().any(|s| s.position.x == 50_000.0 && !s.spawned));
+    }
+
+    /// The whole round trip: a ship spawns from its entry, loses blocks,
+    /// leaves range (its holes are written down), and comes back with them.
+    #[test]
+    fn damage_survives_going_off_screen() {
+        let mut app = app();
+        // Real ships load their sprites.
+        app.init_asset::<Image>();
+        let class = crate::ai_ship::roster::intern("lancer");
+        {
+            let mut sim = app.world_mut().resource_mut::<WorldSimulation>();
+            let mut ship = SimulatedShip::patrolling(0, AiShipType::TerranHegemony, Vec2::new(2_000.0, 0.0), Vec2::new(2_000.0, 0.0), 500.0, 0.0);
+            ship.class = class;
+            sim.add(ship);
+        }
+        app.update();
+        let mut roots = app.world_mut().query_filtered::<(Entity, &Children), With<AiShip>>();
+        let (_, children) = roots.single(app.world()).expect("the ship spawned from its entry");
+        let built: Vec<Entity> = children.iter().collect();
+        // Shoot three hull cells clean off.
+        let mut hull = app.world_mut().query::<&crate::components::HullSegment>();
+        let victims: Vec<Entity> = built.iter().copied().filter(|e| hull.get(app.world(), *e).is_ok()).take(3).collect();
+        let lost: Vec<IVec2> = victims.iter().map(|e| hull.get(app.world(), *e).unwrap().grid_position).collect();
+        for v in &victims {
+            app.world_mut().despawn(*v);
+        }
+        // The player leaves: the ship goes back into the simulation.
+        let player = app.world_mut().query_filtered::<Entity, With<Ship>>().single(app.world()).unwrap();
+        app.world_mut().entity_mut(player).insert(Transform::from_xyz(-40_000.0, 0.0, 0.0));
+        app.update();
+        let sim = app.world().resource::<WorldSimulation>();
+        let wounds = sim.ships[0].wounds.clone().expect("its damage was written down");
+        assert!(!sim.ships[0].spawned);
+        for p in &lost {
+            assert!(wounds.hull.contains(p), "lost cell {p:?} was not recorded");
+        }
+        // And comes back: the same holes, nothing else missing.
+        app.world_mut().entity_mut(player).insert(Transform::default());
+        app.update();
+        let mut roots = app.world_mut().query_filtered::<&Children, With<AiShip>>();
+        let children: Vec<Entity> = roots.single(app.world()).unwrap().iter().collect();
+        let mut hull = app.world_mut().query::<&crate::components::HullSegment>();
+        let cells: Vec<IVec2> = children.iter().filter_map(|e| hull.get(app.world(), *e).ok()).map(|h| h.grid_position).collect();
+        for p in &lost {
+            assert!(!cells.contains(p), "lost cell {p:?} grew back");
+        }
+        let design = crate::ai_ship::spawner::built_design(AiShipType::TerranHegemony, class);
+        assert_eq!(cells.len(), design.hull_cells.len() - lost.len());
+    }
+
+    /// A fleet materialises whole when any of it is in range, and goes back
+    /// into the simulation only once all of it has left.
+    #[test]
+    fn a_fleet_comes_and_goes_whole() {
+        let mut app = app();
+        app.init_asset::<Image>();
+        let lancer = crate::ai_ship::roster::intern("lancer");
+        {
+            let mut sim = app.world_mut().resource_mut::<WorldSimulation>();
+            let fleet = super::super::fleet::SimFleet::new(
+                super::super::fleet::FleetKind::Patrol, AiShipType::TerranHegemony, 0,
+                Vec2::new(8_000.0, 0.0), Vec2::ZERO, 50_000.0, 80.0,
+            );
+            let members = super::super::fleet::crew(&fleet, &super::super::fleet::hulls_of(AiShipType::TerranHegemony, &[lancer, lancer, lancer]));
+            sim.add_fleet(fleet, members);
+            // Strung out: only the first is inside render distance.
+            sim.ships[0].position = Vec2::new(8_000.0, 0.0);
+            sim.ships[1].position = Vec2::new(12_000.0, 0.0);
+            sim.ships[2].position = Vec2::new(30_000.0, 0.0);
+        }
+        app.update();
+        let mut members = app.world_mut().query::<&super::super::fleet::FleetMember>();
+        let live: Vec<_> = members.iter(app.world()).copied().collect();
+        assert_eq!(live.len(), 3, "the whole fleet came in, not just the ship in range");
+        assert_eq!(live.iter().filter(|m| m.leader).count(), 1, "one leader");
+
+        // The player moves off; one member is still near.
+        let player = app.world_mut().query_filtered::<Entity, With<Ship>>().single(app.world()).unwrap();
+        app.world_mut().entity_mut(player).insert(Transform::from_xyz(40_000.0, 0.0, 0.0));
+        app.update();
+        assert_eq!(members.iter(app.world()).count(), 3, "a fleet member left while another was in range");
+        assert!(app.world().resource::<WorldSimulation>().ships.iter().all(|s| s.spawned));
+
+        // And then all of it is far: it goes back as one, in formation.
+        app.world_mut().entity_mut(player).insert(Transform::from_xyz(-60_000.0, 0.0, 0.0));
+        app.update();
+        app.update();
+        assert_eq!(members.iter(app.world()).count(), 0);
+        let sim = app.world().resource::<WorldSimulation>();
+        assert!(sim.ships.iter().all(|s| !s.spawned));
+        let fleet = sim.fleets[0].clone();
+        for ship in &sim.ships {
+            assert!(ship.position.distance(fleet.slot_position(ship.slot)) < 1.0, "a member is out of its slot");
+        }
+    }
+
+    /// A whole populated system, the player parked in the middle of one of
+    /// its holdings: whatever comes on screen comes as whole fleets, and the
+    /// block budget holds (bar the one group that always fits).
+    #[test]
+    fn a_populated_system_brings_only_whole_fleets() {
+        let mut app = app();
+        app.init_asset::<Image>();
+        let galaxy = crate::celestial::galaxy::generate_galaxy_map(42);
+        let system = galaxy
+            .systems
+            .iter()
+            .find(|s| s.faction == Some(AiShipType::TerranHegemony))
+            .expect("the Hegemony holds a system")
+            .clone();
+        let centre = {
+            let mut sim = app.world_mut().resource_mut::<WorldSimulation>();
+            spawn_system_faction_population(&mut sim, &system);
+            assert!(!sim.fleets.is_empty());
+            // The holding with the most fleets.
+            let mut best = (Vec2::ZERO, 0usize);
+            for f in &sim.fleets {
+                let n = sim.fleets.iter().filter(|g| g.position.distance(f.position) < RENDER_DISTANCE).count();
+                if n > best.1 {
+                    best = (f.position, n);
+                }
+            }
+            best.0
+        };
+        let player = app.world_mut().query_filtered::<Entity, With<Ship>>().single(app.world()).unwrap();
+        app.world_mut().entity_mut(player).insert(Transform::from_translation(centre.extend(0.0)));
+        app.update();
+        app.update();
+
+        let mut members = app.world_mut().query::<&super::super::fleet::FleetMember>();
+        let live: Vec<u32> = members.iter(app.world()).map(|m| m.fleet).collect();
+        assert!(!live.is_empty(), "nothing came on screen in the middle of a holding");
+        let sim = app.world().resource::<WorldSimulation>();
+        let mut fleets: Vec<u32> = live.clone();
+        fleets.sort_unstable();
+        fleets.dedup();
+        for id in &fleets {
+            let on_screen = live.iter().filter(|f| *f == id).count();
+            let alive = sim.ships.iter().filter(|s| s.fleet == *id && s.behavior != SimBehavior::Dead).count();
+            assert_eq!(on_screen, alive, "fleet {id}: {on_screen} of {alive} came on screen");
+        }
+        let blocks: usize = sim
+            .ships
+            .iter()
+            .filter(|s| s.spawned)
+            .map(|s| crate::ai_ship::spawner::design_blocks(s.faction, s.class))
+            .sum();
+        assert!(fleets.len() == 1 || blocks <= MAX_LIVE_AI_BLOCKS, "{blocks} blocks live over {} fleets", fleets.len());
+
+        // And the player leaves: every fleet goes back whole.
+        app.world_mut().entity_mut(player).insert(Transform::from_xyz(centre.x + 200_000.0, centre.y, 0.0));
+        app.update();
+        app.update();
+        assert_eq!(members.iter(app.world()).count(), 0);
+        assert!(app.world().resource::<WorldSimulation>().ships.iter().all(|s| !s.spawned));
     }
 }

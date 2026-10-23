@@ -111,6 +111,8 @@ pub fn design_slug(ship_type: AiShipType) -> &'static str {
         AiShipType::RecursiveKingdom => "recursive_kingdom",
         AiShipType::EternalHegemony => "eternal_hegemony",
         AiShipType::Shepherd => "shepherd",
+        AiShipType::MerchantPrinces => "merchant_princes",
+        AiShipType::FreeHaulersCompact => "free_haulers_compact",
     }
 }
 
@@ -127,6 +129,10 @@ pub fn get_layout(ship_type: AiShipType) -> AiShipLayout {
         AiShipType::RecursiveKingdom => recursive_kingdom_layout(),
         AiShipType::EternalHegemony => eternal_hegemony_layout(),
         AiShipType::Shepherd => shepherd_layout(),
+        // Never flown: both have hand-drawn rosters and a design file of
+        // their own (designs/factions/<slug>.json). A stand-in so a missing
+        // file still builds a ship.
+        AiShipType::MerchantPrinces | AiShipType::FreeHaulersCompact => the_silence_layout(),
     }
 }
 
@@ -844,11 +850,11 @@ mod layout_tests {
     use super::*;
     use std::collections::HashSet;
 
-    const ALL: [AiShipType; 10] = [
+    const ALL: [AiShipType; 12] = [
         AiShipType::StellarPreserve, AiShipType::SynthesisCollective, AiShipType::BrokenChoir,
         AiShipType::CorpseStars, AiShipType::TheSilence, AiShipType::TerranHegemony,
         AiShipType::GildedThrone, AiShipType::RecursiveKingdom, AiShipType::EternalHegemony,
-        AiShipType::Shepherd,
+        AiShipType::Shepherd, AiShipType::MerchantPrinces, AiShipType::FreeHaulersCompact,
     ];
 
     /// A slug must name a file that is actually there, and no design file may

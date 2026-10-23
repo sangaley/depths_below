@@ -96,7 +96,6 @@ pub struct GameAudio {
     /// Interior ambience for the station. The opening was ~50 seconds of
     /// silence: no menu audio, no station hum, nothing marking launch.
     station_hum: Handle<AudioSource>,
-    machine_loops: Vec<Handle<AudioSource>>,
     hull_creaks: Vec<Handle<AudioSource>>,
     alarm_loop: Handle<AudioSource>,
     ui_select: Vec<Handle<AudioSource>>,
@@ -144,11 +143,6 @@ fn load_audio(mut commands: Commands, assets: Res<AssetServer>) {
         dread_low: assets.load("audio/ambient/black_hole_drone.mp3"),
         dread_high: assets.load("audio/ambient/hostile_atmosphere_loop.mp3"),
         station_hum: assets.load("audio/ambient/interior_hum.ogg"),
-        machine_loops: vec![
-            assets.load("audio/ambient/machine_loop_1.ogg"),
-            assets.load("audio/ambient/machine_loop_2.ogg"),
-            assets.load("audio/ambient/machine_loop_3.ogg"),
-        ],
         hull_creaks: load_all(&[
             "audio/ambient/hull_creak_1.mp3",
             "audio/ambient/hull_creak_2.mp3",
@@ -482,17 +476,26 @@ fn stop_menu_loop(mut commands: Commands, loops: Query<Entity, With<MenuLoopAudi
     }
 }
 
+/// The master volume (and mute) as a factor. Bevy applies GlobalVolume only
+/// when a sound starts; the loops below set their own volume every frame,
+/// which used to replace it -- so Mute silenced one-shots while the engine,
+/// ambient and dread loops played on. Every live set_volume multiplies by this.
+fn master(global: &GlobalVolume) -> f32 {
+    global.volume.to_linear()
+}
+
 fn fade_in_loops(
     time: Res<Time>,
     mut commands: Commands,
     mut fading: Query<(Entity, &mut AudioFadeIn, &mut AudioSink)>,
+    global: Res<GlobalVolume>,
 ) {
     for (entity, mut fade, mut sink) in fading.iter_mut() {
         fade.elapsed += time.delta_secs();
         let t = (fade.elapsed / fade.seconds).clamp(0.0, 1.0);
         // Ease in, so the first second is nearly silent rather than a ramp
         // the ear can follow.
-        sink.set_volume(Volume::Linear(fade.target * t * t));
+        sink.set_volume(Volume::Linear(fade.target * t * t * master(&global)));
         if t >= 1.0 {
             commands.entity(entity).remove::<AudioFadeIn>();
         }
@@ -515,15 +518,9 @@ fn start_station_loops(
         PlaybackSettings::LOOP.with_volume(Volume::Linear(vol)),
         StationLoopAudio,
     ));
-    // One machine loop under the hum so the berth sounds worked-in rather
-    // than merely not-silent.
-    if let Some(machine) = audio.machine_loops.first() {
-        commands.spawn((
-            AudioPlayer(machine.clone()),
-            PlaybackSettings::LOOP.with_volume(Volume::Linear(vol * 0.55)),
-            StationLoopAudio,
-        ));
-    }
+    // There was a machine loop under the hum: three seconds of clank,
+    // repeating for as long as you sat at the berth. Players heard it as a
+    // fault, not as a station.
 }
 
 fn stop_station_loops(loops: Query<Entity, With<StationLoopAudio>>, mut commands: Commands) {
@@ -601,12 +598,13 @@ fn dread_volume(
     settings: Res<GameSettings>,
     cascade: Res<crate::narrative::CascadeState>,
     mut layers: Query<(&mut AudioSink, &DreadLoopAudio)>,
+    global: Res<GlobalVolume>,
 ) {
     let level = cascade.level.clamp(0.0, 1.0);
     for (mut sink, layer) in layers.iter_mut() {
         let span = (layer.peak - layer.from).max(0.001);
         let ramp = ((level - layer.from) / span).clamp(0.0, 1.0);
-        let target = ramp * layer.ceiling * settings.music_volume;
+        let target = ramp * layer.ceiling * settings.music_volume * master(&global);
         let current = sink.volume().to_linear();
         let eased = current + (target - current) * (time.delta_secs() * 0.6).min(1.0);
         sink.set_volume(Volume::Linear(eased));
@@ -617,12 +615,13 @@ fn dread_volume(
 fn update_ambient_volume(
     settings: Res<GameSettings>,
     mut sink_query: Query<&mut AudioSink, With<AmbientLoopAudio>>,
+    global: Res<GlobalVolume>,
 ) {
-    if !settings.is_changed() {
+    if !settings.is_changed() && !global.is_changed() {
         return;
     }
     if let Ok(mut sink) = sink_query.single_mut() {
-        sink.set_volume(Volume::Linear(AMBIENT_VOL * settings.music_volume));
+        sink.set_volume(Volume::Linear(AMBIENT_VOL * settings.music_volume * master(&global)));
     }
 }
 
@@ -652,6 +651,7 @@ fn engine_loop_volume(
     mut sink_query: Query<&mut AudioSink, With<EngineLoopAudio>>,
     time: Res<Time>,
     mut current: Local<f32>,
+    global: Res<GlobalVolume>,
 ) {
     let Ok(mut sink) = sink_query.single_mut() else { return };
     let throttle = ship_query.single().map(|p| p.throttle.abs()).unwrap_or(0.0);
@@ -663,7 +663,7 @@ fn engine_loop_volume(
     let target = intensity.clamp(0.0, 1.0) * ENGINE_MAX_VOL * settings.sfx_volume;
     let rate = if target > *current { 6.0 } else { 2.5 };
     *current += (target - *current) * (rate * time.delta_secs()).min(1.0);
-    sink.set_volume(Volume::Linear(*current));
+    sink.set_volume(Volume::Linear(*current * master(&global)));
 }
 
 // ============================================================================

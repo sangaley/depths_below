@@ -11,17 +11,43 @@ pub mod simulation;
 mod crew;
 pub mod interior;
 mod power;
+pub mod roster;
+pub mod fleet;
+pub mod standing_spawns;
+pub mod preview;
 
 use bevy::prelude::*;
 
 use crate::states::{GameState, SpatialSet};
 
 use components::*;
+pub use layouts::design_slug;
 
 pub struct AiShipPlugin;
 
 impl Plugin for AiShipPlugin {
     fn build(&self, app: &mut App) {
+        app.add_systems(Last, clear_ships_left_by_load);
+        // A system changing hands moves its fleets (celestial::territory).
+        app.add_systems(Update, simulation::fleets_change_hands);
+        // Far ships drawn as pictures of their designs, until they materialise.
+        app.init_resource::<preview::PreviewImages>().add_systems(
+            Update,
+            preview::sync_previews
+                .after(simulation::sync_simulation_entities)
+                .run_if(in_state(crate::states::GameState::Exploring)),
+        );
+        // Your standing sends hunters, escorts and war fleets.
+        app.init_resource::<standing_spawns::StandingSpawns>().add_systems(
+            Update,
+            (
+                standing_spawns::standing_spawns,
+                standing_spawns::war_fleets,
+                standing_spawns::tick_missions,
+                standing_spawns::allies_defend_player,
+            )
+                .run_if(in_state(crate::states::GameState::Exploring)),
+        );
         app
             .init_resource::<WorldSimulation>()
             .init_resource::<scavenger::ScavengerWaves>()
@@ -33,7 +59,7 @@ impl Plugin for AiShipPlugin {
                 Update,
                 (
                     simulation::tick_world_simulation,
-                    simulation::sync_simulation_entities,
+                    (simulation::sync_simulation_entities, simulation::apply_spawn_integrity, simulation::track_live_ships).chain(),
                     // spawn_raider_waves removed — was periodically teleporting a
                     // hostile wing in right next to the player regardless of
                     // location, which was most of what made fights feel
@@ -93,5 +119,17 @@ impl Plugin for AiShipPlugin {
                 )
                     .run_if(in_state(GameState::Exploring)),
             );
+    }
+}
+
+/// Despawn the AI ships a load left behind (see `LeftByLoad`) once the
+/// messages that might still name them have run out.
+fn clear_ships_left_by_load(mut commands: Commands, mut ships: Query<(Entity, &mut LeftByLoad)>) {
+    for (ship, mut left) in ships.iter_mut() {
+        if left.frames == 0 {
+            commands.entity(ship).try_despawn();
+        } else {
+            left.frames -= 1;
+        }
     }
 }

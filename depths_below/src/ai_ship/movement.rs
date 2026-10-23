@@ -3,6 +3,22 @@ use bevy::prelude::*;
 use crate::components::*;
 use super::components::*;
 
+/// Top speed for harbour traffic inside the harbour.
+const HARBOUR_SPEED: f32 = 350.0;
+/// How far past a starport's hull the harbour reaches: the guard fleet
+/// patrols within 8 km of it, convoys berth 4 km off it.
+const HARBOUR_REACH: f32 = 12_000.0;
+/// Past the harbour the limit lifts gradually (u/s per unit out), so a fleet
+/// leaving it speeds up instead of lurching.
+const HARBOUR_EASE: f32 = 0.25;
+
+/// Speed limit for a ship `distance` from the centre of a starport whose hull
+/// reaches `extent`. A Gilded Throne patrol at 2,000 u/s wheeled its formation
+/// into itself and shoved hulls into whatever sat by the station.
+pub fn harbour_speed_cap(distance: f32, extent: f32) -> f32 {
+    HARBOUR_SPEED + (distance - extent - HARBOUR_REACH).max(0.0) * HARBOUR_EASE
+}
+
 /// Moves AI ships toward their nav destination, reading child Engine components for thrust.
 pub fn ai_ship_movement_system(
     time: Res<Time>,
@@ -16,6 +32,8 @@ pub fn ai_ship_movement_system(
         &AiShipType,
         &Children,
         Option<&crate::ship::collision::Collider>,
+        Option<&super::fleet::FleetMember>,
+        Has<super::standing_spawns::PlayerEscort>,
     ), With<AiShip>>,
     engine_query: Query<(&Engine, &Module, &OwnedByAiShip)>,
     weapon_query: Query<(&Weapon, &Module, &OwnedByAiShip), Without<Engine>>,
@@ -26,10 +44,17 @@ pub fn ai_ship_movement_system(
         (&Transform, &crate::ship::collision::Collider),
         crate::ship::collision::TerrainFilter,
     >,
+    // The player's hull is in the way too: a fleet crossing near you flowed
+    // into it, and an escort could wedge itself between the Pincer's claws.
+    player: Query<(&Transform, &crate::ship::collision::Collider), (With<Ship>, Without<AiShip>)>,
+    faction_stations: Res<crate::diplomacy::stations::FactionStations>,
 ) {
     let dt = time.delta_secs();
+    let player_obstacle = player.single().ok().map(|(tf, c)| {
+        (crate::ship::collision::world_point(tf, c.bound_center), c.bound_radius)
+    });
 
-    for (_entity, mut transform, mut velocity, behavior, nav, state, ship_type, children, collider) in ai_ships.iter_mut() {
+    for (_entity, mut transform, mut velocity, behavior, nav, state, ship_type, children, collider, member, escort) in ai_ships.iter_mut() {
         if *behavior == AiShipBehavior::Dead || state.is_destroyed {
             velocity.0 = Vec2::ZERO;
             continue;
@@ -77,6 +102,20 @@ pub fn ai_ship_movement_system(
             AiShipBehavior::Dead => 0.0,
         };
 
+        // In formation, the leader holds back so its escorts can keep up,
+        // and an escort out of place hurries to its slot.
+        let to_slot = nav.destination.map_or(0.0, |d| d.distance(transform.translation.truncate()));
+        let behavior_mult = match (member, behavior) {
+            (Some(m), AiShipBehavior::Patrolling) if m.leader => behavior_mult * 0.75,
+            // An escort keeps up with you: you fly at full speed, it doesn't
+            // dawdle at patrol pace.
+            (Some(_), AiShipBehavior::Patrolling) if escort => behavior_mult * 1.6,
+            (Some(_), AiShipBehavior::Patrolling) if to_slot > 1_500.0 => behavior_mult * 1.35,
+            _ => behavior_mult,
+        };
+        // An escort settles into its slot rather than overshooting it.
+        let settle = (escort || member.is_some_and(|m| !m.leader)) && *behavior == AiShipBehavior::Patrolling;
+
         // Faction-specific speed characteristics
         let faction_mult = match ship_type {
             AiShipType::TheSilence => 1.6,      // fastest ship in the game
@@ -89,11 +128,26 @@ pub fn ai_ship_movement_system(
             AiShipType::TerranHegemony => 0.6,       // slow battleship
             AiShipType::EternalHegemony => 0.4,    // colossal, lumbering
             AiShipType::Shepherd => 0.35,     // barely moves, but it doesn't need to
+            AiShipType::MerchantPrinces => 0.9,   // laden freight
+            AiShipType::FreeHaulersCompact => 0.8, // pushing a load
         };
 
         // Global AI pace.
         const AI_SPEED_SCALE: f32 = 0.8;
         let max_speed = total_thrust * behavior_mult * faction_mult * AI_SPEED_SCALE;
+        // Harbour traffic goes slow. A ship going about its business near a
+        // faction starport keeps to harbour speed; one fighting or running
+        // for its life doesn't.
+        let harbour_bound = matches!(
+            behavior,
+            AiShipBehavior::Patrolling | AiShipBehavior::Idle | AiShipBehavior::FollowingTradeRoute | AiShipBehavior::Salvaging
+        );
+        let max_speed = match faction_stations.post {
+            Some((_, port, extent)) if harbour_bound => {
+                max_speed.min(harbour_speed_cap(transform.translation.truncate().distance(port), extent))
+            }
+            _ => max_speed,
+        };
 
         // Frame-rate-independent smoothing fraction: closes this much of the
         // remaining gap (to a target velocity or a target angle) per second.
@@ -107,6 +161,26 @@ pub fn ai_ship_movement_system(
 
         if let Some(destination) = nav.destination {
             let pos = transform.translation.truncate();
+            let own_radius = collider.map(|c| c.bound_radius).unwrap_or(300.0);
+            // Room kept round your hull, wider the faster this ship is going:
+            // its velocity eases onto a new heading, so a hull at 1,500 u/s
+            // carries on a few hundred units before a swerve takes.
+            let player_obstacle = player_obstacle
+                .map(|(center, radius)| (center, radius + (velocity.0.length() * 0.3).clamp(200.0, 800.0)));
+            // A formation slot or waypoint that lands on you is taken just
+            // outside your hull instead. A patrol sweeping past a parked
+            // ship had escorts flying their slots straight through it.
+            let destination = match player_obstacle {
+                Some((center, radius)) if *behavior != AiShipBehavior::Engaging => {
+                    let keep = radius + own_radius;
+                    if destination.distance(center) < keep {
+                        center + (destination - center).normalize_or((pos - center).normalize_or(Vec2::X)) * keep
+                    } else {
+                        destination
+                    }
+                }
+                _ => destination,
+            };
             // Drive damage skews the perceived heading — the ship weaves
             // toward where its broken engines are dragging it.
             let to_dest = Vec2::from_angle(wobble_angle).rotate(destination - pos);
@@ -150,6 +224,14 @@ pub fn ai_ship_movement_system(
             } else {
                 0.0
             };
+            // Measured from the ship's centre, so a hull kilometres across
+            // held its "distance" with its own bow in your hull, shoving you
+            // across the system. The standoff starts where its hull ends.
+            let standoff = if standoff > 0.0 {
+                standoff + collider.map_or(0.0, |c| c.bound_radius)
+            } else {
+                0.0
+            };
 
             if standoff > 0.0 && dist < standoff * 1.3 && dist > 1.0 {
                 let direction = to_dest / dist; // toward the player
@@ -182,7 +264,6 @@ pub fn ai_ship_movement_system(
                 transform.rotation = transform.rotation.slerp(target_rotation, turn_blend);
             } else if dist > 5.0 {
                 // Bend the heading around any terrain blocking the way.
-                let own_radius = collider.map(|c| c.bound_radius).unwrap_or(300.0);
                 let direction = crate::ship::collision::steer_around(
                     &collider_grid,
                     &terrain,
@@ -191,9 +272,18 @@ pub fn ai_ship_movement_system(
                     dist,
                     own_radius,
                 );
+                // Not while fighting you: a ship engaging holds its own
+                // standoff, and a rammer means to hit.
+                let direction = match player_obstacle {
+                    Some((center, radius)) if *behavior != AiShipBehavior::Engaging => {
+                        crate::ship::collision::steer_clear_of(pos, direction, dist, own_radius, center, radius)
+                    }
+                    _ => direction,
+                };
 
                 // Gradually accelerate toward desired velocity
-                let desired_vel = direction * max_speed;
+                let arrive = if settle { (dist / 600.0).min(1.0) } else { 1.0 };
+                let desired_vel = direction * max_speed * arrive;
                 velocity.0 = velocity.0.lerp(desired_vel, vel_blend);
 
                 // Update rotation to face movement direction
@@ -260,5 +350,26 @@ pub fn ai_fuel_system(
         };
 
         state.fuel = (state.fuel - fuel_consumption * consumption_mult * dt).max(0.0);
+    }
+}
+
+#[cfg(test)]
+mod harbour_tests {
+    use super::*;
+
+    /// Inside the harbour everyone keeps to harbour speed; the limit lifts
+    /// smoothly outside it, and is gone a system's width away.
+    #[test]
+    fn harbour_traffic_slows_near_the_starport() {
+        let extent = 2_300.0;
+        assert_eq!(harbour_speed_cap(0.0, extent), HARBOUR_SPEED);
+        assert_eq!(harbour_speed_cap(extent + HARBOUR_REACH, extent), HARBOUR_SPEED);
+        let mut last = HARBOUR_SPEED;
+        for step in 1..100 {
+            let cap = harbour_speed_cap(extent + HARBOUR_REACH + step as f32 * 200.0, extent);
+            assert!(cap > last && cap - last <= 200.0 * HARBOUR_EASE + 0.01, "the limit jumps at {step}");
+            last = cap;
+        }
+        assert!(harbour_speed_cap(100_000.0, extent) > 10_000.0);
     }
 }

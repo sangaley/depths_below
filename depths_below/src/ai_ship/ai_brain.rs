@@ -32,6 +32,9 @@ use crate::spatial::CreatureGrid;
 /// another AI ship's crossfire now fights back against THAT ship instead
 /// of reflexively assuming it was the player. Falls back to best_target if
 /// the real attacker died, left range, or was never recorded.
+/// How near something hostile comes before a civilian hull runs from it.
+const CIVILIAN_ALARM: f32 = 5_000.0;
+
 pub fn ai_brain_system(
     time: Res<Time>,
     mut ai_ships: Query<(
@@ -45,6 +48,10 @@ pub fn ai_brain_system(
         &mut AiShipTarget,
         &Children,
         Option<&AiLoadout>,
+        Option<&super::fleet::FleetMember>,
+        Has<super::fleet::CivilianHull>,
+        Has<super::standing_spawns::PlayerEscort>,
+        Has<super::standing_spawns::Hunter>,
     )>,
     player_ship: Query<(Entity, &Transform, &Children), With<Ship>>,
     player_weapon_query: Query<(&Weapon, &Module), Without<OwnedByAiShip>>,
@@ -57,6 +64,11 @@ pub fn ai_brain_system(
     // Every module class, for guns_left — the same tally check_ai_cripple
     // runs, so withdrawing and striking colours read one count.
     module_query: Query<(&Module, &OwnedByAiShip)>,
+    standing: Res<crate::diplomacy::FactionStanding>,
+    // Faction stations hold fire for their own rule, and reach: a hull
+    // kilometres across has guns in range long before its centre is.
+    stations: Query<(), With<crate::diplomacy::FactionStation>>,
+    reach: Query<&crate::combat::shields::ShipShield>,
 ) {
     // --- Pre-pass: snapshot every living ship's position + "threat value"
     // (block count + 2x active weapon damage — cheap proxies for size and
@@ -68,7 +80,26 @@ pub fn ai_brain_system(
     }
 
     let mut ai_snapshot: Vec<(Entity, Vec2, f32)> = Vec::new();
-    for (entity, transform, _, state, _, _, _, _, children, _) in ai_ships.iter() {
+    let mut ai_factions: Vec<(Entity, AiShipType)> = Vec::new();
+    // Who each fleet forms up on: its leader, or if the leader is gone, the
+    // living member nearest the formation's centre. (fleet, ship, position,
+    // facing, slot)
+    let mut fleet_anchors: Vec<(u32, Entity, Vec2, Quat, Vec2)> = Vec::new();
+    for (entity, transform, ship_type, state, _, _, _, _, children, _, member, _, escort, _) in ai_ships.iter() {
+        if !state.is_destroyed {
+            ai_factions.push((entity, *ship_type));
+            if let Some(m) = member.filter(|_| !escort) {
+                let candidate = (m.fleet, entity, transform.translation.truncate(), transform.rotation, m.slot);
+                match fleet_anchors.iter_mut().find(|a| a.0 == m.fleet) {
+                    None => fleet_anchors.push(candidate),
+                    Some(held) => {
+                        if m.leader || (held.4 != Vec2::ZERO && m.slot.length() < held.4.length()) {
+                            *held = candidate;
+                        }
+                    }
+                }
+            }
+        }
         if state.is_destroyed { continue; }
         let weapon_dmg: f32 = children.iter()
             .filter_map(|c| weapon_query.get(c).ok())
@@ -87,7 +118,11 @@ pub fn ai_brain_system(
         (e, t.translation.truncate(), threat_value(children, weapon_dmg))
     });
 
-    for (entity, transform, ship_type, mut state, mut behavior, mut nav, mut timer, mut ai_target, children, loadout) in ai_ships.iter_mut() {
+    // An escort forms up on you: where you are and which way you face.
+    let player_frame: Option<(Vec2, Quat)> =
+        player_ship.iter().next().map(|(_, t, _)| (t.translation.truncate(), t.rotation));
+
+    for (entity, transform, ship_type, mut state, mut behavior, mut nav, mut timer, mut ai_target, children, loadout, member, civilian, escort, hunter) in ai_ships.iter_mut() {
         timer.timer.tick(time.delta());
         if !timer.timer.just_finished() {
             continue;
@@ -99,6 +134,17 @@ pub fn ai_brain_system(
             *behavior = AiShipBehavior::Dead;
             continue;
         }
+
+        // Your standing decides who comes for you: only a faction that counts
+        // you Hostile treats you as a target. A ship you've fired on fires
+        // back whatever its faction thinks of you.
+        let player_snapshot = player_snapshot.filter(|(player, _, _)| {
+            standing.attacks_player(*ship_type)
+                || state.last_attacker == Some(*player)
+                // Answering a fleet-mate (or a faction-mate's distress call)
+                // that you're fighting.
+                || (state.alert_timer > 0.0 && state.alert_target == Some(*player))
+        });
 
         let pos = transform.translation.truncate();
 
@@ -132,6 +178,37 @@ pub fn ai_brain_system(
             .map(|(weapon, _, _)| weapon.range)
             .fold(0.0_f32, f32::max);
         let engage_range = if max_weapon_range > 0.0 { max_weapon_range * 1.05 } else { 4400.0 };
+        // Guns ride the hull, so a big hull reaches further than its centre.
+        let engage_range = engage_range + reach.get(entity).map_or(0.0, |s| s.radius * 0.8);
+
+        // A faction station doesn't patrol, flee or ram: it fires on whatever
+        // its faction is at war with, and on you if its faction counts you
+        // Hostile or you've fired on it (player_snapshot is already gated).
+        if stations.contains(entity) {
+            let hostile = |e: Entity| {
+                ai_factions.iter().find(|(f, _)| *f == e).is_some_and(|(_, t)| {
+                    crate::ai_ship::components::factions_hostile(*ship_type, *t)
+                })
+            };
+            let target = player_snapshot
+                .iter()
+                .map(|&(e, p, _)| (e, p))
+                .chain(ai_snapshot.iter().filter(|(e, _, _)| *e != entity && hostile(*e)).map(|&(e, p, _)| (e, p)))
+                .filter(|(_, p)| pos.distance(*p) < engage_range)
+                .min_by(|(_, a), (_, b)| pos.distance(*a).total_cmp(&pos.distance(*b)));
+            match target {
+                Some((e, p)) => {
+                    *behavior = AiShipBehavior::Engaging;
+                    ai_target.entity = Some(e);
+                    ai_target.position = p;
+                }
+                None => {
+                    *behavior = AiShipBehavior::Idle;
+                    ai_target.entity = None;
+                }
+            }
+            continue;
+        }
 
         // How much of the battery is still shooting. A ship that has been
         // disarmed doesn't heroically hold station waiting to be finished —
@@ -168,9 +245,15 @@ pub fn ai_brain_system(
         // clearly outclasses it (40%+ better score) or it dies/leaves range.
         const TARGET_STICKINESS: f32 = 1.4;
         let held_target = ai_target.entity;
+        // Only ships its faction is at war with: this once counted every
+        // ship in range, its own fleet-mates included, so a battle group
+        // opened fire on itself the moment it materialised.
+        let at_war = |e: Entity| {
+            ai_factions.iter().any(|(f, t)| *f == e && crate::ai_ship::components::factions_hostile(*ship_type, *t))
+        };
         let best_target: Option<(Entity, Vec2)> = player_snapshot.iter()
             .map(|&(e, p, v)| (e, p, v))
-            .chain(ai_snapshot.iter().filter(|(e, _, _)| *e != entity).map(|&(e, p, v)| (e, p, v)))
+            .chain(ai_snapshot.iter().filter(|(e, _, _)| *e != entity && at_war(*e)).map(|&(e, p, v)| (e, p, v)))
             .filter(|(_, p, _)| pos.distance(*p) < engage_range)
             .map(|(e, p, v)| (e, p, if Some(e) == held_target { v * TARGET_STICKINESS } else { v }))
             .max_by(|(_, pa, va), (_, pb, vb)| {
@@ -225,6 +308,18 @@ pub fn ai_brain_system(
 
         let mut actions: Vec<ScoredAction> = Vec::with_capacity(12);
 
+        // A fleet escort's place: its slot on whoever the fleet forms up on,
+        // turned with that ship. None for a leader or a ship alone.
+        let formation_point: Option<Vec2> = member.and_then(|m| {
+            if escort {
+                return player_frame.map(|(at, facing)| at + (facing * m.slot.extend(0.0)).truncate());
+            }
+            fleet_anchors
+                .iter()
+                .find(|a| a.0 == m.fleet && a.1 != entity)
+                .map(|&(_, _, at, facing, anchor_slot)| at + (facing * (m.slot - anchor_slot).extend(0.0)).truncate())
+        });
+
         // ====================================================================
         // DISTRESS RESPONSE — faction-agnostic, evaluated before the per-
         // faction trees. A same-faction ally within earshot called for backup
@@ -266,6 +361,36 @@ pub fn ai_brain_system(
         // Per-faction unique decision trees
         // ====================================================================
         match *ship_type {
+            // ----------------------------------------------------------------
+            // TRADERS (Merchant Princes, Free Haulers' Compact): no warfleet.
+            // Shot at, they run from whoever did it and let their escort and
+            // their ally do the fighting (ai_distress_system); otherwise they
+            // keep their course. Their civilian hulls run from any threat
+            // anyway (CivilianHull, below); this covers the rest, the Arms
+            // Bazaar among them.
+            // ----------------------------------------------------------------
+            AiShipType::MerchantPrinces | AiShipType::FreeHaulersCompact => {
+                if under_fire {
+                    if let Some((_, t_pos)) = attacker_target {
+                        let away = (pos - t_pos).normalize_or(Vec2::X);
+                        actions.push(ScoredAction {
+                            score: 90.0,
+                            behavior: AiShipBehavior::Fleeing,
+                            destination: Some(pos + away * 4_000.0),
+                            target: None,
+                        });
+                    }
+                }
+                if !nav.waypoints.is_empty() {
+                    actions.push(ScoredAction {
+                        score: 40.0,
+                        behavior: AiShipBehavior::Patrolling,
+                        destination: nav.waypoints.get(nav.current_waypoint).copied(),
+                        target: None,
+                    });
+                }
+            }
+
             // ----------------------------------------------------------------
             // LEVIATHAN RIDERS: Hunt creatures, avoid combat, flee when hurt
             // Prioritize: find creatures > capture > flee > patrol
@@ -843,6 +968,50 @@ pub fn ai_brain_system(
             }
         }
 
+        // A hunter came for you: it closes and engages wherever you are in
+        // the system, whatever its faction's habits, unless its own
+        // survival or its signature move scores higher.
+        if hunter {
+            if let Some((pe, pp, _)) = player_info {
+                actions.push(ScoredAction {
+                    score: 92.0,
+                    behavior: AiShipBehavior::Engaging,
+                    destination: Some(pp),
+                    target: Some((pe, pp)),
+                });
+            }
+        }
+
+        // A civilian hull runs instead of fighting: from whoever is shooting
+        // at it, or from anything hostile that comes near. Its escort is
+        // what answers (ai_distress_system).
+        if civilian {
+            actions.retain(|a| a.behavior != AiShipBehavior::Engaging);
+            let hostile = |e: Entity| {
+                ai_factions.iter().any(|(f, t)| *f == e && crate::ai_ship::components::factions_hostile(*ship_type, *t))
+            };
+            let threat = under_fire
+                .then(|| attacker_target.map(|(_, p)| p))
+                .flatten()
+                .or_else(|| {
+                    player_snapshot
+                        .map(|(_, p, _)| p)
+                        .into_iter()
+                        .chain(ai_snapshot.iter().filter(|(e, _, _)| *e != entity && hostile(*e)).map(|&(_, p, _)| p))
+                        .filter(|p| pos.distance(*p) < CIVILIAN_ALARM)
+                        .min_by(|a, b| pos.distance(*a).total_cmp(&pos.distance(*b)))
+                });
+            if let Some(threat) = threat {
+                let away = (pos - threat).normalize_or(Vec2::X);
+                actions.push(ScoredAction {
+                    score: 99.0,
+                    behavior: AiShipBehavior::Fleeing,
+                    destination: Some(pos + away * 4_000.0),
+                    target: None,
+                });
+            }
+        }
+
         // Default fallback for all factions
         actions.push(ScoredAction {
             score: 5.0,
@@ -862,6 +1031,13 @@ pub fn ai_brain_system(
             if let Some(dest) = best.destination {
                 nav.destination = Some(dest);
             }
+            // An escort with nothing better to do keeps its place in the
+            // formation instead of flying a patrol of its own.
+            if *behavior == AiShipBehavior::Patrolling {
+                if let Some(slot) = formation_point {
+                    nav.destination = Some(slot);
+                }
+            }
             // Combat target for ai_weapon_fire_system — separate from
             // nav.destination (see AiShipTarget's doc comment for why).
             // Non-Engaging actions carry target: None, which correctly
@@ -878,7 +1054,7 @@ pub fn ai_brain_system(
         }
 
         // Advance waypoints when near current one
-        if let Some(dest) = nav.destination {
+        if let Some(dest) = nav.destination.filter(|_| formation_point.is_none()) {
             if pos.distance(dest) < 80.0 && !nav.waypoints.is_empty() {
                 nav.current_waypoint = (nav.current_waypoint + 1) % nav.waypoints.len();
                 nav.destination = nav.waypoints.get(nav.current_waypoint).copied();

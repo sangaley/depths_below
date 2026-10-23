@@ -73,6 +73,7 @@ fn maybe_send_it(
     assets: Res<AssetServer>,
     mut notifications: MessageWriter<ShowNotification>,
     stations: Res<crate::world::home_base::SystemStations>,
+    faction_stations: Res<crate::diplomacy::stations::FactionStations>,
 ) {
     if state.spent || cascade.level < EARLIEST {
         return;
@@ -98,10 +99,16 @@ fn maybe_send_it(
     // Not on the doorstep. Somebody who comes home late in a run should not
     // have this turn up in the station's own parking orbit — it reads as a
     // spawner glitch rather than as something that followed them.
+    // A faction starport counts too, measured from its hull: the player
+    // berths and undocks there, and a hostile copy arriving on top of that
+    // read as the station itself hitting them.
     if stations
         .sites
         .iter()
         .any(|s| s.pos.distance(origin) < STATION_KEEP_CLEAR)
+        || faction_stations
+            .post
+            .is_some_and(|(_, at, extent)| at.distance(origin) < STATION_KEEP_CLEAR + extent)
     {
         return;
     }
