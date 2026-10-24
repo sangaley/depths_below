@@ -765,6 +765,9 @@ impl Plugin for DemoPlugin {
                 crate::vfx::ship_roof::update_ai_roofs,
             ));
         }
+        if std::env::var("DEPTHS_ROT_TRACE").ok().as_deref() == Some("1") {
+            app.add_systems(Last, rot_trace);
+        }
         if std::env::var("DEPTHS_FLY_TO").ok().as_deref() == Some("station") {
             app.add_systems(PreUpdate, fly_to_station.after(bevy::input::InputSystems));
         }
@@ -1186,6 +1189,82 @@ fn play_scripted_keys(
         script.held.push((key, now + hold));
         script.next += 1;
     }
+}
+
+/// DEPTHS_ROT_TRACE=1: every 2 s, log each AI ship whose nose reversed its
+/// turning direction (a nod) and what it was doing at the time.
+#[derive(Default)]
+struct RotTrack {
+    last: f32,
+    last_w: f32,
+    flips: u32,
+    max_w: f32,
+    /// Heading at the last reversal, and the biggest swing between two.
+    at_flip: f32,
+    swing: f32,
+    dest: Option<Vec2>,
+    dest_moved: f32,
+    face: Option<f32>,
+}
+
+fn rot_trace(
+    time: Res<Time>,
+    mut acc: Local<f32>,
+    mut track: Local<bevy::platform::collections::HashMap<Entity, RotTrack>>,
+    ships: Query<(Entity, &Transform, &crate::components::Velocity, &crate::ai_ship::components::AiShipBehavior,
+                  &crate::ai_ship::components::AiShipNav, &crate::ai_ship::components::AiShipType,
+                  Option<&crate::ai_ship::fleet::FleetMember>), With<AiShip>>,
+) {
+    let dt = time.delta_secs().max(1e-4);
+    for (e, tf, _, _, nav, ..) in &ships {
+        let a = tf.rotation.to_euler(EulerRot::ZYX).0;
+        let t = track.entry(e).or_insert(RotTrack { last: a, at_flip: a, ..default() });
+        let d = (a - t.last + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+        let w = d / dt;
+        if w.abs() > 0.05 && t.last_w.abs() > 0.05 && w.signum() != t.last_w.signum() {
+            let sw = ((a - t.at_flip + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI).abs();
+            // only swings you could see count as a nod
+            if sw > 0.08 {
+                t.flips += 1;
+                t.swing = t.swing.max(sw);
+            }
+            t.at_flip = a;
+        }
+        if let (Some(p), Some(n)) = (t.dest, nav.destination) {
+            t.dest_moved += p.distance(n);
+        }
+        t.dest = nav.destination;
+        t.face = nav.face;
+        if w.abs() > 0.05 {
+            t.last_w = w;
+        }
+        t.max_w = t.max_w.max(w.abs());
+        t.last = a;
+    }
+    *acc += dt;
+    if *acc < 2.0 {
+        return;
+    }
+    *acc = 0.0;
+    let mut nodders = 0;
+    for (e, tf, vel, behavior, nav, ty, member) in &ships {
+        let Some(t) = track.get_mut(&e) else { continue };
+        if t.flips >= 2 {
+            nodders += 1;
+            let to_dest = nav.destination.map(|d| d.distance(tf.translation.truncate()));
+            info!(
+                "ROT_TRACE nod {:?} {:?} {:?} role={} flips={} swing={:.2} max_w={:.2} speed={:.0} to_dest={:?} dest_moved={:.0} face={}",
+                e, ty, behavior,
+                member.map_or("solo", |m| if m.leader { "leader" } else { "escort" }),
+                t.flips, t.swing, t.max_w, vel.0.length(), to_dest.map(|d| d as i32), t.dest_moved, t.face.is_some()
+            );
+        }
+        t.flips = 0;
+        t.max_w = 0.0;
+        t.swing = 0.0;
+        t.dest_moved = 0.0;
+    }
+    info!("ROT_TRACE {} ships, {} nodding", ships.iter().count(), nodders);
 }
 
 /// On a station part already shown whole.

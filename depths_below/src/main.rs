@@ -61,6 +61,15 @@ fn main() {
                 resolution: (1280, 720).into(),
                 ..default()
             }),
+            // An offscreen run (DEPTHS_OFFSCREEN, unattended filming and
+            // tests) renders into an image, not the window -- so it keeps
+            // going when macOS sleeps the display and takes the window away
+            // with the monitor, instead of quitting half way through.
+            exit_condition: if std::env::var("DEPTHS_OFFSCREEN").ok().as_deref() == Some("1") {
+                bevy::window::ExitCondition::DontExit
+            } else {
+                bevy::window::ExitCondition::OnAllClosed
+            },
             ..default()
         }))
 
