@@ -771,7 +771,8 @@ fn update_depth_vignette(
         let dist = to_target.length();
 
         // GTA-style: completely hide entities far from the player
-        if dist > cull_range {
+        // (DEPTHS_NO_DARK films a wide shot far from the ship: draw it all.)
+        if dist > cull_range && !no_dark() {
             *visibility = Visibility::Hidden;
             continue;
         }

@@ -394,7 +394,7 @@ pub fn fire_laser_system(
         commands.spawn((
             (Sprite {
                     color: Color::srgba(0.3, 0.9, 0.4, 0.8),
-                    custom_size: Some(Vec2::new(length, 3.0)),
+                    custom_size: Some(Vec2::new(length, 3.0 * super::fx_scale())),
                     ..default()
                 }, Transform {
                     translation: Vec3::new(midpoint.x, midpoint.y, 0.6),
@@ -408,7 +408,7 @@ pub fn fire_laser_system(
         commands.spawn((
             (Sprite {
                     color: Color::srgba(0.2, 0.7, 0.3, 0.2),
-                    custom_size: Some(Vec2::new(length, 10.0)),
+                    custom_size: Some(Vec2::new(length, 10.0 * super::fx_scale())),
                     ..default()
                 }, Transform {
                     translation: Vec3::new(midpoint.x, midpoint.y, 0.55),

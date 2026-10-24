@@ -47,7 +47,7 @@ pub(crate) fn spawn_projectile(
         (Sprite {
                 image: asset_server.load(texture_path),
                 color: final_color,
-                custom_size: Some(ammo_type.projectile_size()),
+                custom_size: Some(ammo_type.projectile_size() * super::fx_scale()),
                 ..default()
             }, Transform {
                 translation: Vec3::new(origin.x, origin.y, 0.5),

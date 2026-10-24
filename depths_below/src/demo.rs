@@ -44,6 +44,10 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //                          <delay> real seconds after launch. For filming.
 //   DEPTHS_HIDE_UI=1 — hide every UI root (HUD, markers, cursor): world only.
 //   DEPTHS_NO_BG_PLANETS=1 — hide the small parallax planets behind everything.
+//   DEPTHS_KEY_BG=1 — empty space pure green, starfield hidden (for keying footage).
+//   DEPTHS_FREEZE_AT=<secs> — stop the game clock then (ships hold their spawn slots).
+//   DEPTHS_FX_SCALE=<k> — shots and beams drawn k times bigger (wide fight shots).
+//   DEPTHS_NO_DAMAGE_TEXT=1 — no floating damage numbers.
 //   DEPTHS_CAM_AT=<x>,<y> | station[>d] — point the camera there instead of at
 //                          the ship ("station": the nearest station core; ">d"
 //                          slides d units toward its world).
@@ -550,6 +554,30 @@ impl Plugin for DemoPlugin {
                 PostUpdate,
                 (|mut planets: Query<&mut Visibility, With<crate::vfx::starfield::BackgroundPlanet>>| {
                     for mut v in &mut planets {
+                        *v = Visibility::Hidden;
+                    }
+                })
+                .before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate),
+            );
+        }
+        // DEPTHS_FREEZE_AT=<secs> -- stop the game clock at that real time, so
+        // ships stay exactly where they spawned (F7 still captures).
+        if let Some(at) = std::env::var("DEPTHS_FREEZE_AT").ok().and_then(|v| v.parse::<f32>().ok()) {
+            app.add_systems(Update, move |real: Res<Time<Real>>, mut virt: ResMut<Time<Virtual>>| {
+                if real.elapsed_secs() >= at && virt.relative_speed() != 0.0 {
+                    virt.set_relative_speed(0.0);
+                }
+            });
+        }
+        // DEPTHS_KEY_BG=1 -- empty space drawn pure green and the starfield
+        // hidden, so footage can be keyed cleanly and given its own backdrop.
+        if std::env::var("DEPTHS_KEY_BG").ok().as_deref() == Some("1") {
+            app.add_systems(
+                PostUpdate,
+                (|mut clear: ResMut<ClearColor>,
+                  mut stars: Query<&mut Visibility, Or<(With<crate::vfx::starfield::StarfieldStar>, With<crate::vfx::starfield::BackgroundPlanet>)>>| {
+                    clear.0 = Color::srgb(0.0, 1.0, 0.0);
+                    for mut v in &mut stars {
                         *v = Visibility::Hidden;
                     }
                 })

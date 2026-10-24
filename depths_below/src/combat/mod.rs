@@ -294,11 +294,27 @@ pub(crate) fn spawn_impact_sparks(
     }
 }
 
+/// DEPTHS_FX_SCALE: a filming switch that draws shots and beams this many
+/// times bigger, so a wide shot of a fight can read. 1.0 in play.
+pub fn fx_scale() -> f32 {
+    static V: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
+    *V.get_or_init(|| std::env::var("DEPTHS_FX_SCALE").ok().and_then(|v| v.parse().ok()).unwrap_or(1.0))
+}
+
+/// DEPTHS_NO_DAMAGE_TEXT=1: no floating numbers or words (filming).
+fn no_damage_text() -> bool {
+    static V: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *V.get_or_init(|| std::env::var("DEPTHS_NO_DAMAGE_TEXT").ok().as_deref() == Some("1"))
+}
+
 /// Spawn a floating word that drifts upward and fades out — the same channel
 /// as a damage number, for outcomes that aren't a number. A round that skips
 /// off a plate did something, and reporting it as "-3" reads as a bad hit
 /// rather than as a deflection.
 pub(crate) fn spawn_floating_label(commands: &mut Commands, position: Vec2, text: &str, color: Color) {
+    if no_damage_text() {
+        return;
+    }
     commands.spawn((
         Text2d::new(text.to_string()),
         TextFont { font_size: FontSize::Px(16.0), ..default() },
@@ -314,6 +330,9 @@ pub(crate) fn spawn_floating_label(commands: &mut Commands, position: Vec2, text
 
 /// Spawn a floating damage number that drifts upward and fades out.
 pub(crate) fn spawn_floating_damage(commands: &mut Commands, position: Vec2, damage: f32, color: Color) {
+    if no_damage_text() {
+        return;
+    }
     commands.spawn((
         Text2d::new(format!("-{}", damage as i32)),
         TextFont { font_size: FontSize::Px(18.0), ..default() },

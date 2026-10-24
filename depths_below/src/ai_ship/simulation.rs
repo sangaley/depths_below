@@ -112,6 +112,19 @@ pub fn init_world_simulation(
         if let Ok(specs) = std::env::var("DEPTHS_MOVETEST_FLEET") {
             use super::fleet::FleetKind;
             for (i, spec) in specs.split(';').filter(|s| !s.trim().is_empty()).enumerate() {
+                // "<Faction>:<Kind>@dx,dy[,deg][!]": placed at an offset from
+                // the meeting point, facing deg, and with "!" holding there --
+                // battle lines and ships idling round a station, for filming.
+                let spec = spec.trim();
+                let hold = spec.ends_with('!');
+                let spec = spec.trim_end_matches('!');
+                let (spec, place) = match spec.split_once('@') {
+                    Some((a, b)) => {
+                        let n: Vec<f32> = b.split(',').filter_map(|v| v.trim().parse().ok()).collect();
+                        (a, (n.len() >= 2).then(|| (Vec2::new(n[0], n[1]), n.get(2).map(|d| d.to_radians()))))
+                    }
+                    None => (spec, None),
+                };
                 let (f, k) = spec.split_once(':').unwrap_or((spec, "Patrol"));
                 let kind = match k.trim() {
                     "BattleGroup" => FleetKind::BattleGroup,
@@ -137,6 +150,14 @@ pub fn init_world_simulation(
                 } else {
                     (Vec2::new(centre.x - reach, y), 0.0, Vec2::new(centre.x + 30_000.0, y))
                 };
+                let (start, heading, far) = match place {
+                    Some((offset, deg)) => {
+                        let at = centre + offset;
+                        let h = deg.unwrap_or(heading);
+                        (at, h, if hold { at } else { at + Vec2::from_angle(h) * 30_000.0 })
+                    }
+                    None => (start, heading, far),
+                };
                 match super::fleet::compose(faction, kind, &mut rng, &mut held) {
                     Some(classes) => {
                         let (mut fleet, members) = super::fleet::new_fleet(
@@ -144,7 +165,7 @@ pub fn init_world_simulation(
                         );
                         fleet.heading = heading;
                         fleet.destination = far;
-                        fleet.route = vec![far, start];
+                        fleet.route = if hold { vec![start] } else { vec![far, start] };
                         info!("MOVETEST: {:?} {:?} fleet of {}: {:?}", faction, kind, members.len(), classes);
                         sim.add_fleet(fleet, members);
                     }
