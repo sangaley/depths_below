@@ -60,6 +60,27 @@ fn turn_toward(rotation: Quat, target_angle: f32, blend: f32, max_rate: f32, dt:
     Quat::from_rotation_z(current + step)
 }
 
+/// Where a ship heading for a point `to_dest` away should point its nose.
+///
+/// Far off, at the point. Close in, the bearing to the point swings with every
+/// few units of error, so an escort sitting on its formation slot -- the slot
+/// moving under it as the leader turns -- nodded its nose left and right all
+/// the time. Near the point the ship faces the way it is actually moving, and
+/// holds its heading when it isn't moving, easing back onto the bearing as the
+/// distance opens.
+pub(crate) fn heading_for(to_dest: Vec2, velocity: Vec2, current: f32) -> f32 {
+    const NEAR: f32 = 1_200.0;
+    let dist = to_dest.length();
+    let bearing = to_dest.y.atan2(to_dest.x);
+    if dist >= NEAR {
+        return bearing;
+    }
+    let travel = if velocity.length() > 40.0 { velocity.y.atan2(velocity.x) } else { current };
+    let k = (dist / NEAR).clamp(0.0, 1.0);
+    let d = (bearing - travel + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+    travel + d * k * k
+}
+
 /// Moves AI ships toward their nav destination, reading child Engine components for thrust.
 pub fn ai_ship_movement_system(
     time: Res<Time>,
@@ -326,8 +347,10 @@ pub fn ai_ship_movement_system(
                 let desired_vel = direction * max_speed * arrive;
                 velocity.0 = velocity.0.lerp(desired_vel, vel_blend);
 
-                // Update rotation to face movement direction
-                let target_angle = direction.y.atan2(direction.x);
+                // Face where it's going -- or, close to the point, where it's
+                // actually moving (heading_for).
+                let current = transform.rotation.to_euler(EulerRot::ZYX).0;
+                let target_angle = heading_for(direction * dist, velocity.0, current);
                 transform.rotation = turn_toward(transform.rotation, target_angle, turn_blend, turn_rate, dt);
             } else {
                 // Near destination, slow down
@@ -410,6 +433,37 @@ mod harbour_tests {
             last = cap;
         }
         assert!(harbour_speed_cap(100_000.0, extent) > 10_000.0);
+    }
+}
+
+#[cfg(test)]
+mod heading_tests {
+    use super::*;
+
+    /// An escort riding on its slot: the slot jitters a few dozen units round
+    /// it every tick while the fleet cruises east. Its nose must stay east,
+    /// not swing to each new bearing.
+    #[test]
+    fn an_escort_on_its_slot_does_not_nod() {
+        let cruising = Vec2::new(300.0, 0.0);
+        for (dx, dy) in [(30.0, 25.0), (-20.0, 30.0), (25.0, -30.0), (-30.0, -20.0)] {
+            let h = heading_for(Vec2::new(dx, dy), cruising, 0.0);
+            assert!(h.abs() < 0.05, "slot at ({dx},{dy}) swung the nose to {h}");
+        }
+    }
+
+    /// Stopped near its point, a ship holds the heading it has.
+    #[test]
+    fn a_ship_at_rest_by_its_point_holds_heading() {
+        let h = heading_for(Vec2::new(0.0, 40.0), Vec2::ZERO, 0.7);
+        assert!((h - 0.7).abs() < 0.01, "{h}");
+    }
+
+    /// Far from the point, it still faces the point.
+    #[test]
+    fn far_off_it_faces_the_point() {
+        let h = heading_for(Vec2::new(0.0, 5_000.0), Vec2::new(300.0, 0.0), 0.0);
+        assert!((h - std::f32::consts::FRAC_PI_2).abs() < 1e-4, "{h}");
     }
 }
 
