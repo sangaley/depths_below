@@ -43,6 +43,7 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //                          to another over <secs> of real time, starting
 //                          <delay> real seconds after launch. For filming.
 //   DEPTHS_HIDE_UI=1 — hide every UI root (HUD, markers, cursor): world only.
+//   DEPTHS_NO_BG_PLANETS=1 — hide the small parallax planets behind everything.
 //   DEPTHS_CAM_AT=<x>,<y> | station[>d] — point the camera there instead of at
 //                          the ship ("station": the nearest station core; ">d"
 //                          slides d units toward its world).
@@ -541,6 +542,19 @@ impl Plugin for DemoPlugin {
             } else if let Some((x, y)) = spec.split_once(',').and_then(|(x, y)| Some((x.trim().parse::<f32>().ok()?, y.trim().parse::<f32>().ok()?))) {
                 app.insert_resource(crate::camera::CameraPin(Some(Vec2::new(x, y))));
             }
+        }
+        // DEPTHS_NO_BG_PLANETS=1 -- hide the small parallax planets drawn behind
+        // everything, for footage with its own backdrop.
+        if std::env::var("DEPTHS_NO_BG_PLANETS").ok().as_deref() == Some("1") {
+            app.add_systems(
+                PostUpdate,
+                (|mut planets: Query<&mut Visibility, With<crate::vfx::starfield::BackgroundPlanet>>| {
+                    for mut v in &mut planets {
+                        *v = Visibility::Hidden;
+                    }
+                })
+                .before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate),
+            );
         }
         // DEPTHS_HIDE_UI=1 -- the world alone, for footage.
         if std::env::var("DEPTHS_HIDE_UI").ok().as_deref() == Some("1") {

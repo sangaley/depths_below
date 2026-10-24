@@ -130,7 +130,8 @@ fn picture(
 
 /// How a preview fades with distance: brighter as it nears materialising.
 pub fn preview_alpha(distance: f32) -> f32 {
-    let t = ((distance - super::simulation::RENDER_DISTANCE) / (PREVIEW_RANGE - super::simulation::RENDER_DISTANCE)).clamp(0.0, 1.0);
+    let near = super::simulation::render_distance();
+    let t = ((distance - near) / (PREVIEW_RANGE.max(near + 1.0) - near)).clamp(0.0, 1.0);
     NEAR_ALPHA + (FAR_ALPHA - NEAR_ALPHA) * t
 }
 

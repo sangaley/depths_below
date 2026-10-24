@@ -24,6 +24,24 @@ pub const RENDER_DISTANCE: f32 = 10_000.0;
 /// either a thin swarm or a frame-rate cliff. 6,000 is about what eight of the
 /// old mid-size hulls cost, and holds a whole swarm or a few capitals.
 const MAX_LIVE_AI_BLOCKS: usize = 6_000;
+
+/// RENDER_DISTANCE, or DEPTHS_AI_RANGE: a filming switch to make whole fleets
+/// real far from the player, for wide shots of a war.
+pub fn render_distance() -> f32 {
+    static V: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
+    *V.get_or_init(|| std::env::var("DEPTHS_AI_RANGE").ok().and_then(|v| v.parse().ok()).unwrap_or(RENDER_DISTANCE))
+}
+
+/// DESPAWN_DISTANCE, kept the same distance past render_distance().
+fn despawn_distance() -> f32 {
+    DESPAWN_DISTANCE + (render_distance() - RENDER_DISTANCE)
+}
+
+/// MAX_LIVE_AI_BLOCKS, or DEPTHS_AI_BLOCKS (filming).
+fn max_live_ai_blocks() -> usize {
+    static V: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *V.get_or_init(|| std::env::var("DEPTHS_AI_BLOCKS").ok().and_then(|v| v.parse().ok()).unwrap_or(MAX_LIVE_AI_BLOCKS))
+}
 /// Distance at which spawned entities get converted back to simulation. Was
 /// 3500 — well inside the new ~8,160 max standoff distance, so a ship
 /// holding a long-range fight would get yanked back to an abstract
@@ -648,7 +666,7 @@ pub fn tick_world_simulation(
                     // Posted before anyone knew where the station would be:
                     // take station there, out of sight, rather than crossing
                     // half a system to get to it.
-                    let unseen = |p: Vec2| player_pos.map_or(true, |pp| pp.distance(p) > RENDER_DISTANCE * 1.5);
+                    let unseen = |p: Vec2| player_pos.map_or(true, |pp| pp.distance(p) > render_distance() * 1.5);
                     let post_at = at + Vec2::from_angle(fleet.heading) * (extent + 3_000.0);
                     if fleet.position.distance(at) > 30_000.0 && unseen(fleet.position) && unseen(post_at) {
                         fleet.position = post_at;
@@ -913,7 +931,7 @@ pub fn sync_simulation_entities(
         let d = if live_fleets.contains(&fleet) { 0.0 } else { s.position.distance(player_pos) };
         group.dist = group.dist.min(d);
     }
-    groups.retain(|g| g.dist < RENDER_DISTANCE);
+    groups.retain(|g| g.dist < render_distance());
     groups.sort_by(|a, b| a.dist.total_cmp(&b.dist));
 
     let mut spawned_any = any_live;
@@ -921,7 +939,7 @@ pub fn sync_simulation_entities(
         // Nearest first; one that doesn't fit waits rather than letting a
         // farther, smaller one jump the queue. The first always fits, or a
         // fleet bigger than the budget could never appear.
-        if spawned_any && live_blocks + group.cost > MAX_LIVE_AI_BLOCKS {
+        if spawned_any && live_blocks + group.cost > max_live_ai_blocks() {
             break;
         }
         let fleet = sim.fleet(group.fleet).cloned();
@@ -984,7 +1002,7 @@ pub fn sync_simulation_entities(
     let near_fleets: std::collections::HashSet<u32> = ai_ships
         .iter()
         .filter(|(_, tf, _, state, ..)| {
-            !state.is_destroyed && tf.translation.truncate().distance(player_pos) <= DESPAWN_DISTANCE
+            !state.is_destroyed && tf.translation.truncate().distance(player_pos) <= despawn_distance()
         })
         .filter_map(|(.., (_, _, _, member))| member.map(|m| m.fleet))
         .collect();
@@ -1024,7 +1042,7 @@ pub fn sync_simulation_entities(
         }
 
         let pos = transform.translation.truncate();
-        if pos.distance(player_pos) <= DESPAWN_DISTANCE {
+        if pos.distance(player_pos) <= despawn_distance() {
             continue;
         }
         if member.is_some_and(|m| near_fleets.contains(&m.fleet)) {
