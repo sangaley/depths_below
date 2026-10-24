@@ -35,6 +35,28 @@ use crate::spatial::CreatureGrid;
 /// How near something hostile comes before a civilian hull runs from it.
 const CIVILIAN_ALARM: f32 = 5_000.0;
 
+/// The way a civilian hull runs: away from every threat at once, the nearer
+/// ones counting for more, and -- once it's running -- mostly the way it's
+/// already going, so the next threat to edge closer doesn't swing it round.
+/// None with nothing to run from.
+pub(crate) fn flee_heading(pos: Vec2, threats: &[Vec2], running_to: Option<Vec2>) -> Option<Vec2> {
+    if threats.is_empty() {
+        return None;
+    }
+    let away: Vec2 = threats
+        .iter()
+        .map(|t| {
+            let d = pos - *t;
+            d.normalize_or(Vec2::X) / d.length().max(300.0)
+        })
+        .sum();
+    let away = away.normalize_or(Vec2::X);
+    Some(match running_to.map(|d| (d - pos).normalize_or_zero()) {
+        Some(current) if current != Vec2::ZERO => (current * 0.75 + away * 0.25).normalize_or(away),
+        _ => away,
+    })
+}
+
 pub fn ai_brain_system(
     time: Res<Time>,
     mut ai_ships: Query<(
@@ -310,6 +332,15 @@ pub fn ai_brain_system(
 
         // A fleet escort's place: its slot on whoever the fleet forms up on,
         // turned with that ship. None for a leader or a ship alone.
+        let formation_facing: Option<f32> = member.and_then(|m| {
+            if escort {
+                return player_frame.map(|(_, facing)| facing.to_euler(EulerRot::ZYX).0);
+            }
+            fleet_anchors
+                .iter()
+                .find(|a| a.0 == m.fleet && a.1 != entity)
+                .map(|a| a.3.to_euler(EulerRot::ZYX).0)
+        });
         let formation_point: Option<Vec2> = member.and_then(|m| {
             if escort {
                 return player_frame.map(|(at, facing)| at + (facing * m.slot.extend(0.0)).truncate());
@@ -990,19 +1021,19 @@ pub fn ai_brain_system(
             let hostile = |e: Entity| {
                 ai_factions.iter().any(|(f, t)| *f == e && crate::ai_ship::components::factions_hostile(*ship_type, *t))
             };
-            let threat = under_fire
-                .then(|| attacker_target.map(|(_, p)| p))
-                .flatten()
-                .or_else(|| {
-                    player_snapshot
-                        .map(|(_, p, _)| p)
-                        .into_iter()
-                        .chain(ai_snapshot.iter().filter(|(e, _, _)| *e != entity && hostile(*e)).map(|&(_, p, _)| p))
-                        .filter(|p| pos.distance(*p) < CIVILIAN_ALARM)
-                        .min_by(|a, b| pos.distance(*a).total_cmp(&pos.distance(*b)))
-                });
-            if let Some(threat) = threat {
-                let away = (pos - threat).normalize_or(Vec2::X);
+            // Already running: it stays scared until well clear, not the
+            // moment it crosses the alarm line -- that turned it straight back
+            // toward the threat, and it ran, turned, ran, its nose swinging.
+            let fleeing = *behavior == AiShipBehavior::Fleeing;
+            let alarm = if fleeing { CIVILIAN_ALARM * 1.8 } else { CIVILIAN_ALARM };
+            let shooter = under_fire.then(|| attacker_target.map(|(_, p)| p)).flatten();
+            let threats: Vec<Vec2> = shooter
+                .into_iter()
+                .chain(player_snapshot.map(|(_, p, _)| p))
+                .chain(ai_snapshot.iter().filter(|(e, _, _)| *e != entity && hostile(*e)).map(|&(_, p, _)| p))
+                .filter(|p| pos.distance(*p) < alarm)
+                .collect();
+            if let Some(away) = flee_heading(pos, &threats, fleeing.then_some(nav.destination).flatten()) {
                 actions.push(ScoredAction {
                     score: 99.0,
                     behavior: AiShipBehavior::Fleeing,
@@ -1033,9 +1064,11 @@ pub fn ai_brain_system(
             }
             // An escort with nothing better to do keeps its place in the
             // formation instead of flying a patrol of its own.
+            nav.face = None;
             if *behavior == AiShipBehavior::Patrolling {
                 if let Some(slot) = formation_point {
                     nav.destination = Some(slot);
+                    nav.face = formation_facing;
                 }
             }
             // Combat target for ai_weapon_fire_system — separate from
@@ -1060,5 +1093,32 @@ pub fn ai_brain_system(
                 nav.destination = nav.waypoints.get(nav.current_waypoint).copied();
             }
         }
+    }
+}
+
+
+#[cfg(test)]
+mod flee_tests {
+    use super::*;
+
+    /// Between two threats it runs out to the side, not toward either.
+    #[test]
+    fn runs_from_both_threats() {
+        let h = flee_heading(Vec2::ZERO, &[Vec2::new(1_000.0, 0.0), Vec2::new(-1_000.0, 200.0)], None).unwrap();
+        assert!(h.y < -0.9, "{h}");
+    }
+
+    /// Once running, a new threat edging in only bends the course.
+    #[test]
+    fn keeps_its_course_once_running() {
+        let pos = Vec2::ZERO;
+        let running_to = Some(Vec2::new(0.0, 4_000.0));
+        let h = flee_heading(pos, &[Vec2::new(0.0, -2_000.0), Vec2::new(-3_000.0, 1_000.0)], running_to).unwrap();
+        assert!(h.y > 0.8, "{h}");
+    }
+
+    #[test]
+    fn nothing_to_run_from() {
+        assert!(flee_heading(Vec2::ZERO, &[], None).is_none());
     }
 }

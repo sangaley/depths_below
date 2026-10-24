@@ -69,16 +69,49 @@ fn turn_toward(rotation: Quat, target_angle: f32, blend: f32, max_rate: f32, dt:
 /// holds its heading when it isn't moving, easing back onto the bearing as the
 /// distance opens.
 pub(crate) fn heading_for(to_dest: Vec2, velocity: Vec2, current: f32) -> f32 {
-    const NEAR: f32 = 1_200.0;
     let dist = to_dest.length();
     let bearing = to_dest.y.atan2(to_dest.x);
     if dist >= NEAR {
         return bearing;
     }
-    let travel = if velocity.length() > 40.0 { velocity.y.atan2(velocity.x) } else { current };
+    // Moving briskly toward the point: face the way it's moving. Stopped, or
+    // drifting past the point after overshooting it: keep the heading it has
+    // rather than spinning round to face backwards.
+    let toward = velocity.length() > 150.0 && velocity.dot(to_dest) > 0.0;
+    let base = if toward { velocity.y.atan2(velocity.x) } else { current };
     let k = (dist / NEAR).clamp(0.0, 1.0);
-    let d = (bearing - travel + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
-    travel + d * k * k
+    base + wrap(bearing - base) * k * k
+}
+
+/// Within this of its point, a ship stops aiming its nose at the point.
+const NEAR: f32 = 1_200.0;
+
+fn wrap(a: f32) -> f32 {
+    (a + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI
+}
+
+/// Where an escort points: the formation's heading near its slot, the
+/// bearing to the slot when it's far off and has ground to make up.
+pub(crate) fn escort_heading(face: f32, to_dest: Vec2, velocity: Vec2, current: f32) -> f32 {
+    const FAR: f32 = 3_000.0;
+    let dist = to_dest.length();
+    if dist >= FAR {
+        return heading_for(to_dest, velocity, current);
+    }
+    let k = ((dist - NEAR) / (FAR - NEAR)).clamp(0.0, 1.0);
+    let far = to_dest.y.atan2(to_dest.x);
+    face + wrap(far - face) * k * k
+}
+
+/// Ease the heading a ship steers for toward `raw`, so a target that flips
+/// back and forth -- a slot jittering round the ship, avoidance picking a
+/// side and dropping it -- averages out instead of wagging the nose.
+pub(crate) fn smooth_heading(prev: Option<f32>, raw: f32, dt: f32) -> f32 {
+    const SETTLE: f32 = 0.5; // seconds
+    match prev {
+        None => raw,
+        Some(p) => p + wrap(raw - p) * (1.0 - (-dt / SETTLE).exp()),
+    }
 }
 
 /// Moves AI ships toward their nav destination, reading child Engine components for thrust.
@@ -89,7 +122,7 @@ pub fn ai_ship_movement_system(
         &mut Transform,
         &mut Velocity,
         &AiShipBehavior,
-        &AiShipNav,
+        &mut AiShipNav,
         &AiShipState,
         &AiShipType,
         &Children,
@@ -116,7 +149,7 @@ pub fn ai_ship_movement_system(
         (crate::ship::collision::world_point(tf, c.bound_center), c.bound_radius)
     });
 
-    for (_entity, mut transform, mut velocity, behavior, nav, state, ship_type, children, collider, member, escort) in ai_ships.iter_mut() {
+    for (_entity, mut transform, mut velocity, behavior, mut nav, state, ship_type, children, collider, member, escort) in ai_ships.iter_mut() {
         if *behavior == AiShipBehavior::Dead || state.is_destroyed {
             velocity.0 = Vec2::ZERO;
             continue;
@@ -322,7 +355,9 @@ pub fn ai_ship_movement_system(
 
                 // Face the player — you're fine with this, and it reads natural
                 // for a ship holding station and trading fire.
-                transform.rotation = turn_toward(transform.rotation, direction.y.atan2(direction.x), turn_blend, turn_rate, dt);
+                let target_angle = direction.y.atan2(direction.x);
+                nav.steer = Some(target_angle);
+                transform.rotation = turn_toward(transform.rotation, target_angle, turn_blend, turn_rate, dt);
             } else if dist > 5.0 {
                 // Bend the heading around any terrain blocking the way.
                 let direction = crate::ship::collision::steer_around(
@@ -348,9 +383,15 @@ pub fn ai_ship_movement_system(
                 velocity.0 = velocity.0.lerp(desired_vel, vel_blend);
 
                 // Face where it's going -- or, close to the point, where it's
-                // actually moving (heading_for).
+                // actually moving (heading_for); an escort near its slot
+                // faces the way the formation does. Smoothed (smooth_heading).
                 let current = transform.rotation.to_euler(EulerRot::ZYX).0;
-                let target_angle = heading_for(direction * dist, velocity.0, current);
+                let raw = match nav.face.filter(|_| settle) {
+                    Some(face) => escort_heading(face, direction * dist, velocity.0, current),
+                    None => heading_for(direction * dist, velocity.0, current),
+                };
+                let target_angle = smooth_heading(nav.steer, raw, dt);
+                nav.steer = Some(target_angle);
                 transform.rotation = turn_toward(transform.rotation, target_angle, turn_blend, turn_rate, dt);
             } else {
                 // Near destination, slow down
@@ -457,6 +498,39 @@ mod heading_tests {
     fn a_ship_at_rest_by_its_point_holds_heading() {
         let h = heading_for(Vec2::new(0.0, 40.0), Vec2::ZERO, 0.7);
         assert!((h - 0.7).abs() < 0.01, "{h}");
+    }
+
+    /// An escort sitting on its slot faces the formation's way, wherever the
+    /// slot jitters to.
+    #[test]
+    fn an_escort_near_its_slot_faces_the_formation() {
+        let face = 1.0;
+        for to_slot in [Vec2::new(200.0, -150.0), Vec2::new(-300.0, 250.0), Vec2::new(0.0, 900.0)] {
+            let h = escort_heading(face, to_slot, Vec2::new(-80.0, 30.0), 0.2);
+            assert!((h - face).abs() < 0.05, "slot {to_slot} pointed it to {h}");
+        }
+        // Far behind, it heads for the slot.
+        let far = escort_heading(face, Vec2::new(0.0, -6_000.0), Vec2::ZERO, 0.0);
+        assert!((far + std::f32::consts::FRAC_PI_2).abs() < 1e-3, "{far}");
+    }
+
+    /// A target flipping between two sides every frame averages out: the
+    /// heading steered for barely moves.
+    #[test]
+    fn a_flipping_target_does_not_wag_the_steering() {
+        let mut steer = Some(0.0);
+        let mut lo = 0.0f32;
+        let mut hi = 0.0f32;
+        for k in 0..240 {
+            let raw = if k % 2 == 0 { 0.6 } else { -0.6 };
+            let s = smooth_heading(steer, raw, 1.0 / 60.0);
+            steer = Some(s);
+            if k > 60 {
+                lo = lo.min(s);
+                hi = hi.max(s);
+            }
+        }
+        assert!(hi - lo < 0.05, "steering swung {lo}..{hi}");
     }
 
     /// Far from the point, it still faces the point.

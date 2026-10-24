@@ -198,6 +198,11 @@ pub struct AiShipNav {
     pub destination: Option<Vec2>,
     pub rotation: f32,
     pub throttle: f32,
+    /// The way the formation faces, for an escort flying a slot (set by the
+    /// brain): close to its slot it points this way rather than at the slot.
+    pub face: Option<f32>,
+    /// The heading the ship is steering for, smoothed (movement owns it).
+    pub steer: Option<f32>,
 }
 
 impl Default for AiShipNav {
@@ -208,6 +213,8 @@ impl Default for AiShipNav {
             destination: None,
             rotation: 0.0,
             throttle: 0.0,
+            face: None,
+            steer: None,
         }
     }
 }
