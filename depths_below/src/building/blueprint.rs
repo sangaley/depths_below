@@ -57,6 +57,53 @@ pub struct BlueprintHullCell {
     pub material: HullMaterial,
 }
 
+/// The same design built `k` times larger out of ordinary blocks: every hull
+/// cell becomes a k x k patch, and every module is repeated to fill the patch
+/// its footprint now covers -- except weapons, which keep one copy each (a
+/// station nine times the size with nine times the guns would be a wall of
+/// fire, not a bigger station). Layers are recomputed: only cells on the new
+/// outside edge stay Outer. `size` gives a module type's footprint size.
+pub fn scale_design(design: &Blueprint, k: i32, size: impl Fn(ModuleType) -> IVec2) -> Blueprint {
+    if k <= 1 {
+        return design.clone();
+    }
+    use std::collections::HashSet;
+    let mut cells: Vec<BlueprintHullCell> = Vec::with_capacity(design.hull_cells.len() * (k * k) as usize);
+    for c in &design.hull_cells {
+        for i in 0..k {
+            for j in 0..k {
+                cells.push(BlueprintHullCell { grid_pos: c.grid_pos * k + IVec2::new(i, j), ..c.clone() });
+            }
+        }
+    }
+    let filled: HashSet<IVec2> = cells.iter().map(|c| c.grid_pos).collect();
+    for c in cells.iter_mut() {
+        let edge = [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y].iter().any(|d| !filled.contains(&(c.grid_pos + *d)));
+        if c.layer == HullLayer::Outer && !edge {
+            c.layer = HullLayer::Inner;
+        }
+    }
+    let mut modules = Vec::new();
+    for m in &design.modules {
+        let fp = crate::building::ShipGrid::cells_for(IVec2::ZERO, size(m.module_type), m.rotation, crate::building::footprints::footprint_override(m.module_type));
+        let mn = fp.iter().fold(IVec2::MAX, |a, c| a.min(*c));
+        let mx = fp.iter().fold(IVec2::MIN, |a, c| a.max(*c));
+        let span = mx - mn + IVec2::ONE;
+        let weapon = m.module_type.category() == ModuleCategory::Weapons;
+        let (copies_x, copies_y) = (k, k);
+        for a in 0..copies_x {
+            for b in 0..copies_y {
+                if weapon && !(a == copies_x / 2 && b == copies_y / 2) {
+                    continue;
+                }
+                let origin = (m.grid_pos + mn) * k + IVec2::new(a * span.x, b * span.y) - mn;
+                modules.push(BlueprintModule { grid_pos: origin, ..m.clone() });
+            }
+        }
+    }
+    Blueprint { hull_cells: cells, modules, ..design.clone() }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BlueprintModule {
     pub module_type: ModuleType,
@@ -672,4 +719,69 @@ fn chrono_lite_timestamp() -> String {
         .unwrap_or_default()
         .as_secs();
     format!("{}", secs)
+}
+
+
+#[cfg(test)]
+mod scale_design_tests {
+    use super::*;
+
+    fn design() -> Blueprint {
+        let mut hull = Vec::new();
+        for x in -2i32..=2 {
+            for y in -1i32..=1 {
+                let edge = x.abs() == 2 || y.abs() == 1;
+                hull.push(BlueprintHullCell { grid_pos: IVec2::new(x, y), layer: if edge { HullLayer::Outer } else { HullLayer::Inner }, material: HullMaterial::Steel });
+            }
+        }
+        let module = |t: ModuleType, x: i32, y: i32, r: Rotation| BlueprintModule {
+            module_type: t, grid_pos: IVec2::new(x, y), rotation: r, custom_name: None, subcomponents: None, extras: None,
+        };
+        Blueprint {
+            name: "t".into(),
+            hull_cells: hull,
+            modules: vec![
+                module(ModuleType::LargeCargo, -1, 0, Rotation::North),
+                module(ModuleType::LargeCargo, 1, 0, Rotation::West),
+                module(ModuleType::Cannon, 0, 1, Rotation::North),
+            ],
+            created_at: String::new(),
+            version: 1,
+        }
+    }
+
+    fn size(t: ModuleType) -> IVec2 {
+        if t == ModuleType::LargeCargo { IVec2::new(2, 1) } else { IVec2::ONE }
+    }
+
+    /// Three times the size: nine times the hull, cargo filling its patch,
+    /// one gun, nothing overlapping, everything standing on hull.
+    #[test]
+    fn a_tripled_design_is_dense_and_keeps_one_gun_each() {
+        let big = scale_design(&design(), 3, size);
+        assert_eq!(big.hull_cells.len(), 15 * 9);
+        assert_eq!(big.modules.iter().filter(|m| m.module_type == ModuleType::Cannon).count(), 1);
+        assert_eq!(big.modules.iter().filter(|m| m.module_type == ModuleType::LargeCargo).count(), 18);
+        let hull: std::collections::HashSet<IVec2> = big.hull_cells.iter().map(|c| c.grid_pos).collect();
+        let mut used = std::collections::HashSet::new();
+        for m in &big.modules {
+            for c in crate::building::ShipGrid::cells_for(m.grid_pos, size(m.module_type), m.rotation, None) {
+                assert!(hull.contains(&c), "{:?} at {} off the hull", m.module_type, c);
+                assert!(used.insert(c), "{:?} overlaps at {}", m.module_type, c);
+            }
+        }
+    }
+
+    /// Only the new outside edge is Outer.
+    #[test]
+    fn only_the_new_edge_is_outer() {
+        let big = scale_design(&design(), 3, size);
+        let hull: std::collections::HashSet<IVec2> = big.hull_cells.iter().map(|c| c.grid_pos).collect();
+        for c in &big.hull_cells {
+            let edge = [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y].iter().any(|d| !hull.contains(&(c.grid_pos + *d)));
+            if c.layer == HullLayer::Outer {
+                assert!(edge, "{} is Outer inside the hull", c.grid_pos);
+            }
+        }
+    }
 }

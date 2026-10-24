@@ -145,9 +145,10 @@ fn planet_gap() -> f32 {
 pub const DOCK_MARGIN: f32 = 3_500.0;
 
 /// How far a design reaches from its centre, in world units.
-fn design_extent(faction: AiShipType, key: &str) -> f32 {
-    let path = format!("designs/factions/{}/{}.json", crate::ai_ship::design_slug(faction), key);
-    crate::building::blueprint::load_design_file(&path)
+fn design_extent(faction: AiShipType, key: &'static str) -> f32 {
+    // As built, not as drawn: a station is built larger (spawner::station_scale).
+    Some(crate::ai_ship::spawner::built_design(faction, Some(key)))
+        .filter(|bp| !bp.hull_cells.is_empty())
         .map(|bp| {
             bp.hull_cells
                 .iter()
@@ -879,6 +880,37 @@ mod tests {
                     "{path} is missing or doesn't parse"
                 );
             }
+        }
+    }
+
+    /// Every station is built larger than drawn (spawner::station_scale), and
+    /// the larger build is sound: nothing overlaps, every module stands on
+    /// hull, and it dwarfs a starter hull.
+    #[test]
+    fn every_station_is_built_big_and_sound() {
+        let sizes: std::collections::HashMap<_, _> =
+            crate::building::registry::build_registry().defs.iter().map(|(t, d)| (*t, d.size)).collect();
+        let k = crate::ai_ship::spawner::station_scale();
+        for (faction, plan) in PLANS {
+            let built = crate::ai_ship::spawner::built_design(*faction, Some(plan.key));
+            let slug = crate::ai_ship::design_slug(*faction);
+            let drawn = crate::building::blueprint::load_design_file(&format!("designs/factions/{slug}/{}.json", plan.key)).unwrap();
+            assert_eq!(built.hull_cells.len(), drawn.hull_cells.len() * (k * k) as usize, "{}", plan.name);
+            // Plates are drawn outboard of the hull, with no cell of their own.
+            let drawn_hull: std::collections::HashSet<IVec2> = drawn.hull_cells.iter().map(|c| c.grid_pos).collect();
+            let outboard: std::collections::HashSet<_> =
+                drawn.modules.iter().filter(|m| !drawn_hull.contains(&m.grid_pos)).map(|m| m.module_type).collect();
+            let hull: std::collections::HashSet<IVec2> = built.hull_cells.iter().map(|c| c.grid_pos).collect();
+            let mut used = std::collections::HashSet::new();
+            for m in &built.modules {
+                let size = sizes.get(&m.module_type).copied().unwrap_or(IVec2::ONE);
+                for c in crate::building::ShipGrid::cells_for(m.grid_pos, size, m.rotation, crate::building::footprints::footprint_override(m.module_type)) {
+                    assert!(hull.contains(&c) || outboard.contains(&m.module_type), "{}: {:?} at {c} is off the hull", plan.name, m.module_type);
+                    assert!(used.insert(c), "{}: {:?} overlaps at {c}", plan.name, m.module_type);
+                }
+            }
+            let span = hull.iter().map(|c| c.x).max().unwrap() - hull.iter().map(|c| c.x).min().unwrap();
+            assert!(span >= 60, "{} is only {span} cells across", plan.name);
         }
     }
 
