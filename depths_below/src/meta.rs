@@ -84,6 +84,7 @@ fn save_unlocks(unlocks: Res<Unlocks>) {
 type PlayerBlocks = (
     Without<crate::ai_ship::components::OwnedByAiShip>,
     Without<crate::combat::severance::DetachedSection>,
+    Without<crate::combat::severance::SeveredBlock>,
 );
 
 /// Get save file path for a given slot

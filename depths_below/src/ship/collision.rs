@@ -349,7 +349,7 @@ pub fn attach_knock(
 /// blocks off a ship actually opens a hole in its collision — the earlier
 /// long-axis-only bucketing kept "phantom hull" where destroyed blocks were.
 /// Cell size scales up on huge hulls to cap the circle count.
-fn fit_ship_collider(points: &[Vec2], mass: f32) -> Collider {
+pub(crate) fn fit_ship_collider(points: &[Vec2], mass: f32) -> Collider {
     if points.is_empty() {
         let mut collider = Collider::circle(120.0, mass);
         collider.awake = true;

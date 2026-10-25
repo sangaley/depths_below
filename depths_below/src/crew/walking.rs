@@ -462,6 +462,7 @@ mod walking_tests {
 
     fn test_app() -> App {
         let mut app = App::new();
+        app.add_plugins(crate::building::layout::LayoutPlugin);
         app.add_plugins(MinimalPlugins);
         app.init_resource::<CrewPlanTimer>();
         app.add_systems(
@@ -618,6 +619,7 @@ mod walking_tests {
 
     fn off_duty_app() -> App {
         let mut app = App::new();
+        app.add_plugins(crate::building::layout::LayoutPlugin);
         app.add_plugins(MinimalPlugins);
         app.init_resource::<CrewPlanTimer>();
         app.init_resource::<CrewOffDutyTimer>();
@@ -653,7 +655,7 @@ mod walking_tests {
         let mut app = off_duty_app();
         let (_, crew) = idle_ship(&mut app);
 
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = bevy::platform::collections::HashSet::new();
         // Long enough to outlast a bunk's dwell several times over.
         for _ in 0..2400 {
             tick(&mut app, 0.1);
@@ -706,6 +708,7 @@ mod walking_tests {
 
     fn med_app() -> App {
         let mut app = App::new();
+        app.add_plugins(crate::building::layout::LayoutPlugin);
         app.add_plugins((MinimalPlugins, bevy::transform::TransformPlugin));
         app.init_resource::<CrewPlanTimer>();
         app.init_resource::<CrewMedicalTimer>();
@@ -970,12 +973,12 @@ pub fn plan_repair_errands(
         return;
     }
 
-    let posted: std::collections::HashSet<Entity> =
+    let posted: bevy::platform::collections::HashSet<Entity> =
         stations.iter().filter_map(|s| s.assigned_crew).collect();
 
     // One job per hand, nearest first — otherwise every spare crew member
     // walks to the same breach and the rest of the damage goes untouched.
-    let mut claimed: std::collections::HashSet<IVec2> = std::collections::HashSet::new();
+    let mut claimed: bevy::platform::collections::HashSet<IVec2> = bevy::platform::collections::HashSet::new();
     for (entity, transform, parent) in crew.iter() {
         if parent.parent() != ship || posted.contains(&entity) {
             continue;
@@ -1175,7 +1178,7 @@ pub fn plan_off_duty_errands(
         return;
     }
 
-    let posted: std::collections::HashSet<Entity> =
+    let posted: bevy::platform::collections::HashSet<Entity> =
         stations.iter().filter_map(|s| s.assigned_crew).collect();
 
     for (entity, transform, parent, member, off_duty, path) in crew.iter_mut() {

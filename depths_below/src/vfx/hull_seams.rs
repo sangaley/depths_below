@@ -48,50 +48,59 @@ fn neighbour_mask(
     mask
 }
 
-/// Rewrites every hull tile's texture to the variant its neighbours call for.
+/// Rewrites a ship's hull tile textures to the variants their neighbours call
+/// for, when that ship's layout changes (`building::layout`) -- so holes
+/// re-frame themselves on the frame they appear.
 ///
-/// Gated on the live tile count, the same way `rebuild_nav_grids` is: the walk
-/// underneath is cheap but not free, and on the overwhelming majority of
-/// frames nothing has been placed or shot off. Destruction moves the count too
-/// -- a destroyed tile leaves the query -- so holes re-frame themselves on the
-/// frame they appear.
+/// It used to be gated on the world's live tile count and then re-texture
+/// every hull tile of every ship, wrecks included, whenever any one changed.
+/// Per ship now, and a tile whose texture is already right isn't touched.
 pub fn update_hull_seams(
     assets: Res<AssetServer>,
-    ships: Query<Entity, Or<(With<Ship>, With<AiShip>)>>,
-    mut hull: Query<(&HullSegment, &ChildOf, &mut Sprite), Without<HullDestroyed>>,
-    mut last: Local<(usize, usize)>,
+    ships: Query<(Entity, &crate::building::layout::LayoutVersion, &Children), Or<(With<Ship>, With<AiShip>)>>,
+    mut hull: Query<(&HullSegment, &mut Sprite), Without<HullDestroyed>>,
+    epoch: Res<crate::building::layout::LayoutEpoch>,
+    mut seen_epoch: Local<Option<crate::building::layout::LayoutEpoch>>,
+    mut built: Local<crate::building::layout::BuiltFrom>,
 ) {
-    let counts = (hull.iter().count(), ships.iter().count());
-    if counts == *last {
+    if *seen_epoch == Some(*epoch) {
         return;
     }
-    *last = counts;
+    *seen_epoch = Some(*epoch);
 
-    // Which texture stands at each cell of each ship. Keyed by ship as well as
-    // cell because grid coordinates are ship-local and collide constantly
-    // across ships -- the same mistake this codebase has made in a dozen other
-    // queries.
-    let mut face: HashMap<(Entity, IVec2), &'static str> = HashMap::default();
-    for (segment, parent, _) in hull.iter() {
-        face.insert(
-            (parent.parent(), segment.grid_position),
-            crate::sprite_map::hull_layer_sprite_path(segment.material, segment.hull_layer),
-        );
+    for (ship, version, children) in ships.iter() {
+        if !built.is_stale(ship, version) {
+            continue;
+        }
+        built.mark(ship, version);
+
+        // Which texture stands at each cell of this ship.
+        let mut face: HashMap<IVec2, &'static str> = HashMap::default();
+        for child in children.iter() {
+            if let Ok((segment, _)) = hull.get(child) {
+                face.insert(
+                    segment.grid_position,
+                    crate::sprite_map::hull_layer_sprite_path(segment.material, segment.hull_layer),
+                );
+            }
+        }
+
+        for child in children.iter() {
+            let Ok((segment, mut sprite)) = hull.get_mut(child) else { continue };
+            let cell = segment.grid_position;
+            let mine = crate::sprite_map::hull_layer_sprite_path(segment.material, segment.hull_layer);
+            let mask = neighbour_mask(|c| face.get(&c).copied(), cell, mine);
+            let image = assets.load(crate::sprite_map::hull_layer_sprite_variant(
+                segment.material,
+                segment.hull_layer,
+                mask,
+            ));
+            if sprite.image != image {
+                sprite.image = image;
+            }
+        }
     }
-
-    for (segment, parent, mut sprite) in hull.iter_mut() {
-        let ship = parent.parent();
-        let cell = segment.grid_position;
-        let mine = crate::sprite_map::hull_layer_sprite_path(segment.material, segment.hull_layer);
-
-        let mask = neighbour_mask(|c| face.get(&(ship, c)).copied(), cell, mine);
-
-        sprite.image = assets.load(crate::sprite_map::hull_layer_sprite_variant(
-            segment.material,
-            segment.hull_layer,
-            mask,
-        ));
-    }
+    built.retain(|e| ships.contains(e));
 }
 
 #[cfg(test)]

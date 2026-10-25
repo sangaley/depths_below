@@ -267,7 +267,11 @@ pub fn tint_damaged_modules(
         // damage.
         if base.0.alpha() <= 0.0 { continue; }
         let damage_frac = 1.0 - (module.health / module.max_health).clamp(0.0, 1.0);
-        sprite.color = mix_color(base.0, DAMAGE_TINT_TARGET, damage_frac);
+        // Only write a colour that differs (see tint_damaged_hull).
+        let tint = mix_color(base.0, DAMAGE_TINT_TARGET, damage_frac);
+        if sprite.color != tint {
+            sprite.color = tint;
+        }
     }
 }
 

@@ -1201,7 +1201,7 @@ mod missile_hits_blocks_tests {
     use crate::combat::new_projectiles::MissileProjectile;
     use crate::combat::shields::ShipShield;
     use crate::components::{HullLayer, HullMaterial};
-    use std::collections::HashMap;
+    use bevy::platform::collections::HashMap;
 
     /// A shield that is down, so the warhead reaches the hull — a missile into
     /// a live shield is absorbed by it, which is working as intended and not

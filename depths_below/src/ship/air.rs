@@ -16,7 +16,7 @@
 //! buys nothing until room detection itself runs per-ship.
 
 use bevy::prelude::*;
-use std::collections::{HashMap, HashSet};
+use bevy::platform::collections::{HashMap, HashSet};
 
 use crate::building::rooms::RoomMap;
 use crate::building::local_to_grid;
@@ -573,6 +573,7 @@ mod air_tests {
         app.init_resource::<Time>();
         app.init_resource::<AirField>();
         app.init_resource::<RoomMap>();
+        app.add_plugins(crate::building::layout::LayoutPlugin);
         app.add_message::<HullBreached>();
         app.add_systems(
             Update,
@@ -740,6 +741,7 @@ mod air_tests {
         app.init_resource::<Time>();
         app.init_resource::<AirField>();
         app.init_resource::<RoomMap>();
+        app.add_plugins(crate::building::layout::LayoutPlugin);
         app.add_systems(Update, crate::building::rooms::update_room_map);
 
         let ship = app.world_mut().spawn(Ship).id();
@@ -879,7 +881,7 @@ mod air_tests {
         let room_map = app.world().resource::<RoomMap>();
         let leaked: Vec<&IVec2> = plating
             .iter()
-            .filter(|c| room_map.tile_to_room.contains_key(c))
+            .filter(|c| room_map.tile_to_room.contains_key(*c))
             .collect();
         assert!(
             leaked.is_empty(),

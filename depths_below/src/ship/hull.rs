@@ -72,7 +72,13 @@ pub fn tint_damaged_hull(
     for (hull, base, mut sprite) in hull_query.iter_mut() {
         if hull.max_health <= 0.0 { continue; }
         let damage_frac = 1.0 - (hull.health / hull.max_health).clamp(0.0, 1.0);
-        sprite.color = mix_color(base.0, DAMAGE_TINT_TARGET, damage_frac);
+        // Only write a colour that differs: every write marks the sprite
+        // changed for the renderer, and this runs over every block in the
+        // world every frame.
+        let tint = mix_color(base.0, DAMAGE_TINT_TARGET, damage_frac);
+        if sprite.color != tint {
+            sprite.color = tint;
+        }
     }
 }
 

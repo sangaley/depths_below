@@ -17,7 +17,8 @@
 //! what makes battle damage sever routes for free.
 
 use bevy::prelude::*;
-use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
+use bevy::platform::collections::{HashMap, HashSet};
+use std::collections::{BinaryHeap, VecDeque};
 
 use crate::ai_ship::components::AiShip;
 use crate::building::{footprints, rooms::transform_to_grid, ShipGrid};
@@ -241,92 +242,98 @@ pub fn hull_nav_cell(layer: HullLayer, sealed: bool) -> Option<NavCell> {
     }
 }
 
-/// Rebuilds every ship's `NavGrid` from its own live blocks.
+/// Rebuilds a ship's `NavGrid` from its own live blocks, when that ship's
+/// layout changed (`building::layout`: a block placed, destroyed or removed,
+/// or a bulkhead sealed or opened -- sealing a door changes where crew can
+/// walk without adding or removing a block).
 ///
-/// Gated the same way `update_ship_grids` is: block counts are a cheap
-/// archetype iteration, the rebuild underneath is not, and on the vast
-/// majority of frames nothing has been placed or destroyed. Sealed bulkheads
-/// are counted too — sealing a door changes where crew can walk, and it does
-/// not add or remove a block.
+/// It used to recount every block in the world each frame and rebuild every
+/// ship's grid on any change. Each rebuild bumps `version`, which sends that
+/// ship's crew back to plan their paths, so one plate lost on a far-off skiff
+/// had everyone aboard every ship re-pathing.
 pub fn rebuild_nav_grids(
     mut commands: Commands,
-    ships: Query<Entity, Or<(With<Ship>, With<AiShip>)>>,
-    modules: Query<
-        (&Module, &ChildOf, Has<CrewStation>, Has<Quarters>, Has<BulkheadSealed>),
-        Without<DestroyedModule>,
+    mut ships: Query<
+        (Entity, &crate::building::layout::LayoutVersion, Option<&Children>, Option<&mut NavGrid>),
+        Or<(With<Ship>, With<AiShip>)>,
     >,
-    hulls: Query<(&HullSegment, &Transform, &ChildOf, Has<BulkheadSealed>), Without<HullDestroyed>>,
-    mut grids: Query<&mut NavGrid>,
-    mut last_counts: Local<(usize, usize, usize, usize)>,
+    modules: Query<(&Module, Has<CrewStation>, Has<Quarters>, Has<BulkheadSealed>), Without<DestroyedModule>>,
+    hulls: Query<(&HullSegment, &Transform, Has<BulkheadSealed>), Without<HullDestroyed>>,
+    epoch: Res<crate::building::layout::LayoutEpoch>,
+    mut seen_epoch: Local<Option<crate::building::layout::LayoutEpoch>>,
+    mut built: Local<crate::building::layout::BuiltFrom>,
 ) {
-    let sealed = hulls.iter().filter(|(_, _, _, sealed)| *sealed).count()
-        + modules.iter().filter(|(_, _, _, _, sealed)| *sealed).count();
-    let counts = (modules.iter().count(), hulls.iter().count(), ships.iter().count(), sealed);
-    if counts == *last_counts && !grids.is_empty() {
+    if *seen_epoch == Some(*epoch) {
         return;
     }
-    *last_counts = counts;
+    *seen_epoch = Some(*epoch);
 
-    // Pre-seed every ship so one that just lost its last block gets an empty
-    // grid written rather than keeping a stale one.
-    let mut per_ship: HashMap<Entity, HashMap<IVec2, NavCell>> =
-        ships.iter().map(|ship| (ship, HashMap::new())).collect();
+    for (ship, version, children, grid) in ships.iter_mut() {
+        if grid.is_some() && !built.is_stale(ship, version) {
+            continue;
+        }
+        built.mark(ship, version);
+        let children: Vec<Entity> = children.map(|c| c.iter().collect()).unwrap_or_default();
 
-    // Hull first: it lays the deck. Anything not listed here is a wall, and
-    // absence from the map is what makes it impassable.
-    for (hull, transform, parent, sealed) in hulls.iter() {
-        let Some(cells) = per_ship.get_mut(&parent.parent()) else { continue };
-        let Some(cell) = hull_nav_cell(hull.hull_layer, sealed) else { continue };
-        cells.insert(transform_to_grid(transform), cell);
-    }
+        // A ship that just lost its last block gets an empty grid written
+        // rather than keeping a stale one.
+        let mut cells: HashMap<IVec2, NavCell> = HashMap::new();
 
-    // Modules then claim their cells. Machinery is solid and takes its cells
-    // OFF the map even if a hallway was laid under it — you can't walk through
-    // a reactor because someone decked the floor first. Posts do the opposite:
-    // a crew station or a bunk is somewhere a person stands, so it goes on the
-    // map whether or not it sits on decking.
-    //
-    // Posts are applied in a second pass so a post always wins its cell,
-    // regardless of the order the queries happen to yield modules in.
-    let mut posts: Vec<(Entity, IVec2)> = Vec::new();
-    for (module, parent, is_station, is_quarters, sealed) in modules.iter() {
-        let Some(cells) = per_ship.get_mut(&parent.parent()) else { continue };
-        let footprint = footprints::footprint_override(module.module_type);
-        let occupied =
-            ShipGrid::cells_for(module.grid_position, module.size, module.rotation, footprint);
-        if module.module_type.is_containment_door() {
-            // A doorway, not machinery. Taking its cells off the map like any
-            // other module would wall a corridor off permanently and strand
-            // whoever was behind it -- open or shut, forever.
-            for cell in occupied {
-                cells.insert(cell, NavCell::Door { sealed });
-            }
-        } else if is_station || is_quarters {
-            posts.extend(occupied.iter().map(|c| (parent.parent(), *c)));
-        } else {
-            for cell in occupied {
-                cells.remove(&cell);
+        // Hull first: it lays the deck. Anything not listed here is a wall,
+        // and absence from the map is what makes it impassable.
+        for &child in &children {
+            let Ok((hull, transform, sealed)) = hulls.get(child) else { continue };
+            let Some(cell) = hull_nav_cell(hull.hull_layer, sealed) else { continue };
+            cells.insert(transform_to_grid(transform), cell);
+        }
+
+        // Modules then claim their cells. Machinery is solid and takes its
+        // cells OFF the map even if a hallway was laid under it — you can't
+        // walk through a reactor because someone decked the floor first.
+        // Posts do the opposite: a crew station or a bunk is somewhere a
+        // person stands, so it goes on the map whether or not it sits on
+        // decking.
+        //
+        // Posts are applied in a second pass so a post always wins its cell,
+        // regardless of the order modules happen to come in.
+        let mut posts: Vec<IVec2> = Vec::new();
+        for &child in &children {
+            let Ok((module, is_station, is_quarters, sealed)) = modules.get(child) else { continue };
+            let footprint = footprints::footprint_override(module.module_type);
+            let occupied =
+                ShipGrid::cells_for(module.grid_position, module.size, module.rotation, footprint);
+            if module.module_type.is_containment_door() {
+                // A doorway, not machinery. Taking its cells off the map like
+                // any other module would wall a corridor off permanently and
+                // strand whoever was behind it -- open or shut, forever.
+                for cell in occupied {
+                    cells.insert(cell, NavCell::Door { sealed });
+                }
+            } else if is_station || is_quarters {
+                posts.extend(occupied);
+            } else {
+                for cell in occupied {
+                    cells.remove(&cell);
+                }
             }
         }
-    }
-    for (ship, cell) in posts {
-        let Some(cells) = per_ship.get_mut(&ship) else { continue };
-        cells.insert(cell, NavCell::Post);
-    }
+        for cell in posts {
+            cells.insert(cell, NavCell::Post);
+        }
 
-    for (ship, cells) in per_ship {
-        match grids.get_mut(ship) {
-            Ok(mut grid) => {
+        match grid {
+            Some(mut grid) => {
                 grid.cells = cells;
                 grid.version = grid.version.wrapping_add(1);
             }
-            Err(_) => {
+            None => {
                 // try_insert: a ship can be despawned the same frame it is
                 // rebuilt (recursive destruction despawn).
                 commands.entity(ship).try_insert(NavGrid { cells, version: 1 });
             }
         }
     }
+    built.retain(|e| ships.contains(e));
 }
 
 #[cfg(test)]
@@ -497,7 +504,7 @@ mod nav_tests {
         let unreachable: Vec<_> = nav
             .cells
             .keys()
-            .filter(|c| !reachable.contains(c))
+            .filter(|c| !reachable.contains(*c))
             .copied()
             .collect();
         assert!(
@@ -532,7 +539,7 @@ mod nav_tests {
         let stranded: Vec<_> = nav
             .cells
             .iter()
-            .filter(|(cell, kind)| **kind == NavCell::Post && !reachable.contains(cell))
+            .filter(|(cell, kind)| **kind == NavCell::Post && !reachable.contains(*cell))
             .map(|(cell, _)| *cell)
             .collect();
         assert!(
@@ -614,7 +621,7 @@ mod nav_tests {
             .unwrap()
             .0;
         let r = reachable_from(&nav, start);
-        let mut bad: Vec<IVec2> = nav.cells.keys().filter(|c| !r.contains(c)).copied().collect();
+        let mut bad: Vec<IVec2> = nav.cells.keys().filter(|c| !r.contains(*c)).copied().collect();
         bad.sort_by_key(|c| (c.x, c.y));
         println!("cells={} reachable={} x0={} y0={}", nav.cells.len(), r.len(), x0, y0);
         for c in bad {
@@ -633,7 +640,7 @@ mod nav_tests {
             while let Some(&seed) = unseen.iter().next() {
                 let reach = reachable_from(&nav, seed);
                 let here: Vec<IVec2> = reach.iter().copied().filter(|c| unseen.contains(c)).collect();
-                let posts = here.iter().filter(|c| nav.cells.get(c) == Some(&NavCell::Post)).count();
+                let posts = here.iter().filter(|c| nav.cells.get(*c) == Some(&NavCell::Post)).count();
                 comps.push((here.len(), posts, seed));
                 for c in here { unseen.remove(&c); }
             }
@@ -673,7 +680,7 @@ mod nav_tests {
             let stranded: Vec<_> = nav
                 .cells
                 .iter()
-                .filter(|(cell, kind)| **kind == NavCell::Post && !reachable.contains(cell))
+                .filter(|(cell, kind)| **kind == NavCell::Post && !reachable.contains(*cell))
                 .map(|(cell, _)| *cell)
                 .collect();
             assert!(

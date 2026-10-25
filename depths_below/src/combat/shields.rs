@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use crate::components::{Ship, Module, ModuleType, HullSegment, Projectile, DestroyedModule, HullDestroyed};
 use crate::ai_ship::components::{AiShip, AiShipType};
-use std::collections::HashSet;
+use bevy::platform::collections::HashSet;
 use bevy::asset::RenderAssetUsages;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 
@@ -93,6 +93,16 @@ pub(crate) struct ShieldSegment {
     /// The sprite's local centre and world size — for texel↔local mapping.
     center: Vec2,
     size: Vec2,
+    /// The texels with any glow at all (most of the texture is empty), and
+    /// each one's angle about `angles_pivot`. The mask only ever depends on
+    /// that angle, so it is worked out once per pivot instead of an atan2 per
+    /// texel per frame -- about 1.3 million a frame on a capital's skin.
+    lit: Vec<u32>,
+    angles: Vec<f32>,
+    angles_pivot: Option<Vec2>,
+    /// The (facing, half-width) the texture was last masked for; while the
+    /// arc holds still the texture isn't touched (or re-uploaded) at all.
+    masked_for: Option<(f32, f32)>,
 }
 
 /// Live blocks only: a block that has been shot off no longer shapes the
@@ -110,10 +120,15 @@ pub type LiveBlockFilter = (
 /// block from that centroid plus margin. Root-centered fixed radii produced
 /// huge off-center bubbles with the ship poking out one side.
 fn ship_extent(ship: Entity, blocks: &Query<(&Transform, &ChildOf), LiveBlockFilter>) -> (Vec2, f32) {
-    let positions: Vec<Vec2> = blocks.iter()
-        .filter(|(_, p)| p.parent() == ship)
-        .map(|(t, _)| t.translation.truncate())
-        .collect();
+    extent_of(
+        blocks.iter()
+            .filter(|(_, p)| p.parent() == ship)
+            .map(|(t, _)| t.translation.truncate()),
+    )
+}
+
+fn extent_of(positions: impl Iterator<Item = Vec2>) -> (Vec2, f32) {
+    let positions: Vec<Vec2> = positions.collect();
     if positions.is_empty() {
         return (Vec2::ZERO, 200.0);
     }
@@ -129,24 +144,37 @@ fn ship_extent(ship: Entity, blocks: &Query<(&Transform, &ChildOf), LiveBlockFil
 /// ship shot to pieces kept its launch-day hittable radius — the ghost
 /// hitbox that let shots "connect" with empty space where blocks used to
 /// be (combat/projectiles.rs and check_projectile_hits both bound their
-/// hull search on `shield.radius`). Gated on the live block count, same
-/// trick as building::update_ship_grids: a block dying or being marked
-/// destroyed changes the count, an idle frame costs one archetype walk.
+/// hull search on `shield.radius`).
+///
+/// Per ship, only when that ship's layout changed (building::layout). It
+/// used to rescan every block in the world for every shield whenever any
+/// block anywhere died.
 pub fn refresh_shield_extents(
-    blocks: Query<(&Transform, &ChildOf), LiveBlockFilter>,
-    mut shields: Query<(Entity, &mut ShipShield)>,
-    mut last_count: Local<usize>,
+    blocks: Query<&Transform, LiveBlockFilter>,
+    mut shields: Query<(Entity, &mut ShipShield, &crate::building::layout::LayoutVersion, Option<&Children>)>,
+    epoch: Res<crate::building::layout::LayoutEpoch>,
+    mut seen_epoch: Local<Option<crate::building::layout::LayoutEpoch>>,
+    mut built: Local<crate::building::layout::BuiltFrom>,
 ) {
-    let count = blocks.iter().count();
-    if count == *last_count {
+    if *seen_epoch == Some(*epoch) {
         return;
     }
-    *last_count = count;
-    for (ship, mut shield) in shields.iter_mut() {
-        let (center, radius) = ship_extent(ship, &blocks);
+    *seen_epoch = Some(*epoch);
+    for (ship, mut shield, version, children) in shields.iter_mut() {
+        if !built.is_stale(ship, version) {
+            continue;
+        }
+        built.mark(ship, version);
+        let positions = children
+            .into_iter()
+            .flat_map(|c| c.iter())
+            .filter_map(|c| blocks.get(c).ok())
+            .map(|t| t.translation.truncate());
+        let (center, radius) = extent_of(positions);
         shield.center_offset = center;
         shield.radius = radius;
     }
+    built.retain(|e| shields.contains(e));
 }
 
 /// The grid cells the ship occupies (module footprints + hull segments). Cell
@@ -175,32 +203,34 @@ fn ship_cells(
 /// Separable box blur (clamped edges). Three passes approximate a Gaussian —
 /// enough to erase the block-grid bumps so the shield contour reads as a single
 /// smooth curve rather than a stepped outline.
+///
+/// A running sum, not a fresh sum per texel: each step adds the texel
+/// entering the window and drops the one leaving it, so the cost is the same
+/// whatever the radius. The direct version added 2r+1 = 39 texels for every
+/// output texel, six passes per skin, and took ~190 ms on the starter -- a
+/// visible hitch every time a block came off.
 fn box_blur(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
-    let ri = r as i32;
-    let norm = 1.0 / (2 * r + 1) as f32;
     let mut tmp = vec![0.0f32; w * h];
     for y in 0..h {
-        for x in 0..w {
-            let mut s = 0.0;
-            for k in -ri..=ri {
-                let xx = (x as i32 + k).clamp(0, w as i32 - 1) as usize;
-                s += src[y * w + xx];
-            }
-            tmp[y * w + x] = s * norm;
-        }
+        blur_line(&src[y * w..(y + 1) * w], 1, &mut tmp[y * w..], 1, w, r);
     }
     let mut out = vec![0.0f32; w * h];
-    for y in 0..h {
-        for x in 0..w {
-            let mut s = 0.0;
-            for k in -ri..=ri {
-                let yy = (y as i32 + k).clamp(0, h as i32 - 1) as usize;
-                s += tmp[yy * w + x];
-            }
-            out[y * w + x] = s * norm;
-        }
+    for x in 0..w {
+        blur_line(&tmp[x..], w, &mut out[x..], w, h, r);
     }
     out
+}
+
+/// One line of `box_blur`: `n` samples `stride` apart, edges clamped.
+fn blur_line(src: &[f32], stride: usize, dst: &mut [f32], dst_stride: usize, n: usize, r: usize) {
+    let at = |i: isize| src[(i.clamp(0, n as isize - 1) as usize) * stride];
+    let norm = 1.0 / (2 * r + 1) as f32;
+    let r = r as isize;
+    let mut sum: f32 = (-r..=r).map(at).sum();
+    for i in 0..n as isize {
+        dst[i as usize * dst_stride] = sum * norm;
+        sum += at(i + r + 1) - at(i - r);
+    }
 }
 
 /// Build the shield skin as a SMOOTH glowing outline around the ship: rasterise
@@ -209,7 +239,7 @@ fn box_blur(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
 /// clean smooth shape hugging the hull — no grid steps, no 90° angles. The gap
 /// off the hull just falls out of the blur amount. Returns (texture, local
 /// centre, local size).
-fn build_shield_skin(cells: &HashSet<IVec2>) -> Option<(Image, Vec2, Vec2, Vec<u8>, usize, usize)> {
+fn build_shield_skin(cells: &HashSet<IVec2>) -> Option<BuiltSkin> {
     const CELL: f32 = 66.0;
     const HALF: f32 = 33.0;
     const TPU: f32 = 0.25;          // texels per world unit (1 texel = 4 units)
@@ -263,7 +293,8 @@ fn build_shield_skin(cells: &HashSet<IVec2>) -> Option<(Image, Vec2, Vec2, Vec<u
         Extent3d { width: w as u32, height: h as u32, depth_or_array_layers: 1 },
         TextureDimension::D2, data, TextureFormat::Rgba8UnormSrgb, RenderAssetUsages::default(),
     );
-    Some((img, (tmin + tmax) * 0.5, world, base_a, w, h))
+    let lit = base_a.iter().enumerate().filter(|(_, a)| **a > 0).map(|(i, _)| i as u32).collect();
+    Some((img, (tmin + tmax) * 0.5, world, base_a, w, h, lit))
 }
 
 /// Spawn the shield skin as a single child sprite carrying the generated
@@ -276,7 +307,21 @@ fn spawn_shield_skin(
     cells: &HashSet<IVec2>,
     is_player: bool,
 ) {
-    let Some((img, center, size, base_a, w, h)) = build_shield_skin(cells) else { return };
+    let Some(built) = build_shield_skin(cells) else { return };
+    spawn_built_skin(commands, images, owner, built, is_player);
+}
+
+/// What build_shield_skin makes: (texture, local centre, local size, base
+/// alpha per texel, width, height, the texels with any glow).
+type BuiltSkin = (Image, Vec2, Vec2, Vec<u8>, usize, usize, Vec<u32>);
+
+fn spawn_built_skin(
+    commands: &mut Commands,
+    images: &mut Assets<Image>,
+    owner: Entity,
+    (img, center, size, base_a, w, h, lit): BuiltSkin,
+    is_player: bool,
+) {
     let handle = images.add(img);
     let mut e = commands.spawn((
         Sprite {
@@ -290,7 +335,7 @@ fn spawn_shield_skin(
     ));
     // The player's bubble is masked into a moving segment; store the base glow.
     if is_player {
-        e.insert(ShieldSegment { base_a, w, h, center, size });
+        e.insert(ShieldSegment { base_a, w, h, center, size, lit, angles: Vec::new(), angles_pivot: None, masked_for: None });
     }
     let skin = e.id();
     commands.entity(owner).add_child(skin);
@@ -342,17 +387,60 @@ pub fn attach_player_shield(
 /// fight. Cheap: it hashes the cell set every frame and only regenerates the
 /// distance-field texture when that hash actually changes, so it costs nothing
 /// while the ship is unchanged.
+///
+/// Only looks when the ship's layout has changed, and draws the new skin on a
+/// background thread: rasterising and blurring it is the costliest thing a
+/// block loss sets off (~19 ms on a 2,300-block capital), and done inline it
+/// was a visible hitch every time. The old skin stays up until the new one is
+/// ready, a frame or two later. At most one redraw is in flight; changes that
+/// land meanwhile are picked up by the next.
 pub fn refresh_player_shield_skin(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut last_hash: Local<u64>,
-    ship_query: Query<Entity, (With<Ship>, With<ShipShield>)>,
-    module_query: Query<(&Module, &ChildOf)>,
-    hull_query: Query<(&HullSegment, &ChildOf)>,
+    mut seen: Local<Option<(Entity, crate::building::layout::LayoutVersion)>>,
+    mut job: Local<Option<(Entity, bevy::tasks::Task<Option<BuiltSkin>>)>>,
+    mut cooldown: Local<f32>,
+    time: Res<Time<Real>>,
+    ship_query: Query<(Entity, &crate::building::layout::LayoutVersion, &Children), (With<Ship>, With<ShipShield>)>,
+    module_query: Query<&Module>,
+    hull_query: Query<&HullSegment>,
     skin_query: Query<(Entity, &ChildOf), With<ShieldBubble>>,
 ) {
-    let Ok(ship) = ship_query.single() else { return };
-    let cells = ship_cells(ship, &module_query, &hull_query);
+    *cooldown -= time.delta_secs();
+    // A finished redraw replaces the player's skin.
+    if let Some((owner, task)) = job.as_mut() {
+        let Some(built) = bevy::tasks::futures::check_ready(task) else { return };
+        let owner = *owner;
+        *job = None;
+        if let Some(built) = built {
+            for (e, p) in skin_query.iter() {
+                if p.parent() == owner { commands.entity(e).try_despawn(); }
+            }
+            spawn_built_skin(&mut commands, &mut images, owner, built, true);
+        }
+    }
+
+    // A ship losing blocks every frame would otherwise keep a redraw running
+    // without pause; twice a second keeps the skin close behind the hull.
+    let Ok((ship, version, children)) = ship_query.single() else { return };
+    if *seen == Some((ship, *version)) || *cooldown > 0.0 {
+        return;
+    }
+    *seen = Some((ship, *version));
+    *cooldown = 0.5;
+    let mut cells = HashSet::new();
+    for child in children.iter() {
+        if let Ok(m) = module_query.get(child) {
+            for dx in 0..m.size.x.max(1) {
+                for dy in 0..m.size.y.max(1) {
+                    cells.insert(m.grid_position + IVec2::new(dx, dy));
+                }
+            }
+        } else if let Ok(h) = hull_query.get(child) {
+            cells.insert(h.grid_position);
+        }
+    }
     if cells.is_empty() { return; }
     // order-independent hash of the cell set
     let hash = cells.iter().fold(0u64, |acc, c| {
@@ -363,11 +451,8 @@ pub fn refresh_player_shield_skin(
     });
     if hash == *last_hash { return; }
     *last_hash = hash;
-    // drop the previous skin sprite(s) for the player ship, then rebuild
-    for (e, p) in skin_query.iter() {
-        if p.parent() == ship { commands.entity(e).try_despawn(); }
-    }
-    spawn_shield_skin(&mut commands, &mut images, ship, &cells, true);
+    let task = bevy::tasks::AsyncComputeTaskPool::get().spawn(async move { build_shield_skin(&cells) });
+    *job = Some((ship, task));
 }
 
 /// Attach shields to AI ships as they spawn, sized by faction.
@@ -650,39 +735,53 @@ pub fn update_ai_shield_arcs(
 pub fn update_shield_segment(
     mut images: ResMut<Assets<Image>>,
     ship_query: Query<(Entity, &Transform, &ShipShield), With<Ship>>,
-    mut seg_query: Query<(&mut Sprite, &ShieldSegment, &ChildOf)>,
+    mut seg_query: Query<(&mut Sprite, &mut ShieldSegment, &ChildOf)>,
 ) {
     let Ok((player, ship_transform, shield)) = ship_query.single() else { return };
 
-    for (mut sprite, seg, parent) in seg_query.iter_mut() {
+    for (mut sprite, mut seg, parent) in seg_query.iter_mut() {
         if parent.parent() != player {
             continue;
         }
         // Off unless a shot's about to hit.
         if !shield.is_up() || !shield.arc_active {
             sprite.color = Color::srgba(0.5, 0.8, 1.0, 0.0);
+            seg.masked_for = None;
             continue;
         }
-        let Some(mut image) = images.get_mut(&sprite.image) else { continue };
-        let Some(buf) = image.data.as_mut() else { continue };
 
         // World facing → local (the sprite rotates with the hull).
         let ship_rot = ship_transform.rotation.to_euler(EulerRot::ZYX).0;
         let local_facing = shield.arc_facing - ship_rot;
         let pivot = shield.center_offset; // block centroid, in ship-local space
-        let tmin = seg.center - seg.size * 0.5;
-        let texel_w = seg.size.x / seg.w as f32;
-        let texel_h = seg.size.y / seg.h as f32;
         let half = shield.arc_half;
         let soft = SHIELD_ARC_SOFT;
 
-        for ty in 0..seg.h {
-            let ly = tmin.y + seg.size.y - (ty as f32 + 0.5) * texel_h;
-            for tx in 0..seg.w {
-                let i = ty * seg.w + tx;
+        if seg.angles_pivot != Some(pivot) {
+            let tmin = seg.center - seg.size * 0.5;
+            let texel_w = seg.size.x / seg.w as f32;
+            let texel_h = seg.size.y / seg.h as f32;
+            let (w, size_y) = (seg.w, seg.size.y);
+            let angles = seg.lit.iter().map(|&i| {
+                let (tx, ty) = (i as usize % w, i as usize / w);
                 let lx = tmin.x + (tx as f32 + 0.5) * texel_w;
-                let ang = (ly - pivot.y).atan2(lx - pivot.x);
-                let mut d = (ang - local_facing).abs();
+                let ly = tmin.y + size_y - (ty as f32 + 0.5) * texel_h;
+                (ly - pivot.y).atan2(lx - pivot.x)
+            }).collect();
+            seg.angles = angles;
+            seg.angles_pivot = Some(pivot);
+            seg.masked_for = None;
+        }
+
+        // Re-mask only when the arc has visibly moved (~0.1 degrees).
+        let moved = seg.masked_for.is_none_or(|(f, h)| (f - local_facing).abs() > 0.002 || (h - half).abs() > 0.002);
+        if moved {
+            let Some(mut image) = images.get_mut(&sprite.image) else { continue };
+            let Some(buf) = image.data.as_mut() else { continue };
+            let seg = &mut *seg;
+            for (&i, &ang) in seg.lit.iter().zip(seg.angles.iter()) {
+                let i = i as usize;
+                let mut d = (ang - local_facing).rem_euclid(std::f32::consts::TAU);
                 if d > std::f32::consts::PI {
                     d = std::f32::consts::TAU - d;
                 }
@@ -696,6 +795,7 @@ pub fn update_shield_segment(
                 };
                 buf[i * 4 + 3] = (seg.base_a[i] as f32 * mask) as u8;
             }
+            seg.masked_for = Some((local_facing, half));
         }
 
         // Overall brightness: visible while active, flaring on impact.
@@ -759,6 +859,46 @@ pub fn update_shields(
                     0.0
                 };
                 sprite.color = Color::srgba(0.5, 0.8, 1.0, alpha);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod blur_tests {
+    use super::*;
+
+    /// The direct sum the running sum replaced, kept as the reference.
+    fn box_blur_direct(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
+        let ri = r as i32;
+        let norm = 1.0 / (2 * r + 1) as f32;
+        let mut tmp = vec![0.0f32; w * h];
+        for y in 0..h {
+            for x in 0..w {
+                let s: f32 = (-ri..=ri).map(|k| src[y * w + (x as i32 + k).clamp(0, w as i32 - 1) as usize]).sum();
+                tmp[y * w + x] = s * norm;
+            }
+        }
+        let mut out = vec![0.0f32; w * h];
+        for y in 0..h {
+            for x in 0..w {
+                let s: f32 = (-ri..=ri).map(|k| tmp[(y as i32 + k).clamp(0, h as i32 - 1) as usize * w + x]).sum();
+                out[y * w + x] = s * norm;
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn the_running_sum_matches_the_direct_blur() {
+        // A blocky silhouette, like the skin rasterises, including radii
+        // wider than the image (all clamped edge).
+        for (w, h, r) in [(37, 23, 4), (64, 40, 19), (9, 5, 19), (1, 1, 3)] {
+            let src: Vec<f32> = (0..w * h).map(|i| if (i * 7 + i / w * 3) % 5 < 2 { 1.0 } else { 0.0 }).collect();
+            let fast = box_blur(&src, w, h, r);
+            let slow = box_blur_direct(&src, w, h, r);
+            for (a, b) in fast.iter().zip(&slow) {
+                assert!((a - b).abs() < 1e-4, "{w}x{h} r={r}: {a} vs {b}");
             }
         }
     }

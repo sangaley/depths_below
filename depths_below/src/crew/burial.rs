@@ -486,6 +486,7 @@ mod burial_tests {
 
     fn burial_app() -> App {
         let mut app = App::new();
+        app.add_plugins(crate::building::layout::LayoutPlugin);
         app.add_plugins((MinimalPlugins, bevy::transform::TransformPlugin));
         app.init_resource::<CrewPlanTimer>();
         app.init_resource::<DriftingDead>();

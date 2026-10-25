@@ -94,7 +94,7 @@ pub fn diffuse_heat(
     let dt = time.delta_secs();
 
     // Build conductivity map (player modules only — AI local coords collide)
-    let mut conductivity_map: std::collections::HashMap<(Entity, IVec2), f32> = std::collections::HashMap::new();
+    let mut conductivity_map: bevy::platform::collections::HashMap<(Entity, IVec2), f32> = bevy::platform::collections::HashMap::new();
     for (module, temp, parent) in temp_query.iter() {
         conductivity_map.insert((parent.parent(), module.grid_position), temp.conductivity);
     }

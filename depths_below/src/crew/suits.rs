@@ -393,7 +393,7 @@ mod suit_tests {
         app.init_resource::<Time>();
         app.add_systems(Update, suited_damage_control);
 
-        let mut cells = std::collections::HashMap::new();
+        let mut cells = bevy::platform::collections::HashMap::new();
         for x in 0..4 {
             cells.insert(IVec2::new(x, 0), NavCell::Hallway);
         }

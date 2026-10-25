@@ -1,5 +1,6 @@
 use bevy::prelude::*;
-use std::collections::{HashMap, HashSet, VecDeque};
+use bevy::platform::collections::{HashMap, HashSet};
+use std::collections::{VecDeque};
 use crate::components::*;  // includes BulkheadSealed
 use crate::resources::PowerGraph;
 
@@ -169,15 +170,25 @@ pub fn detect_rooms(
 /// System that recalculates rooms when hull tiles change, preserving flood state.
 /// Uses tile-set intersection: each tile remembers its old room's flood state,
 /// and the new room inherits the worst (highest water) state from overlapping tiles.
+///
+/// Only when the player ship's layout changed (`layout::LayoutVersion`: a
+/// block placed, destroyed, removed, or a bulkhead sealed or opened). It used
+/// to re-flood every room every frame, whatever happened -- the single most
+/// expensive system in a capital-sized fight.
 pub fn update_room_map(
-    ship_query: Query<Entity, With<Ship>>,
+    ship_query: Query<(Entity, &super::layout::LayoutVersion), With<Ship>>,
     hull_query: Query<(&HullSegment, &Transform, &ChildOf)>,
     module_query: Query<(&Module, &Transform, &ChildOf)>,
     sealed_query: Query<(&HullSegment, &Transform, &ChildOf), With<BulkheadSealed>>,
     sealed_modules: Query<(&Module, &ChildOf), With<BulkheadSealed>>,
     mut room_map: ResMut<RoomMap>,
+    mut built_from: Local<Option<(Entity, super::layout::LayoutVersion)>>,
 ) {
-    let Ok(player_ship) = ship_query.single() else { return };
+    let Ok((player_ship, version)) = ship_query.single() else { return };
+    if *built_from == Some((player_ship, *version)) {
+        return;
+    }
+    *built_from = Some((player_ship, *version));
 
     // Build set of sealed bulkhead positions.
     //
@@ -248,6 +259,7 @@ mod room_shape_tests {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
         app.init_resource::<RoomMap>();
+        app.add_plugins(crate::building::layout::LayoutPlugin);
         app.add_systems(Update, update_room_map);
         app
     }

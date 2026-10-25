@@ -753,7 +753,7 @@ fn update_depth_vignette(
                 .take(4)
                 .any(|e| e == ship_e);
             if on_ship {
-                *visibility = Visibility::Inherited;
+                visibility.set_if_neq(Visibility::Inherited);
                 continue;
             }
         }
@@ -772,13 +772,19 @@ fn update_depth_vignette(
 
         // GTA-style: completely hide entities far from the player
         // (DEPTHS_NO_DARK films a wide shot far from the ship: draw it all.)
+        // set_if_neq throughout: writing Visibility or Sprite marks it
+        // changed, and a changed one is re-propagated and re-prepared by the
+        // renderer. Unconditional writes made every sprite in range "changed"
+        // every frame, so the cost of this pass grew with the whole world's
+        // block count rather than with what actually moved in or out of the
+        // light.
         if dist > cull_range && !no_dark() {
-            *visibility = Visibility::Hidden;
+            visibility.set_if_neq(Visibility::Hidden);
             continue;
         }
 
         // Make sure nearby entities are visible
-        *visibility = Visibility::Inherited;
+        visibility.set_if_neq(Visibility::Inherited);
 
         // Skip alpha processing right at the home station — was depth<100,
         // which at a 54m test-undock still fully suppressed the system and
@@ -816,13 +822,16 @@ fn update_depth_vignette(
         };
         let light_range = omni_radius + (cone_range - omni_radius) * angular_factor;
 
-        if dist <= light_range {
-            sprite.color.set_alpha(1.0);
+        let alpha = if dist <= light_range {
+            1.0
         } else if dist > light_range * 1.5 {
-            sprite.color.set_alpha(ENV_FLOOR);
+            ENV_FLOOR
         } else {
             let fade = 1.0 - ((dist - light_range) / (light_range * 0.5)).clamp(0.0, 1.0);
-            sprite.color.set_alpha(fade.max(ENV_FLOOR));
+            fade.max(ENV_FLOOR)
+        };
+        if sprite.color.alpha() != alpha {
+            sprite.color.set_alpha(alpha);
         }
     }
 

@@ -1,5 +1,6 @@
 use bevy::prelude::*;
-use std::collections::{HashSet, VecDeque};
+use bevy::platform::collections::{HashSet};
+use std::collections::{VecDeque};
 use crate::components::*;
 use crate::resources::*;
 use crate::events::*;
@@ -10,13 +11,23 @@ use crate::events::*;
 /// PLAYER SHIP ONLY: grid tiles are ship-local coordinates, and AI ships
 /// reuse the same coordinates — unscoped, their reactors powered (and their
 /// consumers drained) the player's grid.
+///
+/// Rebuilt only when the player ship's layout changes (a block placed,
+/// destroyed or removed -- `building::layout`). A module reaching 0 health is
+/// marked DestroyedModule the same frame, which bumps the layout, so the
+/// graph is never more than a frame behind a death.
 pub fn build_power_graph(
     module_query: Query<(&Module, &ChildOf)>,
     hull_query: Query<(&HullSegment, &ChildOf)>,
-    ship_query: Query<Entity, With<Ship>>,
+    ship_query: Query<(Entity, &crate::building::layout::LayoutVersion), With<Ship>>,
     mut power_graph: ResMut<PowerGraph>,
+    mut built_from: Local<Option<(Entity, crate::building::layout::LayoutVersion)>>,
 ) {
-    let Ok(player_ship) = ship_query.single() else { return };
+    let Ok((player_ship, version)) = ship_query.single() else { return };
+    if *built_from == Some((player_ship, *version)) {
+        return;
+    }
+    *built_from = Some((player_ship, *version));
     power_graph.powered_tiles.clear();
 
     // Collect all tiles that can conduct power

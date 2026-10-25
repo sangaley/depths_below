@@ -6,7 +6,7 @@
 Each line of the call graph is "<indent><count> <function> ...". A function's
 inclusive count is summed over the nodes where it is NOT already on the stack
 above (so recursion isn't double counted), across every thread. Only
-depths_below:: functions are listed, with Rust hashes and generics trimmed so
+depths_below:: functions are listed (or another prefix, third argument), with Rust hashes and generics trimmed so
 one system reads as one row.
 """
 import re
@@ -45,13 +45,16 @@ def main(path, top=40):
             pass
         if depth <= 4:
             total_samples += count
-        if fn.startswith("depths_below::") and all(f != fn for _, f in stack):
+        if fn.startswith(PREFIX) and all(f != fn for _, f in stack):
             totals[fn] = totals.get(fn, 0) + count
         stack.append((depth, fn))
     rows = sorted(totals.items(), key=lambda kv: -kv[1])[:top]
-    print(f"== {path}: top {len(rows)} depths_below functions by inclusive samples")
+    print(f"== {path}: top {len(rows)} {PREFIX} functions by inclusive samples")
     for fn, c in rows:
         print(f"  {c:7d}  {fn}")
 
 
+# Optional third argument: a function-name prefix other than depths_below::,
+# e.g. "bevy_" to see what the engine itself spends.
+PREFIX = sys.argv[3] if len(sys.argv) > 3 else "depths_below::"
 main(sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 40)

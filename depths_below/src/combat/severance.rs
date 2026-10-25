@@ -20,103 +20,184 @@ pub struct DetachedSection {
     pub mass: f32,
 }
 
-/// System: detect when hull segments are destroyed and check for section severance
-/// Scoped to the player's own ship only (via ChildOf) — hull/module destruction
-/// on AI ships is not this system's concern and must never be attributed to the
-/// player's ship center, or AI ship modules get ejected with the player's velocity.
+/// Marks a block that broke away with a severed section. It is still a hull
+/// segment or module -- it draws, burns and cooks off like one -- but it is
+/// no longer the player's, so saving leaves it out.
+#[derive(Component)]
+pub struct SeveredBlock;
+
+/// The blocks of the player's ship that were joined to its main body the last
+/// time this looked. Only these can break away: a piece a designer left
+/// floating on purpose was never attached, so losing a plate elsewhere doesn't
+/// fling it off.
+#[derive(Default)]
+pub struct AttachedBefore {
+    ship: Option<Entity>,
+    blocks: bevy::platform::collections::HashSet<Entity>,
+}
+
+/// A section breaks away when nothing joins it to the ship any more.
+///
+/// After any of the player's blocks is destroyed, the ship's live blocks are
+/// grouped by what touches what -- sides AND corners, because hulls step
+/// diagonally and a wedge meets its neighbour at a corner. The biggest group
+/// is the ship. Every other group that was joined to it a moment ago breaks
+/// off as ONE body: a new root carrying the blocks in their places, with the
+/// ship's velocity plus a shove outward, its own collider, and the reactor /
+/// ammo / fuel aboard deciding whether it becomes a bomb.
+///
+/// It replaces a guess -- "a module within 130 units of a hole and further
+/// from the centre than from the hole is severed" -- which on a big hull
+/// threw off nearly every module beside any hole near an edge: a capital
+/// losing ten blocks a second shed thirty modules a second, each as its own
+/// spinning chunk.
+///
+/// Only destruction severs. Removing blocks in build mode never does, and the
+/// player's ship only -- AI ships break up through their own death rules.
 pub fn check_section_severance(
     mut commands: Commands,
-    destroyed_hull: Query<(&HullSegment, &GlobalTransform, &ChildOf), Added<crate::components::HullDestroyed>>,
-    mut module_query: Query<(Entity, &mut Module, &GlobalTransform, &ChildOf), Without<DestroyedModule>>,
-    ship_query: Query<(Entity, &Transform, &Velocity), With<Ship>>,
+    ship_query: Query<(Entity, &Transform, &Velocity, &crate::building::layout::LayoutVersion, &Children), With<Ship>>,
+    fresh_destroyed: Query<&ChildOf, Or<(Added<HullDestroyed>, Added<DestroyedModule>)>>,
+    hulls: Query<(&HullSegment, &Transform), Without<HullDestroyed>>,
+    modules: Query<(&Module, &Transform), Without<DestroyedModule>>,
+    mut seen: Local<Option<crate::building::layout::LayoutVersion>>,
+    mut attached: Local<AttachedBefore>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    if destroyed_hull.is_empty() { return; }
-    let Ok((ship_entity, ship_transform, ship_velocity)) = ship_query.single() else { return; };
+    let Ok((ship, ship_transform, ship_velocity, version, children)) = ship_query.single() else { return };
+    let destroyed_now = fresh_destroyed.iter().any(|p| p.parent() == ship);
+    if attached.ship == Some(ship) && *seen == Some(*version) && !destroyed_now {
+        return;
+    }
+    *seen = Some(*version);
 
-    for (_hull, hull_gt, hull_parent) in destroyed_hull.iter() {
-        // Only the player's own ship's hull triggers severance checks here.
-        if hull_parent.parent() != ship_entity { continue; }
+    // Live blocks by cell, and where each block sits in the ship.
+    let mut cell_block: bevy::platform::collections::HashMap<IVec2, Entity> = Default::default();
+    let mut local_pos: bevy::platform::collections::HashMap<Entity, Vec2> = Default::default();
+    for child in children.iter() {
+        if let Ok((hull, transform)) = hulls.get(child) {
+            cell_block.insert(hull.grid_position, child);
+            local_pos.insert(child, transform.translation.truncate());
+        } else if let Ok((module, transform)) = modules.get(child) {
+            let footprint = crate::building::footprints::footprint_override(module.module_type);
+            for cell in crate::building::ShipGrid::cells_for(module.grid_position, module.size, module.rotation, footprint) {
+                cell_block.insert(cell, child);
+            }
+            local_pos.insert(child, transform.translation.truncate());
+        }
+    }
 
-        let hull_pos = hull_gt.translation().truncate();
+    let groups = touching_groups(&cell_block);
+    let Some(main) = groups.iter().max_by_key(|g| g.len()) else { return };
 
-        // Check if any modules are now isolated (simplified check)
-        // Full implementation would use flood-fill from ship core
-        // For now: modules far from center that lost adjacent hull = at risk
+    // First look at this ship (or a new one): learn what is attached, sever nothing.
+    if attached.ship != Some(ship) || !destroyed_now {
+        attached.ship = Some(ship);
+        attached.blocks = main.clone();
+        return;
+    }
 
-        let ship_center = ship_transform.translation.truncate();
+    for group in &groups {
+        if std::ptr::eq(group, main) || !group.iter().any(|e| attached.blocks.contains(e)) {
+            continue;
+        }
+        let blocks: Vec<(Entity, Vec2)> = group.iter().filter_map(|e| local_pos.get(e).map(|p| (*e, *p))).collect();
+        let module_types: Vec<ModuleType> = group.iter().filter_map(|e| modules.get(*e).ok().map(|(m, _)| m.module_type)).collect();
+        break_off(&mut commands, &mut notifications, ship_transform, ship_velocity, &blocks, &module_types);
+    }
+    attached.blocks = main.clone();
+}
 
-        for (module_entity, mut module, module_gt, module_parent) in module_query.iter_mut() {
-            // Only consider modules that belong to the player's own ship.
-            if module_parent.parent() != ship_entity { continue; }
-            let module_pos = module_gt.translation().truncate();
-            let dist_to_hull = module_pos.distance(hull_pos);
-
-            // Only check modules near the destroyed hull
-            if dist_to_hull > 130.0 { continue; }
-
-            let dist_to_center = module_pos.distance(ship_center);
-            // Modules far from center + near destroyed hull = potential severance
-            if dist_to_center < 200.0 { continue; } // Too close to center to sever
-
-            // Check if this module has any intact hull between it and center
-            // Simplified: if distance to destroyed hull < distance to center, likely severed
-            if dist_to_hull < dist_to_center * 0.5 {
-                // SEVER!
-                let has_reactor = matches!(module.module_type,
-                    ModuleType::SmallReactor | ModuleType::StandardReactor |
-                    ModuleType::LargeReactor | ModuleType::FusionReactor);
-                let has_ammo = matches!(module.module_type,
-                    ModuleType::AmmoFeedUnit | ModuleType::WarheadBay);
-                let has_fuel = module.module_type == ModuleType::FuelTank;
-
-                // Calculate ejection velocity: ship velocity + impact kick
-                let impact_dir = (module_pos - hull_pos).normalize_or_zero();
-                let kick = impact_dir * 80.0;
-                let eject_velocity = ship_velocity.0 + kick;
-
-                // Severed means dead to the ship: nothing aboard it powers,
-                // fires or pushes any more. A shot-off engine stayed active
-                // and kept thrusting the player along for free.
-                module.is_active = false;
-
-                // Detach the module from the ship, IN PLACE. A bare
-                // remove::<ChildOf>() keeps the ship-local Transform, which
-                // as a root is a world position near the origin -- the
-                // section jumped there instead of breaking off where it was.
-                commands.entity(module_entity)
-                    .remove_parent_in_place()
-                    .insert(DetachedSection {
-                        has_reactor,
-                        has_ammo,
-                        has_fuel,
-                        meltdown_timer: if has_reactor { Some(10.0) } else { None },
-                        mass: 50.0,
-                    })
-                    .insert(Velocity(eject_velocity))
-                    .insert(GravityAffected { mass: 50.0 })
-                    .insert(GravityForce::default())
-                    // Light physical body: chunks carom off hulls and rocks
-                    // instead of ghosting through (ships barely feel them —
-                    // 50 mass vs a ship's ~1200). Shots still pass through
-                    // debris (see collision::TerrainFilter).
-                    .insert(crate::ship::collision::Collider::circle(45.0, 50.0));
-
-                notifications.write(ShowNotification {
-                    message: format!("SECTION SEVERED! {} detached!", module.module_type.name()),
-                    notification_type: NotificationType::Danger,
-                    duration: 4.0,
-                });
-
-                if has_reactor {
-                    notifications.write(ShowNotification {
-                        message: "WARNING: Severed section contains reactor! Meltdown in 10s!".into(),
-                        notification_type: NotificationType::Danger,
-                        duration: 5.0,
-                    });
+/// Groups of blocks joined by a side or a corner.
+fn touching_groups(
+    cell_block: &bevy::platform::collections::HashMap<IVec2, Entity>,
+) -> Vec<bevy::platform::collections::HashSet<Entity>> {
+    let mut seen_cells: bevy::platform::collections::HashSet<IVec2> = Default::default();
+    let mut groups = Vec::new();
+    for &start in cell_block.keys() {
+        if !seen_cells.insert(start) {
+            continue;
+        }
+        let mut group: bevy::platform::collections::HashSet<Entity> = Default::default();
+        let mut stack = vec![start];
+        while let Some(cell) = stack.pop() {
+            group.insert(cell_block[&cell]);
+            for dx in -1..=1 {
+                for dy in -1..=1 {
+                    let next = cell + IVec2::new(dx, dy);
+                    if cell_block.contains_key(&next) && seen_cells.insert(next) {
+                        stack.push(next);
+                    }
                 }
             }
         }
+        groups.push(group);
+    }
+    groups
+}
+
+/// Re-root one severed group under a new body, in place, and send it off.
+fn break_off(
+    commands: &mut Commands,
+    notifications: &mut MessageWriter<ShowNotification>,
+    ship_transform: &Transform,
+    ship_velocity: &Velocity,
+    blocks: &[(Entity, Vec2)],
+    module_types: &[ModuleType],
+) {
+    if blocks.is_empty() {
+        return;
+    }
+    let centroid = blocks.iter().map(|(_, p)| *p).sum::<Vec2>() / blocks.len() as f32;
+    let has_reactor = module_types.iter().any(|t| matches!(t,
+        ModuleType::SmallReactor | ModuleType::StandardReactor | ModuleType::LargeReactor | ModuleType::FusionReactor));
+    let has_ammo = module_types.iter().any(|t| matches!(t, ModuleType::AmmoFeedUnit | ModuleType::WarheadBay));
+    let has_fuel = module_types.contains(&ModuleType::FuelTank);
+    let mass = (blocks.len() as f32 * 8.0).max(50.0);
+
+    // The new root sits where the section's centre is, turned like the ship,
+    // so the blocks keep their exact places and it tumbles about its middle.
+    let world_centre = ship_transform.transform_point(centroid.extend(0.0));
+    let outward = (ship_transform.rotation * centroid.extend(0.0)).truncate().normalize_or_zero();
+    let velocity = ship_velocity.0 + outward * 60.0;
+    let points: Vec<Vec2> = blocks.iter().map(|(_, p)| *p - centroid).collect();
+    let root = commands.spawn((
+        Name::new("Severed section"),
+        Transform { translation: world_centre, rotation: ship_transform.rotation, scale: Vec3::ONE },
+        Visibility::default(),
+        DetachedSection {
+            has_reactor,
+            has_ammo,
+            has_fuel,
+            meltdown_timer: if has_reactor { Some(10.0) } else { None },
+            mass,
+        },
+        Velocity(velocity),
+        GravityAffected { mass },
+        GravityForce::default(),
+        // A real body: it caroms off hulls and rocks instead of ghosting
+        // through. Shots still pass through debris (collision::TerrainFilter).
+        crate::ship::collision::fit_ship_collider(&points, mass),
+    )).id();
+    for (block, local) in blocks {
+        let at = (*local - centroid).extend(0.0);
+        commands.entity(*block).insert((SeveredBlock, ChildOf(root))).entry::<Transform>().and_modify(move |mut t| {
+            t.translation.x = at.x;
+            t.translation.y = at.y;
+        });
+    }
+
+    notifications.write(ShowNotification {
+        message: format!("SECTION SEVERED! {} blocks broke away", blocks.len()),
+        notification_type: NotificationType::Danger,
+        duration: 4.0,
+    });
+    if has_reactor {
+        notifications.write(ShowNotification {
+            message: "WARNING: Severed section contains reactor! Meltdown in 10s!".into(),
+            notification_type: NotificationType::Danger,
+            duration: 5.0,
+        });
     }
 }
 
@@ -210,5 +291,96 @@ pub fn debris_collision(
                 break;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod severance_tests {
+    use super::*;
+
+    fn hull_at(x: i32, y: i32) -> (HullSegment, Transform) {
+        (
+            HullSegment {
+                health: 100.0,
+                max_health: 100.0,
+                radiation_shielding: 0.0,
+                is_depressurized: false,
+                depressurization_level: 0.0,
+                hull_layer: HullLayer::Inner,
+                material: HullMaterial::Steel,
+                grid_position: IVec2::new(x, y),
+            },
+            Transform::from_xyz(x as f32 * 66.0, y as f32 * 66.0 - 33.0, 0.0),
+        )
+    }
+
+    fn app() -> App {
+        let mut app = App::new();
+        app.add_plugins(crate::building::layout::LayoutPlugin);
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, check_section_severance);
+        app
+    }
+
+    /// A ship that is a row of hull at x = 0..len, plus any extra cells.
+    fn ship(app: &mut App, len: i32, extra: &[(i32, i32)]) -> (Entity, Vec<Entity>) {
+        let ship = app.world_mut().spawn((Ship, Transform::default(), Velocity(Vec2::ZERO))).id();
+        let mut blocks: Vec<Entity> = (0..len).map(|x| app.world_mut().spawn((hull_at(x, 0), ChildOf(ship))).id()).collect();
+        for &(x, y) in extra {
+            blocks.push(app.world_mut().spawn((hull_at(x, y), ChildOf(ship))).id());
+        }
+        app.update(); // learn the attached body
+        (ship, blocks)
+    }
+
+    fn sections(app: &mut App) -> Vec<Entity> {
+        app.world_mut().query_filtered::<Entity, With<DetachedSection>>().iter(app.world()).collect()
+    }
+
+    #[test]
+    fn cutting_a_row_in_two_sends_the_smaller_end_off_as_one_piece() {
+        let mut app = app();
+        let (ship, blocks) = ship(&mut app, 7, &[]);
+        app.world_mut().entity_mut(blocks[4]).insert(HullDestroyed);
+        app.update();
+        let found = sections(&mut app);
+        assert_eq!(found.len(), 1, "one severed section, not one per block");
+        for &b in &blocks[5..] {
+            assert_eq!(app.world().get::<ChildOf>(b).unwrap().parent(), found[0]);
+            assert!(app.world().get::<SeveredBlock>(b).is_some());
+        }
+        for &b in &blocks[..4] {
+            assert_eq!(app.world().get::<ChildOf>(b).unwrap().parent(), ship, "the bigger part stays the ship");
+        }
+    }
+
+    #[test]
+    fn blocks_joined_only_at_a_corner_hold_together() {
+        let mut app = app();
+        // A diagonal step off the end of the row: (5,1) touches (4,0) at a corner.
+        let (_, blocks) = ship(&mut app, 5, &[(5, 1), (6, 2)]);
+        app.world_mut().entity_mut(blocks[0]).insert(HullDestroyed);
+        app.update();
+        assert!(sections(&mut app).is_empty());
+    }
+
+    #[test]
+    fn a_piece_built_apart_on_purpose_is_never_flung_off() {
+        let mut app = app();
+        // (0,5) never touched the hull.
+        let (ship, blocks) = ship(&mut app, 5, &[(0, 5)]);
+        app.world_mut().entity_mut(blocks[0]).insert(HullDestroyed);
+        app.update();
+        assert!(sections(&mut app).is_empty());
+        assert_eq!(app.world().get::<ChildOf>(blocks[5]).unwrap().parent(), ship);
+    }
+
+    #[test]
+    fn removing_a_block_without_destroying_it_severs_nothing() {
+        let mut app = app();
+        let (_, blocks) = ship(&mut app, 7, &[]);
+        app.world_mut().entity_mut(blocks[4]).despawn(); // a build-mode delete
+        app.update();
+        assert!(sections(&mut app).is_empty());
     }
 }

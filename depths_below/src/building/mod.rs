@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use std::collections::HashMap;
+use bevy::platform::collections::HashMap;
 use smallvec::SmallVec;
 use crate::states::{GameState, BuildState};
 use crate::components::*;
@@ -21,6 +21,7 @@ pub mod templates;
 pub mod template_ghost;
 
 pub mod rooms;
+pub mod layout;
 pub mod registry;
 pub mod stat_calculator;
 pub mod blueprint;
@@ -34,6 +35,7 @@ pub struct BuildingPlugin;
 impl Plugin for BuildingPlugin {
     fn build(&self, app: &mut App) {
         app
+            .add_plugins(layout::LayoutPlugin)
             .init_state::<BuildState>()
             .init_resource::<BuildingState>()
             .init_resource::<rooms::RoomMap>()
@@ -644,55 +646,63 @@ fn update_grid_occupancy(
 /// that only refreshed at a station would send shells into cells whose
 /// block died two fights ago.
 ///
-/// Gated on block counts changing. Counting is a cheap archetype iteration
-/// with no hashing; the rebuild underneath it is ~2k HashMap inserts, so
-/// the check pays for itself on every frame nothing is destroyed (which is
-/// nearly all of them).
+/// Rebuilds only the ships whose `layout::LayoutVersion` moved. It used to
+/// recount every block in the world each frame and rebuild EVERY ship when a
+/// count changed -- and in a fight some block dies nearly every frame, so a
+/// 2,000-block capital rebuilt its whole grid because a skiff lost a plate.
 pub fn update_ship_grids(
     mut commands: Commands,
-    ships: Query<Entity, Or<(With<Ship>, With<crate::ai_ship::components::AiShip>)>>,
-    modules: Query<(Entity, &Module, &ChildOf), Without<DestroyedModule>>,
-    hulls: Query<(Entity, &Transform, &ChildOf), (With<HullSegment>, Without<HullDestroyed>)>,
-    mut grids: Query<&mut ShipGrid>,
-    mut last_counts: Local<(usize, usize, usize)>,
+    mut ships: Query<
+        (Entity, &layout::LayoutVersion, Option<&Children>, Option<&mut ShipGrid>),
+        Or<(With<Ship>, With<crate::ai_ship::components::AiShip>)>,
+    >,
+    modules: Query<&Module, Without<DestroyedModule>>,
+    hulls: Query<&Transform, (With<HullSegment>, Without<HullDestroyed>)>,
+    epoch: Res<layout::LayoutEpoch>,
+    mut seen_epoch: Local<Option<layout::LayoutEpoch>>,
+    mut built: Local<layout::BuiltFrom>,
 ) {
-    let counts = (modules.iter().count(), hulls.iter().count(), ships.iter().count());
-    if counts == *last_counts && !grids.is_empty() {
+    // Nothing anywhere changed since the last pass: every grid is current.
+    if *seen_epoch == Some(*epoch) {
         return;
     }
-    *last_counts = counts;
+    *seen_epoch = Some(*epoch);
 
-    // Bucket live blocks by the ship that owns them. Pre-seeding every ship
-    // means a vessel that just lost its last block still gets an empty grid
-    // written rather than keeping a stale one.
-    let mut per_ship: HashMap<Entity, HashMap<IVec2, Entity>> = ships
-        .iter()
-        .map(|ship| (ship, HashMap::new()))
-        .collect();
+    for (ship, version, children, grid) in ships.iter_mut() {
+        if grid.is_some() && !built.is_stale(ship, version) {
+            continue;
+        }
+        built.mark(ship, version);
 
-    for (entity, module, parent) in modules.iter() {
-        let Some(cells) = per_ship.get_mut(&parent.parent()) else { continue };
-        let footprint = footprints::footprint_override(module.module_type);
-        for cell in ShipGrid::cells_for(module.grid_position, module.size, module.rotation, footprint) {
-            cells.insert(cell, entity);
+        // A ship that just lost its last block still gets an empty grid
+        // written rather than keeping a stale one.
+        let mut cells: HashMap<IVec2, Entity> = HashMap::new();
+        let children = children.map(|c| c.iter().collect::<Vec<_>>()).unwrap_or_default();
+        for &child in &children {
+            if let Ok(module) = modules.get(child) {
+                let footprint = footprints::footprint_override(module.module_type);
+                for cell in ShipGrid::cells_for(module.grid_position, module.size, module.rotation, footprint) {
+                    cells.insert(cell, child);
+                }
+            }
+        }
+        // Hull is always 1x1, and spawns at `grid * 66.0` (y offset -33.0) on
+        // player and AI ships alike, so the transform inverts cleanly. Modules
+        // can't use this path: multi-cell ones are centred on their footprint
+        // centroid, not on their origin cell. Hull goes in second and takes
+        // a shared cell, as it always has.
+        for &child in &children {
+            if let Ok(transform) = hulls.get(child) {
+                cells.insert(rooms::transform_to_grid(transform), child);
+            }
+        }
+
+        match grid {
+            Some(mut grid) => grid.cells = cells,
+            None => { commands.entity(ship).try_insert(ShipGrid { cells }); }
         }
     }
-
-    // Hull is always 1x1, and spawns at `grid * 66.0` (y offset -33.0) on
-    // player and AI ships alike, so the transform inverts cleanly. Modules
-    // can't use this path: multi-cell ones are centred on their footprint
-    // centroid, not on their origin cell.
-    for (entity, transform, parent) in hulls.iter() {
-        let Some(cells) = per_ship.get_mut(&parent.parent()) else { continue };
-        cells.insert(rooms::transform_to_grid(transform), entity);
-    }
-
-    for (ship, cells) in per_ship {
-        match grids.get_mut(ship) {
-            Ok(mut grid) => grid.cells = cells,
-            Err(_) => { commands.entity(ship).try_insert(ShipGrid { cells }); }
-        }
-    }
+    built.retain(|e| ships.contains(e));
 }
 
 // ============================================================================
@@ -1681,6 +1691,7 @@ mod ship_grid_tests {
     fn test_app() -> App {
         let mut app = App::new();
         app.add_plugins(MinimalPlugins);
+        app.add_plugins(layout::LayoutPlugin);
         app.add_systems(Update, update_ship_grids);
         app
     }

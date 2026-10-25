@@ -395,8 +395,8 @@ fn compute_module_efficiency(
     // derived from the player's cores would quietly hand every enemy in the
     // system the same benefit. Same bug shape as the crew and power leaks that
     // turned up when AI ships first got real crews.
-    let mut cores_by_ship: std::collections::HashMap<Entity, Vec<f32>> =
-        std::collections::HashMap::new();
+    let mut cores_by_ship: bevy::platform::collections::HashMap<Entity, Vec<f32>> =
+        bevy::platform::collections::HashMap::new();
     for (core, module, parent) in core_query.iter() {
         if !module.is_active {
             continue;
@@ -411,10 +411,10 @@ fn compute_module_efficiency(
     // Which engines a short-handed room keeps running is resolved by grid
     // position so it's stable frame to frame; an engineer's own nozzle is
     // always covered first.
-    let mut covered_propulsion: std::collections::HashSet<Entity> = std::collections::HashSet::new();
+    let mut covered_propulsion: bevy::platform::collections::HashSet<Entity> = bevy::platform::collections::HashSet::new();
     {
-        let mut by_ship: std::collections::HashMap<Entity, (Vec<(IVec2, Entity)>, usize)> =
-            std::collections::HashMap::new();
+        let mut by_ship: bevy::platform::collections::HashMap<Entity, (Vec<(IVec2, Entity)>, usize)> =
+            bevy::platform::collections::HashMap::new();
         for (entity, module, station, parent) in station_query.iter() {
             if module.module_type.category() != ModuleCategory::Propulsion {
                 continue;
@@ -622,7 +622,7 @@ fn auto_assign_crew(
     };
 
     // Collect all crew currently assigned to any station
-    let mut assigned_crew: std::collections::HashSet<Entity> = std::collections::HashSet::new();
+    let mut assigned_crew: bevy::platform::collections::HashSet<Entity> = bevy::platform::collections::HashSet::new();
     for (_, _, station, _, _) in station_query.iter() {
         if let Some(crew_entity) = station.assigned_crew {
             assigned_crew.insert(crew_entity);
@@ -667,8 +667,8 @@ fn auto_assign_crew(
     // compute_module_efficiency). Work out how many the room actually wants,
     // then release anyone beyond that so a big bank stops eating the crew.
     // Pinned posts are honoured first — a KeepManned engine keeps its hand.
-    let mut engine_berths_wanted: std::collections::HashMap<Entity, usize> =
-        std::collections::HashMap::new();
+    let mut engine_berths_wanted: bevy::platform::collections::HashMap<Entity, usize> =
+        bevy::platform::collections::HashMap::new();
     for (_, module, _, _, owned) in station_query.iter() {
         if module.module_type.category() == ModuleCategory::Propulsion {
             if let Some(ship) = owner_of(owned) {
@@ -680,8 +680,8 @@ fn auto_assign_crew(
         *wanted = wanted.div_ceil(ENGINES_PER_OPERATOR);
     }
 
-    let mut engine_berths_used: std::collections::HashMap<Entity, usize> =
-        std::collections::HashMap::new();
+    let mut engine_berths_used: bevy::platform::collections::HashMap<Entity, usize> =
+        bevy::platform::collections::HashMap::new();
     for pinned_pass in [true, false] {
         for (_, module, mut station, pinned, owned) in station_query.iter_mut() {
             if module.module_type.category() != ModuleCategory::Propulsion || pinned != pinned_pass {
@@ -703,7 +703,7 @@ fn auto_assign_crew(
     }
 
     // Collect unfilled stations (priority > 0, not manually assigned), bucketed by owning ship
-    let mut unfilled_by_ship: std::collections::HashMap<Entity, Vec<(Entity, u8, bool, ModuleCategory)>> = std::collections::HashMap::new();
+    let mut unfilled_by_ship: bevy::platform::collections::HashMap<Entity, Vec<(Entity, u8, bool, ModuleCategory)>> = bevy::platform::collections::HashMap::new();
     for (entity, module, station, pinned, owned) in station_query.iter() {
         if station.priority > 0 && !station.manually_assigned && station.assigned_crew.is_none() {
             if let Some(ship) = owner_of(owned) {
@@ -735,7 +735,7 @@ fn auto_assign_crew(
     }
 
     // Collect available crew (alive, not panicking/unconscious, not assigned), bucketed by owning ship
-    let mut available_by_ship: std::collections::HashMap<Entity, Vec<(Entity, CrewDuty)>> = std::collections::HashMap::new();
+    let mut available_by_ship: bevy::platform::collections::HashMap<Entity, Vec<(Entity, CrewDuty)>> = bevy::platform::collections::HashMap::new();
     for (entity, crew, duty, owned) in crew_query.iter() {
         if crew.health > 0.0
             && crew.state != CrewState::Panicking
@@ -763,7 +763,7 @@ fn auto_assign_crew(
         // WILLING hand rather than the first hand full stop is the whole
         // difference: a gunner is passed over for the reactor and is still
         // there when the post they were told to take comes up.
-        let mut taken: std::collections::HashSet<Entity> = std::collections::HashSet::new();
+        let mut taken: bevy::platform::collections::HashSet<Entity> = bevy::platform::collections::HashSet::new();
         for (station_entity, _priority, _pinned, category) in unfilled {
             let Some(&(crew_entity, _)) = available_crew
                 .iter()
@@ -910,7 +910,7 @@ fn crew_emergency_dispatch(
     }
 
     // Collect crew assigned to stations (to know who to pull)
-    let mut station_assignments: std::collections::HashMap<Entity, Entity> = std::collections::HashMap::new();
+    let mut station_assignments: bevy::platform::collections::HashMap<Entity, Entity> = bevy::platform::collections::HashMap::new();
     for (station_entity, station) in station_query.iter() {
         if let Some(crew_entity) = station.assigned_crew {
             if !station.manually_assigned {
@@ -1016,7 +1016,7 @@ fn crew_fire_suppression(
     let dt = time.delta_secs();
 
     // Build per-room suppression power from repairing crew (flat 1.0 per crew)
-    let mut room_suppression: std::collections::HashMap<usize, f32> = std::collections::HashMap::new();
+    let mut room_suppression: bevy::platform::collections::HashMap<usize, f32> = bevy::platform::collections::HashMap::new();
     for (crew, location) in crew_query.iter() {
         if crew.state != CrewState::Repairing || crew.health <= 0.0 {
             continue;
@@ -1121,7 +1121,7 @@ fn crew_repair_system(
     // they walk, a hand mends what's within arm's reach — the cell under them
     // and its four neighbours. It also drops a dependency on GridOccupancy,
     // which only rebuilds at dock and is stale for the whole flight.
-    let mut cell_power: std::collections::HashMap<IVec2, f32> = std::collections::HashMap::new();
+    let mut cell_power: bevy::platform::collections::HashMap<IVec2, f32> = bevy::platform::collections::HashMap::new();
     for (crew, transform, parent) in crew_query.iter() {
         if crew.health <= 0.0 || parent.parent() != player_ship {
             continue;
@@ -1147,7 +1147,7 @@ fn crew_repair_system(
         .collect();
 
     // Build per-room RepairBay boost
-    let mut room_repair_boost: std::collections::HashMap<usize, f32> = std::collections::HashMap::new();
+    let mut room_repair_boost: bevy::platform::collections::HashMap<usize, f32> = bevy::platform::collections::HashMap::new();
     for &(module, repair_sys) in &our_bays {
         if let Some(&room_id) = room_map.tile_to_room.get(&module.grid_position) {
             let boost = room_repair_boost.entry(room_id).or_insert(0.0);
@@ -1268,7 +1268,7 @@ fn report_crew_deaths(
     crew: Query<(Entity, &CrewMember), Without<crate::ai_ship::components::OwnedByAiShip>>,
     mut damage_events: MessageReader<CrewDamaged>,
     mut deaths: MessageWriter<CrewDied>,
-    mut wounds: Local<std::collections::HashMap<Entity, CrewDamageSource>>,
+    mut wounds: Local<bevy::platform::collections::HashMap<Entity, CrewDamageSource>>,
 ) {
     // Remember the last thing that hurt each person. Kept across frames on
     // purpose: the killing blow and the frame this notices the body are not
@@ -1431,7 +1431,7 @@ fn ships_with_facility<'a>(
     kind: FacilityType,
     facilities: impl Iterator<Item = FacilityRow<'a>>,
     player: Option<Entity>,
-) -> std::collections::HashSet<Entity> {
+) -> bevy::platform::collections::HashSet<Entity> {
     facilities
         .filter(|(f, m, _, _)| f.facility_type == kind && m.is_active && m.health > 0.0)
         .filter_map(|(_, _, parent, owned)| match owned {

@@ -1,5 +1,6 @@
 use bevy::prelude::*;
-use std::collections::{HashMap, HashSet, VecDeque};
+use bevy::platform::collections::{HashMap, HashSet};
+use std::collections::{VecDeque};
 
 use crate::combat::shields::ShipShield;
 use crate::components::*;
@@ -27,63 +28,69 @@ pub struct AiPowerState {
 /// player's singleton Ship. Grid positions are ship-local, so each ship's
 /// BFS must stay scoped to its own modules/hull — mixing them would corrupt
 /// every ship's graph, exactly why the player's version is scoped too.
+/// Which cells of an AI ship its reactors can reach, and the layout version
+/// that was worked out from. The flood fill only reruns when the ship's
+/// layout changes; the power balance on top of it is summed every frame,
+/// because crew efficiency and is_active move all the time.
+#[derive(Component, Default)]
+pub struct AiPowerReach {
+    built_from: Option<u64>,
+    powered_tiles: bevy::platform::collections::HashSet<IVec2>,
+}
+
 pub fn update_ai_power(
     mut commands: Commands,
-    ai_ships: Query<(Entity, &AiShipType, Option<&ShipShield>), With<AiShip>>,
+    mut ai_ships: Query<
+        (
+            Entity,
+            &AiShipType,
+            Option<&ShipShield>,
+            &crate::building::layout::LayoutVersion,
+            Option<&mut AiPowerReach>,
+            Option<&mut AiPowerState>,
+        ),
+        With<AiShip>,
+    >,
     module_query: Query<(&Module, &OwnedByAiShip, Option<&ModuleEfficiency>)>,
     hull_query: Query<(&HullSegment, &OwnedByAiShip)>,
 ) {
-    // Sort every block by its ship once. Walking every block in the world
-    // once PER SHIP cost ships x blocks a frame: nothing with eight small
-    // hulls, a stall with eight capitals.
-    let mut by_ship: HashMap<Entity, (Vec<(&Module, Option<&ModuleEfficiency>)>, Vec<IVec2>)> = HashMap::new();
+    let mut by_ship: HashMap<Entity, Vec<(&Module, Option<&ModuleEfficiency>)>> = HashMap::new();
     for (module, owned, eff) in module_query.iter() {
-        by_ship.entry(owned.root).or_default().0.push((module, eff));
+        by_ship.entry(owned.root).or_default().push((module, eff));
     }
-    for (hull, owned) in hull_query.iter() {
-        by_ship.entry(owned.root).or_default().1.push(hull.grid_position);
-    }
-
-    for (ai_root, ship_type, shield) in ai_ships.iter() {
-        let Some((modules, hull)) = by_ship.get(&ai_root) else { continue };
-        let mut conductive_tiles: HashSet<IVec2> = hull.iter().copied().collect();
-        let mut power_sources: Vec<IVec2> = Vec::new();
-
-        for (module, _eff) in modules {
-            if module.health <= 0.0 {
-                continue;
-            }
-            let footprint = crate::building::footprints::footprint_override(module.module_type);
-            let cells = crate::building::GridOccupancy::cells_for(
-                module.grid_position, module.size, module.rotation, footprint,
-            );
-            for cell in &cells {
-                conductive_tiles.insert(*cell);
-            }
-            if module.power_generation > 0.0 {
-                power_sources.extend(cells);
+    // Hull only matters to a ship whose reach is being rebuilt.
+    let stale: HashSet<Entity> = ai_ships
+        .iter()
+        .filter(|(_, _, _, v, reach, _)| reach.as_ref().is_none_or(|r| r.built_from != Some(v.0)))
+        .map(|(e, ..)| e)
+        .collect();
+    let mut hull_by_ship: HashMap<Entity, Vec<IVec2>> = HashMap::new();
+    if !stale.is_empty() {
+        for (hull, owned) in hull_query.iter() {
+            if stale.contains(&owned.root) {
+                hull_by_ship.entry(owned.root).or_default().push(hull.grid_position);
             }
         }
+    }
 
-        let mut visited: HashSet<IVec2> = HashSet::new();
-        let mut queue: VecDeque<IVec2> = VecDeque::new();
-        for pos in power_sources {
-            if visited.insert(pos) {
-                queue.push_back(pos);
-            }
-        }
-        let mut powered_tiles: HashSet<IVec2> = HashSet::new();
-        while let Some(current) = queue.pop_front() {
-            powered_tiles.insert(current);
-            for offset in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
-                let neighbor = current + offset;
-                if !visited.contains(&neighbor) && conductive_tiles.contains(&neighbor) {
-                    visited.insert(neighbor);
-                    queue.push_back(neighbor);
+    for (ai_root, ship_type, shield, version, mut reach, power_state) in ai_ships.iter_mut() {
+        let Some(modules) = by_ship.get(&ai_root) else { continue };
+        let mut fresh: Option<AiPowerReach> = None;
+        if reach.as_ref().is_none_or(|r| r.built_from != Some(version.0)) {
+            let tiles = flood_power(modules, hull_by_ship.get(&ai_root).map_or(&[][..], |h| &h[..]));
+            match reach.as_mut() {
+                Some(r) => {
+                    r.built_from = Some(version.0);
+                    r.powered_tiles = tiles;
                 }
+                None => fresh = Some(AiPowerReach { built_from: Some(version.0), powered_tiles: tiles }),
             }
         }
-
+        let powered_tiles = match (&reach, &fresh) {
+            (Some(r), _) => &r.powered_tiles,
+            (None, Some(f)) => &f.powered_tiles,
+            (None, None) => continue,
+        };
         let mut total_generation = 0.0;
         let mut total_consumption = 0.0;
         // Shield upkeep — AI shields are always enabled (ShipShield's own
@@ -115,6 +122,55 @@ pub fn update_ai_power(
         // clamped away. (This makes the weak-faction power_output_multiplier
         // derate purely cosmetic now — it thins surplus but can't dark a gun.)
         let power_balance = (total_generation - total_consumption).max(0.0);
-        commands.entity(ai_root).try_insert(AiPowerState { power_balance });
+        match power_state {
+            Some(mut state) => state.power_balance = power_balance,
+            None => { commands.entity(ai_root).try_insert(AiPowerState { power_balance }); }
+        }
+        if let Some(f) = fresh {
+            commands.entity(ai_root).try_insert(f);
+        }
     }
+}
+
+/// Cells reachable from any live reactor through live modules and hull.
+fn flood_power(
+    modules: &[(&Module, Option<&ModuleEfficiency>)],
+    hull: &[IVec2],
+) -> bevy::platform::collections::HashSet<IVec2> {
+    let mut conductive_tiles: bevy::platform::collections::HashSet<IVec2> = hull.iter().copied().collect();
+    let mut power_sources: Vec<IVec2> = Vec::new();
+    for (module, _eff) in modules {
+        if module.health <= 0.0 {
+            continue;
+        }
+        let footprint = crate::building::footprints::footprint_override(module.module_type);
+        let cells = crate::building::GridOccupancy::cells_for(
+            module.grid_position, module.size, module.rotation, footprint,
+        );
+        for cell in &cells {
+            conductive_tiles.insert(*cell);
+        }
+        if module.power_generation > 0.0 {
+            power_sources.extend(cells);
+        }
+    }
+    let mut visited: bevy::platform::collections::HashSet<IVec2> = bevy::platform::collections::HashSet::new();
+    let mut queue: VecDeque<IVec2> = VecDeque::new();
+    for pos in power_sources {
+        if visited.insert(pos) {
+            queue.push_back(pos);
+        }
+    }
+    let mut powered_tiles = bevy::platform::collections::HashSet::new();
+    while let Some(current) = queue.pop_front() {
+        powered_tiles.insert(current);
+        for offset in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
+            let neighbor = current + offset;
+            if !visited.contains(&neighbor) && conductive_tiles.contains(&neighbor) {
+                visited.insert(neighbor);
+                queue.push_back(neighbor);
+            }
+        }
+    }
+    powered_tiles
 }

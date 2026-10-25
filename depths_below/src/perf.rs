@@ -15,6 +15,11 @@ use crate::components::{HullSegment, Module, Ship};
 //                          percentiles, entities, blocks by owner), for runs
 //                          nobody is watching. tools/perf_summary.py reads them.
 //   DEPTHS_PERF_OVERLAY=1 — start with the readout showing (for screenshots).
+//   DEPTHS_PERF_CHURN=<n> — knock out n random blocks of YOUR ship a second
+//                          (health to 0, through the normal destruction
+//                          path), after warm-up. A fight's worth of block loss
+//                          on demand, without needing an enemy to get through
+//                          the shield -- the cost a capital pays for being hit.
 //   DEPTHS_PERF_QUIT=<s> — print a `PERF SUMMARY` line and exit after s
 //                          seconds, so two runs can be compared like for like.
 //                          The first DEPTHS_PERF_WARMUP seconds (default 10:
@@ -56,6 +61,7 @@ impl Plugin for PerfPlugin {
         .init_resource::<SimStart>()
         .add_systems(Startup, spawn_perf_overlay)
         .add_systems(First, mark_sim_start)
+        .add_systems(Update, churn_player_blocks.run_if(|| churn_rate() > 0.0))
         .add_systems(Last, (record_frame, report_perf).chain());
     }
 }
@@ -121,6 +127,45 @@ fn spawn_perf_overlay(mut commands: Commands, state: Res<PerfState>) {
     ));
 }
 
+fn churn_rate() -> f32 {
+    static RATE: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
+    *RATE.get_or_init(|| std::env::var("DEPTHS_PERF_CHURN").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0))
+}
+
+/// DEPTHS_PERF_CHURN: zero the health of random live blocks on the player
+/// ship. Zero health is all it takes -- the ship's own damage systems mark
+/// the block destroyed, tint it, and remove it, exactly as a hit would.
+fn churn_player_blocks(
+    time: Res<Time<Real>>,
+    state: Res<PerfState>,
+    mut owed: Local<f32>,
+    player: Query<&Children, With<Ship>>,
+    mut hulls: Query<&mut HullSegment, Without<crate::components::HullDestroyed>>,
+    mut modules: Query<&mut Module, Without<crate::components::DestroyedModule>>,
+) {
+    if state.elapsed < state.warmup {
+        return;
+    }
+    let Ok(children) = player.single() else { return };
+    *owed += churn_rate() * time.delta_secs();
+    while *owed >= 1.0 {
+        *owed -= 1.0;
+        let live: Vec<Entity> = children
+            .iter()
+            .filter(|c| hulls.get(*c).is_ok_and(|h| h.health > 0.0) || modules.get(*c).is_ok_and(|m| m.health > 0.0))
+            .collect();
+        if live.is_empty() {
+            return;
+        }
+        let pick = live[rand::random::<u32>() as usize % live.len()];
+        if let Ok(mut h) = hulls.get_mut(pick) {
+            h.health = 0.0;
+        } else if let Ok(mut m) = modules.get_mut(pick) {
+            m.health = 0.0;
+        }
+    }
+}
+
 /// When this frame's First schedule began.
 #[derive(Resource, Default)]
 struct SimStart(Option<std::time::Instant>);
@@ -173,6 +218,8 @@ fn report_perf(
     keys: Res<ButtonInput<KeyCode>>,
     mut state: ResMut<PerfState>,
     entities: Query<Entity>,
+    colliders: Query<(), With<crate::ship::collision::Collider>>,
+    detached: Query<(), With<crate::combat::severance::DetachedSection>>,
     blocks: Query<&ChildOf, Or<(With<HullSegment>, With<Module>)>>,
     player: Query<(), With<Ship>>,
     ai: Query<&AiShipState, With<AiShip>>,
@@ -223,9 +270,9 @@ fn report_perf(
 
     if state.log {
         info!(
-            "PERF t={:.0} fps={:.1} avg={:.2}ms p50={:.2} p95={:.2} p99={:.2} max={:.2} sim_avg={:.2} sim_p95={:.2} sim_p99={:.2} sim_max={:.2} entities={} player={} ai={} wreck={}",
+            "PERF t={:.0} fps={:.1} avg={:.2}ms p50={:.2} p95={:.2} p99={:.2} max={:.2} sim_avg={:.2} sim_p95={:.2} sim_p99={:.2} sim_max={:.2} entities={} player={} ai={} wreck={} colliders={} detached={}",
             state.elapsed, fps, avg, p50, p95, p99, max, sim_avg, sim_p95, sim_p99, sim_max,
-            entity_count, counts.player, counts.ai, counts.wreck
+            entity_count, counts.player, counts.ai, counts.wreck, colliders.iter().count(), detached.iter().count()
         );
     }
     if state.overlay {
