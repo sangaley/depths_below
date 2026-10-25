@@ -965,6 +965,9 @@ pub struct BuildingState {
     /// When true, rotation was set by auto-rotate (will be overridden on ghost move).
     /// When false, user manually set rotation with R key.
     pub auto_rotated: bool,
+    /// Shift held at the press of a hull drag: the corner a rectangle fill
+    /// started from. The rectangle runs to `ghost_position` until release.
+    pub hull_rect_anchor: Option<IVec2>,
 }
 
 const HULL_LAYERS: [HullLayer; 5] = [
@@ -1023,6 +1026,7 @@ impl Default for BuildingState {
             ghost_position: IVec2::ZERO,
             cursor_on_grid: false,
             auto_rotated: true,
+            hull_rect_anchor: None,
         }
     }
 }

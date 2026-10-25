@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy::platform::collections::HashMap;
+use bevy::platform::collections::{HashMap, HashSet};
 use smallvec::SmallVec;
 use crate::states::{GameState, BuildState};
 use crate::components::*;
@@ -65,6 +65,7 @@ impl Plugin for BuildingPlugin {
                     handle_build_input,
                     update_ghost_preview,
                     handle_module_placement,
+                    draw_hull_rect_preview,
                     handle_module_removal,
                     blueprint::save_blueprint_system,
                     blueprint::load_blueprint_system,
@@ -1197,7 +1198,8 @@ fn check_position_rules(
 /// can't accidentally buy three reactors.
 fn handle_module_placement(
     mouse: Res<ButtonInput<MouseButton>>,
-    build_state: Res<BuildingState>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut build_state: ResMut<BuildingState>,
     current_state: Res<State<BuildState>>,
     mut place_module_events: MessageWriter<PlaceModuleRequest>,
     mut place_hull_events: MessageWriter<PlaceHullRequest>,
@@ -1207,8 +1209,11 @@ fn handle_module_placement(
     registry: Res<ModuleRegistry>,
     currency: Res<Currency>,
     module_query: Query<&Module, Without<crate::ai_ship::components::OwnedByAiShip>>,
+    player_children: Query<&Children, With<Ship>>,
+    hull_blocks: Query<(), With<HullSegment>>,
 ) {
     if *current_state.get() != BuildState::Placing {
+        build_state.hull_rect_anchor = None;
         return;
     }
 
@@ -1227,6 +1232,45 @@ fn handle_module_placement(
     }
 
     let is_hull = matches!(build_state.current_selection(), BuildSelection::Hull(_));
+
+    // Shift-drag a hull layer: fill the rectangle on release. Nothing is
+    // painted while the rectangle is being dragged out.
+    let shift = keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight);
+    if is_hull && shift && mouse.just_pressed(MouseButton::Left) && build_state.cursor_on_grid {
+        build_state.hull_rect_anchor = Some(build_state.ghost_position);
+    }
+    if let Some(anchor) = build_state.hull_rect_anchor {
+        if mouse.pressed(MouseButton::Left) && is_hull {
+            return;
+        }
+        build_state.hull_rect_anchor = None;
+        let BuildSelection::Hull(layer) = build_state.current_selection() else { return };
+        if !mouse.just_released(MouseButton::Left) {
+            return;
+        }
+        let mut cells = rect_cells(anchor, build_state.ghost_position);
+        if symmetry_state.enabled {
+            let mirrored: Vec<IVec2> = cells.iter().map(|c| symmetry::mirror_position(*c)).collect();
+            cells.extend(mirrored);
+        }
+        // Same tally the ghost's limit check uses: our modules plus our hull.
+        let player_hull = player_children.single().map_or(0, |c| c.iter().filter(|e| hull_blocks.contains(*e)).count());
+        let player_blocks = module_query.iter().count() + player_hull;
+        let cost = build_state.hull_material.cost().max(1);
+        let budget = ((currency.credits / cost) as usize)
+            .min(crate::combat::limits::MAX_SHIP_BLOCKS.saturating_sub(player_blocks));
+        let order = hull_fill_order(&cells, |c| occupancy.cells.contains_key(&c), player_blocks == 0, budget);
+        for grid_position in order {
+            place_hull_events.write(PlaceHullRequest {
+                layer,
+                material: build_state.hull_material,
+                grid_position,
+                free: false,
+            });
+        }
+        return;
+    }
+
     let drag_paint = is_hull
         && mouse.pressed(MouseButton::Left)
         && *last_painted != Some(build_state.ghost_position);
@@ -1304,6 +1348,71 @@ fn handle_module_placement(
             }
         }
     }
+}
+
+/// Every cell of the rectangle between two corners, inclusive.
+pub fn rect_cells(a: IVec2, b: IVec2) -> Vec<IVec2> {
+    let (lo, hi) = (a.min(b), a.max(b));
+    (lo.y..=hi.y).flat_map(|y| (lo.x..=hi.x).map(move |x| IVec2::new(x, y))).collect()
+}
+
+/// Which of `cells` a fill should place, and in what order: the free ones
+/// that join the ship, spreading out from the cells already touching it, so
+/// that whatever the money or the block limit runs out on is the far edge,
+/// never a stray island. Cells that can't reach the ship through the fill
+/// are left out -- a block has to touch the hull to be placed. On a ship with
+/// no blocks at all the fill starts from the first cell.
+pub fn hull_fill_order(
+    cells: &[IVec2],
+    occupied: impl Fn(IVec2) -> bool,
+    empty_ship: bool,
+    budget: usize,
+) -> Vec<IVec2> {
+    let free: HashSet<IVec2> = cells.iter().copied().filter(|c| !occupied(*c)).collect();
+    let sides = [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y];
+    let mut queue: std::collections::VecDeque<IVec2> = cells
+        .iter()
+        .copied()
+        .filter(|c| free.contains(c) && sides.iter().any(|s| occupied(*c + *s)))
+        .collect();
+    if queue.is_empty() && empty_ship {
+        queue.extend(cells.first().copied().filter(|c| free.contains(c)));
+    }
+    let mut placed: HashSet<IVec2> = queue.iter().copied().collect();
+    let mut order = Vec::new();
+    while let Some(cell) = queue.pop_front() {
+        if order.len() >= budget {
+            break;
+        }
+        order.push(cell);
+        for s in sides {
+            let next = cell + s;
+            if free.contains(&next) && placed.insert(next) {
+                queue.push_back(next);
+            }
+        }
+    }
+    order
+}
+
+/// Outline of the rectangle a Shift-drag will fill.
+fn draw_hull_rect_preview(
+    build_state: Res<BuildingState>,
+    ship: Query<&GlobalTransform, With<Ship>>,
+    mut gizmos: Gizmos,
+) {
+    let Some(anchor) = build_state.hull_rect_anchor else { return };
+    let Ok(ship) = ship.single() else { return };
+    let (lo, hi) = (anchor.min(build_state.ghost_position), anchor.max(build_state.ghost_position));
+    let half = Vec2::splat(GRID_SIZE * 0.5);
+    let corners = [
+        grid_to_local(lo) - half,
+        grid_to_local(IVec2::new(hi.x, lo.y)) + Vec2::new(half.x, -half.y),
+        grid_to_local(hi) + half,
+        grid_to_local(IVec2::new(lo.x, hi.y)) + Vec2::new(-half.x, half.y),
+    ];
+    let world: Vec<Vec2> = corners.iter().map(|c| ship.transform_point(c.extend(0.0)).truncate()).collect();
+    gizmos.linestrip_2d(world.iter().copied().chain(std::iter::once(world[0])), Color::srgb(0.5, 0.9, 1.0));
 }
 
 /// Handles removing modules.
@@ -1908,5 +2017,48 @@ mod walk_tests {
         assert!(grid.walk(Vec2::new(-100.0, 0.0), Vec2::new(100.0, 0.0)).is_empty());
         assert!(grid.walk(Vec2::new(f32::NAN, 0.0), Vec2::new(1.0, 0.0)).is_empty());
         assert!(grid.walk(Vec2::ZERO, Vec2::new(f32::INFINITY, 0.0)).is_empty());
+    }
+}
+
+#[cfg(test)]
+mod hull_fill_tests {
+    use super::*;
+
+    #[test]
+    fn a_rectangle_covers_both_corners_whichever_way_it_is_dragged() {
+        let a = rect_cells(IVec2::new(2, 3), IVec2::new(0, 1));
+        assert_eq!(a.len(), 9);
+        assert!(a.contains(&IVec2::new(0, 1)) && a.contains(&IVec2::new(2, 3)));
+    }
+
+    #[test]
+    fn a_fill_grows_out_from_the_hull_and_skips_what_is_built() {
+        // Existing hull along x = 0; fill x = 0..=3, y = 0..=1.
+        let built = |c: IVec2| c.x == 0;
+        let order = hull_fill_order(&rect_cells(IVec2::new(0, 0), IVec2::new(3, 1)), built, false, usize::MAX);
+        assert_eq!(order.len(), 6, "the two built cells are skipped");
+        let first_two: Vec<i32> = order.iter().take(2).map(|c| c.x).collect();
+        assert_eq!(first_two, vec![1, 1], "cells touching the hull go first");
+        assert!(order.iter().all(|c| c.x > 0));
+    }
+
+    #[test]
+    fn running_out_of_money_leaves_the_far_edge_not_an_island() {
+        let built = |c: IVec2| c.x == 0 && c.y == 0;
+        let order = hull_fill_order(&rect_cells(IVec2::new(1, 0), IVec2::new(5, 0)), built, false, 2);
+        assert_eq!(order, vec![IVec2::new(1, 0), IVec2::new(2, 0)]);
+    }
+
+    #[test]
+    fn a_rectangle_out_in_open_space_places_nothing() {
+        let built = |c: IVec2| c == IVec2::ZERO;
+        let order = hull_fill_order(&rect_cells(IVec2::new(5, 5), IVec2::new(7, 7)), built, false, usize::MAX);
+        assert!(order.is_empty(), "a block has to touch the hull");
+    }
+
+    #[test]
+    fn the_first_rectangle_on_an_empty_grid_is_placed_whole() {
+        let order = hull_fill_order(&rect_cells(IVec2::new(0, 0), IVec2::new(2, 2)), |_| false, true, usize::MAX);
+        assert_eq!(order.len(), 9);
     }
 }
