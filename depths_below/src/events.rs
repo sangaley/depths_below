@@ -17,6 +17,12 @@ pub struct ShipDamaged {
     pub amount: f32,
     pub position: Option<Vec2>,
     pub direction: Option<Vec2>,  // Normalized attack direction
+    /// The blocks have already taken this. Gunfire is resolved block by block
+    /// where it lands (new_projectiles::check_projectile_hits), the same way
+    /// for every ship; the event is then only for what reacts to being hit --
+    /// camera shake, audio, damage arrows, the death screen -- and
+    /// process_ship_damage must not apply it a second time.
+    pub applied: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -26,6 +32,8 @@ pub enum DamageSource {
     Collision,
     Explosion,
     Fire,
+    /// Another ship's guns.
+    Gunfire,
 }
 
 /// Fired whenever a weapon actually discharges (player or AI) — audio/vfx hook.

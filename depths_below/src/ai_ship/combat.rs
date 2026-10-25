@@ -336,15 +336,16 @@ pub fn ai_weapon_fire_system(
                 continue;
             }
 
-            crate::combat::projectiles::spawn_projectile(
+            crate::combat::new_projectiles::spawn_ai_round(
                 &mut commands,
                 &asset_server,
+                child,
+                module.module_type,
                 muzzle,
                 aim_point,
                 weapon.damage * efficiency,
                 base_speed,
                 weapon.range,
-                crate::components::ProjectileOwner::AiShip(ai_entity),
                 ammo_storage.ammo_type,
                 loaded.map(|a| a.0),
             );

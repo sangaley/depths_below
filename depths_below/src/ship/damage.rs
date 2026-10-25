@@ -57,9 +57,15 @@ pub fn process_ship_damage(
             DamageSource::Collision => "collision",
             DamageSource::Explosion => "explosion",
             DamageSource::Fire => "fire",
+            DamageSource::Gunfire => "enemy fire",
             DamageSource::Radiation => unreachable!(),
         };
         death_cause.last_damage = Some((source_desc.to_string(), time.elapsed_secs_f64()));
+
+        // Gunfire has already been resolved block by block where it landed.
+        if event.applied {
+            continue;
+        }
 
         if hull_query.is_empty() {
             continue;

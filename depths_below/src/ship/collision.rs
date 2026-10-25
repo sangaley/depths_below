@@ -671,6 +671,7 @@ pub fn resolve_collisions(
                         amount,
                         position: Some(contact),
                         direction: Some(into),
+                        applied: false,
                     });
                 } else if ai.contains(entity) {
                     ai_damage.write(AiShipDamaged {

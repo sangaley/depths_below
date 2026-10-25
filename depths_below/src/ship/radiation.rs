@@ -93,6 +93,7 @@ pub fn check_radiation_damage(
                     amount: damage,
                     position: None,
                     direction: None,
+                    applied: false,
                 });
             }
 
@@ -103,6 +104,7 @@ pub fn check_radiation_damage(
                     amount: 10.0,
                     position: None,
                     direction: None,
+                    applied: false,
                 });
             }
         } else {

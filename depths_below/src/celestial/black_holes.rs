@@ -59,6 +59,7 @@ pub fn check_event_horizon(
                         amount: damage,
                         position: None,
                         direction: Some((bh_pos - ship_pos).normalize_or_zero()),
+                        applied: false,
                     });
                 }
             }

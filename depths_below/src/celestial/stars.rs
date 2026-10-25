@@ -80,6 +80,7 @@ pub fn apply_flare_radiation(
                 amount: damage,
                 position: None,
                 direction: None,
+                applied: false,
             });
         }
     }
@@ -193,6 +194,7 @@ pub fn apply_supernova_damage(
             amount: damage,
             position: Some(shockwave.origin),
             direction: Some((ship_pos - shockwave.origin).normalize_or_zero()),
+            applied: false,
         });
 
         notifications.write(ShowNotification {

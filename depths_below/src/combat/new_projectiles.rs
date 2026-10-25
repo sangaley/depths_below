@@ -460,40 +460,8 @@ pub fn fire_weapons_system(
         });
 
         // Loaded ammo drives damage type, per-round damage, and penetration.
-        // Without a SelectedAmmo (AI ships, pre-tuning saves) everything
-        // falls back to the old per-weapon-type behavior.
-        use crate::combat::ammo_types::KineticAmmoType;
-        let (damage_type, ammo_damage_mult, penetration) = match selected_ammo.map(|a| a.0) {
-            Some(ammo) => (
-                match ammo {
-                    KineticAmmoType::Incendiary
-                    | KineticAmmoType::PlasmaSlug
-                    | KineticAmmoType::NaniteCanister => ProjectileDamageType::Incendiary,
-                    // A neutron shell does nothing electrical, but of the four
-                    // damage types this is the one that means "the hull is
-                    // fine, what's inside it isn't".
-                    KineticAmmoType::EMPShell | KineticAmmoType::NeutronShell =>
-                        ProjectileDamageType::EmpRound,
-                    KineticAmmoType::APHE | KineticAmmoType::HEFrag | KineticAmmoType::Flak
-                    | KineticAmmoType::Antimatter | KineticAmmoType::Singularity =>
-                        ProjectileDamageType::Explosive,
-                    _ => ProjectileDamageType::Kinetic,
-                },
-                ammo.damage_mult(),
-                ammo.penetration(),
-            ),
-            None => (
-                ProjectileDamageType::Kinetic,
-                1.0,
-                match module.module_type {
-                    ModuleType::Railgun => 80.0,   // Goes through almost anything
-                    ModuleType::Cannon => 40.0,    // Decent penetration
-                    ModuleType::Coilgun => 25.0,   // Light penetration
-                    ModuleType::Gatling => 10.0,   // Barely penetrates
-                    _ => 20.0,
-                },
-            ),
-        };
+        let (damage_type, ammo_damage_mult, penetration) =
+            round_profile(selected_ammo.map(|a| a.0), module.module_type);
 
         // Spawn projectile(s)
         let burst_count = match module.module_type {
@@ -650,6 +618,168 @@ const MAX_CREATURE_HIT_RADIUS: f32 = 90.0;
 /// to it — tightened by eye from 0.4, which still read as too much on screen.
 const IMPACT_BLAST_SCALE: f32 = 0.32;
 
+/// What a round does, from what's loaded and the gun firing it: damage type,
+/// damage multiplier, and penetration. Without a loaded round (pre-tuning
+/// saves, untuned guns) it falls back to the per-weapon-type behaviour. The
+/// player's guns and the AI's use the same table.
+pub fn round_profile(
+    ammo: Option<crate::combat::ammo_types::KineticAmmoType>,
+    module_type: ModuleType,
+) -> (ProjectileDamageType, f32, f32) {
+    use crate::combat::ammo_types::KineticAmmoType;
+    match ammo {
+        Some(ammo) => (
+            match ammo {
+                KineticAmmoType::Incendiary
+                | KineticAmmoType::PlasmaSlug
+                | KineticAmmoType::NaniteCanister => ProjectileDamageType::Incendiary,
+                // A neutron shell does nothing electrical, but of the four
+                // damage types this is the one that means "the hull is
+                // fine, what's inside it isn't".
+                KineticAmmoType::EMPShell | KineticAmmoType::NeutronShell =>
+                    ProjectileDamageType::EmpRound,
+                KineticAmmoType::APHE | KineticAmmoType::HEFrag | KineticAmmoType::Flak
+                | KineticAmmoType::Antimatter | KineticAmmoType::Singularity =>
+                    ProjectileDamageType::Explosive,
+                _ => ProjectileDamageType::Kinetic,
+            },
+            ammo.damage_mult(),
+            ammo.penetration(),
+        ),
+        None => (
+            ProjectileDamageType::Kinetic,
+            1.0,
+            match module_type {
+                ModuleType::Railgun => 80.0,   // Goes through almost anything
+                ModuleType::Cannon => 40.0,    // Decent penetration
+                ModuleType::Coilgun => 25.0,   // Light penetration
+                ModuleType::Gatling => 10.0,   // Barely penetrates
+                _ => 20.0,
+            },
+        ),
+    }
+}
+
+/// Scales every AI gun round's damage. 1.0 is parity: an enemy shell is
+/// exactly as strong as the same gun and round in the player's hands.
+///
+/// Measured when the hit paths were merged (2026-10-25): the same hostile
+/// capital took the starter from 313 to 253 blocks in 80 s through the old
+/// player-only path, and to 109 through this one -- about 3.4x the damage,
+/// because the old path ignored the ammo's damage multiplier, spall and
+/// splash and soaked hull hits by plate thickness. This one number is where
+/// to dial enemy fire back if parity is too much.
+pub const AI_ROUND_DAMAGE_SCALE: f32 = 1.0;
+
+/// An AI gun's round: the same `Projectile` the player's guns fire, resolved
+/// by the same check_projectile_hits -- so an enemy shell meets your plating
+/// the way yours meets theirs (angle, ricochet, spall, the ammo's own effect),
+/// and AI-vs-AI fire finally meets armour at all.
+///
+/// Two things deliberately stay as AI rounds always flew: they do NOT inherit
+/// the shooter's velocity, and nothing bends them (no gravity). The AI's lead
+/// (ai_ship::combat) solves for a straight line at a fixed speed from the
+/// muzzle; change either and every enemy shot misses by its own motion.
+#[allow(clippy::too_many_arguments)]
+pub fn spawn_ai_round(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    weapon: Entity,
+    module_type: ModuleType,
+    muzzle: Vec2,
+    aim_point: Vec2,
+    damage: f32,
+    speed: f32,
+    range: f32,
+    ammo_type: AmmoType,
+    loaded: Option<crate::combat::ammo_types::KineticAmmoType>,
+) {
+    let direction = (aim_point - muzzle).normalize_or_zero();
+    let speed = speed * ammo_type.speed_mult();
+    let lifetime = (range / speed.max(1.0)).max(0.1);
+    let (damage_type, damage_mult, penetration) = round_profile(loaded, module_type);
+    commands.spawn((
+        Sprite {
+            image: asset_server.load(crate::sprite_map::effect_sprite_path("enemy_projectile")),
+            // Enemy fire reads red whatever it's loaded with.
+            color: Color::srgb(1.0, 0.2, 0.2),
+            custom_size: Some(ammo_type.projectile_size() * fx_scale()),
+            ..default()
+        },
+        Transform {
+            translation: muzzle.extend(0.5),
+            rotation: Quat::from_rotation_z(direction.y.atan2(direction.x)),
+            ..default()
+        },
+        Projectile {
+            damage: damage * damage_mult * AI_ROUND_DAMAGE_SCALE,
+            speed,
+            lifetime,
+            max_lifetime: lifetime,
+            owner: weapon,
+            damage_type,
+            penetration,
+            has_penetrated: false,
+            ammo: loaded,
+            caliber: caliber_scale(module_type),
+            last_hit: None,
+            prev_pos: muzzle,
+            bounces: 0,
+        },
+        Velocity(direction * speed),
+    ));
+}
+
+/// What a round landing on the PLAYER's ship sets off besides block damage --
+/// the parts of the old separate player hit path (combat::projectiles +
+/// ship::damage::process_ship_damage) that were about being the player, not
+/// about how a round meets a block.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct PlayerHitEffects<'w, 's> {
+    ship_damage: MessageWriter<'w, crate::events::ShipDamaged>,
+    breaches: MessageWriter<'w, crate::events::HullBreached>,
+    depressurized: MessageWriter<'w, crate::events::RoomDepressurized>,
+    notifications: MessageWriter<'w, ShowNotification>,
+    room_map: Res<'w, crate::building::rooms::RoomMap>,
+    debug: Res<'w, crate::debug::DebugTuning>,
+    gunnery: Query<'w, 's, &'static mut crate::ai_ship::components::AiGunneryLog>,
+}
+
+impl PlayerHitEffects<'_, '_> {
+    /// A player plate knocked under 30% opens to space -- the same rule
+    /// process_ship_damage applied to the blocks its walk damaged.
+    fn breach_if_holed(&mut self, segment: Entity, hull: &mut HullSegment) {
+        let health_pct = if hull.max_health > 0.0 { hull.health / hull.max_health } else { 0.0 };
+        if health_pct < 0.3 && !hull.is_depressurized {
+            hull.is_depressurized = true;
+            self.breaches.write(crate::events::HullBreached { segment, severity: 1.0 - health_pct });
+            if let Some(&room_id) = self.room_map.tile_to_room.get(&hull.grid_position) {
+                self.depressurized.write(crate::events::RoomDepressurized { room_id, severity: 1.0 - health_pct });
+            }
+        }
+    }
+
+    /// The hit, for the camera, audio, damage arrows and death screen.
+    /// `applied`: the blocks have already taken it.
+    fn report(&mut self, amount: f32, at: Vec2, travel: Vec2, announce: bool) {
+        self.ship_damage.write(crate::events::ShipDamaged {
+            source: crate::events::DamageSource::Gunfire,
+            amount,
+            position: Some(at),
+            // Readers expect the direction TOWARD the attacker.
+            direction: Some(-travel),
+            applied: true,
+        });
+        if announce {
+            self.notifications.write(ShowNotification {
+                message: format!("Hull hit! -{:.0} damage", amount),
+                notification_type: NotificationType::Danger,
+                duration: 2.0,
+            });
+        }
+    }
+}
+
 pub fn check_projectile_hits(
     fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut commands: Commands,
@@ -663,9 +793,12 @@ pub fn check_projectile_hits(
     >,
     mut creature_query: Query<(&Transform, &mut Creature), Without<Ship>>,
     creature_grid: Res<crate::spatial::CreatureGrid>,
+    // EVERY ship, the player's included. AI guns fire these rounds too now,
+    // so there is one way a round meets a ship -- armour angle, ricochet,
+    // spall, the ammo's own effect -- whoever fired it and whoever it hits.
     mut ai_ship_query: Query<
-        (Entity, &Transform, &GlobalTransform, &Children, &mut crate::combat::shields::ShipShield),
-        With<crate::ai_ship::components::AiShip>,
+        (Entity, &Transform, &GlobalTransform, &Children, &mut crate::combat::shields::ShipShield, Has<Ship>),
+        Or<(With<crate::ai_ship::components::AiShip>, With<Ship>)>,
     >,
     mut ai_module_query: Query<(&mut Module, &GlobalTransform), Without<DestroyedModule>>,
     mut ai_hull_query: Query<(&mut HullSegment, &GlobalTransform), Without<crate::components::HullDestroyed>>,
@@ -675,7 +808,7 @@ pub fn check_projectile_hits(
     grid_query: Query<&crate::building::ShipGrid>,
     block_query: Query<&crate::building::Block>,
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
-    _notifications: MessageWriter<ShowNotification>,
+    mut player_hits: PlayerHitEffects,
 ) {
     'projectiles: for (proj_entity, mut proj, mut proj_transform, mut proj_vel, mut proj_sprite) in proj_query.iter_mut() {
         // Spent this frame: move_projectiles already queued its despawn. Both
@@ -693,7 +826,7 @@ pub fn check_projectile_hits(
         let owner_ship = owner_parent_query.get(proj.owner).ok().map(|p| p.parent());
 
         // === AI SHIPS: shield first, then block-by-block hull damage ===
-        for (ai_entity, ai_transform, ai_gt, children, mut shield) in ai_ship_query.iter_mut() {
+        for (ai_entity, ai_transform, ai_gt, children, mut shield, is_player) in ai_ship_query.iter_mut() {
             if Some(ai_entity) == owner_ship { continue; }
             // Bubble is centered on the blocks' centroid, not the root
             let center = shield.world_center(ai_transform);
@@ -777,6 +910,12 @@ pub fn check_projectile_hits(
                     }
                 }
                 let Some((step, block, surface)) = found else { continue };
+                // Debug god mode: the player's ship takes nothing.
+                if is_player && player_hits.debug.god_mode {
+                    commands.entity(proj_entity).try_despawn();
+                    continue 'projectiles;
+                }
+                let incoming = proj.damage;
                 let obl = crate::combat::impact::obliquity(
                     surface.normal, dir_local, &block, proj.ammo, proj.caliber,
                 );
@@ -827,6 +966,11 @@ pub fn check_projectile_hits(
                         spawn_floating_damage(&mut commands, hit_pos, impact.to_block, Color::srgb(1.0, 0.3, 0.3));
                         (step.entity, hit_pos)
                     });
+                    if is_player {
+                        if let Ok((mut hull, _)) = ai_hull_query.get_mut(step.entity) {
+                            player_hits.breach_if_holed(step.entity, &mut hull);
+                        }
+                    }
                     if let (Some(module_entity), true) = (covered, impact.through > 0.0) {
                         if let Ok((mut module, gt)) = ai_module_query.get_mut(module_entity) {
                             module.health = (module.health - impact.through).max(0.0);
@@ -922,14 +1066,25 @@ pub fn check_projectile_hits(
                         proj_transform.translation.y += clear.y;
                         proj.prev_pos = proj_transform.translation.truncate();
                     }
-                    ai_damage_events.write(crate::events::AiShipDamaged {
-                        target: ai_entity,
-                        source: crate::events::DamageSource::Explosion,
-                        amount: 0.0,
-                        position: Some(hit_pos),
-                        direction: None,
-                        attacker: owner_ship,
-                    });
+                    // Tell the shooter. A crew that can't see its own rounds
+                    // skipping can't learn to load something else.
+                    if let Some(shooter) = owner_ship {
+                        if let Ok(mut log) = player_hits.gunnery.get_mut(shooter) {
+                            log.ricochets += 1;
+                        }
+                    }
+                    if is_player {
+                        player_hits.report(incoming, hit_pos, dir_local_world, false);
+                    } else {
+                        ai_damage_events.write(crate::events::AiShipDamaged {
+                            target: ai_entity,
+                            source: crate::events::DamageSource::Explosion,
+                            amount: 0.0,
+                            position: Some(hit_pos),
+                            direction: None,
+                            attacker: owner_ship,
+                        });
+                    }
                     continue 'projectiles;
                 }
 
@@ -1060,14 +1215,18 @@ pub fn check_projectile_hits(
                     }
                 }
 
-                ai_damage_events.write(crate::events::AiShipDamaged {
-                    target: ai_entity,
-                    source: crate::events::DamageSource::Explosion,
-                    amount: 0.0, // damage already applied directly above — this is bookkeeping only
-                    position: Some(hit_pos),
-                    direction: None,
-                    attacker: owner_ship,
-                });
+                if is_player {
+                    player_hits.report(incoming, hit_pos, dir_local_world, true);
+                } else {
+                    ai_damage_events.write(crate::events::AiShipDamaged {
+                        target: ai_entity,
+                        source: crate::events::DamageSource::Explosion,
+                        amount: 0.0, // damage already applied directly above — this is bookkeeping only
+                        position: Some(hit_pos),
+                        direction: None,
+                        attacker: owner_ship,
+                    });
+                }
                 if !penetrates {
                     commands.entity(proj_entity).try_despawn();
                 }
@@ -1393,5 +1552,102 @@ mod sweep_tests {
         let (d_ahead, t_ahead) = segment_closest(prev, cur, Vec2::new(400.0, 0.0));
         assert_eq!(t_ahead, 1.0);
         assert!(d_ahead > HIT_RADIUS);
+    }
+}
+
+/// One resolver for every ship: an AI round into the PLAYER's hull, through
+/// the real check_projectile_hits.
+#[cfg(test)]
+mod shared_hit_tests {
+    use super::*;
+    use crate::ai_ship::components::AiShip;
+    use crate::building::ShipGrid;
+    use crate::combat::shields::ShipShield;
+    use crate::components::{HullLayer, HullMaterial};
+    use bevy::platform::collections::HashMap;
+
+    fn shield_down() -> ShipShield {
+        ShipShield {
+            current: 0.0, max: 0.0, base_max: 0.0, recharge_rate: 0.0, recharge_delay: 0.0,
+            since_hit: 999.0, radius: 400.0, center_offset: Vec2::ZERO, flash: 0.0, enabled: true,
+            surge: 0.0, arc_facing: 0.0, arc_half: std::f32::consts::PI, arc_traverse: 0.0, arc_active: false,
+        }
+    }
+
+    fn plate(cell: IVec2) -> HullSegment {
+        HullSegment {
+            health: 100.0, max_health: 100.0, radiation_shielding: 0.0, is_depressurized: false,
+            depressurization_level: 0.0, hull_layer: HullLayer::Outer, material: HullMaterial::Steel,
+            grid_position: cell,
+        }
+    }
+
+    /// A player ship with a row of plate at y = 0, x = 0..3; an AI gun; one
+    /// of its rounds about to cross cell (0, 0) head-on from below.
+    fn setup(god_mode: bool) -> (App, Entity, Vec<Entity>) {
+        let mut app = App::new();
+        app.insert_resource(crate::vfx::effect_textures::EffectTextures::empty());
+        app.init_resource::<crate::spatial::CreatureGrid>();
+        app.init_resource::<crate::building::rooms::RoomMap>();
+        app.insert_resource(crate::debug::DebugTuning { god_mode, ..default() });
+        app.add_message::<crate::events::AiShipDamaged>();
+        app.add_message::<crate::events::ShipDamaged>();
+        app.add_message::<crate::events::HullBreached>();
+        app.add_message::<crate::events::RoomDepressurized>();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, check_projectile_hits);
+
+        let player = app.world_mut()
+            .spawn((Ship, Transform::default(), GlobalTransform::default(), shield_down()))
+            .id();
+        let mut cells = HashMap::new();
+        let mut plates = Vec::new();
+        for x in 0..3 {
+            let cell = IVec2::new(x, 0);
+            let local = crate::building::grid_to_local(cell).extend(0.0);
+            let id = app.world_mut().spawn((
+                plate(cell), Transform::from_translation(local), GlobalTransform::from_translation(local), ChildOf(player),
+            )).id();
+            cells.insert(cell, id);
+            plates.push(id);
+        }
+        app.world_mut().entity_mut(player).insert(ShipGrid { cells });
+
+        let enemy = app.world_mut().spawn((AiShip, Transform::from_xyz(0.0, -5000.0, 0.0), GlobalTransform::default(), shield_down())).id();
+        let gun = app.world_mut().spawn(ChildOf(enemy)).id();
+        app.world_mut().spawn((
+            Sprite::default(),
+            Transform::from_translation(crate::building::grid_to_local(IVec2::new(0, 1)).extend(0.5)),
+            Projectile {
+                damage: 40.0, speed: 2000.0, lifetime: 1.0, max_lifetime: 1.0, owner: gun,
+                damage_type: ProjectileDamageType::Kinetic, penetration: 20.0, has_penetrated: false,
+                ammo: None, caliber: 1.0, last_hit: None,
+                // Last frame it was two cells below the row: this step crosses (0, 0).
+                prev_pos: crate::building::grid_to_local(IVec2::new(0, -2)),
+                bounces: 0,
+            },
+            Velocity(Vec2::new(0.0, 2000.0)),
+        ));
+        (app, player, plates)
+    }
+
+    #[test]
+    fn an_enemy_round_damages_the_player_plate_it_crosses_and_says_so() {
+        let (mut app, _, plates) = setup(false);
+        app.update();
+        let hp = app.world().get::<HullSegment>(plates[0]).unwrap().health;
+        assert!(hp < 100.0, "the plate on the round's line took the hit ({hp})");
+        assert_eq!(app.world().get::<HullSegment>(plates[1]).unwrap().health, 100.0, "its neighbour did not");
+        let hits: Vec<_> = app.world_mut().resource_mut::<Messages<crate::events::ShipDamaged>>().drain().collect();
+        assert_eq!(hits.len(), 1);
+        assert!(hits[0].applied, "already applied, so process_ship_damage won't apply it twice");
+        assert!(matches!(hits[0].source, crate::events::DamageSource::Gunfire));
+    }
+
+    #[test]
+    fn god_mode_spares_the_player() {
+        let (mut app, _, plates) = setup(true);
+        app.update();
+        assert_eq!(app.world().get::<HullSegment>(plates[0]).unwrap().health, 100.0);
     }
 }

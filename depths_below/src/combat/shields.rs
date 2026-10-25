@@ -625,34 +625,45 @@ pub fn refresh_player_shield_capacity(
 /// mask converts it into the (rotating) hull frame.
 pub fn update_player_shield_arc(
     time: Res<Time>,
-    mut ship_query: Query<(&Transform, &mut ShipShield), With<Ship>>,
+    mut ship_query: Query<(Entity, &Transform, &mut ShipShield), With<Ship>>,
     projectiles: Query<(&Transform, &Projectile)>,
+    // Ship guns, the AI's included, fire these; the legacy kind above is
+    // only creatures' now.
+    rounds: Query<(&Transform, &crate::combat::new_projectiles::Projectile, &crate::components::Velocity)>,
+    owners: Query<&ChildOf>,
 ) {
     let dt = time.delta_secs();
-    let Ok((ship_transform, mut shield)) = ship_query.single_mut() else { return };
+    let Ok((player, ship_transform, mut shield)) = ship_query.single_mut() else { return };
     let center = shield.world_center(ship_transform);
 
     // Most dangerous hostile shot heading at us; remember how close it is.
     let mut best: Option<(f32, f32, Vec2)> = None; // (damage, dist, pos)
-    for (t, proj) in projectiles.iter() {
-        if proj.owner.is_player() {
-            continue;
-        }
-        let p = t.translation.truncate();
+    let mut consider = |p: Vec2, heading: Vec2, damage: f32| {
         let to_ship = center - p;
         let dist = to_ship.length();
         if dist > SHIELD_ARC_TRACK_RANGE {
-            continue;
+            return;
         }
-        if proj.direction.dot(to_ship.normalize_or_zero()) <= 0.0 {
-            continue; // already flying past us
+        if heading.dot(to_ship.normalize_or_zero()) <= 0.0 {
+            return; // already flying past us
         }
         let better = match best {
             None => true,
-            Some((bd, bdist, _)) => proj.damage > bd || (proj.damage == bd && dist < bdist),
+            Some((bd, bdist, _)) => damage > bd || (damage == bd && dist < bdist),
         };
         if better {
-            best = Some((proj.damage, dist, p));
+            best = Some((damage, dist, p));
+        }
+    };
+    for (t, proj) in projectiles.iter() {
+        if !proj.owner.is_player() {
+            consider(t.translation.truncate(), proj.direction, proj.damage);
+        }
+    }
+    for (t, proj, velocity) in rounds.iter() {
+        let ours = owners.get(proj.owner).is_ok_and(|p| p.parent() == player);
+        if !ours {
+            consider(t.translation.truncate(), velocity.0.normalize_or_zero(), proj.damage);
         }
     }
 

@@ -653,6 +653,7 @@ fn apply_hazard_damage(
                         amount: damage,
                         position: Some(hazard_pos),
                         direction: Some((hazard_pos - ship_pos).normalize_or_zero()),
+                        applied: false,
                     });
                 }
 

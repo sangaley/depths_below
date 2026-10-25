@@ -915,6 +915,7 @@ pub fn check_missile_hits(
                     amount: if own { 0.0 } else { missile.damage },
                     position: Some(missile_pos_now),
                     direction: Some(from),
+                    applied: false,
                 });
                 notifications.write(ShowNotification {
                     message: if own {

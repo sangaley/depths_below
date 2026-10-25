@@ -91,6 +91,9 @@ pub(super) fn projectile_movement(
 
 /// Check projectile collisions — ammo-type aware.
 /// Torpedo/Bullet: single target. Charge: AoE hits all creatures in radius.
+// Only creatures fire this legacy round now. Ship guns, the AI's included,
+// fire new_projectiles::Projectile and are resolved by check_projectile_hits;
+// the AiShip-owner arms below no longer see a round.
 pub(super) fn projectile_collision(
     fx: Res<crate::vfx::effect_textures::EffectTextures>,
     mut commands: Commands,
@@ -376,6 +379,7 @@ pub(super) fn projectile_collision(
                         // blocks at the stern first instead of the bow
                         // blocks it actually hit.
                         direction: Some(-projectile.direction),
+                        applied: false,
                     });
 
                     notifications.write(ShowNotification {
