@@ -118,6 +118,10 @@
             <button id="rotate" type="button">Turn &#8635;</button>
             <span class="hint" id="rotname" style="align-self:center">North</span>
           </div>
+          <div class="row">
+            <label class="hint" style="align-self:center"><input type="checkbox" id="mirror"> Mirror top/bottom</label>
+          </div>
+          <p class="hint">Shift-drag: fill a rectangle (right button: clear one).</p>
           <p class="hint" id="sel">Hull plate</p>
           <p class="why" id="why" hidden></p>
         </div>
@@ -141,6 +145,11 @@
   var mods = new Map();      // "x,y" -> {t: type, r: 0..3}  (0 N, 1 E, 2 S, 3 W)
   var tool = { kind: "hull", value: "Outer" };
   var rot = 0;
+  // Shift-drag rectangle: its first corner and the cell under the pointer now.
+  var rect = null;
+  // Mirror across the ship's long axis, the game's own symmetry
+  // (building::symmetry::mirror_position: (x, y) -> (x, -y)).
+  var mirrorOn = false;
   var ROT_NAME = ["North", "East", "South", "West"];
   var shipKey = "pincer";
   var db = null, dirty = false, saving = false;
@@ -453,9 +462,21 @@
         ctx.fillRect((+p[0] - b.x0) * T, (b.y1 - +p[1]) * T, T, T);
       });
     }
+    if (rect) {
+      ctx.save();
+      ctx.strokeStyle = rect.erase ? "#e2543e" : "#7fe6ff";
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 4]);
+      rectsToApply().forEach(function (r) {
+        var x0 = Math.min(r.a.x, r.b.x), x1 = Math.max(r.a.x, r.b.x);
+        var y0 = Math.min(r.a.y, r.b.y), y1 = Math.max(r.a.y, r.b.y);
+        ctx.strokeRect((x0 - b.x0) * T + 1, (b.y1 - y1) * T + 1, (x1 - x0 + 1) * T - 2, (y1 - y0 + 1) * T - 2);
+      });
+      ctx.restore();
+    }
     // The pending placement, under the cursor: green where it will land,
     // red where it will not. Drawn last so it sits over everything.
-    if (hoverCell) {
+    if (hoverCell && !rect) {
       var v = check(hoverCell.x, hoverCell.y);
       ctx.save();
       ctx.fillStyle = v.ok ? "rgba(79,209,165,0.28)" : "rgba(226,84,62,0.32)";
@@ -559,17 +580,74 @@
     if (changed) { fit(); survey(); draw(); markDirty(); }
   }
 
+  // The game's mirror turns a block facing port to face starboard and leaves
+  // fore/aft alone: North <-> South, East and West stay.
+  function mirrorRot(r) { return r === 0 ? 2 : r === 2 ? 0 : r; }
+  // Where a module's mirror image has to be anchored: the origin whose
+  // footprint, turned the mirrored way, covers exactly the mirrored cells.
+  function mirrorModule(t, x, y, r) {
+    var want = cellsOf(t, x, y, r).map(function (c) { return key(c[0], -c[1]); }).sort().join("|");
+    var mr = mirrorRot(r);
+    for (var dx = -4; dx <= 4; dx++) for (var dy = -4; dy <= 4; dy++) {
+      var got = cellsOf(t, x + dx, -y + dy, mr).map(function (c) { return key(c[0], c[1]); }).sort().join("|");
+      if (got === want) return { x: x + dx, y: -y + dy, r: mr };
+    }
+    return null;
+  }
+  function applyMirrored(x, y, erase) {
+    apply(x, y, erase);
+    if (!mirrorOn || y === 0) return;
+    if (tool.kind === "mod" && !erase) {
+      var m = mirrorModule(tool.value, x, y, rot);
+      if (!m) return;
+      var keep = rot; rot = m.r; apply(m.x, m.y, false); rot = keep;
+    } else {
+      apply(x, -y, erase);
+    }
+  }
+  function rectsToApply() {
+    if (!rect) return [];
+    var out = [{ a: rect.a, b: rect.b }];
+    if (mirrorOn) out.push({ a: { x: rect.a.x, y: -rect.a.y }, b: { x: rect.b.x, y: -rect.b.y } });
+    return out;
+  }
+  // Fill (or clear) every cell of the rectangle, and its mirror. Hull tools
+  // and clearing only: a rectangle of reactors is never what anyone meant.
+  function applyRect() {
+    var changed = false;
+    rectsToApply().forEach(function (r) {
+      for (var x = Math.min(r.a.x, r.b.x); x <= Math.max(r.a.x, r.b.x); x++)
+        for (var y = Math.min(r.a.y, r.b.y); y <= Math.max(r.a.y, r.b.y); y++) {
+          if (rect.erase) { changed = removeAt(x, y) || changed; }
+          else if (hull.get(key(x, y)) !== tool.value) { hull.set(key(x, y), tool.value); changed = true; }
+        }
+    });
+    rect = null;
+    if (changed) { fit(); survey(); markDirty(); }
+    draw();
+  }
+
   var painting = 0;
   canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
   canvas.addEventListener("pointerdown", function (e) {
-    painting = e.button === 2 ? 2 : 1;
+    var c = cellFrom(e);
     canvas.setPointerCapture(e.pointerId);
-    var c = cellFrom(e); apply(c.x, c.y, painting === 2);
+    if (e.shiftKey && (tool.kind === "hull" || e.button === 2)) {
+      rect = { a: c, b: c, erase: e.button === 2 };
+      draw();
+      return;
+    }
+    painting = e.button === 2 ? 2 : 1;
+    applyMirrored(c.x, c.y, painting === 2);
   });
   var ghostQueued = false;
   canvas.addEventListener("pointermove", function (e) {
     var c = cellFrom(e);
-    if (painting) { apply(c.x, c.y, painting === 2); return; }
+    if (rect) {
+      if (rect.b.x !== c.x || rect.b.y !== c.y) { rect.b = c; draw(); }
+      return;
+    }
+    if (painting) { applyMirrored(c.x, c.y, painting === 2); return; }
     if (hoverCell && hoverCell.x === c.x && hoverCell.y === c.y) return;
     hoverCell = c;
     if (tool.kind === "mod") { var v = check(c.x, c.y); sayWhy(v.ok ? "" : v.why); }
@@ -578,7 +656,14 @@
     ghostQueued = true;
     requestAnimationFrame(function () { ghostQueued = false; draw(); });
   });
-  canvas.addEventListener("pointerup", function () { painting = 0; });
+  canvas.addEventListener("pointerup", function () {
+    painting = 0;
+    if (rect) applyRect();
+  });
+  document.getElementById("mirror").addEventListener("change", function (e) {
+    mirrorOn = e.target.checked;
+    draw();
+  });
 
   // ---- palette ---------------------------------------------------------
   var palHost = document.getElementById("pal");
