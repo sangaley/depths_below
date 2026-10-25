@@ -48,6 +48,7 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //   DEPTHS_FREEZE_AT=<secs> — stop the game clock then (ships hold their spawn slots).
 //   DEPTHS_FX_SCALE=<k> — shots and beams drawn k times bigger (wide fight shots).
 //   DEPTHS_NO_DAMAGE_TEXT=1 — no floating damage numbers.
+//   DEPTHS_NO_SHIELD_FX=1 — no shield outline glow or facing arcs (shields still work).
 //   DEPTHS_CAM_AT=<x>,<y> | station[>d] — point the camera there instead of at
 //                          the ship ("station": the nearest station core; ">d"
 //                          slides d units toward its world).
@@ -802,8 +803,9 @@ impl Plugin for DemoPlugin {
                 }
             });
         }
-        // DEPTHS_DOOM=<t1>,<t2>,...: at those real seconds the AI ship nearest the
-        // camera is taken apart through the game's own damage path -- a burst
+        // DEPTHS_DOOM=<t1>,<t2>,...: at those real seconds the AI ship in shot
+        // that's under fire and worst hurt (else the one nearest the camera)
+        // is taken apart through the game's own damage path -- a burst
         // of heavy hits on its blocks, then enough to gut it -- so a battle
         // filmed for seconds, not minutes, has ships dying the way they do in play.
         if let Ok(spec) = std::env::var("DEPTHS_DOOM") {
@@ -1256,17 +1258,20 @@ fn doom(
     while doom.times.first().is_some_and(|t| now >= *t) {
         doom.times.remove(0);
         let taken: Vec<Entity> = doom.active.iter().map(|a| a.0).collect();
-        let victim = ships
-            .iter()
-            .filter(|(e, _, _, st, _)| !st.is_destroyed && !taken.contains(e))
-            .min_by(|a, b| a.1.translation().truncate().distance(focus).total_cmp(&b.1.translation().truncate().distance(focus)));
-        if let Some((v, vt, vty, _, _)) = victim {
+        let alive = || ships.iter().filter(|(e, _, _, st, _)| !st.is_destroyed && !taken.contains(e));
+        // The ship in shot that's under fire and worst hurt, so the kill
+        // lands where the rounds have been landing; else the nearest one.
+        let victim = alive()
+            .filter(|(_, gt, _, st, _)| st.last_hit_timer < 2.0 && gt.translation().truncate().distance(focus) < 9_000.0)
+            .min_by(|a, b| a.3.hull_integrity.total_cmp(&b.3.hull_integrity))
+            .or_else(|| alive().min_by(|a, b| a.1.translation().truncate().distance(focus).total_cmp(&b.1.translation().truncate().distance(focus))));
+        if let Some((v, vt, vty, vst, _)) = victim {
             let at = vt.translation().truncate();
-            let attacker = ships
+            let attacker = vst.last_attacker.or_else(|| ships
                 .iter()
                 .filter(|(_, _, t, st, _)| !st.is_destroyed && crate::ai_ship::components::factions_hostile(**t, *vty))
                 .min_by(|a, b| a.1.translation().truncate().distance(at).total_cmp(&b.1.translation().truncate().distance(at)))
-                .map(|(e, ..)| e);
+                .map(|(e, ..)| e));
             info!("DOOM t={now:.1}: taking apart {:?} {:?}", v, vty);
             doom.active.push((v, attacker, now));
         }
@@ -1316,6 +1321,8 @@ struct RotTrack {
     dest: Option<Vec2>,
     dest_moved: f32,
     face: Option<f32>,
+    /// Total turn this window, either way (a ship spinning on the spot).
+    turned: f32,
 }
 
 fn rot_trace(
@@ -1350,6 +1357,7 @@ fn rot_trace(
             t.last_w = w;
         }
         t.max_w = t.max_w.max(w.abs());
+        t.turned += d.abs();
         t.last = a;
     }
     *acc += dt;
@@ -1370,10 +1378,20 @@ fn rot_trace(
                 t.flips, t.swing, t.max_w, vel.0.length(), to_dest.map(|d| d as i32), t.dest_moved, t.face.is_some()
             );
         }
+        if t.turned > 1.5 {
+            let to_dest = nav.destination.map(|d| d.distance(tf.translation.truncate()));
+            info!(
+                "ROT_TRACE spin {:?} {:?} {:?} role={} turned={:.1} speed={:.0} to_dest={:?} waypoints={} at={:?}",
+                e, ty, behavior,
+                member.map_or("solo", |m| if m.leader { "leader" } else { "escort" }),
+                t.turned, vel.0.length(), to_dest.map(|d| d as i32), nav.waypoints.len(), tf.translation.truncate().as_ivec2()
+            );
+        }
         t.flips = 0;
         t.max_w = 0.0;
         t.swing = 0.0;
         t.dest_moved = 0.0;
+        t.turned = 0.0;
     }
     info!("ROT_TRACE {} ships, {} nodding", ships.iter().count(), nodders);
 }
