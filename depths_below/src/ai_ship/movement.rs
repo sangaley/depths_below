@@ -93,6 +93,44 @@ pub(crate) fn heading_for(to_dest: Vec2, velocity: Vec2, current: f32) -> f32 {
     base + wrap(bearing - base) * k * k
 }
 
+/// The share of its top speed a ship wants `dist` from its point. It brakes
+/// into the point: at full speed to within a few units of it, a ship
+/// overshot, swung back, overshot again -- looping round its stop for good,
+/// the "ships just doing circles" at a station. An escort eases into its slot
+/// over a longer run. Not while fighting: a rammer means to hit.
+fn arrive_factor(dist: f32, max_speed: f32, settle: bool, engaging: bool) -> f32 {
+    if settle {
+        (dist / 600.0).min(1.0)
+    } else if engaging {
+        1.0
+    } else {
+        (dist / (max_speed * 0.3).max(250.0)).min(1.0)
+    }
+}
+
+/// Room a ship in a fight keeps between its hull and any other.
+const KEEP_CLEAR: f32 = 700.0;
+
+/// Which way, and how hard (0..1), a hull at `at` should ease off the others
+/// crowding it: away from each one closer than both radii plus KEEP_CLEAR,
+/// the harder the deeper it's in.
+fn keep_clear(me: Entity, at: Vec2, radius: f32, hulls: &[(Entity, Vec2, f32)]) -> Vec2 {
+    let mut push = Vec2::ZERO;
+    for &(other, center, r) in hulls {
+        if other == me {
+            continue;
+        }
+        let off = at - center;
+        let reach = radius + r + KEEP_CLEAR;
+        let d = off.length();
+        if d < reach {
+            let away = if d > 1.0 { off / d } else { Vec2::X };
+            push += away * (1.0 - d / reach);
+        }
+    }
+    push.clamp_length_max(1.0)
+}
+
 /// Within this of its point, a ship stops aiming its nose at the point.
 const NEAR: f32 = 1_200.0;
 
@@ -161,6 +199,15 @@ pub fn ai_ship_movement_system(
     let player_obstacle = player.single().ok().map(|(tf, c)| {
         (crate::ship::collision::world_point(tf, c.bound_center), c.bound_radius)
     });
+
+    // Every live AI hull, so ships in a fight can keep clear of each other.
+    let ai_hulls: Vec<(Entity, Vec2, f32)> = ai_ships
+        .iter()
+        .filter_map(|(e, tf, _, behavior, _, state, _, _, collider, ..)| {
+            let c = collider.filter(|_| *behavior != AiShipBehavior::Dead && !state.is_destroyed)?;
+            Some((e, crate::ship::collision::world_point(tf, c.bound_center), c.bound_radius))
+        })
+        .collect();
 
     for (_entity, mut transform, mut velocity, behavior, mut nav, state, ship_type, children, collider, member, escort, target) in ai_ships.iter_mut() {
         if *behavior == AiShipBehavior::Dead || state.is_destroyed {
@@ -364,7 +411,12 @@ pub fn ai_ship_movement_system(
                 let sway_sign = if bits & 1 == 0 { 1.0 } else { -1.0 };
                 let tangent = Vec2::new(-direction.y, direction.x) * sway_sign;
                 let sway = tangent * max_speed * 0.1 * (time.elapsed_secs() * 0.4 + phase).sin();
-                velocity.0 = velocity.0.lerp(radial + sway, vel_blend);
+                // And off any hull crowding its own: every ship holding on
+                // one target parked in the same spot, and a side became one
+                // heap of overlapping hulls. Now it spreads along its line.
+                let own_center = collider.map_or(pos, |c| crate::ship::collision::world_point(&transform, c.bound_center));
+                let spread = keep_clear(_entity, own_center, own_radius, &ai_hulls) * max_speed * 0.5;
+                velocity.0 = velocity.0.lerp(radial + sway + spread, vel_blend);
 
                 // Face the player — you're fine with this, and it reads natural
                 // for a ship holding station and trading fire.
@@ -391,7 +443,7 @@ pub fn ai_ship_movement_system(
                 };
 
                 // Gradually accelerate toward desired velocity
-                let arrive = if settle { (dist / 600.0).min(1.0) } else { 1.0 };
+                let arrive = arrive_factor(dist, max_speed, settle, *behavior == AiShipBehavior::Engaging);
                 let desired_vel = direction * max_speed * arrive;
                 velocity.0 = velocity.0.lerp(desired_vel, vel_blend);
 
@@ -507,6 +559,50 @@ mod heading_tests {
     }
 
     /// Stopped near its point, a ship holds the heading it has.
+    #[test]
+    fn a_ship_arriving_at_speed_settles_on_its_point() {
+        // The movement loop's own velocity rule, at 60 fps: a ship coming in
+        // fast and off-line must end up parked on its point, not looping it.
+        let max_speed = 1500.0;
+        let dt = 1.0 / 60.0;
+        let mut pos = Vec2::new(-4000.0, 300.0);
+        let mut vel = Vec2::new(max_speed, 0.0);
+        let mut closest = f32::MAX;
+        for _ in 0..(20.0 / dt) as usize {
+            let to = -pos;
+            let dist = to.length();
+            if dist > 5.0 {
+                let want = to / dist * max_speed * arrive_factor(dist, max_speed, false, false);
+                vel = vel.lerp(want, 1.0 - (-6.0_f32 * dt).exp());
+            } else {
+                vel *= (1.0 - 3.0 * dt).max(0.0);
+            }
+            vel *= 1.0 - 0.5 * dt;
+            pos += vel * dt;
+            closest = closest.min(pos.length());
+        }
+        // in the brain's waypoint radius (80), and stopped
+        assert!(pos.length() < 80.0, "ended {:.0} from its point", pos.length());
+        assert!(vel.length() < 60.0, "still moving at {:.0}", vel.length());
+        assert!(closest < 80.0);
+    }
+
+    #[test]
+    fn a_ship_eases_off_a_hull_crowding_it_and_ignores_far_ones() {
+        let mut world = World::new();
+        let (me, near, far) = (world.spawn_empty().id(), world.spawn_empty().id(), world.spawn_empty().id());
+        let hulls = [(me, Vec2::ZERO, 800.0), (near, Vec2::new(1000.0, 0.0), 800.0), (far, Vec2::new(0.0, 9000.0), 800.0)];
+        let push = keep_clear(me, Vec2::ZERO, 800.0, &hulls);
+        assert!(push.x < -0.3 && push.y.abs() < 1e-4, "{push}");
+        // alone, nothing to ease off from
+        assert_eq!(keep_clear(me, Vec2::ZERO, 800.0, &hulls[..1]), Vec2::ZERO);
+    }
+
+    #[test]
+    fn a_rammer_does_not_brake() {
+        assert_eq!(arrive_factor(50.0, 1500.0, false, true), 1.0);
+    }
+
     #[test]
     fn a_ship_at_rest_by_its_point_holds_heading() {
         let h = heading_for(Vec2::new(0.0, 40.0), Vec2::ZERO, 0.7);
