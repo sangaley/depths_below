@@ -118,6 +118,14 @@ pub fn init_world_simulation(
                 let spec = spec.trim();
                 let hold = spec.ends_with('!');
                 let spec = spec.trim_end_matches('!');
+                // "@dx,dy>tx,ty": fly from one offset to another and stop there.
+                let (spec, travel_to) = match spec.split_once('>') {
+                    Some((a, b)) => {
+                        let n: Vec<f32> = b.split(',').filter_map(|v| v.trim().parse().ok()).collect();
+                        (a, (n.len() >= 2).then(|| Vec2::new(n[0], n[1])))
+                    }
+                    None => (spec, None),
+                };
                 let (spec, place) = match spec.split_once('@') {
                     Some((a, b)) => {
                         let n: Vec<f32> = b.split(',').filter_map(|v| v.trim().parse().ok()).collect();
@@ -126,6 +134,12 @@ pub fn init_world_simulation(
                     None => (spec, None),
                 };
                 let (f, k) = spec.split_once(':').unwrap_or((spec, "Patrol"));
+                // A class key in place of a fleet kind ("MerchantPrinces:hauler"):
+                // that one ship, alone.
+                let solo: Option<&'static str> = match k.trim() {
+                    "BattleGroup" | "Convoy" | "StationGuard" | "Raiders" | "Patrol" => None,
+                    key => Some(Box::leak(key.to_string().into_boxed_str())),
+                };
                 let kind = match k.trim() {
                     "BattleGroup" => FleetKind::BattleGroup,
                     "Convoy" => FleetKind::Convoy,
@@ -158,14 +172,26 @@ pub fn init_world_simulation(
                     }
                     None => (start, heading, far),
                 };
-                match super::fleet::compose(faction, kind, &mut rng, &mut held) {
+                let (heading, far, hold) = match travel_to {
+                    Some(to) => {
+                        let to = centre + to;
+                        let d = to - start;
+                        (d.y.atan2(d.x), to, true)
+                    }
+                    None => (heading, far, hold),
+                };
+                let classes = match solo {
+                    Some(key) => Some(vec![(faction, Some(key))]),
+                    None => super::fleet::compose(faction, kind, &mut rng, &mut held),
+                };
+                match classes {
                     Some(classes) => {
                         let (mut fleet, members) = super::fleet::new_fleet(
                             faction, kind, &classes, 0, start, Vec2::ZERO, 40_000.0, &mut rng,
                         );
                         fleet.heading = heading;
                         fleet.destination = far;
-                        fleet.route = if hold { vec![start] } else { vec![far, start] };
+                        fleet.route = if travel_to.is_some() { vec![far] } else if hold { vec![start] } else { vec![far, start] };
                         info!("MOVETEST: {:?} {:?} fleet of {}: {:?}", faction, kind, members.len(), classes);
                         sim.add_fleet(fleet, members);
                     }

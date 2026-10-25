@@ -164,7 +164,15 @@ fn faction_difficulty(ship_type: AiShipType) -> (f32, f32) {
     let t = (super::components::faction_power(ship_type) / 8.0).clamp(0.0, 1.0);
     let health_mult = 1.0 + t * 1.5; // up to 2.5x hull HP for the toughest factions
     let damage_mult = 1.0 + t * 0.8; // up to 1.8x weapon damage for the toughest factions
-    (health_mult, damage_mult)
+    (health_mult, damage_mult * filming_damage())
+}
+
+/// DEPTHS_AI_DAMAGE=<k>: a filming switch -- AI weapons hit k times harder, so
+/// a battle filmed for a few seconds has ships going down in it. The shots
+/// and explosions are the game's own; only how many it takes changes. 1 in play.
+fn filming_damage() -> f32 {
+    static V: OnceLock<f32> = OnceLock::new();
+    *V.get_or_init(|| std::env::var("DEPTHS_AI_DAMAGE").ok().and_then(|v| v.parse().ok()).unwrap_or(1.0))
 }
 
 /// Color tint per AI ship type
@@ -451,7 +459,7 @@ pub fn spawn_ai_ship_with_design(
 
         // Tougher factions hit harder too — scale weapon damage by the same
         // danger factor (see faction_difficulty doc comment).
-        if damage_mult > 1.0 {
+        if damage_mult != 1.0 {
             if let CompanionData::Weapon { damage, range, fire_rate, ammo, .. } = &registry.get(mp.module_type).companion {
                 commands.entity(module_entity).insert(Weapon {
                     damage: damage * damage_mult,

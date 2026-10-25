@@ -215,7 +215,7 @@ fn spawn_camera(mut commands: Commands) {
 /// (nothing to dim) there was nothing to see at all, so the "cone" never
 /// actually read as a beam of light, just as things popping in and out.
 #[derive(Component)]
-struct LightConeVisual;
+pub(crate) struct LightConeVisual;
 
 /// Texture width used for the cone image — the apex sits at local x=0 (left
 /// edge) and radius 1.0 (i.e. the eventual `cone_range` after scaling) sits

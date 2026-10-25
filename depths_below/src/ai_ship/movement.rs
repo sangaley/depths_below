@@ -60,6 +60,16 @@ fn turn_toward(rotation: Quat, target_angle: f32, blend: f32, max_rate: f32, dt:
     Quat::from_rotation_z(current + step)
 }
 
+/// DEPTHS_STANDOFF_HULLS=1 (filming, for now): hold the firing distance hull
+/// to hull, adding the target's own size -- otherwise a big target is hugged.
+fn target_reach(target: Option<&AiShipTarget>, hulls: &Query<&crate::ship::collision::Collider>) -> f32 {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if !*ON.get_or_init(|| std::env::var("DEPTHS_STANDOFF_HULLS").ok().as_deref() == Some("1")) {
+        return 0.0;
+    }
+    target.and_then(|t| t.entity).and_then(|e| hulls.get(e).ok()).map_or(0.0, |c| c.bound_radius)
+}
+
 /// Where a ship heading for a point `to_dest` away should point its nose.
 ///
 /// Far off, at the point. Close in, the bearing to the point swings with every
@@ -129,7 +139,10 @@ pub fn ai_ship_movement_system(
         Option<&crate::ship::collision::Collider>,
         Option<&super::fleet::FleetMember>,
         Has<super::standing_spawns::PlayerEscort>,
+        Option<&AiShipTarget>,
     ), With<AiShip>>,
+    // The target's own size, for DEPTHS_STANDOFF_HULLS (see below).
+    hulls: Query<&crate::ship::collision::Collider>,
     engine_query: Query<(&Engine, &Module, &OwnedByAiShip)>,
     weapon_query: Query<(&Weapon, &Module, &OwnedByAiShip), Without<Engine>>,
     // Terrain look-ahead so ships swing around rocks/stations on their way
@@ -149,7 +162,7 @@ pub fn ai_ship_movement_system(
         (crate::ship::collision::world_point(tf, c.bound_center), c.bound_radius)
     });
 
-    for (_entity, mut transform, mut velocity, behavior, mut nav, state, ship_type, children, collider, member, escort) in ai_ships.iter_mut() {
+    for (_entity, mut transform, mut velocity, behavior, mut nav, state, ship_type, children, collider, member, escort, target) in ai_ships.iter_mut() {
         if *behavior == AiShipBehavior::Dead || state.is_destroyed {
             velocity.0 = Vec2::ZERO;
             continue;
@@ -323,7 +336,7 @@ pub fn ai_ship_movement_system(
             // held its "distance" with its own bow in your hull, shoving you
             // across the system. The standoff starts where its hull ends.
             let standoff = if standoff > 0.0 {
-                standoff + collider.map_or(0.0, |c| c.bound_radius)
+                standoff + collider.map_or(0.0, |c| c.bound_radius) + target_reach(target, &hulls)
             } else {
                 0.0
             };

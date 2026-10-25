@@ -500,6 +500,8 @@ impl Plugin for DemoPlugin {
         // the furthest out.
         if let Some(z) = std::env::var("DEPTHS_ZOOM").ok().and_then(|v| v.parse::<f32>().ok()) {
             app.add_systems(Update, move |mut cam: ResMut<crate::camera::CameraState>| {
+                // filming may go wider than play allows
+                cam.max_zoom = cam.max_zoom.max(z);
                 cam.zoom = z.clamp(cam.min_zoom, cam.max_zoom);
                 cam.user_zoomed = true;
             });
@@ -513,6 +515,7 @@ impl Plugin for DemoPlugin {
             app.add_systems(Update, move |time: Res<Time<Real>>, mut cam: ResMut<crate::camera::CameraState>| {
                 let t = ((time.elapsed_secs() - delay) / secs).clamp(0.0, 1.0);
                 let eased = t * t * (3.0 - 2.0 * t);
+                cam.max_zoom = cam.max_zoom.max(from.max(to));
                 cam.zoom = (from * (to / from).powf(eased)).clamp(cam.min_zoom, cam.max_zoom);
                 cam.user_zoomed = true;
             });
@@ -568,6 +571,19 @@ impl Plugin for DemoPlugin {
                     virt.set_relative_speed(0.0);
                 }
             });
+        }
+        // DEPTHS_HIDE_PLAYER=1 -- your own ship and its light cone out of the
+        // picture, for footage of the world going on without you.
+        if std::env::var("DEPTHS_HIDE_PLAYER").ok().as_deref() == Some("1") {
+            app.add_systems(
+                PostUpdate,
+                (|mut q: Query<&mut Visibility, Or<(With<crate::components::Ship>, With<crate::camera::LightConeVisual>, With<crate::world::home_base::BaseArrow>, With<crate::contracts::bounty_nav::BountyArrow>)>>| {
+                    for mut v in &mut q {
+                        *v = Visibility::Hidden;
+                    }
+                })
+                .before(bevy::camera::visibility::VisibilitySystems::VisibilityPropagate),
+            );
         }
         // DEPTHS_KEY_BG=1 -- empty space drawn pure green and the starfield
         // hidden, so footage can be keyed cleanly and given its own backdrop.
@@ -764,6 +780,35 @@ impl Plugin for DemoPlugin {
                 show_ships_whole.after(crate::ai_ship::interior::conceal_new_ai_interiors),
                 crate::vfx::ship_roof::update_ai_roofs,
             ));
+        }
+        // DEPTHS_KILL_TRACE=1: log every AI ship destroyed, with when and how.
+        if std::env::var("DEPTHS_KILL_TRACE").ok().as_deref() == Some("1") {
+            app.add_systems(Last, |time: Res<Time<Real>>,
+                                   mut kills: MessageReader<crate::events::AiShipDestroyed>,
+                                   mut fired: MessageReader<crate::events::WeaponFired>,
+                                   mut hits: MessageReader<crate::events::AiShipDamaged>,
+                                   mut tally: Local<(f32, u32, u32, f32)>| {
+                for k in kills.read() {
+                    info!("KILL_TRACE t={:.1} {:?} at {:?} cause {:?}", time.elapsed_secs(), k.ship_type, k.position, k.cause);
+                }
+                tally.1 += fired.read().filter(|f| !f.from_player).count() as u32;
+                for h in hits.read() {
+                    tally.2 += 1;
+                    tally.3 += h.amount;
+                }
+                if time.elapsed_secs() - tally.0 >= 2.0 {
+                    info!("KILL_TRACE fire: {} AI shots, {} hits, {:.0} damage in 2 s", tally.1, tally.2, tally.3);
+                    *tally = (time.elapsed_secs(), 0, 0, 0.0);
+                }
+            });
+        }
+        // DEPTHS_DOOM=<t1>,<t2>,...: at those real seconds the AI ship nearest the
+        // camera is taken apart through the game's own damage path -- a burst
+        // of heavy hits on its blocks, then enough to gut it -- so a battle
+        // filmed for seconds, not minutes, has ships dying the way they do in play.
+        if let Ok(spec) = std::env::var("DEPTHS_DOOM") {
+            let times: Vec<f32> = spec.split(',').filter_map(|v| v.trim().parse().ok()).collect();
+            app.insert_resource(Doom { times, active: Vec::new() }).add_systems(Update, doom);
         }
         if std::env::var("DEPTHS_ROT_TRACE").ok().as_deref() == Some("1") {
             app.add_systems(Last, rot_trace);
@@ -1189,6 +1234,72 @@ fn play_scripted_keys(
         script.held.push((key, now + hold));
         script.next += 1;
     }
+}
+
+#[derive(Resource)]
+struct Doom {
+    times: Vec<f32>,
+    /// (victim, attacker, started at)
+    active: Vec<(Entity, Option<Entity>, f32)>,
+}
+
+fn doom(
+    time: Res<Time<Real>>,
+    mut doom: ResMut<Doom>,
+    pin: Option<Res<crate::camera::CameraPin>>,
+    ships: Query<(Entity, &GlobalTransform, &crate::ai_ship::components::AiShipType, &crate::ai_ship::components::AiShipState, &Children), (With<AiShip>, Without<crate::diplomacy::FactionStation>)>,
+    blocks: Query<&GlobalTransform, Or<(With<crate::components::Module>, With<crate::components::HullSegment>)>>,
+    mut hits: MessageWriter<crate::events::AiShipDamaged>,
+) {
+    let now = time.elapsed_secs();
+    let focus = pin.and_then(|p| p.0).unwrap_or(Vec2::ZERO);
+    while doom.times.first().is_some_and(|t| now >= *t) {
+        doom.times.remove(0);
+        let taken: Vec<Entity> = doom.active.iter().map(|a| a.0).collect();
+        let victim = ships
+            .iter()
+            .filter(|(e, _, _, st, _)| !st.is_destroyed && !taken.contains(e))
+            .min_by(|a, b| a.1.translation().truncate().distance(focus).total_cmp(&b.1.translation().truncate().distance(focus)));
+        if let Some((v, vt, vty, _, _)) = victim {
+            let at = vt.translation().truncate();
+            let attacker = ships
+                .iter()
+                .filter(|(_, _, t, st, _)| !st.is_destroyed && crate::ai_ship::components::factions_hostile(**t, *vty))
+                .min_by(|a, b| a.1.translation().truncate().distance(at).total_cmp(&b.1.translation().truncate().distance(at)))
+                .map(|(e, ..)| e);
+            info!("DOOM t={now:.1}: taking apart {:?} {:?}", v, vty);
+            doom.active.push((v, attacker, now));
+        }
+    }
+    let mut rng = rand::thread_rng();
+    use rand::Rng;
+    doom.active.retain(|(v, attacker, started)| {
+        let Ok((_, gt, _, st, children)) = ships.get(*v) else { return false };
+        if st.is_destroyed {
+            return false;
+        }
+        let since = now - started;
+        let kids: Vec<Vec2> = children.iter().filter_map(|c| blocks.get(c).ok()).map(|g| g.translation().truncate()).collect();
+        if kids.is_empty() {
+            return false;
+        }
+        // a heavy hit every so often for a second and a half, then the end
+        if rng.gen_range(0.0..1.0) < 0.22 && since < 1.5 {
+            let p = kids[rng.gen_range(0..kids.len())];
+            hits.write(crate::events::AiShipDamaged {
+                target: *v, source: crate::events::DamageSource::Explosion, amount: 900.0,
+                position: Some(p), direction: None, attacker: *attacker,
+            });
+        }
+        if since >= 1.5 {
+            hits.write(crate::events::AiShipDamaged {
+                target: *v, source: crate::events::DamageSource::Explosion, amount: 1.0e7,
+                position: Some(gt.translation().truncate()), direction: None, attacker: *attacker,
+            });
+            return false;
+        }
+        true
+    });
 }
 
 /// DEPTHS_ROT_TRACE=1: every 2 s, log each AI ship whose nose reversed its
