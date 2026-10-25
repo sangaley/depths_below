@@ -336,8 +336,11 @@ pub fn is_launcher(module_type: ModuleType) -> bool {
 const MAX_PANEL_CELLS: usize = 1;
 
 /// Cells to walk before calling an exit path clear. Longer than the widest
-/// hull, so leaving the ship entirely is what ends the walk.
-pub const SILO_REACH: i32 = MAX_WALK_STEPS as i32;
+/// hull, so leaving the ship entirely is what ends the walk. It was tied to
+/// MAX_WALK_STEPS (24, a per-frame projectile bound that has nothing to do
+/// with hull size), so a silo deep in a capital more than 24 cells from its
+/// own bow was declared clear and fired through its own plating.
+pub const SILO_REACH: i32 = 256;
 
 /// First block sealing a launcher's exit path, if any.
 ///

@@ -92,8 +92,10 @@ impl NavGrid {
         if self.passable(from) {
             return Some(from);
         }
-        // Ships are ~20 cells across at the widest; this bound is generous.
-        const MAX_RING: i32 = 32;
+        // Generous for a capital: the biggest hulls run 60+ cells across
+        // (eternal_hegemony/citadel), and ships are meant to grow past that.
+        // A ring search only gets this far when someone is far off the deck.
+        const MAX_RING: i32 = 96;
         for ring in 1..=MAX_RING {
             let mut best: Option<(IVec2, i32)> = None;
             for dy in -ring..=ring {
