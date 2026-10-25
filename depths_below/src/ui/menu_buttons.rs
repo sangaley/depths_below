@@ -549,7 +549,9 @@ pub fn apply_display_settings(
         win.mode = desired_mode;
     }
 
-    let desired_present = if settings.vsync {
+    // A perf run (perf.rs) keeps vsync off whatever the settings say, or it
+    // measures the display's refresh instead of the frame.
+    let desired_present = if settings.vsync && !crate::perf::perf_mode() {
         PresentMode::AutoVsync
     } else {
         PresentMode::AutoNoVsync

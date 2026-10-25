@@ -27,6 +27,7 @@ mod debug;
 mod gamepad;
 mod tutorial;
 mod diplomacy;
+mod perf;
 
 use states::GameState;
 use events::EventsPlugin;
@@ -59,6 +60,13 @@ fn main() {
             primary_window: Some(Window {
                 title: "Depths Below - Into the Void".into(),
                 resolution: (1280, 720).into(),
+                // Perf runs (perf.rs) measure what a frame costs, so they
+                // must not be held to the display's refresh by vsync.
+                present_mode: if perf::perf_mode() {
+                    bevy::window::PresentMode::AutoNoVsync
+                } else {
+                    bevy::window::PresentMode::default()
+                },
                 ..default()
             }),
             // An offscreen run (DEPTHS_OFFSCREEN, unattended filming and
@@ -123,6 +131,7 @@ fn main() {
         .add_plugins(diplomacy::DiplomacyPlugin)
         .add_plugins(narrative::NarrativePlugin)
         .add_plugins(ship::towing::TowingPlugin)
+        .add_plugins(perf::PerfPlugin)
 
         .run();
 }
