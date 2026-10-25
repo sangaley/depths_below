@@ -76,6 +76,13 @@ impl ShipShield {
     }
 }
 
+/// DEPTHS_NO_SHIELD_FX=1 (filming): no shield outline glow and no facing
+/// arcs. The shields still block; only their drawing is off.
+fn shield_fx_hidden() -> bool {
+    static V: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *V.get_or_init(|| std::env::var("DEPTHS_NO_SHIELD_FX").ok().as_deref() == Some("1"))
+}
+
 /// Marker for the bubble visual (child sprite of the shielded ship)
 #[derive(Component)]
 pub struct ShieldBubble;
@@ -176,29 +183,28 @@ fn ship_cells(
 /// enough to erase the block-grid bumps so the shield contour reads as a single
 /// smooth curve rather than a stepped outline.
 fn box_blur(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
-    let ri = r as i32;
+    // A running sum along each row, then each column: the same clamped-edge
+    // box as summing all 2r+1 neighbours, but one add and one subtract per
+    // texel, not 2r+1. Station-sized skins (stations are built 3x) took the
+    // old loop most of a minute to blur.
     let norm = 1.0 / (2 * r + 1) as f32;
+    let pass = |get: &dyn Fn(usize) -> f32, n: usize, out: &mut dyn FnMut(usize, f32)| {
+        let at = |i: isize| get(i.clamp(0, n as isize - 1) as usize);
+        let ri = r as isize;
+        let mut sum: f32 = (-ri..=ri).map(at).sum();
+        for i in 0..n {
+            out(i, sum * norm);
+            let i = i as isize;
+            sum += at(i + ri + 1) - at(i - ri);
+        }
+    };
     let mut tmp = vec![0.0f32; w * h];
     for y in 0..h {
-        for x in 0..w {
-            let mut s = 0.0;
-            for k in -ri..=ri {
-                let xx = (x as i32 + k).clamp(0, w as i32 - 1) as usize;
-                s += src[y * w + xx];
-            }
-            tmp[y * w + x] = s * norm;
-        }
+        pass(&|x| src[y * w + x], w, &mut |x, v| tmp[y * w + x] = v);
     }
     let mut out = vec![0.0f32; w * h];
-    for y in 0..h {
-        for x in 0..w {
-            let mut s = 0.0;
-            for k in -ri..=ri {
-                let yy = (y as i32 + k).clamp(0, h as i32 - 1) as usize;
-                s += tmp[yy * w + x];
-            }
-            out[y * w + x] = s * norm;
-        }
+    for x in 0..w {
+        pass(&|y| tmp[y * w + x], h, &mut |y, v| out[y * w + x] = v);
     }
     out
 }
@@ -624,7 +630,7 @@ pub fn update_ai_shield_arcs(
         }
 
         // Faint arc showing the protected facing, brighter just after a block.
-        if shield.is_up() {
+        if shield.is_up() && !shield_fx_hidden() {
             let alpha = (0.12 + shield.flash * 0.5).min(0.8);
             let color = Color::srgba(0.5, 0.8, 1.0, alpha);
             let r = shield.radius;
@@ -659,7 +665,7 @@ pub fn update_shield_segment(
             continue;
         }
         // Off unless a shot's about to hit.
-        if !shield.is_up() || !shield.arc_active {
+        if !shield.is_up() || !shield.arc_active || shield_fx_hidden() {
             sprite.color = Color::srgba(0.5, 0.8, 1.0, 0.0);
             continue;
         }
@@ -752,7 +758,7 @@ pub fn update_shields(
         // in absorb, decays above). Player and AI alike.
         for child in children.iter() {
             if let Ok(mut sprite) = bubble_query.get_mut(child) {
-                let alpha = if shield.is_up() {
+                let alpha = if shield.is_up() && !shield_fx_hidden() {
                     let charge = if shield.max > 0.0 { shield.current / shield.max } else { 0.0 };
                     (0.12 + 0.18 * charge + shield.flash * SHIELD_FLASH_ALPHA).min(0.9)
                 } else {
@@ -760,6 +766,40 @@ pub fn update_shields(
                 };
                 sprite.color = Color::srgba(0.5, 0.8, 1.0, alpha);
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The running-sum blur matches summing every neighbour directly.
+    #[test]
+    fn the_fast_blur_matches_the_direct_one() {
+        fn direct(src: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
+            let ri = r as i32;
+            let norm = 1.0 / (2 * r + 1) as f32;
+            let mut tmp = vec![0.0f32; w * h];
+            for y in 0..h {
+                for x in 0..w {
+                    let s: f32 = (-ri..=ri).map(|k| src[y * w + (x as i32 + k).clamp(0, w as i32 - 1) as usize]).sum();
+                    tmp[y * w + x] = s * norm;
+                }
+            }
+            let mut out = vec![0.0f32; w * h];
+            for y in 0..h {
+                for x in 0..w {
+                    let s: f32 = (-ri..=ri).map(|k| tmp[(y as i32 + k).clamp(0, h as i32 - 1) as usize * w + x]).sum();
+                    out[y * w + x] = s * norm;
+                }
+            }
+            out
+        }
+        let (w, h, r) = (37, 23, 5);
+        let src: Vec<f32> = (0..w * h).map(|i| ((i * 7919) % 13) as f32 / 13.0).collect();
+        for (a, b) in box_blur(&src, w, h, r).iter().zip(&direct(&src, w, h, r)) {
+            assert!((a - b).abs() < 1e-4, "{a} vs {b}");
         }
     }
 }
