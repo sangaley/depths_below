@@ -140,10 +140,25 @@ pub fn part_mass_t(t: ModuleType) -> f32 {
 }
 pub const PLATE_MASS_T: f32 = 0.5;
 
+/// The hull cells a ring covers. From its real footprint: a square block
+/// laid with a turn still grows from its origin cell in the turned
+/// direction, so origin + (half, half) is only right facing North.
+pub fn ring_cells(ring: &Module) -> Vec<IVec2> {
+    crate::building::GridOccupancy::cells_for(
+        ring.grid_position,
+        ring.size,
+        ring.rotation,
+        crate::building::footprints::footprint_override(ring.module_type),
+    )
+    .into_iter()
+    .collect()
+}
+
 /// Where a turret body stands, ship-local: the centre of its ring.
 fn ring_centre(ring: &Module) -> (IVec2, Vec2) {
-    let half = (ring_size(ring.module_type) - 1) / 2;
-    let centre = ring.grid_position + IVec2::splat(half);
+    let cells = ring_cells(ring);
+    let sum = cells.iter().fold(IVec2::ZERO, |a, c| a + *c);
+    let centre = sum / cells.len().max(1) as i32;
     (centre, crate::building::grid_to_local(centre))
 }
 
@@ -269,10 +284,7 @@ pub fn traverse_turrets(
         }
         body.mass_t = mass;
         // Motors: Traverse Motor blocks on the hull deck touching the ring.
-        let ring_cells: Vec<IVec2> = rings
-            .get(body.ring)
-            .map(|r| (0..body.size).flat_map(|x| (0..body.size).map(move |y| r.grid_position + IVec2::new(x, y))).collect())
-            .unwrap_or_default();
+        let ring_cells: Vec<IVec2> = rings.get(body.ring).map(ring_cells).unwrap_or_default();
         let Ok((ship_gt, ship_children)) = ships.get(parent.parent()) else {
             // Not the player's ship: AI turrets aim with AI weapons later.
             continue;

@@ -51,17 +51,21 @@ mod tests {
         let mut checked = 0;
 
         let mut check = |label: &str, design: &crate::building::blueprint::Blueprint| {
-            let mut owner: HashMap<bevy::prelude::IVec2, crate::components::ModuleType> =
+            // Keyed by deck as well as cell: a block on a turret stands on
+            // that turret's own grid (ModuleExtras.turret), where (0, 0) is
+            // the ring's centre, not the hull's (0, 0).
+            let mut owner: HashMap<(Option<bevy::prelude::IVec2>, bevy::prelude::IVec2), crate::components::ModuleType> =
                 HashMap::new();
             for m in &design.modules {
                 let def = registry.get(m.module_type);
+                let deck = m.extras.as_ref().and_then(|e| e.turret);
                 for cell in ShipGrid::cells_for(
                     m.grid_pos,
                     def.size,
                     m.rotation,
                     footprint_override(m.module_type),
                 ) {
-                    if let Some(other) = owner.insert(cell, m.module_type) {
+                    if let Some(other) = owner.insert((deck, cell), m.module_type) {
                         panic!(
                             "{label}: {:?} at {:?} claims {cell:?}, already taken by {other:?}",
                             m.module_type, m.grid_pos
