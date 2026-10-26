@@ -371,7 +371,11 @@ pub(crate) fn is_in_firing_arc(
     match mount.mount_type {
         MountType::Turret => true,
         MountType::Fixed => {
-            let module_angle = ship_rotation + module_rotation.to_radians();
+            // facing_angle, not to_radians: module art points +Y, so
+            // to_radians is a quarter turn off the way the gun faces. A
+            // railgun laid facing the bow had its cone over the starboard
+            // side and refused anything dead ahead.
+            let module_angle = ship_rotation + module_rotation.facing_angle();
             let weapon_forward = Vec2::new(module_angle.cos(), module_angle.sin());
             let dot = weapon_forward.dot(direction_to_target.normalize_or_zero());
             dot >= (mount.firing_arc / 2.0).to_radians().cos()
@@ -402,7 +406,7 @@ pub(crate) fn clamp_to_firing_arc(
     let forward = match mount.mount_type {
         MountType::Turret => return aim_dir,
         MountType::Fixed => {
-            let angle = ship_rotation + module_rotation.to_radians();
+            let angle = ship_rotation + module_rotation.facing_angle();
             Vec2::new(angle.cos(), angle.sin())
         }
         MountType::Broadside => {
@@ -575,4 +579,27 @@ pub(super) fn weapon_is_crewed(
     efficiency: Option<&crate::components::ModuleEfficiency>,
 ) -> bool {
     !has_station || efficiency.is_some_and(|e| e.staffing_factor > 0.0)
+}
+
+#[cfg(test)]
+mod firing_arc_tests {
+    use super::*;
+
+    fn fixed(arc: f32) -> WeaponMount {
+        WeaponMount { mount_type: MountType::Fixed, firing_arc: arc }
+    }
+
+    #[test]
+    fn a_fixed_gun_laid_facing_the_bow_fires_over_the_bow() {
+        // Ship heading 0 = bow toward +x; East is the bow (Rotation::facing_offset).
+        assert!(is_in_firing_arc(0.0, &Rotation::East, &fixed(10.0), Vec2::X));
+        assert!(!is_in_firing_arc(0.0, &Rotation::East, &fixed(10.0), Vec2::NEG_Y), "not over the side");
+        assert!(is_in_firing_arc(0.0, &Rotation::North, &fixed(10.0), Vec2::Y));
+    }
+
+    #[test]
+    fn clamping_pulls_aim_back_inside_the_cone_around_the_facing() {
+        let out = clamp_to_firing_arc(0.0, &Rotation::East, &fixed(20.0), Vec2::Y);
+        assert!(out.x > 0.9, "clamped toward +x, the way it faces: {out:?}");
+    }
 }
