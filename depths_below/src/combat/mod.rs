@@ -26,6 +26,7 @@ pub mod recoil;
 pub mod limits;
 pub mod impact;
 pub mod gun_math;
+pub mod gun_assembly;
 
 /// Dev switch: no weapon consumes ammunition while true (player and AI).
 ///
@@ -476,6 +477,11 @@ impl Plugin for CombatPlugin {
                 shields::update_shields,
                 turrets::aim_turrets,
             ).run_if(in_state(GameState::Exploring)))
+            // Guns built from parts: re-worked out per ship when its layout
+            // changes, docked or flying, before the enhancer pass folds
+            // tuning into the numbers it writes.
+            .add_systems(Update, gun_assembly::assemble_guns
+                .before(crate::building::multiblock::enhancers::apply_weapon_enhancers))
             // Player weapons: kinetic projectiles + missiles (new physics system)
             .add_systems(Update, (
                 new_projectiles::fire_weapons_system,

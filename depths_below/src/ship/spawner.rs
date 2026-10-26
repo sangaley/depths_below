@@ -413,6 +413,7 @@ pub fn starts_active(module_type: ModuleType) -> bool {
             | ModuleCategory::Propulsion
             | ModuleCategory::LifeSupport
             | ModuleCategory::Weapons
+            | ModuleCategory::Guns
             | ModuleCategory::Detection
     ) || matches!(
         module_type,
@@ -773,6 +774,23 @@ pub fn spawn_module(
             ModuleType::ShieldEmitter => Some((BlockRole::ShieldEmitter, false)),
             _ => None,
         };
+
+        // A firing piece's numbers come from the gun built around it
+        // (combat::gun_assembly), which rewrites this snapshot whenever the
+        // ship's layout changes. It needs one from the start: the enhancer
+        // pass resets every weapon from its BaseWeaponStats before folding
+        // tuning in, and a weapon without one would compound its tuning
+        // every frame.
+        if module_type == ModuleType::FiringPiece {
+            if let CompanionData::Weapon { damage, range, fire_rate, ammo, .. } = &def.companion {
+                commands.entity(module_entity).insert(crate::building::multiblock::components::BaseWeaponStats {
+                    damage: *damage,
+                    range: *range,
+                    fire_rate: *fire_rate,
+                    max_ammo: *ammo,
+                });
+            }
+        }
 
         if let Some((role, is_core)) = machine_role {
             commands.entity(module_entity).insert(MachineBlock {

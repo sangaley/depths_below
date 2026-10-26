@@ -238,6 +238,16 @@ pub struct AimInput<'w, 's> {
     pub aim_lock: Res<'w, crate::combat::targeting::AimLock>,
 }
 
+/// DEPTHS_AIM_AT=<x>,<y> (ship-local units): where unattended runs aim.
+fn aim_at_override() -> Option<Vec2> {
+    static AT: std::sync::OnceLock<Option<Vec2>> = std::sync::OnceLock::new();
+    *AT.get_or_init(|| {
+        let v = std::env::var("DEPTHS_AIM_AT").ok()?;
+        let (x, y) = v.split_once(',')?;
+        Some(Vec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?))
+    })
+}
+
 pub fn fire_weapons_system(
     fx: Res<crate::vfx::effect_textures::EffectTextures>,
     aiming: AimInput,
@@ -261,6 +271,9 @@ pub fn fire_weapons_system(
     mut fired_events: MessageWriter<crate::events::WeaponFired>,
     mut commands: Commands,
     debug_tuning: Res<crate::debug::DebugTuning>,
+    // Guns built from parts: their velocity, spread, caliber, penetration and
+    // muzzle come from the parts (combat::gun_assembly), not the block type.
+    assemblies: Query<&crate::combat::gun_assembly::GunAssembly>,
 ) {
     let Ok((player_ship, ship_transform, ship_physics, ship_velocity)) = ship_query.single() else { return };
     let _dt = time.delta_secs();
@@ -283,7 +296,10 @@ pub fn fire_weapons_system(
     // the stick direction.
     let cursor_world = aiming.input_state.gamepad_aim
         .map(|dir| ship_transform.translation.truncate() + dir * 2000.0)
-        .or(cursor_world);
+        .or(cursor_world)
+        // DEPTHS_AIM_AT=<x>,<y>: a scripted run has no mouse; aim at this
+        // point ahead of the ship (ship-local, so it stays ahead as it moves).
+        .or_else(|| aim_at_override().map(|p| ship_transform.transform_point(p.extend(0.0)).truncate()));
 
     // Build module position list for adjacency checks -- OUR modules only.
     // Grid cells are ship-local, so an enemy's Targeting Computer at the
@@ -317,6 +333,7 @@ pub fn fire_weapons_system(
         // muddying what was actually happening.
         if !matches!(module.module_type,
             ModuleType::Cannon | ModuleType::Railgun | ModuleType::Coilgun | ModuleType::Gatling
+            | ModuleType::FiringPiece
         ) {
             continue;
         }
@@ -342,7 +359,12 @@ pub fn fire_weapons_system(
         // Check ammo
         if !crate::combat::INFINITE_AMMO && weapon.ammo <= 0 { continue; }
 
-        let weapon_pos = global_transform.translation().truncate();
+        let assembly = assemblies.get(entity).ok();
+        // A built gun fires from the end of its barrel, not from its breech.
+        let weapon_pos = match assembly {
+            Some(a) => ship_transform.transform_point(crate::building::grid_to_local(a.muzzle_cell).extend(0.0)).truncate(),
+            None => global_transform.translation().truncate(),
+        };
 
         // Aim at the selected target if there is one; otherwise dumb-fire at
         // the cursor. Never silently skip on range — an out-of-range target
@@ -420,8 +442,9 @@ pub fn fire_weapons_system(
         // ammo's own velocity profile (APFSDS darts fly, HEAT crawls).
         let tuning_vel = tuning.map(|t| t.velocity).unwrap_or(1.0);
         let ammo_vel = selected_ammo.map(|a| a.0.velocity_mult()).unwrap_or(1.0);
-        let proj_speed =
-            crate::building::customization::tuning::base_projectile_speed(module.module_type)
+        let proj_speed = assembly
+            .map(|a| a.stats.velocity_mps * crate::combat::gun_assembly::GAME_SPEED_PER_MPS)
+            .unwrap_or_else(|| crate::building::customization::tuning::base_projectile_speed(module.module_type))
             * tuning_vel * ammo_vel;
 
         // Get shooter velocity for relative prediction
@@ -444,7 +467,9 @@ pub fn fire_weapons_system(
             weapon_pos,
             prediction.aim_point,
             prediction.distance_accuracy * 0.85, // Distance degrades accuracy
-            10.0, // Max spread degrees at worst accuracy
+            // Max spread at worst accuracy: a built gun's own spread
+            // (barrel length, recoil, absorbers), otherwise 10 degrees.
+            assembly.map(|a| a.stats.spread_deg * 4.0).unwrap_or(10.0),
         );
 
         // Fire!
@@ -462,6 +487,7 @@ pub fn fire_weapons_system(
         // Loaded ammo drives damage type, per-round damage, and penetration.
         let (damage_type, ammo_damage_mult, penetration) =
             round_profile(selected_ammo.map(|a| a.0), module.module_type);
+        let penetration = assembly.map(|a| crate::combat::gun_assembly::penetration_for(&a.stats)).unwrap_or(penetration);
 
         // Spawn projectile(s)
         let burst_count = match module.module_type {
@@ -498,6 +524,11 @@ pub fn fire_weapons_system(
                 ModuleType::Cannon => (Vec2::new(38.0, 22.0), Color::srgb(1.0, 0.45, 0.05)), // big orange shell
                 ModuleType::Coilgun => (Vec2::new(24.0, 10.0), Color::srgb(0.6, 0.8, 1.0)),
                 ModuleType::Gatling => (Vec2::new(17.0, 7.0), Color::srgb(1.0, 0.85, 0.2)),
+                // Brass, sized by the shell: 170 mm is cannon-sized, 500 mm huge.
+                ModuleType::FiringPiece => {
+                    let g = assembly.map(|a| a.stats.gauge_mm).unwrap_or(150.0);
+                    (Vec2::new(18.0 + g * 0.12, 6.0 + g * 0.04), Color::srgb(1.0, 0.78, 0.4))
+                }
                 _ => (Vec2::new(17.0, 7.0), Color::srgb(0.8, 0.8, 0.4)),
             };
             // Loaded ammo recolors the round (AP brass, EMP blue, ...) so a
@@ -526,7 +557,8 @@ pub fn fire_weapons_system(
                     penetration,
                     has_penetrated: false,
                     ammo: selected_ammo.map(|a| a.0),
-                    caliber: caliber_scale(module.module_type),
+                    caliber: assembly.map(|a| crate::combat::gun_assembly::caliber_for(&a.stats))
+                        .unwrap_or_else(|| caliber_scale(module.module_type)),
                     last_hit: None,
                     prev_pos: weapon_pos,
                     bounces: 0,
@@ -546,6 +578,10 @@ pub fn fire_weapons_system(
             _ => Color::srgb(0.8, 0.8, 0.4),
         };
         spawn_muzzle_flash(&mut commands, &fx, weapon_pos + direction * 30.0, direction, 20.0, flash_color);
+        if let (Some(a), true) = (assembly, crate::combat::gun_assembly::trace()) {
+            info!("GUN fired {:?}: {:.0} mm at {:.0} u/s, {:.0} damage, next in {:.1} s",
+                entity, a.stats.gauge_mm, proj_speed, weapon.damage, 1.0 / weapon.fire_rate.max(1e-3));
+        }
     }
 }
 

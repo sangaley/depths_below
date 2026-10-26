@@ -81,7 +81,8 @@ fn absorber_reduction(
 /// System: calculate recoil when kinetic projectiles are spawned
 pub fn accumulate_projectile_recoil(
     new_projectiles: Query<(&Projectile, &Velocity, &Transform), Added<Projectile>>,
-    _weapon_query: Query<(&Module, &GlobalTransform), With<Weapon>>,
+    owners: Query<&ChildOf>,
+    guns: Query<&crate::combat::gun_assembly::GunAssembly>,
     ship_query: Query<(Entity, &Transform), With<Ship>>,
     recoil_absorber_query: Query<(&Module, &ChildOf), Without<DestroyedModule>>,
     mut recoil: ResMut<RecoilAccumulator>,
@@ -93,6 +94,11 @@ pub fn accumulate_projectile_recoil(
     let absorber_reduction = absorber_reduction(&recoil_absorber_query, player_ship);
 
     for (projectile, proj_velocity, proj_transform) in new_projectiles.iter() {
+        // Our own rounds only. AI guns fire this same Projectile now, and
+        // without this every enemy shot kicked the PLAYER's ship.
+        if !owners.get(projectile.owner).is_ok_and(|p| p.parent() == player_ship) {
+            continue;
+        }
         // Projectile momentum = damage as proxy for mass × velocity
         // Heavier rounds (more damage) create more recoil
         let projectile_mass = projectile.damage * 0.01; // Scale factor
@@ -102,8 +108,17 @@ pub fn accumulate_projectile_recoil(
         let proj_dir = proj_velocity.0.normalize_or_zero();
         let recoil_force = -proj_dir * projectile_mass * proj_speed;
 
-        // Apply absorber reduction
-        let final_force = recoil_force * absorber_reduction;
+        // A gun built from parts soaks its own recoil: each of ITS absorbers
+        // takes one unit of the recoil the shot makes (a muzzle brake has
+        // already halved that), and only what's left reaches the hull. Other
+        // guns use the ship-wide absorber count as before.
+        let reduction = match guns.get(projectile.owner) {
+            Ok(gun) if gun.stats.recoil > 0.0 => {
+                ((gun.stats.recoil - gun.parts.absorbers as f32) / gun.stats.recoil).clamp(0.15, 1.0)
+            }
+            _ => absorber_reduction,
+        };
+        let final_force = recoil_force * reduction;
 
         recoil.force += final_force;
 

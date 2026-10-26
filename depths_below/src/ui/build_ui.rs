@@ -694,6 +694,7 @@ pub fn update_module_tooltip(
     registry: Res<ModuleRegistry>,
     mouse: Res<ButtonInput<MouseButton>>,
     ship_query: Query<Entity, With<Ship>>,
+    guns: Query<&crate::combat::gun_assembly::GunAssembly>,
 ) {
     // Despawn old tooltip
     for entity in existing.iter() {
@@ -718,13 +719,27 @@ pub fn update_module_tooltip(
             } else {
                 String::new()
             };
-            let tooltip_text = format!(
+            let mut tooltip_text = format!(
                 "{} | HP:{:.0}/{:.0}{}",
                 module.module_type.name(),
                 module.health,
                 module.max_health,
                 power_str,
             );
+            // Part of a gun built from parts: say what the whole gun does,
+            // and the first thing wrong with it, while you're building it.
+            if let Some(gun) = guns.iter().find(|g| g.members.contains(&entity)) {
+                let st = &gun.stats;
+                tooltip_text.push_str(&format!(
+                    "\n{:.0} mm gun | {:.0} m/s | {:.0} dmg | {:.1} rpm | {} loader{} | barrel {} m",
+                    st.gauge_mm, st.velocity_mps, st.damage, st.rpm,
+                    st.working_loaders, if st.working_loaders == 1 { "" } else { "s" },
+                    gun.parts.barrel_m,
+                ));
+                if let Some(problem) = gun.problems.first() {
+                    tooltip_text.push_str(&format!("\n{}", problem));
+                }
+            }
 
             commands.spawn((
                 Text2d::new(tooltip_text),

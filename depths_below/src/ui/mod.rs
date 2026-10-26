@@ -1224,6 +1224,18 @@ fn weapon_rack_name(m: ModuleType) -> &'static str {
     }
 }
 
+/// A gun built from parts is named by its gauge. Gauge only comes in nine
+/// sizes (60 mm + 55 mm per increaser, up to 500), so each has a fixed name
+/// and guns of one size stack in the rack like any other weapon.
+fn built_gun_rack_name(gauge_mm: f32) -> &'static str {
+    const NAMES: [&str; 9] = [
+        "60 mm Gun", "115 mm Gun", "170 mm Gun", "225 mm Gun", "280 mm Gun",
+        "335 mm Gun", "390 mm Gun", "445 mm Gun", "500 mm Gun",
+    ];
+    let i = ((gauge_mm - crate::combat::gun_math::BASE_GAUGE_MM) / crate::combat::gun_math::GAUGE_PER_INCREASER_MM).round();
+    NAMES[(i.max(0.0) as usize).min(NAMES.len() - 1)]
+}
+
 /// What one rack row says about a stack of identical weapons.
 #[derive(Debug, Clone, PartialEq)]
 struct RackLine {
@@ -1293,7 +1305,8 @@ fn rack_line(name: &str, weapons: &[RackWeapon]) -> RackLine {
 fn update_weapon_rack(
     rack_root: Query<Entity, With<WeaponRackRoot>>,
     ship_query: Query<Entity, With<Ship>>,
-    weapon_query: Query<(&Module, &Weapon, Option<&WeaponCooldown>, Option<&crate::combat::targeting::fire_groups::FireGroup>, &ChildOf, Option<&ModuleTemperature>)>,
+    weapon_query: Query<(Entity, &Module, &Weapon, Option<&WeaponCooldown>, Option<&crate::combat::targeting::fire_groups::FireGroup>, &ChildOf, Option<&ModuleTemperature>)>,
+    assemblies: Query<&crate::combat::gun_assembly::GunAssembly>,
     rows: Query<(Entity, &WeaponRackRow)>,
     mut texts: Query<(&mut Text, &mut TextColor), With<WeaponRackDynText>>,
     mut bars: Query<(&mut Node, &mut BackgroundColor), With<WeaponRackBarFill>>,
@@ -1306,7 +1319,7 @@ fn update_weapon_rack(
     let Ok(player) = ship_query.single() else { return };
 
     let mut stacks: std::collections::BTreeMap<(u8, &'static str), Vec<RackWeapon>> = std::collections::BTreeMap::new();
-    for (module, weapon, cd, fg, parent, temp) in weapon_query.iter() {
+    for (entity, module, weapon, cd, fg, parent, temp) in weapon_query.iter() {
         if parent.parent() != player { continue; }
         // The tractor beam carries a Weapon for its reach, but it's the tow
         // tool (Y), not a gun -- it sat in the rack as a row called "Weapon".
@@ -1324,7 +1337,13 @@ fn update_weapon_rack(
             }
         };
         stacks
-            .entry((fg.map(|f| f.group).unwrap_or(0), weapon_rack_name(module.module_type)))
+            .entry((
+                fg.map(|f| f.group).unwrap_or(0),
+                match assemblies.get(entity) {
+                    Ok(a) => built_gun_rack_name(a.stats.gauge_mm),
+                    Err(_) => weapon_rack_name(module.module_type),
+                },
+            ))
             .or_default()
             .push(RackWeapon { frac, ready, remaining, ammo: weapon.ammo, max: weapon.max_ammo, alive: module.health > 0.0 });
     }
@@ -6789,5 +6808,17 @@ mod galaxy_map_tests {
         let ringed = rings.iter(app.world()).filter(|n| n.border.left == Val::Px(2.0)).count();
         let haunts = map.systems.iter().filter(|s| s.haunt.is_some()).count();
         assert_eq!(ringed, crate::celestial::territory::TERRITORIAL.len() + haunts);
+    }
+}
+
+#[cfg(test)]
+mod built_gun_name_tests {
+    use super::*;
+
+    #[test]
+    fn a_built_gun_is_named_by_its_gauge() {
+        assert_eq!(built_gun_rack_name(60.0), "60 mm Gun");
+        assert_eq!(built_gun_rack_name(280.0), "280 mm Gun");
+        assert_eq!(built_gun_rack_name(500.0), "500 mm Gun");
     }
 }

@@ -1359,7 +1359,7 @@ pub fn build_registry() -> ModuleRegistry {
             damage: 10.0, range: 6000.0, fire_rate: 0.2, ammo: 40,
             mount_type: MountType::Fixed, ammo_type: AmmoType::Bullet,
         }, customizable: false, cost: 60,
-        base_stats: CalculatedStats::default(), crew_station: true,
+        base_stats: CalculatedStats::default(), crew_station: false,
     });
 
     defs.insert(ModuleType::GaugeIncreaser, ModuleDef {
