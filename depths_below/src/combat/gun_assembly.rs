@@ -35,6 +35,31 @@ pub struct GunAssembly {
     /// Ship-local cell the round leaves from: just past the last barrel.
     pub muzzle_cell: IVec2,
     pub feeders: u32,
+    /// Magazines this gun's feeders reach (directly or along belt
+    /// conveyors), and the shells of them that are this gun's share.
+    pub magazines: Vec<Entity>,
+    pub magazine_shells: u32,
+    /// Shells a minute the feeders can bring up from the magazines. Zero
+    /// with no magazine reached.
+    pub feed_rpm: f32,
+}
+
+impl GunAssembly {
+    /// Every shell the gun can carry: its ready rack plus its share of the
+    /// magazines behind it.
+    pub fn max_ammo(&self) -> u32 {
+        self.stats.ready_rack + self.magazine_shells
+    }
+}
+
+/// A gun's ready rack as it empties and refills: shells in the loaders and
+/// clips right now. While there are any the gun fires at its loaders' pace;
+/// with the rack empty it can only fire as fast as the feeders bring shells
+/// up from the magazine. War Thunder's first-stage rack.
+#[derive(Component, Clone, Copy, Debug, Default)]
+pub struct GunRack {
+    pub ready: f32,
+    pub last_ammo: u32,
 }
 
 /// DEPTHS_GUN_TRACE=1: log each gun as it is assembled, and each shot.
@@ -49,6 +74,10 @@ pub fn trace() -> bool {
 pub const GAME_SPEED_PER_MPS: f32 = 3.0;
 /// The arc a spinal gun can fire in: it has no turret, you aim the ship.
 pub const SPINAL_ARC_DEG: f32 = 8.0;
+/// Metres of shell one Magazine block holds: big shells eat storage.
+pub const MAGAZINE_SHELL_M: f32 = 20.0;
+/// Shells a minute one Shell Feeder brings up from a magazine.
+pub const FEEDER_RPM: f32 = 40.0;
 
 pub fn range_for(stats: &GunStats) -> f32 {
     4000.0 + stats.velocity_mps * 4.0
@@ -275,10 +304,91 @@ pub fn assemble(modules: &[(Entity, Module)]) -> Vec<(Entity, GunAssembly)> {
         }
 
         let muzzle_cell = barrel.last().copied().unwrap_or(cell + if mantlet { dir } else { IVec2::ZERO }) + dir;
-        out.push((fp, GunAssembly { parts, stats, members, problems, muzzle_cell, feeders }));
+
+        // Magazines: from each feeder, along belt conveyors, to any magazine.
+        let mut reached: Vec<IVec2> = Vec::new();
+        let mut seen_belt: HashSet<IVec2> = HashSet::new();
+        let mut belt: VecDeque<IVec2> = mine.iter().copied().filter(|c| kind(c) == Some(ModuleType::ShellFeeder)).collect();
+        while let Some(c) = belt.pop_front() {
+            for step in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
+                let n = c + step;
+                match kind(&n) {
+                    Some(ModuleType::Magazine) if !reached.contains(&n) => reached.push(n),
+                    Some(ModuleType::BeltConveyor) if seen_belt.insert(n) => belt.push_back(n),
+                    _ => {}
+                }
+            }
+        }
+        reached.sort_by_key(|c| (c.x, c.y));
+        let magazines: Vec<Entity> = reached.iter().filter_map(|c| at.get(c).map(|(e, _, _)| *e)).collect();
+        let feed_rpm = if magazines.is_empty() { 0.0 } else { FEEDER_RPM * feeders as f32 };
+        out.push((fp, GunAssembly { parts, stats, members, problems, muzzle_cell, feeders, magazines, magazine_shells: 0, feed_rpm }));
+    }
+
+    // Share each magazine between the guns that draw on it, in shells of
+    // each gun's own size.
+    let mut users: HashMap<Entity, u32> = HashMap::new();
+    for (_, g) in &out {
+        for m in &g.magazines {
+            *users.entry(*m).or_default() += 1;
+        }
+    }
+    for (_, g) in out.iter_mut() {
+        let metres: f32 = g.magazines.iter().map(|m| MAGAZINE_SHELL_M / users[m] as f32).sum();
+        g.magazine_shells = if g.stats.shell_m > 0.0 { (metres / g.stats.shell_m).floor() as u32 } else { 0 };
+        if g.stats.working_loaders > 0 {
+            if g.feeders == 0 {
+                g.problems.push(format!(
+                    "No Shell Feeder: only the {} shells in the ready rack, then nothing until you rearm.",
+                    g.stats.ready_rack
+                ));
+            } else if g.magazines.is_empty() {
+                g.problems.push("The feeders reach no Magazine. Put one beside a feeder, or run a Belt Conveyor to one.".to_string());
+            }
+        }
     }
     out
 }
+
+/// Keep each built gun's ready rack: refill it from the magazines at the
+/// feeders' pace, spend it as the gun fires, and hold the gun to the feed
+/// rate once it's empty.
+pub fn run_gun_racks(
+    time: Res<Time>,
+    mut commands: Commands,
+    mut guns: Query<(Entity, &GunAssembly, &crate::components::Weapon, &mut BaseWeaponStats, Option<&mut GunRack>)>,
+) {
+    let dt = time.delta_secs();
+    for (entity, gun, weapon, mut base, rack) in guns.iter_mut() {
+        let rack_max = gun.stats.ready_rack as f32;
+        let Some(mut rack) = rack else {
+            commands.entity(entity).try_insert(GunRack { ready: rack_max.min(weapon.ammo as f32), last_ammo: weapon.ammo });
+            continue;
+        };
+        // Shots fired since last frame come out of the rack first.
+        if weapon.ammo < rack.last_ammo {
+            rack.ready = (rack.ready - (rack.last_ammo - weapon.ammo) as f32).max(0.0);
+        }
+        rack.last_ammo = weapon.ammo;
+        // The feeders top it up, from what's left in the magazines.
+        let behind = weapon.ammo as f32 - rack.ready;
+        if behind > 0.0 {
+            rack.ready = (rack.ready + gun.feed_rpm / 60.0 * dt).min(rack_max).min(weapon.ammo as f32);
+        }
+        let rpm = if rack.ready >= 1.0 { gun.stats.rpm } else { gun.stats.rpm.min(gun.feed_rpm) };
+        let rate = (rpm / 60.0).max(0.0);
+        if (base.fire_rate - rate).abs() > 1e-4 {
+            base.fire_rate = rate;
+        }
+    }
+}
+
+/// A firing piece that has never been assembled still carries the registry's
+/// placeholder magazine; the first assembly fills it to the real size.
+fn newly_spawned(weapon: &crate::components::Weapon) -> bool {
+    weapon.max_ammo == FIRING_PIECE_PLACEHOLDER_AMMO
+}
+pub const FIRING_PIECE_PLACEHOLDER_AMMO: u32 = 40;
 
 /// Re-assemble a ship's guns when its layout changes, and hand the numbers
 /// to the firing piece's weapon.
@@ -286,7 +396,7 @@ pub fn assemble_guns(
     mut commands: Commands,
     ships: Query<(Entity, &LayoutVersion, Option<&Children>)>,
     modules: Query<&Module, Without<DestroyedModule>>,
-    mut firing: Query<(&mut BaseWeaponStats, &mut WeaponMount)>,
+    mut firing: Query<(&mut BaseWeaponStats, &mut WeaponMount, &mut crate::components::Weapon)>,
     epoch: Res<LayoutEpoch>,
     mut seen_epoch: Local<Option<LayoutEpoch>>,
     mut built: Local<BuiltFrom>,
@@ -310,10 +420,14 @@ pub fn assemble_guns(
             continue;
         }
         for (fp, assembly) in assemble(&mods) {
-            if let Ok((mut base, mut mount)) = firing.get_mut(fp) {
+            if let Ok((mut base, mut mount, mut weapon)) = firing.get_mut(fp) {
                 base.damage = assembly.stats.damage;
                 base.range = range_for(&assembly.stats);
                 base.fire_rate = (assembly.stats.rpm / 60.0).max(0.0);
+                // A magazine shot off takes its shells with it.
+                let was_full = weapon.ammo >= base.max_ammo;
+                base.max_ammo = assembly.max_ammo();
+                weapon.ammo = if was_full && newly_spawned(&weapon) { base.max_ammo } else { weapon.ammo.min(base.max_ammo) };
                 mount.firing_arc = SPINAL_ARC_DEG;
             }
             if trace() {
@@ -375,6 +489,8 @@ mod gun_assembly_tests {
             (GunBarrel, 2, 0, East),
             (GunBarrel, 3, 0, East),
             (GunBarrel, 4, 0, East),
+            (ShellFeeder, -3, 0, East),
+            (Magazine, -4, 0, East),
         ])
     }
 
@@ -390,7 +506,7 @@ mod gun_assembly_tests {
         assert_eq!(g.stats.gauge_mm, 170.0);
         assert!(g.stats.rpm > 0.0);
         assert_eq!(g.muzzle_cell, IVec2::new(5, 0));
-        assert_eq!(g.members.len(), 10);
+        assert_eq!(g.members.len(), 11, "the magazine isn't part of the gun");
         assert!(g.problems.is_empty(), "{:?}", g.problems);
     }
 
@@ -441,10 +557,99 @@ mod gun_assembly_tests {
     }
 
     #[test]
+    fn a_magazine_behind_the_feeder_adds_shells_by_size() {
+        let g = &assemble(&small_gun())[0].1;
+        assert_eq!(g.magazines.len(), 1);
+        // 20 m of 0.51 m shells.
+        assert_eq!(g.magazine_shells, 39);
+        assert_eq!(g.feed_rpm, FEEDER_RPM);
+        assert_eq!(g.max_ammo(), g.stats.ready_rack + 39);
+    }
+
+    #[test]
+    fn belt_conveyors_carry_the_feed_to_a_distant_magazine() {
+        let mut s = small_gun();
+        s.retain(|(_, m)| m.module_type != Magazine);
+        let next = |i: u32| Entity::from_raw_u32(200 + i).unwrap();
+        s.push((next(0), m(BeltConveyor, -4, 0, East)));
+        s.push((next(1), m(BeltConveyor, -5, 0, East)));
+        s.push((next(2), m(Magazine, -6, 0, East)));
+        let g = &assemble(&s)[0].1;
+        assert_eq!(g.magazines, vec![next(2)]);
+    }
+
+    #[test]
+    fn two_guns_on_one_magazine_split_it() {
+        let s = ship(&[
+            (FiringPiece, 0, 0, East), (Loader, -1, 0, East), (ShellFeeder, -2, 0, East),
+            (Magazine, -3, 1, East),
+            (FiringPiece, 0, 2, East), (Loader, -1, 2, East), (ShellFeeder, -2, 2, East),
+            (BeltConveyor, -3, 0, East), (BeltConveyor, -3, 2, East),
+        ]);
+        let guns = assemble(&s);
+        assert!(guns.iter().all(|(_, g)| g.magazines.len() == 1));
+        // 10 m each of 0.18 m shells (60 mm gauge).
+        assert!(guns.iter().all(|(_, g)| g.magazine_shells == 55), "{:?}", guns.iter().map(|g| g.1.magazine_shells).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn no_feeder_means_only_the_ready_rack() {
+        let mut s = small_gun();
+        s.retain(|(_, m)| m.module_type != ShellFeeder);
+        let g = &assemble(&s)[0].1;
+        assert_eq!(g.magazine_shells, 0);
+        assert_eq!(g.max_ammo(), g.stats.ready_rack);
+        assert!(g.problems.iter().any(|p| p.contains("No Shell Feeder")));
+    }
+
+    #[test]
     fn a_gun_with_nothing_to_load_it_says_so() {
         let s = ship(&[(FiringPiece, 0, 0, North), (GunBarrel, 0, 1, North)]);
         let g = &assemble(&s)[0].1;
         assert_eq!(g.stats.rpm, 0.0);
         assert!(g.problems.iter().any(|p| p.contains("No loader")));
+    }
+}
+
+#[cfg(test)]
+mod gun_rack_tests {
+    use super::*;
+    use crate::components::Weapon;
+
+    /// A gun whose loaders could fire 60 a minute but whose one slow feeder
+    /// brings up only 20: three shells ready, ten aboard.
+    fn app() -> (App, Entity) {
+        let mut app = App::new();
+        app.init_resource::<Time>();
+        app.add_systems(Update, run_gun_racks);
+        let mut gun = GunAssembly::default();
+        gun.stats.rpm = 60.0;
+        gun.stats.ready_rack = 3;
+        gun.feed_rpm = 20.0;
+        let weapon = Weapon { damage: 1.0, range: 1.0, fire_rate: 1.0, ammo: 10, max_ammo: 10 };
+        let e = app.world_mut().spawn((gun, weapon, BaseWeaponStats { damage: 1.0, range: 1.0, fire_rate: 1.0, max_ammo: 10 })).id();
+        app.update(); // fits the rack
+        (app, e)
+    }
+
+    fn rate(app: &App, e: Entity) -> f32 {
+        app.world().get::<BaseWeaponStats>(e).unwrap().fire_rate
+    }
+
+    fn advance(app: &mut App, secs: f32) {
+        app.world_mut().resource_mut::<Time>().advance_by(std::time::Duration::from_secs_f32(secs));
+        app.update();
+    }
+
+    #[test]
+    fn the_rack_lets_the_gun_fire_at_its_loaders_pace_until_it_empties() {
+        let (mut app, e) = app();
+        advance(&mut app, 0.01);
+        assert!((rate(&app, e) - 1.0).abs() < 1e-4, "60 rpm while the rack is full");
+        app.world_mut().get_mut::<Weapon>(e).unwrap().ammo = 7; // three shots
+        advance(&mut app, 0.01);
+        assert!((rate(&app, e) - 20.0 / 60.0).abs() < 1e-3, "rack empty: held to the feed");
+        advance(&mut app, 3.5); // 20 rpm refills one shell every 3 s
+        assert!((rate(&app, e) - 1.0).abs() < 1e-4, "a shell back in the rack: full pace again");
     }
 }

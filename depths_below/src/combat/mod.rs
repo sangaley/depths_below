@@ -480,7 +480,7 @@ impl Plugin for CombatPlugin {
             // Guns built from parts: re-worked out per ship when its layout
             // changes, docked or flying, before the enhancer pass folds
             // tuning into the numbers it writes.
-            .add_systems(Update, gun_assembly::assemble_guns
+            .add_systems(Update, (gun_assembly::assemble_guns, gun_assembly::run_gun_racks).chain()
                 .before(crate::building::multiblock::enhancers::apply_weapon_enhancers))
             // Player weapons: kinetic projectiles + missiles (new physics system)
             .add_systems(Update, (

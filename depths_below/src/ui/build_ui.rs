@@ -731,10 +731,10 @@ pub fn update_module_tooltip(
             if let Some(gun) = guns.iter().find(|g| g.members.contains(&entity)) {
                 let st = &gun.stats;
                 tooltip_text.push_str(&format!(
-                    "\n{:.0} mm gun | {:.0} m/s | {:.0} dmg | {:.1} rpm | {} loader{} | barrel {} m",
+                    "\n{:.0} mm gun | {:.0} m/s | {:.0} dmg | {:.1} rpm | {} loader{} | barrel {} m | {} shells ({} ready)",
                     st.gauge_mm, st.velocity_mps, st.damage, st.rpm,
                     st.working_loaders, if st.working_loaders == 1 { "" } else { "s" },
-                    gun.parts.barrel_m,
+                    gun.parts.barrel_m, gun.max_ammo(), st.ready_rack,
                 ));
                 if let Some(problem) = gun.problems.first() {
                     tooltip_text.push_str(&format!("\n{}", problem));

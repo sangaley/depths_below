@@ -4903,7 +4903,14 @@ struct RackAmmo {
     max: u32,
     loaded: Option<crate::combat::ammo_types::KineticAmmoType>,
     kind: ModuleType,
+    /// Damage per round, which prices a gun built from parts: its shell grows
+    /// with the square of its gauge, and so does what it does.
+    damage: f32,
 }
+
+/// Credits per point of a built gun's shell damage: a 170 mm shell ~2c,
+/// 280 mm ~5c, 500 mm ~18c, next to a cannon shell's 1.5c.
+const BUILT_SHELL_PRICE_PER_DAMAGE: f32 = 0.02;
 
 impl RackAmmo {
     /// Rounds short of a full magazine. Power-fed guns have no magazine to buy.
@@ -4913,6 +4920,11 @@ impl RackAmmo {
     /// What one round for this gun costs here, its load and the station's
     /// discount included.
     fn round_cost(&self, discount: f32) -> f32 {
+        if self.kind == ModuleType::FiringPiece {
+            let type_mult = crate::combat::ammo_types::rearm_price(ModuleType::Cannon, self.loaded, 1)
+                / crate::combat::ammo_types::rearm_price(ModuleType::Cannon, None, 1);
+            return self.damage * BUILT_SHELL_PRICE_PER_DAMAGE * type_mult * discount;
+        }
         crate::combat::ammo_types::rearm_price(self.kind, self.loaded, 1) * discount
     }
 }
@@ -5027,7 +5039,7 @@ fn get_docking_services(
     // the same railgun full of AP (combat::ammo_types::rearm_price).
     let rack: Vec<RackAmmo> = weapon_query
         .iter()
-        .map(|(entity, w, sel, module)| RackAmmo { entity, ammo: w.ammo, max: w.max_ammo, loaded: sel.map(|a| a.0), kind: module.module_type })
+        .map(|(entity, w, sel, module)| RackAmmo { entity, ammo: w.ammo, max: w.max_ammo, loaded: sel.map(|a| a.0), kind: module.module_type, damage: w.damage })
         .collect();
     let (ammo_needed, ammo_cost) = rearm_bill(&rack, discounts.ammo);
 
@@ -5632,7 +5644,7 @@ fn docking_menu_input(
         let weapon_read_query_hack: Vec<RackAmmo> = weapon_query.iter()
             .filter_map(|(entity, w, sel)| {
                 let kind = module_query.get(entity).ok()?.module_type;
-                Some(RackAmmo { entity, ammo: w.ammo, max: w.max_ammo, loaded: sel.map(|a| a.0), kind })
+                Some(RackAmmo { entity, ammo: w.ammo, max: w.max_ammo, loaded: sel.map(|a| a.0), kind, damage: w.damage })
             })
             .collect();
 
@@ -6066,7 +6078,7 @@ fn docking_menu_input(
     let weapon_data: Vec<RackAmmo> = weapon_query.iter()
         .filter_map(|(entity, w, sel)| {
             let kind = module_query.get(entity).ok()?.module_type;
-            Some(RackAmmo { entity, ammo: w.ammo, max: w.max_ammo, loaded: sel.map(|a| a.0), kind })
+            Some(RackAmmo { entity, ammo: w.ammo, max: w.max_ammo, loaded: sel.map(|a| a.0), kind, damage: w.damage })
         })
         .collect();
 
@@ -6208,7 +6220,7 @@ mod rearm_tests {
     use super::*;
 
     fn gun(n: u32, kind: ModuleType, ammo: u32, max: u32) -> RackAmmo {
-        RackAmmo { entity: Entity::from_raw_u32(n).unwrap(), ammo, max, loaded: None, kind }
+        RackAmmo { entity: Entity::from_raw_u32(n).unwrap(), ammo, max, loaded: None, kind, damage: 50.0 }
     }
 
     fn starter_empty() -> Vec<RackAmmo> {
@@ -6236,6 +6248,16 @@ mod rearm_tests {
 
     /// Short of the bill you still get rounds -- in every gun, not one --
     /// and are never charged more than you have.
+    #[test]
+    fn a_built_guns_shells_cost_by_their_damage() {
+        let mut small = gun(1, ModuleType::FiringPiece, 0, 10);
+        small.damage = 87.0;
+        let mut big = gun(2, ModuleType::FiringPiece, 0, 10);
+        big.damage = 909.0;
+        assert!((small.round_cost(1.0) - 1.74).abs() < 0.01);
+        assert!(big.round_cost(1.0) > 10.0 * small.round_cost(1.0) * 0.9);
+    }
+
     #[test]
     fn a_short_wallet_buys_a_partial_rearm() {
         let rack = starter_empty();
