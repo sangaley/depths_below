@@ -8,3 +8,4 @@ pub mod radial_menu;
 pub mod power_routing;
 
 pub mod tuning;
+pub mod shell_designer;

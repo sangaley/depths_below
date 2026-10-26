@@ -275,6 +275,9 @@ pub struct ModuleData {
     /// then in the turret's own grid (combat::turret_deck).
     #[serde(default)]
     pub turret: Option<IVec2>,
+    /// A built gun's shell design (combat::shell), on its firing piece.
+    #[serde(default)]
+    pub shell: Option<crate::combat::shell::ShellDesign>,
 }
 
 fn default_rotation() -> Rotation { Rotation::North }

@@ -26,6 +26,7 @@ pub mod recoil;
 pub mod limits;
 pub mod impact;
 pub mod gun_math;
+pub mod shell;
 pub mod gun_assembly;
 pub mod turret_deck;
 

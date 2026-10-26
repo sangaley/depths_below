@@ -23,6 +23,10 @@ pub struct Projectile {
     /// Loaded round type — drives on-hit behavior (blast, EMP, burn, ...).
     /// None for AI shots and legacy paths → plain single-block damage.
     pub ammo: Option<crate::combat::ammo_types::KineticAmmoType>,
+    /// A designed shell's own on-hit effect (combat::shell), worked out when
+    /// it was fired. Beats `ammo`'s; `ammo` then only stands for how the
+    /// round meets armour (spall, angle, what gets through plate).
+    pub effect: Option<crate::combat::ammo_types::AmmoHitBehavior>,
     /// Caliber scale of the firing weapon — shrinks/grows the ammo's on-hit
     /// EFFECTS (blast radius, EMP duration, burn time). Damage numbers
     /// already scale through proj.damage; without this a gatling EMP round
@@ -482,6 +486,8 @@ pub fn fire_weapons_system(
         // window's live readout) scaled by the velocity slider and the loaded
         // ammo's own velocity profile (APFSDS darts fly, HEAT crawls).
         let tuning_vel = tuning.map(|t| t.velocity).unwrap_or(1.0);
+        // A built gun's shell is designed, not picked from the ammo list.
+        let selected_ammo = selected_ammo.filter(|_| assembly.is_none());
         let ammo_vel = selected_ammo.map(|a| a.0.velocity_mult()).unwrap_or(1.0);
         let proj_speed = assembly
             .map(|a| a.stats.velocity_mps * crate::combat::gun_assembly::GAME_SPEED_PER_MPS)
@@ -526,9 +532,15 @@ pub fn fire_weapons_system(
         });
 
         // Loaded ammo drives damage type, per-round damage, and penetration.
-        let (damage_type, ammo_damage_mult, penetration) =
-            round_profile(selected_ammo.map(|a| a.0), module.module_type);
+        // A built gun's shell already has its damage and penetration in the
+        // gun's numbers; it carries its own on-hit effect, and the fixed-list
+        // round nearest it stands for how it meets armour.
+        let shell = assembly.map(|a| &a.parts.shell);
+        let loaded = shell.map(|s| s.analogue()).or(selected_ammo.map(|a| a.0));
+        let (damage_type, ammo_damage_mult, penetration) = round_profile(loaded, module.module_type);
+        let ammo_damage_mult = if shell.is_some() { 1.0 } else { ammo_damage_mult };
         let penetration = assembly.map(|a| crate::combat::gun_assembly::penetration_for(&a.stats)).unwrap_or(penetration);
+        let effect = assembly.map(|a| a.parts.shell.hit_behavior(a.stats.gauge_mm, penetration));
 
         // Spawn projectile(s)
         let burst_count = match module.module_type {
@@ -574,7 +586,9 @@ pub fn fire_weapons_system(
             };
             // Loaded ammo recolors the round (AP brass, EMP blue, ...) so a
             // mixed loadout reads at a glance; size stays per-weapon.
-            let color = selected_ammo.map(|a| a.0.color()).unwrap_or(base_color);
+            let color = loaded.filter(|_| shell.is_none() || shell.is_some_and(|s| s.head != crate::combat::shell::ShellHead::Ap))
+                .map(|a| a.color())
+                .unwrap_or(base_color);
 
             let angle = vel.y.atan2(vel.x);
 
@@ -597,7 +611,8 @@ pub fn fire_weapons_system(
                     damage_type,
                     penetration,
                     has_penetrated: false,
-                    ammo: selected_ammo.map(|a| a.0),
+                    ammo: loaded,
+                    effect,
                     caliber: assembly.map(|a| crate::combat::gun_assembly::caliber_for(&a.stats))
                         .unwrap_or_else(|| caliber_scale(module.module_type)),
                     last_hit: None,
@@ -798,6 +813,7 @@ pub fn spawn_ai_round(
             penetration,
             has_penetrated: false,
             ammo: loaded,
+            effect: None,
             caliber: caliber_scale(module_type),
             last_hit: None,
             prev_pos: muzzle,
@@ -1220,9 +1236,10 @@ pub fn check_projectile_hits(
                 // along. `penetrates` decides whether the round survives
                 // this hit and flies on into the block behind.
                 let mut penetrates = false;
-                if let Some(ammo) = proj.ammo {
+                let behavior = proj.effect.or_else(|| proj.ammo.map(|a| a.hit_behavior(proj.damage)));
+                if let Some(behavior) = behavior {
                     use crate::combat::ammo_types::AmmoHitBehavior::*;
-                    match ammo.hit_behavior(proj.damage) {
+                    match behavior {
                         Penetrate { damage_falloff, .. } => {
                             // AP/APFSDS: continue into the next block with
                             // reduced energy (one extra layer for now).
@@ -1363,9 +1380,9 @@ pub fn check_projectile_hits(
 
         // Fragmenting rounds splash other creatures around the impact —
         // HE-Frag/Flak's whole identity ("great vs swarms") vs single-target AP.
-        let creature_splash: Option<(f32, f32)> = proj.ammo.and_then(|ammo| {
+        let creature_splash: Option<(f32, f32)> = proj.effect.or_else(|| proj.ammo.map(|a| a.hit_behavior(proj.damage))).and_then(|behavior| {
             use crate::combat::ammo_types::AmmoHitBehavior::*;
-            match ammo.hit_behavior(proj.damage) {
+            match behavior {
                 SurfaceExplode { blast_radius, fragment_damage, .. } => Some((blast_radius * proj.caliber, fragment_damage)),
                 ProximityBurst { fragment_radius, fragment_damage, .. } => Some((fragment_radius * proj.caliber, fragment_damage)),
                 // A well pulls in whatever is swimming past it, same as frag
@@ -1748,7 +1765,7 @@ mod shared_hit_tests {
             Projectile {
                 damage: 40.0, speed: 2000.0, lifetime: 1.0, max_lifetime: 1.0, owner: gun,
                 damage_type: ProjectileDamageType::Kinetic, penetration: 20.0, has_penetrated: false,
-                ammo: None, caliber: 1.0, last_hit: None,
+                ammo: None, effect: None, caliber: 1.0, last_hit: None,
                 // Last frame it was two cells below the row: this step crosses (0, 0).
                 prev_pos: crate::building::grid_to_local(IVec2::new(0, -2)),
                 bounces: 0,

@@ -123,7 +123,7 @@ pub struct BlueprintModule {
 /// Per-module state a design carries beyond type + position. Only
 /// non-default values are recorded, so v1-era files and untouched modules
 /// serialize compactly.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct ModuleExtras {
     #[serde(default)]
     pub tuning: Option<WeaponTuning>,
@@ -136,11 +136,14 @@ pub struct ModuleExtras {
     /// ring's centre (combat::turret_deck).
     #[serde(default)]
     pub turret: Option<IVec2>,
+    /// A built gun's shell design, on its firing piece (combat::shell).
+    #[serde(default)]
+    pub shell: Option<crate::combat::shell::ShellDesign>,
 }
 
 impl ModuleExtras {
     pub fn is_empty(&self) -> bool {
-        self.tuning.is_none() && self.fire_group.is_none() && self.ammo.is_none() && self.turret.is_none()
+        self.tuning.is_none() && self.fire_group.is_none() && self.ammo.is_none() && self.turret.is_none() && self.shell.is_none()
     }
 }
 
@@ -157,6 +160,9 @@ pub fn apply_module_extras(commands: &mut Commands, entity: Entity, extras: &Mod
     }
     if let Some(ring_cell) = extras.turret {
         commands.entity(entity).try_insert(crate::combat::turret_deck::PendingTurretMount(ring_cell));
+    }
+    if let Some(shell) = &extras.shell {
+        commands.entity(entity).try_insert(crate::combat::shell::GunShell(shell.clone()));
     }
 }
 
@@ -266,6 +272,7 @@ pub struct DesignCapture<'w, 's> {
     pub on_turret_query: Query<'w, 's, &'static crate::combat::turret_deck::OnTurret>,
     pub pending_turret_query: Query<'w, 's, &'static crate::combat::turret_deck::PendingTurretMount>,
     pub plate_query: Query<'w, 's, (), With<crate::combat::turret_deck::TurretPlate>>,
+    pub shell_query: Query<'w, 's, &'static crate::combat::shell::GunShell>,
 }
 
 impl DesignCapture<'_, '_> {
@@ -314,7 +321,14 @@ impl DesignCapture<'_, '_> {
                     .map(|t| t.ring_cell)
                     .or_else(|_| self.pending_turret_query.get(entity).map(|p| p.0))
                     .ok();
-                let extras = ModuleExtras { tuning, fire_group, ammo, turret };
+                // Only a shell someone designed; the default is no entry.
+                let shell = self
+                    .shell_query
+                    .get(entity)
+                    .ok()
+                    .map(|s| s.0.clone())
+                    .filter(|s| *s != crate::combat::shell::ShellDesign::default());
+                let extras = ModuleExtras { tuning, fire_group, ammo, turret, shell };
 
                 let (custom_name, subcomponents) = match self.custom_query.get(entity) {
                     Ok((custom, module_children)) => (
@@ -487,7 +501,7 @@ pub fn load_blueprint_system(
             rotation: module.rotation,
             custom_name: module.custom_name.clone(),
             subcomponents: module.subcomponents.clone(),
-            extras: module.extras,
+            extras: module.extras.clone(),
             free: true,
         });
     }
@@ -778,7 +792,13 @@ mod turret_capture_tests {
             ChildOf(ship),
         )).id();
         app.world_mut().spawn((HullSegment { grid_position: IVec2::ZERO, ..default() }, TurretPlate, ChildOf(body)));
-        app.world_mut().spawn((module(ModuleType::FiringPiece, IVec2::ZERO), OnTurret { ring_cell: IVec2::new(5, 1) }, ChildOf(body)));
+        let heat = crate::combat::shell::ShellDesign { head: crate::combat::shell::ShellHead::Heat, ..default() };
+        app.world_mut().spawn((
+            module(ModuleType::FiringPiece, IVec2::ZERO),
+            OnTurret { ring_cell: IVec2::new(5, 1) },
+            crate::combat::shell::GunShell(heat.clone()),
+            ChildOf(body),
+        ));
         app.update();
 
         let bp = app.world().resource::<Captured>().0.clone().unwrap();
@@ -786,8 +806,9 @@ mod turret_capture_tests {
         assert_eq!(bp.modules.len(), 2);
         let fp = bp.modules.iter().find(|m| m.module_type == ModuleType::FiringPiece).unwrap();
         assert_eq!(fp.grid_pos, IVec2::ZERO);
-        assert_eq!(fp.extras.and_then(|e| e.turret), Some(IVec2::new(5, 1)));
+        assert_eq!(fp.extras.as_ref().and_then(|e| e.turret), Some(IVec2::new(5, 1)));
+        assert_eq!(fp.extras.as_ref().and_then(|e| e.shell.clone()), Some(heat), "its shell design too");
         let ring = bp.modules.iter().find(|m| m.module_type == ModuleType::TurretRing).unwrap();
-        assert_eq!(ring.extras.and_then(|e| e.turret), None);
+        assert_eq!(ring.extras.as_ref().and_then(|e| e.turret), None);
     }
 }

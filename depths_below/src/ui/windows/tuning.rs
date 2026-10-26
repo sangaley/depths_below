@@ -93,6 +93,11 @@ pub fn right_click_open_tuning(
     build_state: Res<State<crate::states::BuildState>>,
     occupancy: Res<GridOccupancy>,
     module_query: Query<(Entity, &Module), With<WeaponTuning>>,
+    // A gun standing on a hull tile: the tile owns the cell in the
+    // occupancy map, so the gun is found by its footprint instead.
+    player_guns: Query<(Entity, &Module, &ChildOf), With<WeaponTuning>>,
+    // Turret guns stand on their turret's grid, not the hull's.
+    turret_guns: Query<(Entity, &Module, &GlobalTransform), (With<WeaponTuning>, With<crate::combat::turret_deck::OnTurret>)>,
     existing: Query<(Entity, &TuningWindow)>,
     parent_query: Query<&ChildOf>,
     floating: Query<Entity, With<FloatingWindow>>,
@@ -113,11 +118,16 @@ pub fn right_click_open_tuning(
         return;
     }
 
-    let Some(cursor_screen) = windows.single().ok().and_then(|w| w.cursor_position()) else { return };
-    let Some(cursor_world) = camera_query.single().ok()
-        .and_then(|(cam, gt)| cam.viewport_to_world_2d(gt, cursor_screen).ok())
-    else { return };
     let Ok(ship_gt) = ship_query.single() else { return };
+    // DEPTHS_BUILD_CELL: a scripted run points at this ship cell instead.
+    let scripted = crate::building::build_cell_override()
+        .map(|c| ship_gt.transform_point(crate::building::grid_to_local(c).extend(0.0)).truncate());
+    let Some(cursor_screen) = windows.single().ok().and_then(|w| w.cursor_position())
+        .or(scripted.map(|_| Vec2::new(420.0, 120.0)))
+    else { return };
+    let Some(cursor_world) = scripted.or_else(|| camera_query.single().ok()
+        .and_then(|(cam, gt)| cam.viewport_to_world_2d(gt, cursor_screen).ok()))
+    else { return };
 
     // Grid cells are ship-local — transform the world-space cursor into the
     // ship's frame first (same math as the build ghost, see building/mod.rs).
@@ -128,8 +138,25 @@ pub fn right_click_open_tuning(
         ((local.y + 33.0) / 66.0).round() as i32,
     );
 
-    let Some(&hit_entity) = occupancy.cells.get(&grid_pos) else { return };
-    let Ok((entity, module)) = module_query.get(hit_entity) else { return };
+    let player = parent_query.get(occupancy.cells.get(&grid_pos).copied().unwrap_or(Entity::PLACEHOLDER)).ok().map(|p| p.parent());
+    let on_hull = occupancy.cells.get(&grid_pos).and_then(|e| module_query.get(*e).ok()).or_else(|| {
+        player_guns
+            .iter()
+            .filter(|(_, _, p)| Some(p.parent()) == player)
+            .find(|(_, m, _)| {
+                GridOccupancy::cells_for(m.grid_position, m.size, m.rotation, crate::building::footprints::footprint_override(m.module_type))
+                    .contains(&grid_pos)
+            })
+            .map(|(e, m, _)| (e, m))
+    });
+    let on_turret = || {
+        turret_guns
+            .iter()
+            .filter(|(_, _, gt)| gt.translation().truncate().distance(cursor_world) < 33.0)
+            .map(|(e, m, _)| (e, m))
+            .next()
+    };
+    let Some((entity, module)) = on_hull.or_else(on_turret) else { return };
 
     // One tuning window at a time — clicking another weapon retargets by
     // replacing the window instead of stacking them.
@@ -170,7 +197,11 @@ fn spawn_tuning_window(
     module_type: ModuleType,
     position: Vec2,
 ) {
-    let title = format!("{:?} - WEAPON TUNING", module_type).to_uppercase();
+    let title = if module_type == ModuleType::FiringPiece {
+        "BUILT GUN - SHELL & TUNING".to_string()
+    } else {
+        format!("{:?} - WEAPON TUNING", module_type).to_uppercase()
+    };
     let content = spawn_floating_window(
         commands,
         &format!("tuning_{:?}", module_entity),
@@ -240,6 +271,11 @@ fn spawn_tuning_window(
             AmmoDescText,
         )).id();
         commands.entity(content).add_child(desc);
+    }
+
+    // SHELL DESIGNER — built guns design their shell instead of picking one.
+    if module_type == ModuleType::FiringPiece {
+        super::shell_designer::spawn_shell_section(commands, content, &Default::default());
     }
 
     // SLIDERS

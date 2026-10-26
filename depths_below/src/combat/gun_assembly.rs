@@ -113,7 +113,7 @@ pub const HOIST_RPM: f32 = 40.0;
 pub const FEEDER_RPM: f32 = 40.0;
 
 pub fn range_for(stats: &GunStats) -> f32 {
-    4000.0 + stats.velocity_mps * 4.0
+    (4000.0 + stats.velocity_mps * 4.0) * stats.range_mult.max(1.0)
 }
 
 /// Projectile caliber scale (combat::new_projectiles::caliber_scale), from
@@ -148,7 +148,7 @@ fn is_feedway(t: Option<ModuleType>) -> bool {
 /// the magazines shared out between them. Pure, so it can be tested without
 /// a world.
 pub fn assemble(modules: &[(Entity, Module)]) -> Vec<(Entity, GunAssembly)> {
-    let mut guns = assemble_parts(modules);
+    let mut guns = assemble_parts(modules, &HashMap::new());
     share_magazines(&mut guns);
     guns
 }
@@ -193,7 +193,9 @@ pub fn hoist_reach(hull: &[(Entity, Module)], ring_cells: &[IVec2]) -> TurretFee
 }
 
 /// The guns among these modules, before their magazines are shared out.
-fn assemble_parts(modules: &[(Entity, Module)]) -> Vec<(Entity, GunAssembly)> {
+/// `shells`: each firing piece's shell design; one not listed fires the
+/// default shell.
+fn assemble_parts(modules: &[(Entity, Module)], shells: &HashMap<Entity, crate::combat::shell::ShellDesign>) -> Vec<(Entity, GunAssembly)> {
     let mut at: HashMap<IVec2, (Entity, ModuleType, crate::components::Rotation)> = HashMap::new();
     for (e, m) in modules {
         at.insert(m.grid_position, (*e, m.module_type, m.rotation));
@@ -360,6 +362,7 @@ fn assemble_parts(modules: &[(Entity, Module)]) -> Vec<(Entity, GunAssembly)> {
             absorbers,
             rail_magnets: magnets,
             muzzle_brake: brake,
+            shell: shells.get(&fp).cloned().unwrap_or_default(),
         };
         let stats = gun_math::stats(&parts);
 
@@ -370,8 +373,11 @@ fn assemble_parts(modules: &[(Entity, Module)]) -> Vec<(Entity, GunAssembly)> {
             problems.push(format!(
                 "The barrel is {:.1} m short of a full burn, so shells leave at {:.0}% speed.",
                 stats.burn_m - barrel.len() as f32,
-                100.0 * stats.velocity_mps / gun_math::FULL_BURN_VELOCITY
+                100.0 * (barrel.len() as f32 / stats.burn_m).sqrt()
             ));
+        }
+        if parts.shell.casings == 0 && magnets == 0 {
+            problems.push("The shell has no casings and nothing else drives it: it won't leave the barrel.".to_string());
         }
         if parts.loaders.is_empty() {
             problems.push("No loader. Put Loader blocks behind or beside the firing piece.".to_string());
@@ -522,14 +528,21 @@ pub fn assemble_guns(
     // gun was sized as a feederless hull gun and kept that small magazine.
     modules: Query<&Module, (Without<DestroyedModule>, Without<super::turret_deck::PendingTurretMount>)>,
     mut firing: Query<(&mut BaseWeaponStats, &mut WeaponMount, &mut crate::components::Weapon)>,
+    // A shell redesigned re-works its gun out, layout change or not.
+    shells: Query<(Entity, &crate::combat::shell::GunShell)>,
+    redesigned: Query<&ChildOf, Changed<crate::combat::shell::GunShell>>,
     epoch: Res<LayoutEpoch>,
     mut seen_epoch: Local<Option<LayoutEpoch>>,
     mut built: Local<BuiltFrom>,
 ) {
-    if *seen_epoch == Some(*epoch) {
+    // The ships (or turrets) whose shells changed since last frame.
+    let redo: HashSet<Entity> = redesigned.iter().map(|p| p.parent()).collect();
+    if *seen_epoch == Some(*epoch) && redo.is_empty() {
         return;
     }
     *seen_epoch = Some(*epoch);
+    let shell_designs: HashMap<Entity, crate::combat::shell::ShellDesign> =
+        shells.iter().map(|(e, s)| (e, s.0.clone())).collect();
     let guns_among = |children: Option<&Children>| -> Vec<(Entity, Module)> {
         children
             .into_iter()
@@ -541,17 +554,18 @@ pub fn assemble_guns(
     for (ship, version, children) in ships.iter() {
         let on_it: Vec<Entity> = children.into_iter().flatten().copied().filter(|c| turrets.contains(*c)).collect();
         let stale = built.is_stale(ship, version)
-            || on_it.iter().any(|t| turrets.get(*t).is_ok_and(|(v, _, _)| built.is_stale(*t, v)));
+            || redo.contains(&ship)
+            || on_it.iter().any(|t| redo.contains(t) || turrets.get(*t).is_ok_and(|(v, _, _)| built.is_stale(*t, v)));
         if !stale {
             continue;
         }
         built.mark(ship, version);
         let hull = guns_among(children);
-        let mut guns = assemble_parts(&hull);
+        let mut guns = assemble_parts(&hull, &shell_designs);
         for t in &on_it {
             let Ok((v, body, t_children)) = turrets.get(*t) else { continue };
             built.mark(*t, v);
-            let mut up_top = assemble_parts(&guns_among(t_children));
+            let mut up_top = assemble_parts(&guns_among(t_children), &shell_designs);
             let feed = hoist_reach(&hull, &body.ring_cells());
             let share = HOIST_RPM / up_top.len().max(1) as f32;
             for (_, g) in up_top.iter_mut() {
@@ -813,12 +827,12 @@ mod gun_assembly_tests {
 
     #[test]
     fn hull_and_turret_guns_split_a_shared_magazine() {
-        let mut hull_gun = assemble_parts(&small_gun());
+        let mut hull_gun = assemble_parts(&small_gun(), &HashMap::new());
         let up_top: Vec<(Entity, Module)> = small_gun()
             .into_iter()
             .filter(|(_, m)| !matches!(m.module_type, Magazine | ShellFeeder))
             .collect();
-        let mut turret_gun = assemble_parts(&up_top);
+        let mut turret_gun = assemble_parts(&up_top, &HashMap::new());
         let magazine = hull_gun[0].1.magazines[0];
         turret_gun[0].1.on_turret = true;
         turret_gun[0].1.feeders = 1;

@@ -205,6 +205,8 @@ impl Plugin for UiPlugin {
                     windows::tuning::ammo_button_click,
                     windows::tuning::reset_tuning_click,
                     windows::tuning::tuning_window_refresh,
+                    windows::shell_designer::shell_designer_click,
+                    windows::shell_designer::shell_designer_refresh,
                 ).run_if(in_state(GameState::StationDocked)),
             )
             .add_systems(OnExit(GameState::StationDocked), windows::tuning::despawn_tuning_windows)

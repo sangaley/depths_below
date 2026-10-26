@@ -1800,7 +1800,14 @@
    "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
-   "extras": null
+   "extras": {
+    "shell": {
+     "base": "Tracer",
+     "casings": 2,
+     "bodies": [],
+     "head": "He"
+    }
+   }
   },
   {
    "module_type": "Mantlet",

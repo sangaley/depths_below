@@ -19,6 +19,8 @@ pub struct GunParts {
     pub absorbers: u32,
     pub rail_magnets: u32,
     pub muzzle_brake: bool,
+    /// The shell it fires (combat::shell).
+    pub shell: super::shell::ShellDesign,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -33,7 +35,7 @@ pub struct Loader {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct GunStats {
     pub gauge_mm: f32,
-    /// The sample shell: AP head, one solid body, two propellant casings.
+    /// Shell length: a gauge per module, half a gauge per casing.
     pub shell_m: f32,
     /// Barrel needed to burn the propellant fully.
     pub burn_m: f32,
@@ -58,14 +60,17 @@ pub struct GunStats {
     /// Shells held ready: one in each loader, three per clip.
     pub ready_rack: u32,
     pub rail_power_mw: f32,
+    /// Range as a multiple of what the velocity alone gives (a base bleeder
+    /// carries further).
+    pub range_mult: f32,
 }
 
 pub const BASE_GAUGE_MM: f32 = 60.0;
 pub const GAUGE_PER_INCREASER_MM: f32 = 55.0;
 pub const MAX_GAUGE_INCREASERS: u32 = 8;
 pub const MAX_GAUGE_MM: f32 = 500.0;
-/// Shell length as a multiple of gauge: head + body + two half-length casings.
-pub const SHELL_GAUGES: f32 = 3.0;
+/// A shell shorter than this many gauges tumbles: less accurate.
+pub const STUBBY_SHELL_GAUGES: f32 = 3.0;
 pub const FULL_BURN_VELOCITY: f32 = 850.0;
 pub const RAIL_VELOCITY_PER_MAGNET: f32 = 90.0;
 pub const RAIL_POWER_PER_MAGNET_MW: f32 = 1.5;
@@ -76,16 +81,25 @@ pub fn gauge_mm(increasers: u32) -> f32 {
 }
 
 pub fn stats(parts: &GunParts) -> GunStats {
+    use super::shell::{ShellBase, ShellHead, HEAT_JET_DAMAGE, HEAT_PEN_PER_MM};
+    let shell = &parts.shell;
     let gauge = gauge_mm(parts.gauge_increasers);
     let g = gauge / 100.0;
-    let shell_m = gauge * SHELL_GAUGES / 1000.0;
-    // Two casings need 0.5 m of barrel per 100 mm of gauge each.
-    let burn_m = g;
+    let shell_m = gauge * shell.length_gauges() / 1000.0;
+    // Each casing needs 0.5 m of barrel per 100 mm of gauge to burn.
+    let burn_m = 0.5 * g * shell.casings as f32;
     let burn_frac = if burn_m > 0.0 { (parts.barrel_m as f32 / burn_m).min(1.0) } else { 1.0 };
-    let velocity = FULL_BURN_VELOCITY * burn_frac.sqrt() + RAIL_VELOCITY_PER_MAGNET * parts.rail_magnets as f32;
+    let velocity = shell.full_burn_velocity() * burn_frac.sqrt() + RAIL_VELOCITY_PER_MAGNET * parts.rail_magnets as f32;
     let speed = velocity / FULL_BURN_VELOCITY;
-    let damage = 30.0 * g * g * speed;
-    let penetration = gauge * 1.1 * speed;
+    // Kinetic damage goes with the hard metal in the shell (2 for the
+    // default AP head + solid body); a HEAT jet adds its own, at any speed.
+    let mut damage = 30.0 * g * g * speed * shell.kinetic_weight() / 2.0;
+    let penetration = if shell.head == ShellHead::Heat {
+        damage += HEAT_JET_DAMAGE * g * g;
+        gauge * HEAT_PEN_PER_MM
+    } else {
+        gauge * 1.1 * speed * shell.penetration_factor()
+    };
 
     // A loader must be long enough for the shell; each one works in parallel,
     // sped up 25% per clip of rack beside it.
@@ -104,14 +118,18 @@ pub fn stats(parts: &GunParts) -> GunStats {
         working += 1;
         ready += 1 + (SHELLS_PER_CLIP as f32 * l.clips).floor() as u32;
     }
-    let heat_per_shot = g.powf(1.5) * 0.6;
+    // Propellant is the heat: the default shell's two casings make 0.6 g^1.5.
+    let heat_per_shot = g.powf(1.5) * 0.3 * shell.casings as f32;
     let cooling = 0.2 + 0.6 * parts.coolers as f32;
     let rpm_heat = 60.0 * cooling / heat_per_shot;
     let rpm = rpm_loaders.min(rpm_heat);
-    let recoil = g.powf(1.5) * speed * 0.3 * if parts.muzzle_brake { 0.5 } else { 1.0 };
-    let spread = 1.6 / (1.0 + 0.5 * parts.barrel_m as f32)
+    let recoil = g.powf(1.5) * speed * 0.3 * shell.projectile_modules() / 2.0 * if parts.muzzle_brake { 0.5 } else { 1.0 };
+    let spread = (1.6 / (1.0 + 0.5 * parts.barrel_m as f32)
         + 0.25 * (recoil - parts.absorbers as f32).max(0.0)
-        + if parts.muzzle_brake { 0.1 } else { 0.0 };
+        + if parts.muzzle_brake { 0.1 } else { 0.0 }
+        // A stubby shell tumbles.
+        + 0.5 * (STUBBY_SHELL_GAUGES - shell.length_gauges()).max(0.0))
+        * if shell.base == ShellBase::Tracer { 0.75 } else { 1.0 };
 
     GunStats {
         gauge_mm: gauge,
@@ -131,6 +149,7 @@ pub fn stats(parts: &GunParts) -> GunStats {
         spread_deg: spread,
         ready_rack: ready,
         rail_power_mw: RAIL_POWER_PER_MAGNET_MW * parts.rail_magnets as f32,
+        range_mult: if shell.base == ShellBase::Bleeder { 1.2 } else { 1.0 },
     }
 }
 
@@ -157,6 +176,7 @@ mod gun_math_tests {
             absorbers: 3,
             rail_magnets: 2,
             muzzle_brake: false,
+            shell: Default::default(),
         }
     }
 
@@ -208,6 +228,53 @@ mod gun_math_tests {
         let hot = stats(&p);
         assert!(hot.rpm_heat < hot.rpm_loaders, "with no coolers heat sets the pace");
         assert_eq!(hot.rpm, hot.rpm_heat);
+    }
+
+    #[test]
+    fn more_casings_need_more_barrel() {
+        use crate::combat::shell::ShellDesign;
+        let mut p = spinal();
+        p.rail_magnets = 0;
+        p.barrel_m = 5;
+        let two = stats(&p);
+        p.shell = ShellDesign { casings: 4, ..Default::default() };
+        let four_short = stats(&p);
+        assert_eq!(four_short.burn_m, 10.0);
+        p.barrel_m = 10;
+        let four_long = stats(&p);
+        assert!(four_long.velocity_mps > two.velocity_mps, "a full burn of more propellant is faster");
+        assert!(four_short.velocity_mps < four_long.velocity_mps, "half burnt, it's slower");
+        assert!(four_long.heat_per_shot > two.heat_per_shot);
+        assert!(four_long.shell_m > two.shell_m, "and the shell's longer");
+    }
+
+    #[test]
+    fn a_heat_jet_goes_as_deep_at_any_speed() {
+        use crate::combat::shell::{ShellDesign, ShellHead};
+        let mut p = spinal();
+        p.shell = ShellDesign { head: ShellHead::Heat, ..Default::default() };
+        p.rail_magnets = 0;
+        let fast = stats(&p);
+        p.barrel_m = 1;
+        let slow = stats(&p);
+        assert_eq!(fast.penetration_mm, slow.penetration_mm);
+        assert!(slow.damage > 0.0);
+    }
+
+    #[test]
+    fn stubby_shells_scatter_and_tracers_steady_them() {
+        use crate::combat::shell::{ShellBase, ShellDesign};
+        let p = spinal();
+        let normal = stats(&p).spread_deg;
+        let mut stub = p.clone();
+        stub.shell = ShellDesign { casings: 1, bodies: vec![], ..Default::default() };
+        assert!(stats(&stub).spread_deg > normal);
+        let mut traced = p.clone();
+        traced.shell.base = ShellBase::Tracer;
+        assert!(stats(&traced).spread_deg < normal);
+        let mut bled = p.clone();
+        bled.shell.base = ShellBase::Bleeder;
+        assert!(stats(&bled).range_mult > 1.0);
     }
 
     #[test]

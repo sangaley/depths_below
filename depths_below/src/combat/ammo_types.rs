@@ -267,7 +267,7 @@ impl KineticAmmoType {
 }
 
 /// Ammo hit behavior — what happens on impact
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum AmmoHitBehavior {
     /// Penetrates and continues (AP, APFSDS)
     Penetrate {

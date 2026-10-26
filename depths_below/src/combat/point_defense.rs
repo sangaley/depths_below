@@ -147,6 +147,7 @@ pub fn intercept_missiles(
                 penetration: 5.0,
                 has_penetrated: false,
                 ammo: None, // PD rounds have no special on-hit behavior
+                effect: None,
                 caliber: 0.3,
                 last_hit: None,
                 prev_pos: weapon_pos,

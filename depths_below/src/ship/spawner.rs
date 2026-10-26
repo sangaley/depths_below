@@ -227,6 +227,7 @@ pub(crate) fn builtin_starter_design() -> crate::building::blueprint::Blueprint 
             fire_group: Some(fire_group),
             ammo: ammo.map(crate::building::customization::tuning::SelectedAmmo),
             turret: None,
+            shell: None,
         }),
     };
 

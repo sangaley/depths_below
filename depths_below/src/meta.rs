@@ -136,6 +136,7 @@ fn collect_save_data(
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&crate::building::customization::tuning::SelectedAmmo>,
         Option<&crate::combat::turret_deck::OnTurret>,
+        Option<&crate::combat::shell::GunShell>,
     ), PlayerBlocks>,
     hull_query: &Query<(&HullSegment, &Transform), PlayerBlocks>,
     crew_query: &Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
@@ -163,7 +164,7 @@ fn collect_save_data(
     // Collect modules
     let modules: Vec<ModuleData> = module_query
         .iter()
-        .map(|(module, custom, tuning, selected_ammo, on_turret)| {
+        .map(|(module, custom, tuning, selected_ammo, on_turret, shell)| {
             let custom_data = custom.map(|c| CustomModuleData {
                 custom_name: c.custom_name.clone(),
                 subcomponents: Vec::new(),
@@ -179,6 +180,7 @@ fn collect_save_data(
                 tuning: tuning.copied(),
                 selected_ammo: selected_ammo.map(|s| s.0),
                 turret: on_turret.map(|t| t.ring_cell),
+                shell: shell.map(|s| s.0.clone()),
             }
         })
         .collect();
@@ -333,6 +335,7 @@ fn handle_save_request(
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&crate::building::customization::tuning::SelectedAmmo>,
         Option<&crate::combat::turret_deck::OnTurret>,
+        Option<&crate::combat::shell::GunShell>,
     ), PlayerBlocks>,
     // With the turrets standing on the ship: bundled, this system is at the cap.
     hull_and_turrets: (
@@ -393,6 +396,7 @@ fn handle_save_request(
                     tuning: None,
                     selected_ammo: None,
                     turret: None,
+                    shell: None,
                 });
             }
         }
@@ -684,6 +688,9 @@ fn rebuild_entities_from_save(
             commands.entity(entity).insert(
                 crate::building::customization::tuning::SelectedAmmo(ammo)
             );
+        }
+        if let Some(shell) = &module_data.shell {
+            commands.entity(entity).insert(crate::combat::shell::GunShell(shell.clone()));
         }
         if let Some(ring_cell) = module_data.turret {
             commands.entity(entity).insert(crate::combat::turret_deck::PendingTurretMount(ring_cell));
