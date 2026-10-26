@@ -49,6 +49,8 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //   DEPTHS_FX_SCALE=<k> — shots and beams drawn k times bigger (wide fight shots).
 //   DEPTHS_NO_DAMAGE_TEXT=1 — no floating damage numbers.
 //   DEPTHS_NO_SHIELD_FX=1 — no shield outline glow or facing arcs (shields still work).
+//   DEPTHS_STANDOFF=<u> — fighting AI ships hold this far off (before hull sizes).
+//   DEPTHS_HOLD_LINES=1 — fighting AI ships hold where they are (placed battle lines).
 //   DEPTHS_CAM_AT=<x>,<y> | station[>d] — point the camera there instead of at
 //                          the ship ("station": the nearest station core; ">d"
 //                          slides d units toward its world).

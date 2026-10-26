@@ -60,6 +60,22 @@ fn turn_toward(rotation: Quat, target_angle: f32, blend: f32, max_rate: f32, dt:
     Quat::from_rotation_z(current + step)
 }
 
+/// DEPTHS_STANDOFF=<u> (filming): the distance a fighting ship holds, before
+/// hull sizes, in place of the one its guns choose (at most 3,000 in play).
+/// For a wide shot of two lines fighting across open space.
+fn filming_standoff() -> Option<f32> {
+    static V: std::sync::OnceLock<Option<f32>> = std::sync::OnceLock::new();
+    *V.get_or_init(|| std::env::var("DEPTHS_STANDOFF").ok().and_then(|v| v.parse().ok()))
+}
+
+/// DEPTHS_HOLD_LINES=1 (filming): ships in a fight hold where they are --
+/// turning to face, swaying, firing -- instead of closing on a target out in
+/// the enemy's second row. Keeps two placed battle lines apart for a shot.
+fn hold_lines() -> bool {
+    static V: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *V.get_or_init(|| std::env::var("DEPTHS_HOLD_LINES").ok().as_deref() == Some("1"))
+}
+
 /// DEPTHS_STANDOFF_HULLS=1 (filming, for now): hold the firing distance hull
 /// to hull, adding the target's own size -- otherwise a big target is hugged.
 fn target_reach(target: Option<&AiShipTarget>, hulls: &Query<&crate::ship::collision::Collider>) -> f32 {
@@ -129,6 +145,15 @@ fn keep_clear(me: Entity, at: Vec2, radius: f32, hulls: &[(Entity, Vec2, f32)]) 
         }
     }
     push.clamp_length_max(1.0)
+}
+
+/// Only the sideways part of a push, across the line to `toward` (the
+/// target): ships behind shoved the front of a line into the enemy, and the
+/// whole side crept in. How far off the target it holds is the standoff's
+/// business.
+fn along_the_line(push: Vec2, toward: Vec2) -> Vec2 {
+    let side = Vec2::new(-toward.y, toward.x);
+    side * push.dot(side)
 }
 
 /// Within this of its point, a ship stops aiming its nose at the point.
@@ -379,6 +404,7 @@ pub fn ai_ship_movement_system(
             } else {
                 0.0
             };
+            let standoff = filming_standoff().filter(|_| standoff > 0.0).unwrap_or(standoff);
             // Measured from the ship's centre, so a hull kilometres across
             // held its "distance" with its own bow in your hull, shoving you
             // across the system. The standoff starts where its hull ends.
@@ -388,7 +414,7 @@ pub fn ai_ship_movement_system(
                 0.0
             };
 
-            if standoff > 0.0 && dist < standoff * 1.3 && dist > 1.0 {
+            if standoff > 0.0 && (dist < standoff * 1.3 || hold_lines()) && dist > 1.0 {
                 let direction = to_dest / dist; // toward the player
                 // Hold and shoot instead of orbiting. Each ship parks at its own
                 // range (jittered so they don't all sit at one perfect radius)
@@ -398,7 +424,9 @@ pub fn ai_ship_movement_system(
                 let bits = _entity.to_bits();
                 let jitter = 0.8 + ((bits % 13) as f32 / 13.0) * 0.35; // 0.8..1.15
                 let hold = standoff * jitter;
-                let radial = if dist > hold * 1.1 {
+                let radial = if hold_lines() {
+                    Vec2::ZERO
+                } else if dist > hold * 1.1 {
                     direction * max_speed * 0.5 // drift in
                 } else if dist < hold * 0.7 {
                     -direction * max_speed * 0.4 // ease back
@@ -415,7 +443,7 @@ pub fn ai_ship_movement_system(
                 // one target parked in the same spot, and a side became one
                 // heap of overlapping hulls. Now it spreads along its line.
                 let own_center = collider.map_or(pos, |c| crate::ship::collision::world_point(&transform, c.bound_center));
-                let spread = keep_clear(_entity, own_center, own_radius, &ai_hulls) * max_speed * 0.5;
+                let spread = along_the_line(keep_clear(_entity, own_center, own_radius, &ai_hulls), direction) * max_speed * 0.5;
                 velocity.0 = velocity.0.lerp(radial + sway + spread, vel_blend);
 
                 // Face the player — you're fine with this, and it reads natural
@@ -596,6 +624,15 @@ mod heading_tests {
         assert!(push.x < -0.3 && push.y.abs() < 1e-4, "{push}");
         // alone, nothing to ease off from
         assert_eq!(keep_clear(me, Vec2::ZERO, 800.0, &hulls[..1]), Vec2::ZERO);
+    }
+
+    #[test]
+    fn a_crowded_ship_slides_along_its_line_not_into_the_enemy() {
+        // enemy to the east; a push from behind (west) must not move it east
+        let toward = Vec2::X;
+        assert!(along_the_line(Vec2::new(0.8, 0.0), toward).length() < 1e-6);
+        let side = along_the_line(Vec2::new(0.5, 0.5), toward);
+        assert!(side.x.abs() < 1e-6 && (side.y - 0.5).abs() < 1e-6, "{side}");
     }
 
     #[test]
