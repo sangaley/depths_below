@@ -69,6 +69,10 @@ pub const RICOCHET_MAX_SPEED: f32 = 1500.0;
 ///
 /// t is what orders hits along the round's path: the block it crossed FIRST
 /// wins, not the one whose centre happens to sit nearest the segment.
+/// How far ahead of a turret gun's muzzle the firing cut-out looks for the
+/// ship's other turrets: further than any turret reaches across a hull.
+const TURRET_CUTOUT_REACH: f32 = 66.0 * 40.0;
+
 pub fn segment_closest(a: Vec2, b: Vec2, p: Vec2) -> (f32, f32) {
     let ab = b - a;
     let len_sq = ab.length_squared();
@@ -274,8 +278,13 @@ pub fn fire_weapons_system(
     // Guns built from parts: their velocity, spread, caliber, penetration and
     // muzzle come from the parts (combat::gun_assembly), not the block type.
     assemblies: Query<(&crate::combat::gun_assembly::GunAssembly, Option<&crate::combat::gun_assembly::GunMuzzle>)>,
-    turret_bodies: Query<&ChildOf, With<crate::combat::turret_deck::TurretBody>>,
+    // Bundled: this system is at Bevy's parameter cap.
+    turrets: (
+        Query<&ChildOf, With<crate::combat::turret_deck::TurretBody>>,
+        Res<crate::combat::turret_deck::TurretShapes>,
+    ),
 ) {
+    let (turret_bodies, turret_shapes) = (&turrets.0, &turrets.1);
     let Ok((player_ship, ship_transform, ship_physics, ship_velocity)) = ship_query.single() else { return };
     let _dt = time.delta_secs();
 
@@ -295,12 +304,12 @@ pub fn fire_weapons_system(
     // Controller right-stick aim beats the mouse while it owns aim (see
     // InputState.gamepad_aim): dumb-fire at a point projected out along
     // the stick direction.
-    let cursor_world = aiming.input_state.gamepad_aim
-        .map(|dir| ship_transform.translation.truncate() + dir * 2000.0)
-        .or(cursor_world)
-        // DEPTHS_AIM_AT=<x>,<y>: a scripted run has no mouse; aim at this
-        // point ahead of the ship (ship-local, so it stays ahead as it moves).
-        .or_else(|| aim_at_override().map(|p| ship_transform.transform_point(p.extend(0.0)).truncate()));
+    // DEPTHS_AIM_AT=<x>,<y>: a scripted run aims at this point (ship-local,
+    // so it stays put relative to the ship as it moves). It comes first: the
+    // real mouse may be sitting over the window and would steer the run.
+    let cursor_world = aim_at_override().map(|p| ship_transform.transform_point(p.extend(0.0)).truncate())
+        .or_else(|| aiming.input_state.gamepad_aim.map(|dir| ship_transform.translation.truncate() + dir * 2000.0))
+        .or(cursor_world);
 
     // Build module position list for adjacency checks -- OUR modules only.
     // Grid cells are ship-local, so an enemy's Targeting Computer at the
@@ -443,6 +452,24 @@ pub fn fire_weapons_system(
         };
         if !in_arc {
             continue;
+        }
+        // A firing cut-out: a turret gun holds fire while its line of fire
+        // crosses another of the ship's turrets. (Hull guns fire on the deck
+        // below and keep the no-line-of-sight rule.)
+        if turret_bodies.contains(parent.parent()) {
+            let own = parent.parent();
+            let to_aim = target_pos - weapon_pos;
+            let end = weapon_pos + to_aim.normalize_or_zero() * to_aim.length().min(TURRET_CUTOUT_REACH);
+            let fouled = turret_shapes.0.iter()
+                .filter(|t| t.body != own && t.ship == player_ship)
+                .flat_map(|t| t.at(t.angle))
+                .any(|p| {
+                    let world = ship_transform.transform_point(p.extend(0.0)).truncate();
+                    segment_closest(weapon_pos, end, world).0 < crate::combat::turret_deck::TURRET_CLEARANCE * 0.8
+                });
+            if fouled {
+                continue;
+            }
         }
 
         // Determine prediction tier — Targeting Computer must be ADJACENT to this weapon
@@ -856,6 +883,7 @@ pub fn check_projectile_hits(
     mut crew_query: Query<&mut crate::components::CrewMember>,
     owner_parent_query: Query<&ChildOf>,
     turret_bodies: Query<(), With<crate::combat::turret_deck::TurretBody>>,
+    turret_layers: Query<(&GlobalTransform, &Children), With<crate::combat::turret_deck::TurretBody>>,
     grid_query: Query<&crate::building::ShipGrid>,
     block_query: Query<&crate::building::Block>,
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
@@ -922,45 +950,92 @@ pub fn check_projectile_hits(
                 // between samples (a railgun/APFSDS step is 2-3 cells), and
                 // occupancy is cell membership — no 45-unit circles over-
                 // covering flat faces and leaking through corner seams.
-                let Ok(grid) = grid_query.get(ai_entity) else { continue };
-                let inv = ai_gt.affine().inverse();
-                let to_cell = |world: Vec2| {
-                    let p = inv.transform_point3(world.extend(0.0)).truncate();
-                    Vec2::new(p.x / 66.0, (p.y + 33.0) / 66.0)
+                //
+                // TOP WINS: a turret is a deck of its own standing over the
+                // hull, with its own grid in its own (turning) frame. The
+                // round is walked through the hull and through every turret,
+                // and whichever it meets first takes the hit -- at a spot a
+                // turret covers, that's the turret (ties go up). One layer
+                // per spot: a round never hits the hull under a turret
+                // without going through the turret, and what follows the hit
+                // (spall, splash, a ricochet off the plate) stays on the layer
+                // that was hit. Barrels don't count as cover: a barrel
+                // reaching out past its deck is walked through, not hit.
+                struct LayerHit {
+                    layer: Entity,
+                    is_turret: bool,
+                    gt: GlobalTransform,
+                    cell_from: Vec2,
+                    dir_local: Vec2,
+                    step: crate::building::GridStep,
+                    block: crate::building::Block,
+                    surface: crate::combat::impact::SurfaceHit,
+                }
+                let mut best: Option<LayerHit> = None;
+                let layers = std::iter::once((ai_entity, false, *ai_gt)).chain(
+                    children.iter().filter_map(|c| turret_layers.get(c).ok().map(|(gt, _)| (c, true, *gt))),
+                );
+                for (layer, is_turret, layer_gt) in layers {
+                    let Ok(layer_grid) = grid_query.get(layer) else { continue };
+                    let inv = layer_gt.affine().inverse();
+                    // Hull cell (x, y) stands at (66x, 66y - 33); a turret's
+                    // has no half-cell offset.
+                    let half = if is_turret { 0.0 } else { 33.0 };
+                    let to_cell = |world: Vec2| {
+                        let p = inv.transform_point3(world.extend(0.0)).truncate();
+                        Vec2::new(p.x / 66.0, (p.y + half) / 66.0)
+                    };
+                    let (cell_from, cell_to) = (to_cell(proj.prev_pos), to_cell(proj_pos));
+                    // Direction in this layer's own cell space -- the hull's
+                    // heading (or the turret's) is baked into `inv`, so
+                    // angling it angles every plate on that side without any
+                    // new per-block data.
+                    let dir_local = (cell_to - cell_from).normalize_or_zero();
+                    // Walk the cells, then ask each block's SHAPE what the
+                    // round actually met inside it. A wedge fills half its
+                    // cell, so a round crossing the hollow corner passes
+                    // through and the walk carries on to whatever is behind.
+                    for step in layer_grid.walk(cell_from, cell_to) {
+                        // A penetrator is still inside the block it just went
+                        // through; keep walking to the one behind it.
+                        if Some(step.entity) == proj.last_hit { continue; }
+                        if is_turret && ai_module_query.get(step.entity).is_ok_and(|(m, _)| {
+                            matches!(m.module_type, ModuleType::GunBarrel | ModuleType::MuzzleBrake)
+                        }) {
+                            continue;
+                        }
+                        let block = block_query
+                            .get(step.entity)
+                            .copied()
+                            .unwrap_or(crate::building::Block::module(step.cell));
+                        let entry = cell_from + dir_local * step.t_enter;
+                        let exit = cell_from + dir_local * (step.t_enter + step.span);
+                        if let Some(surface) = crate::combat::impact::clip_to_shape(
+                            &block, step.entry_face, step.cell, entry, exit,
+                        ) {
+                            let nearer = best.as_ref().is_none_or(|b| {
+                                if is_turret { step.t_enter <= b.step.t_enter + 1e-3 } else { step.t_enter < b.step.t_enter }
+                            });
+                            if nearer {
+                                best = Some(LayerHit { layer, is_turret, gt: layer_gt, cell_from, dir_local, step, block, surface });
+                            }
+                            break;
+                        }
+                    }
+                }
+                let Some(LayerHit { layer, is_turret: on_turret, gt: layer_gt, cell_from: _, dir_local, step, block, surface }) = best else { continue };
+                // From here on the hit is resolved on the layer it landed on.
+                let Ok(grid) = grid_query.get(layer) else { continue };
+                let ai_gt = &layer_gt;
+                let children = if on_turret {
+                    match turret_layers.get(layer) { Ok((_, c)) => c, Err(_) => continue }
+                } else {
+                    children
                 };
-                let (cell_from, cell_to) = (to_cell(proj.prev_pos), to_cell(proj_pos));
                 // World-space heading, for effects: dir_local is in the
                 // target's cell space and would spray along the wrong axis on
                 // any ship that isn't sitting at zero rotation.
                 let dir_local_world = proj_vel.0.normalize_or_zero();
-                // Direction in the SHIP's own cell space — the hull's heading
-                // is already baked into `inv`, so angling the ship angles
-                // every plate on that side without any new per-block data.
-                let dir_local = (cell_to - cell_from).normalize_or_zero();
-                // Walk the cells, then ask each block's SHAPE what the round
-                // actually met inside it. A wedge fills half its cell, so a
-                // round crossing the hollow corner passes through and the walk
-                // carries on to whatever is behind — the block no longer gets
-                // to claim its diagonal from every direction.
-                let mut found = None;
-                for step in grid.walk(cell_from, cell_to) {
-                    // A penetrator is still inside the block it just went
-                    // through; keep walking to the one behind it.
-                    if Some(step.entity) == proj.last_hit { continue; }
-                    let block = block_query
-                        .get(step.entity)
-                        .copied()
-                        .unwrap_or(crate::building::Block::module(step.cell));
-                    let entry = cell_from + dir_local * step.t_enter;
-                    let exit = cell_from + dir_local * (step.t_enter + step.span);
-                    if let Some(hit) = crate::combat::impact::clip_to_shape(
-                        &block, step.entry_face, step.cell, entry, exit,
-                    ) {
-                        found = Some((step, block, hit));
-                        break;
-                    }
-                }
-                let Some((step, block, surface)) = found else { continue };
                 // Debug god mode: the player's ship takes nothing.
                 if is_player && player_hits.debug.god_mode {
                     commands.entity(proj_entity).try_despawn();
@@ -1017,7 +1092,8 @@ pub fn check_projectile_hits(
                         spawn_floating_damage(&mut commands, hit_pos, impact.to_block, Color::srgb(1.0, 0.3, 0.3));
                         (step.entity, hit_pos)
                     });
-                    if is_player {
+                    // A turret's plating keeps no air in: holing it breaches nothing.
+                    if is_player && !on_turret {
                         if let Ok((mut hull, _)) = ai_hull_query.get_mut(step.entity) {
                             player_hits.breach_if_holed(step.entity, &mut hull);
                         }
@@ -1693,6 +1769,57 @@ mod shared_hit_tests {
         assert_eq!(hits.len(), 1);
         assert!(hits[0].applied, "already applied, so process_ship_damage won't apply it twice");
         assert!(matches!(hits[0].source, crate::events::DamageSource::Gunfire));
+    }
+
+    /// A turret standing on the player's ship, its centre over hull cell
+    /// (1, 0), so its cell (-1, 0) is over hull cell (0, 0) -- the round's line.
+    fn add_turret(app: &mut App, player: Entity, plated: bool, barrel: bool) -> (Entity, Option<Entity>, Option<Entity>) {
+        use crate::combat::turret_deck::{TurretBody, TurretPlate};
+        let at = crate::building::grid_to_local(IVec2::new(1, 0)).extend(1.2);
+        let body = app.world_mut().spawn((
+            TurretBody::new(Entity::PLACEHOLDER, IVec2::ZERO, 1),
+            Transform::from_translation(at), GlobalTransform::from_translation(at), ChildOf(player),
+        )).id();
+        let cell = IVec2::new(-1, 0);
+        let world = at + Vec3::new(-66.0, 0.0, 0.0);
+        let mut cells = HashMap::new();
+        let barrel_e = barrel.then(|| {
+            let e = app.world_mut().spawn((
+                Module {
+                    module_type: ModuleType::GunBarrel, health: 50.0, max_health: 50.0, power_consumption: 0.0,
+                    power_generation: 0.0, is_active: true, grid_position: cell, size: IVec2::ONE, rotation: Rotation::East,
+                },
+                GlobalTransform::from_translation(world), ChildOf(body),
+            )).id();
+            cells.insert(cell, e);
+            e
+        });
+        let plate_e = plated.then(|| {
+            let e = app.world_mut().spawn((plate(cell), TurretPlate, GlobalTransform::from_translation(world), ChildOf(body))).id();
+            cells.insert(cell, e);
+            e
+        });
+        app.world_mut().entity_mut(body).insert(ShipGrid { cells });
+        (body, plate_e, barrel_e)
+    }
+
+    #[test]
+    fn where_a_turret_stands_over_the_hull_the_round_meets_the_turret() {
+        let (mut app, player, plates) = setup(false);
+        let (_, turret_plate, _) = add_turret(&mut app, player, true, false);
+        app.update();
+        let hp = app.world().get::<HullSegment>(turret_plate.unwrap()).unwrap().health;
+        assert!(hp < 100.0, "the turret's plating took it ({hp})");
+        assert_eq!(app.world().get::<HullSegment>(plates[0]).unwrap().health, 100.0, "the hull under it did not");
+    }
+
+    #[test]
+    fn a_barrel_reaching_over_the_hull_is_no_cover() {
+        let (mut app, player, plates) = setup(false);
+        let (_, _, barrel) = add_turret(&mut app, player, false, true);
+        app.update();
+        assert!(app.world().get::<HullSegment>(plates[0]).unwrap().health < 100.0, "the round went on to the hull");
+        assert_eq!(app.world().get::<Module>(barrel.unwrap()).unwrap().health, 50.0);
     }
 
     #[test]

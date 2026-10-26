@@ -288,11 +288,14 @@ pub fn process_module_destruction(
     mut commands: Commands,
     mut module_query: Query<(Entity, &mut Module, &mut Sprite, &ChildOf), Without<DestroyedModule>>,
     ship_query: Query<Entity, With<Ship>>,
+    turrets: Query<&ChildOf, With<crate::combat::turret_deck::TurretBody>>,
     mut destroy_events: MessageWriter<ModuleDestroyed>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
     let player_ship = ship_query.single().ok();
     for (entity, mut module, mut sprite, parent) in module_query.iter_mut() {
+        // A part on a turret deck belongs to the ship the turret stands on.
+        let owner = turrets.get(parent.parent()).map(|t| t.parent()).unwrap_or(parent.parent());
         // Health alone decides this. It used to also require is_active, which
         // meant a module that spawns INACTIVE could never be destroyed — its
         // health went to zero and past it and nothing ever marked it. That's
@@ -314,7 +317,7 @@ pub fn process_module_destruction(
                 original_type: module.module_type,
             });
             sprite.color = DAMAGE_TINT_TARGET;
-            if Some(parent.parent()) == player_ship {
+            if Some(owner) == player_ship {
                 destroy_events.write(ModuleDestroyed { module: entity });
                 notifications.write(ShowNotification {
                     message: format!("{} destroyed!", module.module_type.name()),

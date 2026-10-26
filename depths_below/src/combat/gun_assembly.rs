@@ -724,10 +724,7 @@ mod gun_muzzle_tests {
 
     #[test]
     fn a_turret_gun_turns_with_its_turret() {
-        let body = TurretBody {
-            ring: Entity::PLACEHOLDER, ring_cell: IVec2::ZERO, size: 3,
-            angle: std::f32::consts::FRAC_PI_2, traverse_deg_s: 0.0, mass_t: 0.0, motors: 0,
-        };
+        let body = TurretBody { angle: std::f32::consts::FRAC_PI_2, ..TurretBody::new(Entity::PLACEHOLDER, IVec2::ZERO, 3) };
         let frame = GlobalTransform::from(
             Transform::from_xyz(100.0, 50.0, 0.0).with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
         );

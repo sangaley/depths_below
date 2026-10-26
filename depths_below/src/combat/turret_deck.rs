@@ -41,11 +41,12 @@ pub fn update_player_aim_point(
         .and_then(|c| camera.single().ok().and_then(|(cam, gt)| cam.viewport_to_world_2d(gt, c).ok()));
     let scripted = crate::combat::new_projectiles::aim_at_override()
         .and_then(|p| ship.single().ok().map(|s| s.transform_point(p.extend(0.0)).truncate()));
-    aim.0 = lock
-        .aim_point()
+    // A scripted run's aim comes first: the real mouse may be sitting over
+    // the window and would otherwise steer the run.
+    aim.0 = scripted
+        .or_else(|| lock.aim_point())
         .or_else(|| selection.target.and_then(|t| targets.get(t).ok()).map(|g| g.translation().truncate()))
-        .or(cursor)
-        .or(scripted);
+        .or(cursor);
 }
 
 /// The rotating deck above a turret ring.
@@ -64,6 +65,21 @@ pub struct TurretBody {
     pub traverse_deg_s: f32,
     pub mass_t: f32,
     pub motors: u32,
+    /// Its ring has been shot out: it can't turn, and waits where it is for
+    /// the ring to be rebuilt under it.
+    pub jammed: bool,
+    /// How its ring was laid: with `ring_cell` and `size`, enough to lay it
+    /// again (meta saves a shot-out ring this way).
+    pub ring_rotation: crate::components::Rotation,
+}
+
+impl TurretBody {
+    pub fn new(ring: Entity, ring_cell: IVec2, size: i32) -> Self {
+        Self {
+            ring, ring_cell, size, angle: 0.0, traverse_deg_s: 0.0, mass_t: 0.0, motors: 0, jammed: false,
+            ring_rotation: crate::components::Rotation::North,
+        }
+    }
 }
 
 /// On a Turret Ring: the body standing on it.
@@ -104,6 +120,15 @@ pub fn ship_of(
 
 pub fn is_turret_ring(t: ModuleType) -> bool {
     matches!(t, ModuleType::TurretRingSmall | ModuleType::TurretRing | ModuleType::TurretRingLarge)
+}
+
+/// The ring that carries a turret of this size.
+pub fn ring_type(size: i32) -> ModuleType {
+    match size {
+        1 => ModuleType::TurretRingSmall,
+        5 => ModuleType::TurretRingLarge,
+        _ => ModuleType::TurretRing,
+    }
 }
 
 pub fn ring_size(t: ModuleType) -> i32 {
@@ -176,32 +201,46 @@ pub fn ring_centre(ring: &Module) -> (IVec2, Vec2) {
     (centre, crate::building::grid_to_local(centre))
 }
 
-/// Give every ring a turret body, and take the body away when its ring goes.
+/// Give every ring a turret body; keep each body on its ring.
+///
+/// - A ring shot out jams its turret, which stays put -- parts, guns and all
+///   -- until the ring is rebuilt on the same cell, and then stands on the new
+///   one. (Destroyed blocks are despawned half a second later and rebuilt as
+///   new entities, so the body can't simply follow its ring entity.)
+/// - A ring that breaks away with a severed section takes its turret along.
+/// - A ring removed in build mode, or a ship replaced by a load, takes its
+///   turret with it.
 pub fn ensure_turret_bodies(
     mut commands: Commands,
     // A load marks the old ship's blocks to go at the end of the frame; a
     // ring on its way out is no ring.
-    rings: Query<(Entity, &Module, &ChildOf, Option<&HasTurretBody>), (Without<DestroyedModule>, Without<crate::meta::DespawnAtFrameEnd>)>,
-    bodies: Query<(Entity, &TurretBody)>,
+    rings: Query<
+        (Entity, &Module, &ChildOf, &Transform, Option<&HasTurretBody>, Has<DestroyedModule>),
+        (Without<crate::meta::DespawnAtFrameEnd>, Without<TurretBody>),
+    >,
+    mut bodies: Query<(Entity, &mut TurretBody, &ChildOf, &mut Transform)>,
     asset_server: Res<AssetServer>,
 ) {
-    for (ring, module, parent, has) in rings.iter() {
-        if !is_turret_ring(module.module_type) || has.is_some() {
+    for (ring, module, parent, _, has, destroyed) in rings.iter() {
+        if !is_turret_ring(module.module_type) || has.is_some() || destroyed {
+            continue;
+        }
+        // A jammed turret waiting on this cell takes the new ring.
+        let waiting = bodies.iter_mut().find(|(_, t, p, _)| {
+            p.parent() == parent.parent() && t.ring_cell == module.grid_position && t.jammed && rings.get(t.ring).is_err()
+        });
+        if let Some((body, mut t, _, _)) = waiting {
+            t.ring = ring;
+            t.jammed = false;
+            t.ring_rotation = module.rotation;
+            commands.entity(ring).try_insert(HasTurretBody(body));
             continue;
         }
         let size = ring_size(module.module_type);
         let (_, at) = ring_centre(module);
         let body = commands
             .spawn((
-                TurretBody {
-                    ring,
-                    ring_cell: module.grid_position,
-                    size,
-                    angle: 0.0,
-                    traverse_deg_s: 0.0,
-                    mass_t: 0.0,
-                    motors: 0,
-                },
+                TurretBody { ring_rotation: module.rotation, ..TurretBody::new(ring, module.grid_position, size) },
                 // Above the hull (0.1) and its modules (0.2-0.4): the turret
                 // stands on the deck. Its own blocks layer within this.
                 Transform::from_translation(at.extend(1.2)),
@@ -234,12 +273,27 @@ pub fn ensure_turret_bodies(
         }
         commands.entity(ring).try_insert(HasTurretBody(body));
     }
-    // A body whose ring has gone (shot off, removed, a load replaced the
-    // ship) goes with it. Shooting the ring should jam the turret instead;
-    // that comes with turret damage.
-    for (body, t) in bodies.iter() {
-        if rings.get(t.ring).is_err() {
-            commands.entity(body).try_despawn();
+    for (body, mut t, parent, mut transform) in bodies.iter_mut() {
+        match rings.get(t.ring) {
+            Ok((_, _, ring_parent, ring_tf, _, destroyed)) => {
+                if destroyed && !t.jammed {
+                    t.jammed = true;
+                }
+                // The ring broke away with a severed section: the turret goes
+                // where it went. A ring's sprite stands at its footprint's
+                // centre, which is where the turret stands.
+                if ring_parent.parent() != parent.parent() {
+                    transform.translation.x = ring_tf.translation.x;
+                    transform.translation.y = ring_tf.translation.y;
+                    commands.entity(body).try_insert(ChildOf(ring_parent.parent()));
+                }
+            }
+            // Ring gone. Shot out, the turret waits jammed for a rebuild;
+            // taken away any other way, the turret goes with it.
+            Err(_) if t.jammed => {}
+            Err(_) => {
+                commands.entity(body).try_despawn();
+            }
         }
     }
 }
@@ -273,12 +327,77 @@ pub fn mount_pending_turret_blocks(
     }
 }
 
+/// Each turret's shape this frame, for turrets that must not turn into each
+/// other or shoot each other: where every block on it stands, in its own
+/// frame, and where it stands on its ship.
+#[derive(Resource, Default, Debug)]
+pub struct TurretShapes(pub Vec<TurretShape>);
+
+#[derive(Debug, Clone)]
+pub struct TurretShape {
+    pub body: Entity,
+    pub ship: Entity,
+    /// Ship-local centre (the ring's).
+    pub centre: Vec2,
+    pub angle: f32,
+    /// Turret-frame positions of its blocks: plating, parts, barrels.
+    pub parts: Vec<Vec2>,
+    /// Furthest any of them reaches from the centre.
+    pub reach: f32,
+}
+
+impl TurretShape {
+    /// Its blocks, ship-local, were it turned to `angle`.
+    pub fn at(&self, angle: f32) -> impl Iterator<Item = Vec2> + '_ {
+        let rot = Vec2::from_angle(angle);
+        self.parts.iter().map(move |p| self.centre + rot.rotate(*p))
+    }
+}
+
+/// Two blocks this close (ship-local units) are in each other's way. A cell
+/// is 66; a little under, so turrets can stand edge to edge.
+pub const TURRET_CLEARANCE: f32 = 50.0;
+
+/// How many of `a`'s blocks (turned to `angle`) foul any other turret on the
+/// same ship.
+pub fn fouling(a: &TurretShape, angle: f32, others: &[TurretShape]) -> usize {
+    let near: Vec<&TurretShape> = others
+        .iter()
+        .filter(|o| o.body != a.body && o.ship == a.ship)
+        .filter(|o| o.centre.distance(a.centre) < a.reach + o.reach + TURRET_CLEARANCE)
+        .collect();
+    if near.is_empty() {
+        return 0;
+    }
+    a.at(angle)
+        .filter(|p| near.iter().any(|o| o.at(o.angle).any(|q| q.distance(*p) < TURRET_CLEARANCE)))
+        .count()
+}
+
+pub fn measure_turrets(
+    mut shapes: ResMut<TurretShapes>,
+    bodies: Query<(Entity, &TurretBody, &Transform, &ChildOf, Option<&Children>)>,
+    blocks: Query<&Transform, (Or<(With<Module>, With<HullSegment>)>, Without<DestroyedModule>, Without<crate::components::HullDestroyed>)>,
+) {
+    shapes.0.clear();
+    for (body, t, tf, parent, children) in bodies.iter() {
+        let parts: Vec<Vec2> = children
+            .into_iter()
+            .flatten()
+            .filter_map(|c| blocks.get(*c).ok())
+            .map(|b| b.translation.truncate())
+            .collect();
+        let reach = parts.iter().map(|p| p.length()).fold(0.0, f32::max);
+        shapes.0.push(TurretShape { body, ship: parent.parent(), centre: tf.translation.truncate(), angle: t.angle, parts, reach });
+    }
+}
+
 /// Weigh each turret, count its motors, and turn it toward what it should
 /// point at -- the player's aim for the player's ship -- no faster than it
 /// can.
 pub fn traverse_turrets(
     time: Res<Time>,
-    mut bodies: Query<(&mut TurretBody, &mut Transform, &ChildOf, Option<&Children>)>,
+    mut bodies: Query<(Entity, &mut TurretBody, &mut Transform, &ChildOf, Option<&Children>)>,
     parts: Query<&Module, Without<DestroyedModule>>,
     plates: Query<(), (With<TurretPlate>, Without<crate::components::HullDestroyed>)>,
     ships: Query<(&GlobalTransform, Option<&Children>), With<Ship>>,
@@ -286,12 +405,13 @@ pub fn traverse_turrets(
     rings: Query<&Module>,
     aim: Res<PlayerAimPoint>,
     build: Option<Res<State<crate::states::BuildState>>>,
+    shapes: Option<Res<TurretShapes>>,
 ) {
     let dt = time.delta_secs();
     // While building, turrets stand squared to the hull, so a turret's cell
     // lies exactly over a hull cell (building::turret_build).
     let building = build.is_some_and(|s| *s.get() != crate::states::BuildState::Inactive);
-    for (mut body, mut transform, parent, children) in bodies.iter_mut() {
+    for (entity, mut body, mut transform, parent, children) in bodies.iter_mut() {
         let mut mass = 0.0;
         for c in children.into_iter().flatten() {
             if let Ok(m) = parts.get(*c) {
@@ -314,7 +434,11 @@ pub fn traverse_turrets(
             .filter(|m| m.module_type == ModuleType::TraverseMotor)
             .filter(|m| ring_cells.iter().any(|r| (m.grid_position - *r).abs().max_element() <= 1 && !ring_cells.contains(&m.grid_position)))
             .count() as u32;
-        body.traverse_deg_s = if body.motors == 0 { 0.0 } else { super::gun_math::traverse_deg_per_s(body.motors, body.mass_t) };
+        body.traverse_deg_s = if body.motors == 0 || body.jammed {
+            0.0
+        } else {
+            super::gun_math::traverse_deg_per_s(body.motors, body.mass_t)
+        };
 
         if building {
             if body.angle != 0.0 {
@@ -334,7 +458,18 @@ pub fn traverse_turrets(
             diff -= std::f32::consts::TAU;
         }
         let max = body.traverse_deg_s.to_radians() * dt;
-        body.angle += diff.clamp(-max, max);
+        let next = body.angle + diff.clamp(-max, max);
+        // A physical stop: it won't turn its guns into another turret. It
+        // may always turn the way that fouls less, so two built overlapping
+        // can still work themselves apart.
+        if let Some(shapes) = shapes.as_ref() {
+            if let Some(shape) = shapes.0.iter().find(|t| t.body == entity) {
+                if fouling(shape, next, &shapes.0) > fouling(shape, body.angle, &shapes.0) {
+                    continue;
+                }
+            }
+        }
+        body.angle = next;
         transform.rotation = Quat::from_rotation_z(body.angle);
     }
 }
@@ -351,6 +486,105 @@ mod turret_deck_tests {
         assert!(small < medium && medium < large, "{small} {medium} {large}");
         assert!(deck_cells(3).contains(&IVec2::new(2, 1)));
         assert!(!deck_cells(3).contains(&IVec2::new(3, 0)));
+    }
+
+    fn app_with_ring() -> (App, Entity, Entity) {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()));
+        app.init_asset::<Image>();
+        app.add_systems(Update, ensure_turret_bodies);
+        let ship = app.world_mut().spawn((Ship, Transform::default())).id();
+        let ring = spawn_ring(&mut app, ship);
+        app.update();
+        app.update();
+        (app, ship, ring)
+    }
+
+    fn spawn_ring(app: &mut App, ship: Entity) -> Entity {
+        let module = Module {
+            module_type: ModuleType::TurretRing, health: 100.0, max_health: 100.0, power_consumption: 0.0,
+            power_generation: 0.0, is_active: true, grid_position: IVec2::new(4, 0), size: IVec2::splat(3),
+            rotation: crate::components::Rotation::North,
+        };
+        app.world_mut().spawn((module, Transform::from_xyz(330.0, 33.0, 0.2), ChildOf(ship))).id()
+    }
+
+    fn the_body(app: &mut App) -> Option<(Entity, TurretBody)> {
+        app.world_mut().query::<(Entity, &TurretBody)>().iter(app.world()).next().map(|(e, t)| (e, t.clone()))
+    }
+
+    #[test]
+    fn a_shot_out_ring_jams_its_turret_and_a_rebuilt_one_frees_it() {
+        let (mut app, ship, ring) = app_with_ring();
+        let (body, _) = the_body(&mut app).expect("a ring gets a turret");
+        // Shot out, then cleared away half a second later.
+        app.world_mut().entity_mut(ring).insert(DestroyedModule { original_type: ModuleType::TurretRing });
+        app.update();
+        assert!(the_body(&mut app).unwrap().1.jammed);
+        app.world_mut().entity_mut(ring).despawn();
+        app.update();
+        let (still, t) = the_body(&mut app).expect("the turret waits for its ring");
+        assert_eq!(still, body);
+        assert!(t.jammed);
+        // The crew rebuild the ring on the same cell.
+        let new_ring = spawn_ring(&mut app, ship);
+        app.update();
+        let (same, t) = the_body(&mut app).unwrap();
+        assert_eq!(same, body, "the same turret, parts and all");
+        assert_eq!(t.ring, new_ring);
+        assert!(!t.jammed);
+    }
+
+    #[test]
+    fn a_ring_taken_away_in_build_mode_takes_its_turret() {
+        let (mut app, _, ring) = app_with_ring();
+        app.world_mut().entity_mut(ring).despawn();
+        app.update();
+        app.update();
+        assert!(the_body(&mut app).is_none());
+    }
+
+    #[test]
+    fn a_ring_that_breaks_away_takes_its_turret_along() {
+        let (mut app, _, ring) = app_with_ring();
+        let section = app.world_mut().spawn(Transform::default()).id();
+        app.world_mut().entity_mut(ring).insert((ChildOf(section), Transform::from_xyz(-20.0, 5.0, 0.2)));
+        app.update();
+        app.update();
+        let (body, _) = the_body(&mut app).unwrap();
+        assert_eq!(app.world().get::<ChildOf>(body).unwrap().parent(), section);
+        let at = app.world().get::<Transform>(body).unwrap().translation;
+        assert_eq!((at.x, at.y), (-20.0, 5.0));
+    }
+
+    /// A turret with a 4-cell barrel along +x, and a plain deck beside it.
+    fn pair() -> (TurretShape, TurretShape) {
+        let gun = TurretShape {
+            body: Entity::from_raw_u32(1).unwrap(), ship: Entity::PLACEHOLDER, centre: Vec2::ZERO, angle: 0.0,
+            parts: (0..5).map(|x| Vec2::new(x as f32 * 66.0, 0.0)).collect(), reach: 264.0,
+        };
+        let deck = TurretShape {
+            body: Entity::from_raw_u32(2).unwrap(), ship: Entity::PLACEHOLDER, centre: Vec2::new(0.0, 264.0), angle: 0.0,
+            parts: vec![Vec2::ZERO], reach: 0.0,
+        };
+        (gun, deck)
+    }
+
+    #[test]
+    fn a_turret_wont_swing_its_barrel_into_a_neighbour() {
+        let (gun, deck) = pair();
+        let all = vec![gun.clone(), deck];
+        assert_eq!(fouling(&gun, 0.0, &all), 0, "pointing ahead it clears");
+        assert!(fouling(&gun, std::f32::consts::FRAC_PI_2, &all) > 0, "swung toward the neighbour it hits it");
+        assert_eq!(fouling(&gun, -std::f32::consts::FRAC_PI_2, &all), 0, "the other way is clear");
+    }
+
+    #[test]
+    fn turrets_on_different_ships_never_foul() {
+        let (gun, mut deck) = pair();
+        deck.ship = Entity::from_raw_u32(9).unwrap();
+        let all = vec![gun.clone(), deck];
+        assert_eq!(fouling(&gun, std::f32::consts::FRAC_PI_2, &all), 0);
     }
 
     #[test]

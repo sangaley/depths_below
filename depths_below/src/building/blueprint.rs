@@ -774,7 +774,7 @@ mod turret_capture_tests {
         let ship = app.world_mut().spawn(Ship).id();
         let ring = app.world_mut().spawn((module(ModuleType::TurretRing, IVec2::new(5, 1)), ChildOf(ship))).id();
         let body = app.world_mut().spawn((
-            TurretBody { ring, ring_cell: IVec2::new(5, 1), size: 3, angle: 0.0, traverse_deg_s: 0.0, mass_t: 0.0, motors: 0 },
+            TurretBody::new(ring, IVec2::new(5, 1), 3),
             ChildOf(ship),
         )).id();
         app.world_mut().spawn((HullSegment { grid_position: IVec2::ZERO, ..default() }, TurretPlate, ChildOf(body)));

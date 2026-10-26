@@ -334,12 +334,18 @@ fn handle_save_request(
         Option<&crate::building::customization::tuning::SelectedAmmo>,
         Option<&crate::combat::turret_deck::OnTurret>,
     ), PlayerBlocks>,
-    hull_query: Query<(&HullSegment, &Transform), PlayerBlocks>,
+    // With the turrets standing on the ship: bundled, this system is at the cap.
+    hull_and_turrets: (
+        Query<(&HullSegment, &Transform), PlayerBlocks>,
+        Query<(&crate::combat::turret_deck::TurretBody, &ChildOf)>,
+        Query<(), With<Ship>>,
+    ),
     crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
 ) {
     let (world_state, galaxy_map, streaming, drifting_dead, looted, fuel, contracts, reputation, standing, sim, faction_stations, war, people, work, spawned) = &world_galaxy;
+    let (hull_query, turrets, player_ship) = &hull_and_turrets;
     for event in save_events.read() {
-        let save_data = collect_save_data(
+        let mut save_data = collect_save_data(
             event.slot,
             &depth_state,
             &hull_state,
@@ -351,7 +357,7 @@ fn handle_save_request(
             world_state,
             &ship_query,
             &module_query,
-            &hull_query,
+            hull_query,
             &crew_query,
             &current_state,
             galaxy_map,
@@ -369,6 +375,27 @@ fn handle_save_request(
             work,
             spawned.galaxy_time,
         );
+
+        // A turret whose ring is shot out still has its parts aboard, and
+        // they're saved standing on it. A destroyed ring is gone from the
+        // save like any destroyed block, so on load they'd wait for a ring
+        // that never comes. Save the ring patched together at 1 HP instead.
+        for (turret, parent) in turrets.iter() {
+            if turret.jammed && player_ship.contains(parent.parent()) && module_query.get(turret.ring).is_err() {
+                save_data.ship.modules.push(ModuleData {
+                    module_type: crate::combat::turret_deck::ring_type(turret.size),
+                    grid_position: turret.ring_cell,
+                    health: 1.0,
+                    rotation: turret.ring_rotation,
+                    is_active: true,
+                    custom_data: None,
+                    customization_params: None,
+                    tuning: None,
+                    selected_ammo: None,
+                    turret: None,
+                });
+            }
+        }
 
         // Tier 3 customization is saved via customization_params field
         // (populated when ModuleCustomization query is added in a future refactor)

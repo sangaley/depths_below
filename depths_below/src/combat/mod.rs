@@ -482,10 +482,12 @@ impl Plugin for CombatPlugin {
             // changes, docked or flying, before the enhancer pass folds
             // tuning into the numbers it writes.
             .init_resource::<turret_deck::PlayerAimPoint>()
+            .init_resource::<turret_deck::TurretShapes>()
             .add_systems(Update, (
                 turret_deck::ensure_turret_bodies,
                 turret_deck::mount_pending_turret_blocks,
                 turret_deck::update_player_aim_point,
+                turret_deck::measure_turrets,
                 turret_deck::traverse_turrets,
             ).chain())
             .add_systems(Update, (gun_assembly::assemble_guns, gun_assembly::run_gun_racks, gun_assembly::place_muzzles).chain()
