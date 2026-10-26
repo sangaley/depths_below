@@ -85,6 +85,8 @@ type PlayerBlocks = (
     Without<crate::ai_ship::components::OwnedByAiShip>,
     Without<crate::combat::severance::DetachedSection>,
     Without<crate::combat::severance::SeveredBlock>,
+    // A turret's plating is made from its ring, never saved.
+    Without<crate::combat::turret_deck::TurretPlate>,
 );
 
 /// Get save file path for a given slot
@@ -133,6 +135,7 @@ fn collect_save_data(
         Option<&CustomModule>,
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&crate::building::customization::tuning::SelectedAmmo>,
+        Option<&crate::combat::turret_deck::OnTurret>,
     ), PlayerBlocks>,
     hull_query: &Query<(&HullSegment, &Transform), PlayerBlocks>,
     crew_query: &Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
@@ -160,7 +163,7 @@ fn collect_save_data(
     // Collect modules
     let modules: Vec<ModuleData> = module_query
         .iter()
-        .map(|(module, custom, tuning, selected_ammo)| {
+        .map(|(module, custom, tuning, selected_ammo, on_turret)| {
             let custom_data = custom.map(|c| CustomModuleData {
                 custom_name: c.custom_name.clone(),
                 subcomponents: Vec::new(),
@@ -175,6 +178,7 @@ fn collect_save_data(
                 customization_params: None, // Tier 3 params saved in future version
                 tuning: tuning.copied(),
                 selected_ammo: selected_ammo.map(|s| s.0),
+                turret: on_turret.map(|t| t.ring_cell),
             }
         })
         .collect();
@@ -328,6 +332,7 @@ fn handle_save_request(
         Option<&CustomModule>,
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&crate::building::customization::tuning::SelectedAmmo>,
+        Option<&crate::combat::turret_deck::OnTurret>,
     ), PlayerBlocks>,
     hull_query: Query<(&HullSegment, &Transform), PlayerBlocks>,
     crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
@@ -652,6 +657,9 @@ fn rebuild_entities_from_save(
             commands.entity(entity).insert(
                 crate::building::customization::tuning::SelectedAmmo(ammo)
             );
+        }
+        if let Some(ring_cell) = module_data.turret {
+            commands.entity(entity).insert(crate::combat::turret_deck::PendingTurretMount(ring_cell));
         }
     }
 

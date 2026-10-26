@@ -460,6 +460,10 @@ impl ModuleCategory {
                 ModuleType::RailMagnet,
                 ModuleType::Magazine,
                 ModuleType::BeltConveyor,
+                ModuleType::TurretRingSmall,
+                ModuleType::TurretRing,
+                ModuleType::TurretRingLarge,
+                ModuleType::TraverseMotor,
             ],
             ModuleCategory::Detection => &[
                 ModuleType::RadarArray,
@@ -756,6 +760,10 @@ pub enum ModuleType {
     RailMagnet,           // Electromagnetic boost along the barrel
     Magazine,             // The ship's ammunition store for built guns
     BeltConveyor,         // Carries shells from a magazine to a feeder
+    TurretRingSmall,      // 1x1 bearing a turret turns on (combat::turret_deck)
+    TurretRing,           // 3x3
+    TurretRingLarge,      // 5x5
+    TraverseMotor,        // Turns the turret on the ring it touches
     OverchargeCapacitor,  // One-shot damage boost, long cooldown
     BoreEvacuator,        // Clears barrel fumes, faster follow-up shots
     MagneticAccelerator,  // Boosts projectile velocity (railgun/coilgun)
@@ -906,7 +914,9 @@ impl ModuleType {
             ModuleType::BreechCooler | ModuleType::RecoilAbsorber |
             ModuleType::GunBarrel | ModuleType::MuzzleBrake |
             ModuleType::Mantlet | ModuleType::RailMagnet |
-            ModuleType::Magazine | ModuleType::BeltConveyor => ModuleCategory::Guns,
+            ModuleType::Magazine | ModuleType::BeltConveyor |
+            ModuleType::TurretRingSmall | ModuleType::TurretRing |
+            ModuleType::TurretRingLarge | ModuleType::TraverseMotor => ModuleCategory::Guns,
 
             ModuleType::ReactorFuelRod |
             ModuleType::ReactorCooling => ModuleCategory::Power,
@@ -1125,6 +1135,10 @@ impl ModuleType {
             ModuleType::RailMagnet => "Rail Magnet",
             ModuleType::Magazine => "Magazine",
             ModuleType::BeltConveyor => "Belt Conveyor",
+            ModuleType::TurretRingSmall => "Small Turret Ring",
+            ModuleType::TurretRing => "Turret Ring",
+            ModuleType::TurretRingLarge => "Large Turret Ring",
+            ModuleType::TraverseMotor => "Traverse Motor",
             ModuleType::OverchargeCapacitor => "Overcharge Capacitor",
             ModuleType::BoreEvacuator => "Bore Evacuator",
             ModuleType::MagneticAccelerator => "Magnetic Accelerator",

@@ -167,6 +167,9 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::RailMagnet => "sprites/gun_parts/rail_magnet.png",
         ModuleType::Magazine => "sprites/gun_parts/ammo_store.png",
         ModuleType::BeltConveyor => "sprites/gun_parts/conveyor.png",
+        ModuleType::TurretRingSmall | ModuleType::TurretRing | ModuleType::TurretRingLarge =>
+            "sprites/gun_parts/turret_ring.png",
+        ModuleType::TraverseMotor => "sprites/gun_parts/traverse_motor.png",
         ModuleType::OverchargeCapacitor => "sprites/modules/battery.png",
         ModuleType::BoreEvacuator => "sprites/modules/hull_beam.png",
         ModuleType::MagneticAccelerator => "sprites/modules/railgun.png",

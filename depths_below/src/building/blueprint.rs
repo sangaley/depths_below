@@ -131,11 +131,16 @@ pub struct ModuleExtras {
     pub fire_group: Option<u8>,
     #[serde(default)]
     pub ammo: Option<SelectedAmmo>,
+    /// On a turret deck: the hull cell of the Turret Ring it stands on. The
+    /// block's grid_pos is then in that turret's own grid, (0, 0) at the
+    /// ring's centre (combat::turret_deck).
+    #[serde(default)]
+    pub turret: Option<IVec2>,
 }
 
 impl ModuleExtras {
     pub fn is_empty(&self) -> bool {
-        self.tuning.is_none() && self.fire_group.is_none() && self.ammo.is_none()
+        self.tuning.is_none() && self.fire_group.is_none() && self.ammo.is_none() && self.turret.is_none()
     }
 }
 
@@ -149,6 +154,9 @@ pub fn apply_module_extras(commands: &mut Commands, entity: Entity, extras: &Mod
     }
     if let Some(ammo) = extras.ammo {
         commands.entity(entity).try_insert(ammo);
+    }
+    if let Some(ring_cell) = extras.turret {
+        commands.entity(entity).try_insert(crate::combat::turret_deck::PendingTurretMount(ring_cell));
     }
 }
 
@@ -289,7 +297,8 @@ impl DesignCapture<'_, '_> {
                     .ok()
                     .copied()
                     .filter(|a| a.0 != crate::combat::ammo_types::KineticAmmoType::AP);
-                let extras = ModuleExtras { tuning, fire_group, ammo };
+                // Turret-deck blocks are captured with their turret in step 5c.
+                let extras = ModuleExtras { tuning, fire_group, ammo, turret: None };
 
                 let (custom_name, subcomponents) = match self.custom_query.get(entity) {
                     Ok((custom, module_children)) => (
@@ -389,7 +398,8 @@ pub fn save_blueprint_system(
                 .filter(|&g| g != 0);
             let ammo = ammo_query.get(entity).ok().copied()
                 .filter(|a| a.0 != crate::combat::ammo_types::KineticAmmoType::AP);
-            let extras = ModuleExtras { tuning, fire_group, ammo };
+            // Turret-deck blocks are captured with their turret in step 5c.
+                let extras = ModuleExtras { tuning, fire_group, ammo, turret: None };
 
             let (custom_name, subcomponents) = match custom_query.get(entity) {
                 Ok((custom, module_children)) => (

@@ -38,6 +38,7 @@ impl Plugin for LayoutPlugin {
         app.init_resource::<LayoutEpoch>()
             .register_required_components::<Ship, LayoutVersion>()
             .register_required_components::<AiShip, LayoutVersion>()
+            .register_required_components::<crate::combat::turret_deck::TurretBody, LayoutVersion>()
             // A block joins a ship when its ChildOf is inserted (spawning it
             // under the ship does that in the same bundle) and leaves when
             // its ChildOf goes: despawned, re-parented onto debris, or

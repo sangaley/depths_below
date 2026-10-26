@@ -76,6 +76,7 @@ impl AiShipLayout {
                     tuning: Some(l.tuning),
                     fire_group: Some(l.fire_group),
                     ammo: l.ammo.map(SelectedAmmo),
+                    turret: None,
                 });
                 BlueprintModule {
                     module_type: m.module_type,

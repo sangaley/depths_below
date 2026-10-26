@@ -1458,6 +1458,38 @@ pub fn build_registry() -> ModuleRegistry {
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
+    defs.insert(ModuleType::TurretRingSmall, ModuleDef {
+        name: "Small Turret Ring", description: "A 1x1 bearing. The turret above it reaches about 1.5 cells: room for a light gun.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 200.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.42, 0.40, 0.36),
+        companion: CompanionData::None, customizable: false, cost: 40,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::TurretRing, ModuleDef {
+        name: "Turret Ring", description: "A 3x3 bearing. The turret above it reaches about 2.5 cells: a twin medium mount.",
+        category: ModuleCategory::Guns, size: IVec2::new(3, 3), health: 400.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.42, 0.40, 0.36),
+        companion: CompanionData::None, customizable: false, cost: 110,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::TurretRingLarge, ModuleDef {
+        name: "Large Turret Ring", description: "A 5x5 bearing. The turret above it reaches about 3.5 cells: heavy guns.",
+        category: ModuleCategory::Guns, size: IVec2::new(5, 5), health: 700.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.42, 0.40, 0.36),
+        companion: CompanionData::None, customizable: false, cost: 240,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::TraverseMotor, ModuleDef {
+        name: "Traverse Motor", description: "Turns the turret on the ring it touches. Turn speed is motors against everything up top.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 90.0,
+        power_generation: 0.0, power_consumption: 6.0, color: Color::srgb(0.42, 0.40, 0.36),
+        companion: CompanionData::None, customizable: false, cost: 35,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
     defs.insert(ModuleType::OverchargeCapacitor, ModuleDef {
         name: "Overcharge Capacitor", description: "Stores energy for a single devastating shot. 3x damage, 15s cooldown. Worth the wait.",
         category: ModuleCategory::Weapons, size: IVec2::new(1, 1), health: 50.0,

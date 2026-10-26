@@ -656,12 +656,13 @@ fn update_grid_occupancy(
 /// 2,000-block capital rebuilt its whole grid because a skiff lost a plate.
 pub fn update_ship_grids(
     mut commands: Commands,
+    // Turret bodies too: each turret deck is a little grid of its own.
     mut ships: Query<
-        (Entity, &layout::LayoutVersion, Option<&Children>, Option<&mut ShipGrid>),
-        Or<(With<Ship>, With<crate::ai_ship::components::AiShip>)>,
+        (Entity, &layout::LayoutVersion, Option<&Children>, Option<&mut ShipGrid>, Has<crate::combat::turret_deck::TurretBody>),
+        Or<(With<Ship>, With<crate::ai_ship::components::AiShip>, With<crate::combat::turret_deck::TurretBody>)>,
     >,
     modules: Query<&Module, Without<DestroyedModule>>,
-    hulls: Query<&Transform, (With<HullSegment>, Without<HullDestroyed>)>,
+    hulls: Query<(&Transform, &HullSegment), Without<HullDestroyed>>,
     epoch: Res<layout::LayoutEpoch>,
     mut seen_epoch: Local<Option<layout::LayoutEpoch>>,
     mut built: Local<layout::BuiltFrom>,
@@ -672,7 +673,7 @@ pub fn update_ship_grids(
     }
     *seen_epoch = Some(*epoch);
 
-    for (ship, version, children, grid) in ships.iter_mut() {
+    for (ship, version, children, grid, is_turret) in ships.iter_mut() {
         if grid.is_some() && !built.is_stale(ship, version) {
             continue;
         }
@@ -696,8 +697,12 @@ pub fn update_ship_grids(
         // centroid, not on their origin cell. Hull goes in second and takes
         // a shared cell, as it always has.
         for &child in &children {
-            if let Ok(transform) = hulls.get(child) {
-                cells.insert(rooms::transform_to_grid(transform), child);
+            if let Ok((transform, hull)) = hulls.get(child) {
+                // A turret's plating sits on the turret's own grid, centred
+                // on (0, 0) with no half-cell offset; its segments know
+                // their cell.
+                let cell = if is_turret { hull.grid_position } else { rooms::transform_to_grid(transform) };
+                cells.insert(cell, child);
             }
         }
 

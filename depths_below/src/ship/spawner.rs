@@ -226,6 +226,7 @@ pub(crate) fn builtin_starter_design() -> crate::building::blueprint::Blueprint 
             tuning: Some(crate::building::customization::tuning::WeaponTuning { velocity, fire_rate, damage, traverse: 1.0 }),
             fire_group: Some(fire_group),
             ammo: ammo.map(crate::building::customization::tuning::SelectedAmmo),
+            turret: None,
         }),
     };
 

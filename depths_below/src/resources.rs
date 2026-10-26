@@ -271,6 +271,10 @@ pub struct ModuleData {
     /// Loaded kinetic ammo type
     #[serde(default)]
     pub selected_ammo: Option<crate::combat::ammo_types::KineticAmmoType>,
+    /// On a turret deck: the hull cell of its Turret Ring; grid_position is
+    /// then in the turret's own grid (combat::turret_deck).
+    #[serde(default)]
+    pub turret: Option<IVec2>,
 }
 
 fn default_rotation() -> Rotation { Rotation::North }

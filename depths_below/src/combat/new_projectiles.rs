@@ -239,7 +239,7 @@ pub struct AimInput<'w, 's> {
 }
 
 /// DEPTHS_AIM_AT=<x>,<y> (ship-local units): where unattended runs aim.
-fn aim_at_override() -> Option<Vec2> {
+pub(crate) fn aim_at_override() -> Option<Vec2> {
     static AT: std::sync::OnceLock<Option<Vec2>> = std::sync::OnceLock::new();
     *AT.get_or_init(|| {
         let v = std::env::var("DEPTHS_AIM_AT").ok()?;
