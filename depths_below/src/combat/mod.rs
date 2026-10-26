@@ -25,6 +25,7 @@ pub mod ammo_types;
 pub mod recoil;
 pub mod limits;
 pub mod impact;
+pub mod gun_math;
 
 /// Dev switch: no weapon consumes ammunition while true (player and AI).
 ///

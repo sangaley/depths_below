@@ -1344,19 +1344,117 @@ pub fn build_registry() -> ModuleRegistry {
     // ADVANCED WEAPON ENHANCERS (optional optimization blocks)
     // ========================================================================
 
-    defs.insert(ModuleType::MuzzleBrake, ModuleDef {
-        name: "Muzzle Brake", description: "Redirects propellant gases to reduce recoil. +15% accuracy, reduces barrel stress.",
-        category: ModuleCategory::Weapons, size: IVec2::new(1, 1), health: 35.0,
-        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.50, 0.35, 0.30),
-        companion: CompanionData::None, customizable: true, cost: 30,
+    // ========================================================================
+    // GUN PARTS -- combat::gun_assembly turns a firing piece and the parts
+    // touching it into one gun. Numbers: combat::gun_math.
+    // ========================================================================
+
+    defs.insert(ModuleType::FiringPiece, ModuleDef {
+        name: "Firing Piece", description: "The breech. One per gun: barrels run out from its front, everything else bolts on behind and beside it.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 160.0,
+        power_generation: 0.0, power_consumption: 10.0, color: Color::srgb(0.55, 0.45, 0.25),
+        companion: CompanionData::Weapon {
+            // Placeholders: combat::gun_assembly works the real numbers out
+            // from the parts around it and overwrites these.
+            damage: 10.0, range: 6000.0, fire_rate: 0.2, ammo: 40,
+            mount_type: MountType::Fixed, ammo_type: AmmoType::Bullet,
+        }, customizable: false, cost: 60,
+        base_stats: CalculatedStats::default(), crew_station: true,
+    });
+
+    defs.insert(ModuleType::GaugeIncreaser, ModuleDef {
+        name: "Gauge Increaser", description: "+55 mm of bore, up to 8 per gun (500 mm). Bigger shells hit harder and load slower.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 120.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.45, 0.42, 0.35),
+        companion: CompanionData::None, customizable: false, cost: 25,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::Loader, ModuleDef {
+        name: "Loader", description: "Autoloader. A straight run of these is one loader, taking 1 m of shell per block. Loaders work in parallel.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 80.0,
+        power_generation: 0.0, power_consumption: 3.0, color: Color::srgb(0.40, 0.40, 0.35),
+        companion: CompanionData::None, customizable: false, cost: 30,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::ClipRack, ModuleDef {
+        name: "Clip Rack", description: "A ready rack beside a loader: 3 shells and a 25% faster load per loader-length of rack. It burns if hit.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 60.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.45, 0.40, 0.25),
+        companion: CompanionData::None, customizable: false, cost: 20,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::ShellFeeder, ModuleDef {
+        name: "Shell Feeder", description: "Pulls shells from a magazine into the gun's racks.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 60.0,
+        power_generation: 0.0, power_consumption: 2.0, color: Color::srgb(0.40, 0.38, 0.30),
+        companion: CompanionData::None, customizable: false, cost: 15,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::BreechCooler, ModuleDef {
+        name: "Breech Cooler", description: "Carries 0.6 heat a second off the gun. A big gun with too few waits on itself.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 70.0,
+        power_generation: 0.0, power_consumption: 3.0, color: Color::srgb(0.35, 0.45, 0.55),
+        companion: CompanionData::None, customizable: false, cost: 25,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
     defs.insert(ModuleType::RecoilAbsorber, ModuleDef {
-        name: "Recoil Absorber", description: "Hydraulic dampener. Protects adjacent blocks from firing vibration. Reduces cascade chance by 30%.",
-        category: ModuleCategory::Weapons, size: IVec2::new(1, 1), health: 45.0,
+        name: "Recoil Absorber", description: "Soaks one unit of recoil per shot, keeping the spread tight under sustained fire.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 100.0,
         power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.40, 0.40, 0.45),
-        companion: CompanionData::None, customizable: false, cost: 38,
+        companion: CompanionData::None, customizable: false, cost: 30,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::GunBarrel, ModuleDef {
+        name: "Barrel", description: "1 m of tube. Needs 1 m per 100 mm of gauge to burn the propellant fully; longer is steadier.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 90.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.35, 0.37, 0.40),
+        companion: CompanionData::None, customizable: false, cost: 20,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::MuzzleBrake, ModuleDef {
+        name: "Muzzle Brake", description: "The barrel's last metre, vented: halves recoil, costs a little accuracy.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 80.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.38, 0.38, 0.40),
+        companion: CompanionData::None, customizable: false, cost: 30,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::Mantlet, ModuleDef {
+        name: "Mantlet", description: "Thick armour in front of the breech, where a turret is usually hit.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 300.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.50, 0.50, 0.52),
+        companion: CompanionData::None, customizable: false, cost: 45,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::RailMagnet, ModuleDef {
+        name: "Rail Magnet", description: "Sits beside the barrel: +90 m/s per magnet, drawing power while it charges.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 70.0,
+        power_generation: 0.0, power_consumption: 15.0, color: Color::srgb(0.60, 0.40, 0.30),
+        companion: CompanionData::None, customizable: false, cost: 40,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::Magazine, ModuleDef {
+        name: "Magazine", description: "The ship's store of shells for built guns. Feeders draw from it, and it is what a flash reaches.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 120.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.45, 0.38, 0.25),
+        companion: CompanionData::None, customizable: false, cost: 35,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::BeltConveyor, ModuleDef {
+        name: "Belt Conveyor", description: "Carries shells from a magazine to a feeder.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 40.0,
+        power_generation: 0.0, power_consumption: 1.0, color: Color::srgb(0.35, 0.35, 0.33),
+        companion: CompanionData::None, customizable: false, cost: 5,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
@@ -2564,8 +2662,6 @@ mod tests {
         ModuleType::BarrelExtension,
         ModuleType::AmmoFeedUnit,
         ModuleType::CoolingJacket,
-        ModuleType::MuzzleBrake,
-        ModuleType::RecoilAbsorber,
         ModuleType::OverchargeCapacitor,
         ModuleType::BoreEvacuator,
         ModuleType::MagneticAccelerator,

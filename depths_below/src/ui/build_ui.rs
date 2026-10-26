@@ -755,6 +755,8 @@ fn module_category_color(cat: ModuleCategory) -> Color {
         ModuleCategory::LifeSupport => Color::srgb(0.2, 0.7, 0.4),
         ModuleCategory::Control => Color::srgb(0.6, 0.6, 0.8),
         ModuleCategory::Weapons => Color::srgb(0.8, 0.2, 0.2),
+        // Brass: the colour the gun parts use for anything carrying shells.
+        ModuleCategory::Guns => Color::srgb(0.79, 0.6, 0.29),
         ModuleCategory::Detection => Color::srgb(0.3, 0.7, 0.7),
         ModuleCategory::Storage => Color::srgb(0.6, 0.5, 0.3),
         ModuleCategory::Crew => Color::srgb(0.7, 0.5, 0.7),
@@ -776,6 +778,7 @@ fn category_color(cat: BuildCategory) -> Color {
         BuildCategory::LifeSupport => Color::srgb(0.2, 0.7, 0.4),
         BuildCategory::Control => Color::srgb(0.6, 0.6, 0.8),
         BuildCategory::Weapons => Color::srgb(0.8, 0.2, 0.2),
+        BuildCategory::Guns => Color::srgb(0.79, 0.6, 0.29),
         BuildCategory::Detection => Color::srgb(0.3, 0.7, 0.7),
         BuildCategory::Storage => Color::srgb(0.6, 0.5, 0.3),
         BuildCategory::Crew => Color::srgb(0.7, 0.5, 0.7),
@@ -796,6 +799,9 @@ fn category_icon(cat: BuildCategory) -> &'static str {
         BuildCategory::LifeSupport => "ui/icons/cat_lifesupport.png",
         BuildCategory::Control => "ui/icons/cat_control.png",
         BuildCategory::Weapons => "ui/icons/cat_weapons.png",
+        // No icon of its own yet; shares the weapons one until the gun-part
+        // art lands.
+        BuildCategory::Guns => "ui/icons/cat_weapons.png",
         BuildCategory::Detection => "ui/icons/cat_detection.png",
         BuildCategory::Storage => "ui/icons/cat_storage.png",
         BuildCategory::Crew => "ui/icons/cat_crew.png",
@@ -813,6 +819,7 @@ fn category_short_name(cat: BuildCategory) -> &'static str {
         BuildCategory::LifeSupport => "LIFE",
         BuildCategory::Control => "CTRL",
         BuildCategory::Weapons => "WEAP",
+        BuildCategory::Guns => "GUNS",
         BuildCategory::Detection => "DET",
         BuildCategory::Storage => "STOR",
         BuildCategory::Crew => "CREW",

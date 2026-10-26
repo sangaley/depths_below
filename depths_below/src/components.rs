@@ -329,6 +329,9 @@ pub enum ModuleCategory {
     LifeSupport,
     Control,
     Weapons,
+    /// Guns built from parts (combat::gun_assembly): a firing piece and the
+    /// loaders, barrels, coolers and the rest that make it a gun.
+    Guns,
     Detection,
     Storage,
     Crew,
@@ -343,6 +346,7 @@ impl ModuleCategory {
         ModuleCategory::LifeSupport,
         ModuleCategory::Control,
         ModuleCategory::Weapons,
+        ModuleCategory::Guns,
         ModuleCategory::Detection,
         ModuleCategory::Storage,
         ModuleCategory::Crew,
@@ -357,6 +361,7 @@ impl ModuleCategory {
             ModuleCategory::LifeSupport => "Life Support",
             ModuleCategory::Control => "Control",
             ModuleCategory::Weapons => "Weapons",
+            ModuleCategory::Guns => "Guns",
             ModuleCategory::Detection => "Detection",
             ModuleCategory::Storage => "Storage",
             ModuleCategory::Crew => "Crew",
@@ -437,6 +442,24 @@ impl ModuleCategory {
                 ModuleType::TractorBeam,
                 ModuleType::EMPPulse,
                 ModuleType::AmmoAutoloader,
+            ],
+            // In the order you build one: the breech, what makes it bigger,
+            // what loads it, what cools and steadies it, the barrel, and the
+            // ammunition supply behind it all.
+            ModuleCategory::Guns => &[
+                ModuleType::FiringPiece,
+                ModuleType::GaugeIncreaser,
+                ModuleType::Loader,
+                ModuleType::ClipRack,
+                ModuleType::ShellFeeder,
+                ModuleType::BreechCooler,
+                ModuleType::RecoilAbsorber,
+                ModuleType::GunBarrel,
+                ModuleType::MuzzleBrake,
+                ModuleType::Mantlet,
+                ModuleType::RailMagnet,
+                ModuleType::Magazine,
+                ModuleType::BeltConveyor,
             ],
             ModuleCategory::Detection => &[
                 ModuleType::RadarArray,
@@ -717,9 +740,22 @@ pub enum ModuleType {
     EngineNozzle,
     ShieldEmitter,
 
-    // Advanced weapon enhancers (optional optimization)
-    MuzzleBrake,          // Reduces recoil, increases accuracy
-    RecoilAbsorber,       // Protects adjacent blocks from firing stress
+    // Gun parts (combat::gun_assembly). MuzzleBrake and RecoilAbsorber were
+    // hidden weapon enhancers before guns were built from parts; the names
+    // stayed so old blueprints still read.
+    MuzzleBrake,          // Halves recoil, costs a little accuracy
+    RecoilAbsorber,       // Soaks a unit of recoil per shot
+    FiringPiece,          // The breech: one per gun
+    GaugeIncreaser,       // +55 mm of bore
+    Loader,               // Autoloader: a straight run is one loader, 1 m per cell
+    ClipRack,             // Ready rack beside a loader
+    ShellFeeder,          // Pulls shells from the magazine into the clips
+    BreechCooler,         // Carries heat off the gun
+    GunBarrel,            // 1 m of tube
+    Mantlet,              // Armour in front of the breech
+    RailMagnet,           // Electromagnetic boost along the barrel
+    Magazine,             // The ship's ammunition store for built guns
+    BeltConveyor,         // Carries shells from a magazine to a feeder
     OverchargeCapacitor,  // One-shot damage boost, long cooldown
     BoreEvacuator,        // Clears barrel fumes, faster follow-up shots
     MagneticAccelerator,  // Boosts projectile velocity (railgun/coilgun)
@@ -859,13 +895,18 @@ impl ModuleType {
             ModuleType::BarrelExtension |
             ModuleType::AmmoFeedUnit |
             ModuleType::CoolingJacket |
-            ModuleType::MuzzleBrake |
-            ModuleType::RecoilAbsorber |
             ModuleType::OverchargeCapacitor |
             ModuleType::BoreEvacuator |
             ModuleType::MagneticAccelerator |
             ModuleType::FocusingArray |
             ModuleType::WarheadBay => ModuleCategory::Weapons,
+
+            ModuleType::FiringPiece | ModuleType::GaugeIncreaser |
+            ModuleType::Loader | ModuleType::ClipRack | ModuleType::ShellFeeder |
+            ModuleType::BreechCooler | ModuleType::RecoilAbsorber |
+            ModuleType::GunBarrel | ModuleType::MuzzleBrake |
+            ModuleType::Mantlet | ModuleType::RailMagnet |
+            ModuleType::Magazine | ModuleType::BeltConveyor => ModuleCategory::Guns,
 
             ModuleType::ReactorFuelRod |
             ModuleType::ReactorCooling => ModuleCategory::Power,
@@ -1073,6 +1114,17 @@ impl ModuleType {
             // Advanced weapon enhancers
             ModuleType::MuzzleBrake => "Muzzle Brake",
             ModuleType::RecoilAbsorber => "Recoil Absorber",
+            ModuleType::FiringPiece => "Firing Piece",
+            ModuleType::GaugeIncreaser => "Gauge Increaser",
+            ModuleType::Loader => "Loader",
+            ModuleType::ClipRack => "Clip Rack",
+            ModuleType::ShellFeeder => "Shell Feeder",
+            ModuleType::BreechCooler => "Breech Cooler",
+            ModuleType::GunBarrel => "Barrel",
+            ModuleType::Mantlet => "Mantlet",
+            ModuleType::RailMagnet => "Rail Magnet",
+            ModuleType::Magazine => "Magazine",
+            ModuleType::BeltConveyor => "Belt Conveyor",
             ModuleType::OverchargeCapacitor => "Overcharge Capacitor",
             ModuleType::BoreEvacuator => "Bore Evacuator",
             ModuleType::MagneticAccelerator => "Magnetic Accelerator",

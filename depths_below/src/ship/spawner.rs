@@ -702,6 +702,22 @@ pub fn spawn_module(
                 explosive_type: ExplosiveType::Ammo,
             });
         }
+        // A gun's shells: the magazine is the big one, a clip rack holds a
+        // few ready rounds.
+        ModuleType::Magazine => {
+            commands.entity(module_entity).insert(Explosive {
+                blast_radius: 2.0,
+                blast_damage: 70.0,
+                explosive_type: ExplosiveType::Ammo,
+            });
+        }
+        ModuleType::ClipRack => {
+            commands.entity(module_entity).insert(Explosive {
+                blast_radius: 1.0,
+                blast_damage: 30.0,
+                explosive_type: ExplosiveType::Ammo,
+            });
+        }
         ModuleType::BatteryBank => {
             commands.entity(module_entity).insert(Explosive {
                 blast_radius: 1.0,

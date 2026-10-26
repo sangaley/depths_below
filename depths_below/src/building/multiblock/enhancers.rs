@@ -77,25 +77,8 @@ pub fn apply_weapon_enhancers(
 
     for (ship, pos, module_type) in &enhancers {
         match module_type {
-            ModuleType::MuzzleBrake => {
-                for (wm, mut weapon, _, _, wp, _, _) in weapon_query.iter_mut() {
-                    if wp.parent() == *ship && is_adjacent(pos, &wm.grid_position) {
-                        weapon.damage *= 1.05;
-                    }
-                }
-                for (cm, mut cascade, cp) in cascade_query.iter_mut() {
-                    if cp.parent() == *ship && is_adjacent(pos, &cm.grid_position) {
-                        cascade.cascade_chance *= 0.85;
-                    }
-                }
-            }
-            ModuleType::RecoilAbsorber => {
-                for (cm, mut cascade, cp) in cascade_query.iter_mut() {
-                    if cp.parent() == *ship && is_adjacent(pos, &cm.grid_position) {
-                        cascade.cascade_chance *= 0.70;
-                    }
-                }
-            }
+            // MuzzleBrake and RecoilAbsorber used to be adjacency enhancers
+            // here. They are gun parts now (combat::gun_assembly).
             ModuleType::BoreEvacuator => {
                 for (wm, mut weapon, _, _, wp, _, _) in weapon_query.iter_mut() {
                     if wp.parent() == *ship && is_adjacent(pos, &wm.grid_position)

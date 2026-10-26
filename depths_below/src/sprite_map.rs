@@ -152,8 +152,21 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::EngineNozzle => "sprites/modules/standard_engine.png",
         ModuleType::ShieldEmitter => "sprites/modules/battery.png",
         // Advanced weapon enhancers
-        ModuleType::MuzzleBrake => "sprites/modules/hull_beam.png",
-        ModuleType::RecoilAbsorber => "sprites/modules/hull_beam.png",
+        // Gun parts. Placeholders drawn from the Gun Deck preview until the
+        // Retro Diffusion art in GUN_PARTS_ART.md replaces them.
+        ModuleType::MuzzleBrake => "sprites/gun_parts/muzzle_brake.png",
+        ModuleType::RecoilAbsorber => "sprites/gun_parts/recoil_absorber.png",
+        ModuleType::FiringPiece => "sprites/gun_parts/firing_piece.png",
+        ModuleType::GaugeIncreaser => "sprites/gun_parts/gauge_increaser.png",
+        ModuleType::Loader => "sprites/gun_parts/autoloader.png",
+        ModuleType::ClipRack => "sprites/gun_parts/ammo_clip.png",
+        ModuleType::ShellFeeder => "sprites/gun_parts/ammo_feeder.png",
+        ModuleType::BreechCooler => "sprites/gun_parts/cooler.png",
+        ModuleType::GunBarrel => "sprites/gun_parts/barrel.png",
+        ModuleType::Mantlet => "sprites/gun_parts/mantlet.png",
+        ModuleType::RailMagnet => "sprites/gun_parts/rail_magnet.png",
+        ModuleType::Magazine => "sprites/gun_parts/ammo_store.png",
+        ModuleType::BeltConveyor => "sprites/gun_parts/conveyor.png",
         ModuleType::OverchargeCapacitor => "sprites/modules/battery.png",
         ModuleType::BoreEvacuator => "sprites/modules/hull_beam.png",
         ModuleType::MagneticAccelerator => "sprites/modules/railgun.png",
