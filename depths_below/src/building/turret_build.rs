@@ -30,6 +30,8 @@ pub fn allowed_on_turret(t: ModuleType) -> bool {
                 | ModuleType::Magazine
                 | ModuleType::BeltConveyor
                 | ModuleType::TraverseMotor
+                | ModuleType::AmmoHoist
+                | ModuleType::AntiFlashDoor
         )
         && !turret_deck::is_turret_ring(t)
 }

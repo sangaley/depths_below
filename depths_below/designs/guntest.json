@@ -2225,6 +2225,39 @@
      1
     ]
    }
+  },
+  {
+   "module_type": "AmmoHoist",
+   "grid_pos": [
+    19,
+    2
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AntiFlashDoor",
+   "grid_pos": [
+    20,
+    2
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    21,
+    2
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "2026-10-25T00:00:00Z",

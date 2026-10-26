@@ -74,6 +74,20 @@ pub struct TurretBody {
 }
 
 impl TurretBody {
+    /// The hull cells its ring covers, from how the ring was laid -- still
+    /// known with the ring shot out.
+    pub fn ring_cells(&self) -> Vec<IVec2> {
+        let t = ring_type(self.size);
+        crate::building::GridOccupancy::cells_for(
+            self.ring_cell,
+            IVec2::splat(self.size),
+            self.ring_rotation,
+            crate::building::footprints::footprint_override(t),
+        )
+        .into_iter()
+        .collect()
+    }
+
     pub fn new(ring: Entity, ring_cell: IVec2, size: i32) -> Self {
         Self {
             ring, ring_cell, size, angle: 0.0, traverse_deg_s: 0.0, mass_t: 0.0, motors: 0, jammed: false,

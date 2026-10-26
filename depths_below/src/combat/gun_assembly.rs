@@ -8,6 +8,12 @@
 //! A straight run of Loader blocks (along the way they face) is one loader,
 //! 1 m long per block; Clip Racks count toward the loader they touch.
 //!
+//! A turret's guns are fed from below: an Ammo Hoist on the hull deck beside
+//! the ring lifts shells up from the magazines it reaches, along Belt
+//! Conveyors and Anti-Flash Doors. A cook-off on the turret flashes back down
+//! the hoist into any magazine it reaches without passing a door
+//! (`flash_down_hoists`).
+//!
 //! Worked out per ship whenever its layout changes (building::layout), and
 //! written into the firing piece's BaseWeaponStats so the existing firing,
 //! tuning and enhancer systems use it unchanged. The numbers come from
@@ -44,6 +50,19 @@ pub struct GunAssembly {
     pub feed_rpm: f32,
     /// The ship this gun is on -- through its turret, for a turret gun.
     pub ship: Option<Entity>,
+    /// Stands on a turret deck, fed by the hoist rather than by feeders.
+    pub on_turret: bool,
+}
+
+/// On a turret: what its hoist reaches on the hull deck below.
+#[derive(Component, Clone, Debug, Default, PartialEq)]
+pub struct TurretFeed {
+    pub hoist: Option<Entity>,
+    /// Every magazine the hoist draws on.
+    pub magazines: Vec<Entity>,
+    /// The ones a flash down the hoist would reach: no Anti-Flash Door
+    /// between them and it.
+    pub flash: Vec<Entity>,
 }
 
 /// Where a built gun's round leaves from and which way its barrel points,
@@ -87,6 +106,9 @@ pub const GAME_SPEED_PER_MPS: f32 = 3.0;
 pub const SPINAL_ARC_DEG: f32 = 8.0;
 /// Metres of shell one Magazine block holds: big shells eat storage.
 pub const MAGAZINE_SHELL_M: f32 = 20.0;
+/// Shells a minute an Ammo Hoist lifts into its turret: one every 1.5 s,
+/// shared by the guns up there.
+pub const HOIST_RPM: f32 = 40.0;
 /// Shells a minute one Shell Feeder brings up from a magazine.
 pub const FEEDER_RPM: f32 = 40.0;
 
@@ -117,9 +139,61 @@ fn is_body(t: ModuleType) -> bool {
     )
 }
 
-/// One ship's guns, from its live modules: (firing piece, assembly).
-/// Pure, so it can be tested without a world.
+/// What carries shells along the hull deck: belts, and the doors set in them.
+fn is_feedway(t: Option<ModuleType>) -> bool {
+    matches!(t, Some(ModuleType::BeltConveyor | ModuleType::AntiFlashDoor))
+}
+
+/// One ship's guns, from its live modules: (firing piece, assembly), with
+/// the magazines shared out between them. Pure, so it can be tested without
+/// a world.
 pub fn assemble(modules: &[(Entity, Module)]) -> Vec<(Entity, GunAssembly)> {
+    let mut guns = assemble_parts(modules);
+    share_magazines(&mut guns);
+    guns
+}
+
+/// What an Ammo Hoist beside this ring reaches on the hull deck: the
+/// magazines it can draw on along belts and doors, and those a flash could
+/// reach -- along belts alone.
+pub fn hoist_reach(hull: &[(Entity, Module)], ring_cells: &[IVec2]) -> TurretFeed {
+    let kind: HashMap<IVec2, (Entity, ModuleType)> =
+        hull.iter().map(|(e, m)| (m.grid_position, (*e, m.module_type))).collect();
+    let mut hoists: Vec<IVec2> = ring_cells
+        .iter()
+        .flat_map(|c| [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y].map(|d| *c + d))
+        .filter(|c| !ring_cells.contains(c))
+        .filter(|c| kind.get(c).is_some_and(|(_, t)| *t == ModuleType::AmmoHoist))
+        .collect();
+    hoists.sort_by_key(|c| (c.x, c.y));
+    let Some(hoist) = hoists.first().copied() else { return TurretFeed::default() };
+    let walk = |through: &dyn Fn(Option<ModuleType>) -> bool| -> Vec<Entity> {
+        let mut reached: Vec<IVec2> = Vec::new();
+        let mut seen: HashSet<IVec2> = HashSet::from_iter([hoist]);
+        let mut queue: VecDeque<IVec2> = VecDeque::from([hoist]);
+        while let Some(c) = queue.pop_front() {
+            for step in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
+                let n = c + step;
+                let t = kind.get(&n).map(|(_, t)| *t);
+                if t == Some(ModuleType::Magazine) && !reached.contains(&n) {
+                    reached.push(n);
+                } else if through(t) && seen.insert(n) {
+                    queue.push_back(n);
+                }
+            }
+        }
+        reached.sort_by_key(|c| (c.x, c.y));
+        reached.iter().map(|c| kind[c].0).collect()
+    };
+    TurretFeed {
+        hoist: Some(kind[&hoist].0),
+        magazines: walk(&|t| is_feedway(t)),
+        flash: walk(&|t| t == Some(ModuleType::BeltConveyor)),
+    }
+}
+
+/// The guns among these modules, before their magazines are shared out.
+fn assemble_parts(modules: &[(Entity, Module)]) -> Vec<(Entity, GunAssembly)> {
     let mut at: HashMap<IVec2, (Entity, ModuleType, crate::components::Rotation)> = HashMap::new();
     for (e, m) in modules {
         at.insert(m.grid_position, (*e, m.module_type, m.rotation));
@@ -325,7 +399,7 @@ pub fn assemble(modules: &[(Entity, Module)]) -> Vec<(Entity, GunAssembly)> {
                 let n = c + step;
                 match kind(&n) {
                     Some(ModuleType::Magazine) if !reached.contains(&n) => reached.push(n),
-                    Some(ModuleType::BeltConveyor) if seen_belt.insert(n) => belt.push_back(n),
+                    t if is_feedway(t) && seen_belt.insert(n) => belt.push_back(n),
                     _ => {}
                 }
             }
@@ -333,13 +407,16 @@ pub fn assemble(modules: &[(Entity, Module)]) -> Vec<(Entity, GunAssembly)> {
         reached.sort_by_key(|c| (c.x, c.y));
         let magazines: Vec<Entity> = reached.iter().filter_map(|c| at.get(c).map(|(e, _, _)| *e)).collect();
         let feed_rpm = if magazines.is_empty() { 0.0 } else { FEEDER_RPM * feeders as f32 };
-        out.push((fp, GunAssembly { parts, stats, members, problems, muzzle_cell, feeders, magazines, magazine_shells: 0, feed_rpm, ship: None }));
+        out.push((fp, GunAssembly { parts, stats, members, problems, muzzle_cell, feeders, magazines, magazine_shells: 0, feed_rpm, ship: None, on_turret: false }));
     }
+    out
+}
 
-    // Share each magazine between the guns that draw on it, in shells of
-    // each gun's own size.
+/// Share each magazine between the guns that draw on it, in shells of each
+/// gun's own size -- hull guns and turret guns alike.
+fn share_magazines(out: &mut [(Entity, GunAssembly)]) {
     let mut users: HashMap<Entity, u32> = HashMap::new();
-    for (_, g) in &out {
+    for (_, g) in out.iter() {
         for m in &g.magazines {
             *users.entry(*m).or_default() += 1;
         }
@@ -347,7 +424,16 @@ pub fn assemble(modules: &[(Entity, Module)]) -> Vec<(Entity, GunAssembly)> {
     for (_, g) in out.iter_mut() {
         let metres: f32 = g.magazines.iter().map(|m| MAGAZINE_SHELL_M / users[m] as f32).sum();
         g.magazine_shells = if g.stats.shell_m > 0.0 { (metres / g.stats.shell_m).floor() as u32 } else { 0 };
-        if g.stats.working_loaders > 0 {
+        if g.stats.working_loaders > 0 && g.on_turret {
+            if g.feeders == 0 {
+                g.problems.push(format!(
+                    "No Ammo Hoist beside the ring: only the {} shells in the ready rack, then nothing until you rearm.",
+                    g.stats.ready_rack
+                ));
+            } else if g.magazines.is_empty() {
+                g.problems.push("The hoist reaches no Magazine. Put one beside it, or run a Belt Conveyor to one.".to_string());
+            }
+        } else if g.stats.working_loaders > 0 {
             if g.feeders == 0 {
                 g.problems.push(format!(
                     "No Shell Feeder: only the {} shells in the ready rack, then nothing until you rearm.",
@@ -358,7 +444,6 @@ pub fn assemble(modules: &[(Entity, Module)]) -> Vec<(Entity, GunAssembly)> {
             }
         }
     }
-    out
 }
 
 /// Where each built gun's muzzle is this frame, and which way it points.
@@ -425,14 +510,18 @@ fn newly_spawned(weapon: &crate::components::Weapon) -> bool {
 }
 pub const FIRING_PIECE_PLACEHOLDER_AMMO: u32 = 40;
 
-/// Re-assemble a ship's guns when its layout changes, and hand the numbers
-/// to the firing piece's weapon.
+/// Re-assemble a ship's guns -- its own and its turrets' together, since they
+/// share the magazines -- when its layout or a turret's changes, and hand
+/// the numbers to each firing piece's weapon.
 pub fn assemble_guns(
     mut commands: Commands,
-    ships: Query<(Entity, &LayoutVersion, Option<&Children>)>,
-    modules: Query<&Module, Without<DestroyedModule>>,
+    ships: Query<(Entity, &LayoutVersion, Option<&Children>), Without<super::turret_deck::TurretBody>>,
+    turrets: Query<(&LayoutVersion, &super::turret_deck::TurretBody, Option<&Children>)>,
+    // A block on its way up to a turret (a design or save spawns it on the
+    // ship for a frame first) isn't a hull part: assembled there, a turret
+    // gun was sized as a feederless hull gun and kept that small magazine.
+    modules: Query<&Module, (Without<DestroyedModule>, Without<super::turret_deck::PendingTurretMount>)>,
     mut firing: Query<(&mut BaseWeaponStats, &mut WeaponMount, &mut crate::components::Weapon)>,
-    turret_parents: Query<&ChildOf, With<super::turret_deck::TurretBody>>,
     epoch: Res<LayoutEpoch>,
     mut seen_epoch: Local<Option<LayoutEpoch>>,
     mut built: Local<BuiltFrom>,
@@ -441,24 +530,45 @@ pub fn assemble_guns(
         return;
     }
     *seen_epoch = Some(*epoch);
+    let guns_among = |children: Option<&Children>| -> Vec<(Entity, Module)> {
+        children
+            .into_iter()
+            .flatten()
+            .filter_map(|c| modules.get(*c).ok().map(|m| (*c, m.clone())))
+            .filter(|(_, m)| m.module_type.category() == crate::components::ModuleCategory::Guns)
+            .collect()
+    };
     for (ship, version, children) in ships.iter() {
-        if !built.is_stale(ship, version) {
+        let on_it: Vec<Entity> = children.into_iter().flatten().copied().filter(|c| turrets.contains(*c)).collect();
+        let stale = built.is_stale(ship, version)
+            || on_it.iter().any(|t| turrets.get(*t).is_ok_and(|(v, _, _)| built.is_stale(*t, v)));
+        if !stale {
             continue;
         }
         built.mark(ship, version);
-        let Some(children) = children else { continue };
-        let mods: Vec<(Entity, Module)> = children
-            .iter()
-            .filter_map(|c| modules.get(c).ok().map(|m| (c, m.clone())))
-            .filter(|(_, m)| m.module_type.category() == crate::components::ModuleCategory::Guns)
-            .collect();
-        if mods.is_empty() {
+        let hull = guns_among(children);
+        let mut guns = assemble_parts(&hull);
+        for t in &on_it {
+            let Ok((v, body, t_children)) = turrets.get(*t) else { continue };
+            built.mark(*t, v);
+            let mut up_top = assemble_parts(&guns_among(t_children));
+            let feed = hoist_reach(&hull, &body.ring_cells());
+            let share = HOIST_RPM / up_top.len().max(1) as f32;
+            for (_, g) in up_top.iter_mut() {
+                g.on_turret = true;
+                g.feeders = u32::from(feed.hoist.is_some());
+                g.magazines = feed.magazines.clone();
+                g.feed_rpm = if g.magazines.is_empty() { 0.0 } else { share };
+            }
+            commands.entity(*t).try_insert(feed);
+            guns.extend(up_top);
+        }
+        if guns.is_empty() {
             continue;
         }
-        // A turret deck's guns belong to the ship the turret stands on.
-        let owner = turret_parents.get(ship).map(|p| p.parent()).unwrap_or(ship);
-        for (fp, mut assembly) in assemble(&mods) {
-            assembly.ship = Some(owner);
+        share_magazines(&mut guns);
+        for (fp, mut assembly) in guns {
+            assembly.ship = Some(ship);
             if let Ok((mut base, mut mount, mut weapon)) = firing.get_mut(fp) {
                 base.damage = assembly.stats.damage;
                 base.range = range_for(&assembly.stats);
@@ -472,15 +582,55 @@ pub fn assemble_guns(
             if trace() {
                 let s = &assembly.stats;
                 info!(
-                    "GUN assembled {:?}: {:.0} mm, shell {:.2} m, {} of {} loaders working, barrel {} m (burn {:.1}), {:.0} m/s, {:.0} dmg, {:.1} rpm (loaders {:.1}, heat {:.1}), spread {:.2} deg, {} parts, problems: {:?}",
+                    "GUN assembled {:?}: {:.0} mm, shell {:.2} m, {} of {} loaders working, barrel {} m (burn {:.1}), {:.0} m/s, {:.0} dmg, {:.1} rpm (loaders {:.1}, heat {:.1}), spread {:.2} deg, {} parts, {} shells aboard, problems: {:?}",
                     fp, s.gauge_mm, s.shell_m, s.working_loaders, assembly.parts.loaders.len(), assembly.parts.barrel_m, s.burn_m,
-                    s.velocity_mps, s.damage, s.rpm, s.rpm_loaders, s.rpm_heat, s.spread_deg, assembly.members.len(), assembly.problems
+                    s.velocity_mps, s.damage, s.rpm, s.rpm_loaders, s.rpm_heat, s.spread_deg, assembly.members.len(), assembly.max_ammo(), assembly.problems
                 );
             }
             commands.entity(fp).try_insert(assembly);
         }
     }
-    built.retain(|e| ships.contains(e));
+    built.retain(|e| ships.contains(e) || turrets.contains(e));
+}
+
+/// A cook-off on a turret -- a clip rack or loader going up -- flashes down
+/// its hoist into every magazine it reaches without passing an Anti-Flash
+/// Door, and they go up too.
+pub fn flash_down_hoists(
+    gone: Query<(&DestroyedModule, &ChildOf), (Added<DestroyedModule>, With<super::turret_deck::OnTurret>)>,
+    feeds: Query<(&TurretFeed, &ChildOf)>,
+    mut modules: Query<&mut Module, Without<DestroyedModule>>,
+    player: Query<(), With<crate::components::Ship>>,
+    mut notifications: MessageWriter<crate::events::ShowNotification>,
+) {
+    for (part, turret) in gone.iter() {
+        // What holds shells: the ready rack, and the round in a loader.
+        if !matches!(part.original_type, ModuleType::ClipRack | ModuleType::Loader) {
+            continue;
+        }
+        let Ok((feed, ship)) = feeds.get(turret.parent()) else { continue };
+        let Some(hoist) = feed.hoist else { continue };
+        if !modules.contains(hoist) {
+            continue; // the hoist is gone: nothing to flash down
+        }
+        let mut lit = 0;
+        for m in &feed.flash {
+            if let Ok(mut mag) = modules.get_mut(*m) {
+                mag.health = 0.0;
+                lit += 1;
+            }
+        }
+        if player.contains(ship.parent()) {
+            let (message, kind) = if lit > 0 {
+                (format!("FLASH! A turret cook-off went down the hoist: {lit} magazine(s) going up"), crate::events::NotificationType::Danger)
+            } else if !feed.magazines.is_empty() {
+                ("Turret cook-off: the anti-flash doors held".to_string(), crate::events::NotificationType::Warning)
+            } else {
+                continue;
+            };
+            notifications.write(crate::events::ShowNotification { message, notification_type: kind, duration: 4.0 });
+        }
+    }
 }
 
 #[cfg(test)]
@@ -631,6 +781,55 @@ mod gun_assembly_tests {
         assert!(guns.iter().all(|(_, g)| g.magazine_shells == 55), "{:?}", guns.iter().map(|g| g.1.magazine_shells).collect::<Vec<_>>());
     }
 
+    /// A 3x3 ring over (0..3, 0..3); a hoist beside it at (3, 1); one
+    /// magazine right next to the hoist, another down a belt behind a door.
+    fn hoisted() -> (Vec<(Entity, Module)>, Vec<IVec2>) {
+        let hull = ship(&[
+            (AmmoHoist, 3, 1, North),
+            (Magazine, 3, 2, North),
+            (BeltConveyor, 4, 1, East),
+            (AntiFlashDoor, 5, 1, East),
+            (Magazine, 6, 1, North),
+        ]);
+        let ring: Vec<IVec2> = (0..3).flat_map(|x| (0..3).map(move |y| IVec2::new(x, y))).collect();
+        (hull, ring)
+    }
+
+    #[test]
+    fn a_hoist_draws_through_doors_but_a_flash_stops_at_them() {
+        let (hull, ring) = hoisted();
+        let feed = hoist_reach(&hull, &ring);
+        assert_eq!(feed.hoist, Some(hull[0].0));
+        assert_eq!(feed.magazines, vec![hull[1].0, hull[4].0], "both, through the door");
+        assert_eq!(feed.flash, vec![hull[1].0], "only the one with no door in the way");
+    }
+
+    #[test]
+    fn a_hoist_must_stand_beside_the_ring() {
+        let (mut hull, ring) = hoisted();
+        hull[0].1.grid_position = IVec2::new(8, 8);
+        assert_eq!(hoist_reach(&hull, &ring), TurretFeed::default());
+    }
+
+    #[test]
+    fn hull_and_turret_guns_split_a_shared_magazine() {
+        let mut hull_gun = assemble_parts(&small_gun());
+        let up_top: Vec<(Entity, Module)> = small_gun()
+            .into_iter()
+            .filter(|(_, m)| !matches!(m.module_type, Magazine | ShellFeeder))
+            .collect();
+        let mut turret_gun = assemble_parts(&up_top);
+        let magazine = hull_gun[0].1.magazines[0];
+        turret_gun[0].1.on_turret = true;
+        turret_gun[0].1.feeders = 1;
+        turret_gun[0].1.magazines = vec![magazine];
+        hull_gun.extend(turret_gun);
+        share_magazines(&mut hull_gun);
+        let alone = assemble(&small_gun())[0].1.magazine_shells;
+        assert!(hull_gun.iter().all(|(_, g)| g.magazine_shells < alone), "each gets part of it");
+        assert!(hull_gun.iter().all(|(_, g)| g.problems.is_empty()), "{:?}", hull_gun.iter().map(|g| &g.1.problems).collect::<Vec<_>>());
+    }
+
     #[test]
     fn no_feeder_means_only_the_ready_rack() {
         let mut s = small_gun();
@@ -732,5 +931,60 @@ mod gun_muzzle_tests {
         // Turret cells have no half-cell offset; a quarter turn puts +x on +y.
         assert!((m.world - Vec2::new(100.0, 50.0 + 198.0)).length() < 1e-2, "{:?}", m.world);
         assert!((m.dir - Vec2::Y).length() < 1e-5, "{:?}", m.dir);
+    }
+}
+
+#[cfg(test)]
+mod flash_tests {
+    use super::*;
+    use crate::combat::turret_deck::{OnTurret, TurretBody};
+    use crate::components::Rotation;
+
+    fn module(t: ModuleType) -> Module {
+        Module {
+            module_type: t, health: 100.0, max_health: 100.0, power_consumption: 0.0, power_generation: 0.0,
+            is_active: true, grid_position: IVec2::ZERO, size: IVec2::ONE, rotation: Rotation::North,
+        }
+    }
+
+    /// A turret whose hoist reaches two magazines, one of them behind a door;
+    /// then `part` on the turret is destroyed. Returns both magazines' health.
+    fn cook_off(part: ModuleType, hoist_alive: bool) -> (f32, f32) {
+        let mut app = App::new();
+        app.add_message::<crate::events::ShowNotification>();
+        app.add_systems(Update, flash_down_hoists);
+        let ship = app.world_mut().spawn(crate::components::Ship).id();
+        let hoist = app.world_mut().spawn((module(ModuleType::AmmoHoist), ChildOf(ship))).id();
+        if !hoist_alive {
+            app.world_mut().entity_mut(hoist).insert(DestroyedModule { original_type: ModuleType::AmmoHoist });
+        }
+        let open = app.world_mut().spawn((module(ModuleType::Magazine), ChildOf(ship))).id();
+        let doored = app.world_mut().spawn((module(ModuleType::Magazine), ChildOf(ship))).id();
+        let body = app.world_mut().spawn((
+            TurretBody::new(Entity::PLACEHOLDER, IVec2::ZERO, 3),
+            TurretFeed { hoist: Some(hoist), magazines: vec![open, doored], flash: vec![open] },
+            ChildOf(ship),
+        )).id();
+        let rack = app.world_mut().spawn((module(part), OnTurret { ring_cell: IVec2::ZERO }, ChildOf(body))).id();
+        app.update();
+        app.world_mut().entity_mut(rack).insert(DestroyedModule { original_type: part });
+        app.update();
+        let hp = |e| app.world().get::<Module>(e).unwrap().health;
+        (hp(open), hp(doored))
+    }
+
+    #[test]
+    fn a_cook_off_flashes_down_the_hoist_to_the_magazine_with_no_door() {
+        assert_eq!(cook_off(ModuleType::ClipRack, true), (0.0, 100.0));
+    }
+
+    #[test]
+    fn a_part_with_no_shells_in_it_starts_no_flash() {
+        assert_eq!(cook_off(ModuleType::GunBarrel, true), (100.0, 100.0));
+    }
+
+    #[test]
+    fn with_the_hoist_gone_there_is_no_way_down() {
+        assert_eq!(cook_off(ModuleType::ClipRack, false), (100.0, 100.0));
     }
 }

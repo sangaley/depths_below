@@ -464,6 +464,8 @@ impl ModuleCategory {
                 ModuleType::TurretRing,
                 ModuleType::TurretRingLarge,
                 ModuleType::TraverseMotor,
+                ModuleType::AmmoHoist,
+                ModuleType::AntiFlashDoor,
             ],
             ModuleCategory::Detection => &[
                 ModuleType::RadarArray,
@@ -764,6 +766,8 @@ pub enum ModuleType {
     TurretRing,           // 3x3
     TurretRingLarge,      // 5x5
     TraverseMotor,        // Turns the turret on the ring it touches
+    AmmoHoist,            // Beside a ring: lifts shells into the turret above
+    AntiFlashDoor,        // A conveyor a turret cook-off can't flash past
     OverchargeCapacitor,  // One-shot damage boost, long cooldown
     BoreEvacuator,        // Clears barrel fumes, faster follow-up shots
     MagneticAccelerator,  // Boosts projectile velocity (railgun/coilgun)
@@ -916,7 +920,8 @@ impl ModuleType {
             ModuleType::Mantlet | ModuleType::RailMagnet |
             ModuleType::Magazine | ModuleType::BeltConveyor |
             ModuleType::TurretRingSmall | ModuleType::TurretRing |
-            ModuleType::TurretRingLarge | ModuleType::TraverseMotor => ModuleCategory::Guns,
+            ModuleType::TurretRingLarge | ModuleType::TraverseMotor |
+            ModuleType::AmmoHoist | ModuleType::AntiFlashDoor => ModuleCategory::Guns,
 
             ModuleType::ReactorFuelRod |
             ModuleType::ReactorCooling => ModuleCategory::Power,
@@ -1139,6 +1144,8 @@ impl ModuleType {
             ModuleType::TurretRing => "Turret Ring",
             ModuleType::TurretRingLarge => "Large Turret Ring",
             ModuleType::TraverseMotor => "Traverse Motor",
+            ModuleType::AmmoHoist => "Ammo Hoist",
+            ModuleType::AntiFlashDoor => "Anti-Flash Door",
             ModuleType::OverchargeCapacitor => "Overcharge Capacitor",
             ModuleType::BoreEvacuator => "Bore Evacuator",
             ModuleType::MagneticAccelerator => "Magnetic Accelerator",
