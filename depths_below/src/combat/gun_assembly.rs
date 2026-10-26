@@ -42,6 +42,17 @@ pub struct GunAssembly {
     /// Shells a minute the feeders can bring up from the magazines. Zero
     /// with no magazine reached.
     pub feed_rpm: f32,
+    /// The ship this gun is on -- through its turret, for a turret gun.
+    pub ship: Option<Entity>,
+}
+
+/// Where a built gun's round leaves from and which way its barrel points,
+/// in world space, refreshed every frame (a turret gun moves with its
+/// turret). The firing system reads this instead of the block's position.
+#[derive(Component, Clone, Copy, Debug)]
+pub struct GunMuzzle {
+    pub world: Vec2,
+    pub dir: Vec2,
 }
 
 impl GunAssembly {
@@ -322,7 +333,7 @@ pub fn assemble(modules: &[(Entity, Module)]) -> Vec<(Entity, GunAssembly)> {
         reached.sort_by_key(|c| (c.x, c.y));
         let magazines: Vec<Entity> = reached.iter().filter_map(|c| at.get(c).map(|(e, _, _)| *e)).collect();
         let feed_rpm = if magazines.is_empty() { 0.0 } else { FEEDER_RPM * feeders as f32 };
-        out.push((fp, GunAssembly { parts, stats, members, problems, muzzle_cell, feeders, magazines, magazine_shells: 0, feed_rpm }));
+        out.push((fp, GunAssembly { parts, stats, members, problems, muzzle_cell, feeders, magazines, magazine_shells: 0, feed_rpm, ship: None }));
     }
 
     // Share each magazine between the guns that draw on it, in shells of
@@ -348,6 +359,30 @@ pub fn assemble(modules: &[(Entity, Module)]) -> Vec<(Entity, GunAssembly)> {
         }
     }
     out
+}
+
+/// Where each built gun's muzzle is this frame, and which way it points.
+/// A gun's grid frame is its ship's (cell (x, y) at (66x, 66y - 33)) or its
+/// turret's (no half-cell offset, (0, 0) at the ring's centre).
+pub fn place_muzzles(
+    mut commands: Commands,
+    guns: Query<(Entity, &GunAssembly, &Module, &ChildOf)>,
+    frames: Query<(&GlobalTransform, Has<super::turret_deck::TurretBody>)>,
+) {
+    for (fp, gun, module, parent) in guns.iter() {
+        let Ok((frame, is_turret)) = frames.get(parent.parent()) else { continue };
+        let local = |c: IVec2| {
+            if is_turret {
+                Vec2::new(c.x as f32 * 66.0, c.y as f32 * 66.0)
+            } else {
+                crate::building::grid_to_local(c)
+            }
+        };
+        let world = frame.transform_point(local(gun.muzzle_cell).extend(0.0)).truncate();
+        let breech = frame.transform_point(local(module.grid_position).extend(0.0)).truncate();
+        let dir = (world - breech).normalize_or_zero();
+        commands.entity(fp).try_insert(GunMuzzle { world, dir });
+    }
 }
 
 /// Keep each built gun's ready rack: refill it from the magazines at the
@@ -397,6 +432,7 @@ pub fn assemble_guns(
     ships: Query<(Entity, &LayoutVersion, Option<&Children>)>,
     modules: Query<&Module, Without<DestroyedModule>>,
     mut firing: Query<(&mut BaseWeaponStats, &mut WeaponMount, &mut crate::components::Weapon)>,
+    turret_parents: Query<&ChildOf, With<super::turret_deck::TurretBody>>,
     epoch: Res<LayoutEpoch>,
     mut seen_epoch: Local<Option<LayoutEpoch>>,
     mut built: Local<BuiltFrom>,
@@ -419,7 +455,10 @@ pub fn assemble_guns(
         if mods.is_empty() {
             continue;
         }
-        for (fp, assembly) in assemble(&mods) {
+        // A turret deck's guns belong to the ship the turret stands on.
+        let owner = turret_parents.get(ship).map(|p| p.parent()).unwrap_or(ship);
+        for (fp, mut assembly) in assemble(&mods) {
+            assembly.ship = Some(owner);
             if let Ok((mut base, mut mount, mut weapon)) = firing.get_mut(fp) {
                 base.damage = assembly.stats.damage;
                 base.range = range_for(&assembly.stats);
@@ -651,5 +690,50 @@ mod gun_rack_tests {
         assert!((rate(&app, e) - 20.0 / 60.0).abs() < 1e-3, "rack empty: held to the feed");
         advance(&mut app, 3.5); // 20 rpm refills one shell every 3 s
         assert!((rate(&app, e) - 1.0).abs() < 1e-4, "a shell back in the rack: full pace again");
+    }
+}
+
+#[cfg(test)]
+mod gun_muzzle_tests {
+    use super::*;
+    use crate::combat::turret_deck::TurretBody;
+    use crate::components::Rotation;
+
+    /// One firing piece on `frame`, its barrel ending three cells along +x.
+    fn muzzle_on(frame: impl Bundle) -> GunMuzzle {
+        let mut app = App::new();
+        app.add_systems(Update, place_muzzles);
+        let parent = app.world_mut().spawn(frame).id();
+        let module = Module {
+            module_type: ModuleType::FiringPiece, health: 1.0, max_health: 1.0, power_consumption: 0.0,
+            power_generation: 0.0, is_active: true, grid_position: IVec2::ZERO, size: IVec2::ONE, rotation: Rotation::East,
+        };
+        let gun = GunAssembly { muzzle_cell: IVec2::new(3, 0), ..default() };
+        let fp = app.world_mut().spawn((module, gun, ChildOf(parent))).id();
+        app.update();
+        *app.world().get::<GunMuzzle>(fp).unwrap()
+    }
+
+    #[test]
+    fn a_hull_gun_fires_from_its_barrel_end_in_the_ship_frame() {
+        let m = muzzle_on(GlobalTransform::from_xyz(1000.0, 0.0, 0.0));
+        // Ship cell (x, y) sits at (66x, 66y - 33).
+        assert!((m.world - Vec2::new(1000.0 + 198.0, -33.0)).length() < 1e-3, "{:?}", m.world);
+        assert!((m.dir - Vec2::X).length() < 1e-5);
+    }
+
+    #[test]
+    fn a_turret_gun_turns_with_its_turret() {
+        let body = TurretBody {
+            ring: Entity::PLACEHOLDER, ring_cell: IVec2::ZERO, size: 3,
+            angle: std::f32::consts::FRAC_PI_2, traverse_deg_s: 0.0, mass_t: 0.0, motors: 0,
+        };
+        let frame = GlobalTransform::from(
+            Transform::from_xyz(100.0, 50.0, 0.0).with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+        );
+        let m = muzzle_on((body, frame));
+        // Turret cells have no half-cell offset; a quarter turn puts +x on +y.
+        assert!((m.world - Vec2::new(100.0, 50.0 + 198.0)).length() < 1e-2, "{:?}", m.world);
+        assert!((m.dir - Vec2::Y).length() < 1e-5, "{:?}", m.dir);
     }
 }

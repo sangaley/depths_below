@@ -488,7 +488,7 @@ impl Plugin for CombatPlugin {
                 turret_deck::update_player_aim_point,
                 turret_deck::traverse_turrets,
             ).chain())
-            .add_systems(Update, (gun_assembly::assemble_guns, gun_assembly::run_gun_racks).chain()
+            .add_systems(Update, (gun_assembly::assemble_guns, gun_assembly::run_gun_racks, gun_assembly::place_muzzles).chain()
                 .before(crate::building::multiblock::enhancers::apply_weapon_enhancers))
             // Player weapons: kinetic projectiles + missiles (new physics system)
             .add_systems(Update, (

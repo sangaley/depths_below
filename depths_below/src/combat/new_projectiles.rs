@@ -273,7 +273,8 @@ pub fn fire_weapons_system(
     debug_tuning: Res<crate::debug::DebugTuning>,
     // Guns built from parts: their velocity, spread, caliber, penetration and
     // muzzle come from the parts (combat::gun_assembly), not the block type.
-    assemblies: Query<&crate::combat::gun_assembly::GunAssembly>,
+    assemblies: Query<(&crate::combat::gun_assembly::GunAssembly, Option<&crate::combat::gun_assembly::GunMuzzle>)>,
+    turret_bodies: Query<&ChildOf, With<crate::combat::turret_deck::TurretBody>>,
 ) {
     let Ok((player_ship, ship_transform, ship_physics, ship_velocity)) = ship_query.single() else { return };
     let _dt = time.delta_secs();
@@ -320,7 +321,9 @@ pub fn fire_weapons_system(
         // also fired every AI ship's default-group weapon at the player's
         // current target/cursor — including an AI ship shooting itself when
         // the player had it targeted.
-        if parent.parent() != player_ship { continue; }
+        // A gun on a turret deck is a grandchild: its turret is the parent.
+        let owner = turret_bodies.get(parent.parent()).map(|t| t.parent()).unwrap_or(parent.parent());
+        if owner != player_ship { continue; }
         // True kinetic weapons only. This loop has no type match arms below
         // for anything else — every OTHER weapon type (Laser, PlasmaCaster,
         // IonDisruptor, EMPPulse, the three missile types, MiningDrill,
@@ -359,10 +362,13 @@ pub fn fire_weapons_system(
         // Check ammo
         if !crate::combat::INFINITE_AMMO && weapon.ammo <= 0 { continue; }
 
-        let assembly = assemblies.get(entity).ok();
+        let (assembly, muzzle) = match assemblies.get(entity) {
+            Ok((a, m)) => (Some(a), m.copied()),
+            Err(_) => (None, None),
+        };
         // A built gun fires from the end of its barrel, not from its breech.
-        let weapon_pos = match assembly {
-            Some(a) => ship_transform.transform_point(crate::building::grid_to_local(a.muzzle_cell).extend(0.0)).truncate(),
+        let weapon_pos = match muzzle {
+            Some(m) => m.world,
             None => global_transform.translation().truncate(),
         };
 
@@ -427,7 +433,15 @@ pub fn fire_weapons_system(
         // Fixed/broadside mounts can't swivel outside their arc — without this
         // check a forward-facing cannon would fire at a target behind the
         // ship, sending the shot straight through the hull it's mounted on.
-        if !is_in_firing_arc(ship_physics.rotation, &module.rotation, mount, target_pos - weapon_pos) {
+        // A built gun fires where its barrel points -- which, on a turret, is
+        // wherever the turret has got to. It holds fire until the turret has
+        // traversed onto the target.
+        let in_arc = match muzzle {
+            Some(m) => m.dir.dot((target_pos - weapon_pos).normalize_or_zero())
+                >= (mount.firing_arc / 2.0).to_radians().cos(),
+            None => is_in_firing_arc(ship_physics.rotation, &module.rotation, mount, target_pos - weapon_pos),
+        };
+        if !in_arc {
             continue;
         }
 
@@ -579,8 +593,8 @@ pub fn fire_weapons_system(
         };
         spawn_muzzle_flash(&mut commands, &fx, weapon_pos + direction * 30.0, direction, 20.0, flash_color);
         if let (Some(a), true) = (assembly, crate::combat::gun_assembly::trace()) {
-            info!("GUN fired {:?}: {:.0} mm at {:.0} u/s, {:.0} damage, next in {:.1} s",
-                entity, a.stats.gauge_mm, proj_speed, weapon.damage, 1.0 / weapon.fire_rate.max(1e-3));
+            info!("GUN fired {:?}: {:.0} mm at {:.0} u/s, {:.0} damage, next in {:.1} s, {} left",
+                entity, a.stats.gauge_mm, proj_speed, weapon.damage, 1.0 / weapon.fire_rate.max(1e-3), weapon.ammo);
         }
     }
 }
@@ -841,6 +855,7 @@ pub fn check_projectile_hits(
     // Neutron shells hurt the people, not the plate — see AmmoHitBehavior::Irradiate.
     mut crew_query: Query<&mut crate::components::CrewMember>,
     owner_parent_query: Query<&ChildOf>,
+    turret_bodies: Query<(), With<crate::combat::turret_deck::TurretBody>>,
     grid_query: Query<&crate::building::ShipGrid>,
     block_query: Query<&crate::building::Block>,
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
@@ -859,7 +874,7 @@ pub fn check_projectile_hits(
         // A weapon's own ship is never a valid target for its own shot,
         // regardless of aim — belt-and-suspenders on top of firing-arc and
         // per-ship query scoping.
-        let owner_ship = owner_parent_query.get(proj.owner).ok().map(|p| p.parent());
+        let owner_ship = crate::combat::turret_deck::ship_of(proj.owner, &owner_parent_query, &turret_bodies);
 
         // === AI SHIPS: shield first, then block-by-block hull damage ===
         for (ai_entity, ai_transform, ai_gt, children, mut shield, is_player) in ai_ship_query.iter_mut() {

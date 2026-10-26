@@ -1320,7 +1320,9 @@ fn update_weapon_rack(
 
     let mut stacks: std::collections::BTreeMap<(u8, &'static str), Vec<RackWeapon>> = std::collections::BTreeMap::new();
     for (entity, module, weapon, cd, fg, parent, temp) in weapon_query.iter() {
-        if parent.parent() != player { continue; }
+        // A turret gun's parent is its turret; its assembly knows the ship.
+        let owner = assemblies.get(entity).ok().and_then(|a| a.ship).unwrap_or(parent.parent());
+        if owner != player { continue; }
         // The tractor beam carries a Weapon for its reach, but it's the tow
         // tool (Y), not a gun -- it sat in the rack as a row called "Weapon".
         if module.module_type == ModuleType::TractorBeam { continue; }
@@ -1642,7 +1644,7 @@ pub fn update_hud_secondary(
     staffing_state: Res<StaffingState>,
     time: Res<Time>,
     ship_query: Query<(Entity, &ShipPhysics), With<Ship>>,
-    weapon_query: Query<(&Weapon, &Module, &ChildOf)>,
+    weapon_query: Query<(&Weapon, &Module, &ChildOf, Option<&crate::combat::gun_assembly::GunAssembly>)>,
     mut fuel_query: Query<(&mut Text, &mut TextColor), (With<FuelText>, Without<ThrusterText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>,
     mut thruster_text_query: Query<(&mut Text, &mut TextColor), (With<ThrusterText>, Without<FuelText>, Without<AmmoText>, Without<NoiseText>, Without<CreditsText>, Without<CrewText>)>,
     mut ammo_ui: (
@@ -1721,8 +1723,8 @@ pub fn update_hud_secondary(
     // first line for a 7-weapon loadout.
     if let Ok((container, children)) = ammo_container_query.single() {
         let mut entries: Vec<(ModuleType, u32, u32)> = Vec::new();
-        for (weapon, module, parent) in weapon_query.iter() {
-            if parent.parent() != player_ship { continue; }
+        for (weapon, module, parent, gun) in weapon_query.iter() {
+            if gun.and_then(|g| g.ship).unwrap_or(parent.parent()) != player_ship { continue; }
             entries.push((module.module_type, weapon.ammo, weapon.max_ammo));
         }
         let snapshot: Vec<(u32, u32)> = entries.iter().map(|(_, a, m)| (*a, *m)).collect();

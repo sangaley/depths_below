@@ -15,7 +15,6 @@
 
 use bevy::prelude::*;
 
-use crate::building::layout::LayoutVersion;
 use crate::components::{
     DestroyedModule, HullLayer, HullMaterial, HullSegment, Module, ModuleType, Ship,
 };
@@ -87,6 +86,21 @@ pub struct TurretPlate;
 /// block in one go; the turret body comes a frame later).
 #[derive(Component, Debug, Clone, Copy)]
 pub struct PendingTurretMount(pub IVec2);
+
+/// The ship something on a ship belongs to: its parent, or for a block on a
+/// turret deck, the ship the turret stands on.
+pub fn ship_of(
+    entity: Entity,
+    parents: &Query<&ChildOf>,
+    bodies: &Query<(), With<TurretBody>>,
+) -> Option<Entity> {
+    let p = parents.get(entity).ok()?.parent();
+    if bodies.contains(p) {
+        parents.get(p).ok().map(|g| g.parent())
+    } else {
+        Some(p)
+    }
+}
 
 pub fn is_turret_ring(t: ModuleType) -> bool {
     matches!(t, ModuleType::TurretRingSmall | ModuleType::TurretRing | ModuleType::TurretRingLarge)

@@ -82,6 +82,7 @@ fn absorber_reduction(
 pub fn accumulate_projectile_recoil(
     new_projectiles: Query<(&Projectile, &Velocity, &Transform), Added<Projectile>>,
     owners: Query<&ChildOf>,
+    turret_bodies: Query<(), With<crate::combat::turret_deck::TurretBody>>,
     guns: Query<&crate::combat::gun_assembly::GunAssembly>,
     ship_query: Query<(Entity, &Transform), With<Ship>>,
     recoil_absorber_query: Query<(&Module, &ChildOf), Without<DestroyedModule>>,
@@ -96,7 +97,7 @@ pub fn accumulate_projectile_recoil(
     for (projectile, proj_velocity, proj_transform) in new_projectiles.iter() {
         // Our own rounds only. AI guns fire this same Projectile now, and
         // without this every enemy shot kicked the PLAYER's ship.
-        if !owners.get(projectile.owner).is_ok_and(|p| p.parent() == player_ship) {
+        if crate::combat::turret_deck::ship_of(projectile.owner, &owners, &turret_bodies) != Some(player_ship) {
             continue;
         }
         // Projectile momentum = damage as proxy for mass × velocity
