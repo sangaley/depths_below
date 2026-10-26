@@ -210,6 +210,18 @@ pub fn get_save_slots() -> Vec<(u32, Option<SaveSlotInfo>)> {
     slots
 }
 
+/// The state a load should drop you back into. Paused is never it: the
+/// pause-menu save keys only work while paused, so a save made mid-flight
+/// recorded "not exploring" and loaded you docked at a station, wherever you
+/// had been. Paused saves record the state you paused from -- the same one
+/// Escape resumes into, with the same fallback.
+fn saved_flight_state(current: GameState, pre_pause: &PrePauseState) -> GameState {
+    match current {
+        GameState::Paused => pre_pause.0.unwrap_or(GameState::Exploring),
+        other => other,
+    }
+}
+
 /// Collect current game state into SaveData
 fn collect_save_data(
     slot: u32,
@@ -222,7 +234,7 @@ fn collect_save_data(
     discovered_locations: &DiscoveredLocations,
     world_state: &WorldState,
     ship_parts: ShipParts,
-    current_state: &State<GameState>,
+    flight_state: GameState,
     galaxy_map: &GalaxyMap,
     streaming: &SystemStreamingManager,
     drifting_dead: &crate::crew::burial::DriftingDead,
@@ -265,7 +277,7 @@ fn collect_save_data(
         position,
         current_depth: depth_state.current_depth,
         world_seed: world_state.seed,
-        was_exploring: *current_state.get() == GameState::Exploring,
+        was_exploring: flight_state == GameState::Exploring,
         current_system_id: streaming.loaded_system.unwrap_or(0),
         galaxy_seed: galaxy_map.galaxy_seed,
         drifting_dead: drifting_dead.bodies.clone(),
@@ -329,7 +341,7 @@ fn handle_save_request(
     // Bundled to stay under Bevy's 16-param cap: local world seed + galaxy state
     // + the drifting dead, and the run state that isn't the ship (fuel,
     // contracts, standing). Bevy caps a system at 16 params; this one is at
-    // 13, so a big addition still belongs in a tuple.
+    // 14, so a big addition still belongs in a tuple.
     world_galaxy: (
         Res<WorldState>,
         Res<GalaxyMap>,
@@ -347,6 +359,7 @@ fn handle_save_request(
         Res<crate::diplomacy::jobs::Jobs>,
     ),
     current_state: Res<State<GameState>>,
+    pre_pause: Res<PrePauseState>,
     player_ship: PlayerShipParts,
 ) {
     let (world_state, galaxy_map, streaming, drifting_dead, looted, fuel, contracts, reputation, standing, sim, faction_stations, war, people, work) = &world_galaxy;
@@ -372,7 +385,7 @@ fn handle_save_request(
             &discovered_locations,
             world_state,
             ship_parts,
-            &current_state,
+            saved_flight_state(*current_state.get(), &pre_pause),
             galaxy_map,
             streaming,
             drifting_dead,
@@ -1196,5 +1209,53 @@ mod save_scope_tests {
         assert_eq!(roster.len(), 4);
         assert_eq!(children_of(&mut app, world.ai), ai_blocks, "load touched the AI ship");
         assert_eq!(children_of(&mut app, world.wreck), wreck_blocks, "load touched the wreck");
+    }
+}
+
+#[cfg(test)]
+mod save_state_tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::state::app::StatesPlugin;
+
+    /// Pause from `from` the way Escape does, then ask what a save made now
+    /// would record.
+    fn saved_after_pausing_from(from: GameState) -> GameState {
+        let mut app = App::new();
+        app.add_plugins(StatesPlugin);
+        app.init_state::<GameState>();
+        app.init_resource::<PrePauseState>();
+
+        app.world_mut().resource_mut::<NextState<GameState>>().set(from);
+        app.update();
+        app.world_mut().resource_mut::<PrePauseState>().0 = Some(from);
+        app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Paused);
+        app.update();
+        assert_eq!(*app.world().resource::<State<GameState>>().get(), GameState::Paused);
+
+        app.world_mut()
+            .run_system_once(|state: Res<State<GameState>>, pre_pause: Res<PrePauseState>| {
+                saved_flight_state(*state.get(), &pre_pause)
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn paused_mid_flight_saves_as_flying() {
+        assert_eq!(saved_after_pausing_from(GameState::Exploring), GameState::Exploring);
+    }
+
+    #[test]
+    fn paused_at_a_station_saves_as_docked() {
+        assert_eq!(saved_after_pausing_from(GameState::StationDocked), GameState::StationDocked);
+    }
+
+    #[test]
+    fn unpaused_saves_record_the_state_they_are_in() {
+        let none = PrePauseState(None);
+        assert_eq!(saved_flight_state(GameState::Exploring, &none), GameState::Exploring);
+        assert_eq!(saved_flight_state(GameState::StationDocked, &none), GameState::StationDocked);
+        // Nothing remembered: same fallback as Escape's resume.
+        assert_eq!(saved_flight_state(GameState::Paused, &none), GameState::Exploring);
     }
 }
