@@ -976,6 +976,16 @@ pub struct BuildingState {
     /// Shift held at the press of a hull drag: the corner a rectangle fill
     /// started from. The rectangle runs to `ghost_position` until release.
     pub hull_rect_anchor: Option<IVec2>,
+    /// Which deck build mode is working on: the hull, or the turret decks
+    /// above it (building::turret_build).
+    pub deck: BuildDeck,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum BuildDeck {
+    #[default]
+    Hull,
+    Turret,
 }
 
 const HULL_LAYERS: [HullLayer; 5] = [
@@ -1035,6 +1045,7 @@ impl Default for BuildingState {
             cursor_on_grid: false,
             auto_rotated: true,
             hull_rect_anchor: None,
+            deck: BuildDeck::Hull,
         }
     }
 }

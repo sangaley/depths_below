@@ -64,6 +64,9 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //                          autoplay director and the gamepad bridge use --
 //                          never OS keystrokes, which land in whatever app is
 //                          focused rather than the game.
+//                          "MouseLeft" / "MouseRight" click the mouse, at
+//                          wherever the game thinks it points (see
+//                          DEPTHS_BUILD_CELL for build mode).
 //   DEPTHS_CASCADE=0.85 — pin the story's progress level, so a late beat can
 //                          be looked at without an hour of flying first.
 //   DEPTHS_CASCADE_TRACE=1 — print the arc's state once a second.
@@ -1128,11 +1131,25 @@ fn aim_camera_offscreen(
 #[derive(Resource, Default)]
 struct ScriptedKeys {
     /// (seconds, key, hold seconds), sorted by time. Hold 0 is a one-frame tap.
-    events: Vec<(f32, KeyCode, f32)>,
+    events: Vec<(f32, ScriptButton, f32)>,
     next: usize,
     /// Keys currently down and when to let them go. A tap releases the next
     /// frame -- one frame down is what `just_pressed` reads.
-    held: Vec<(KeyCode, f32)>,
+    held: Vec<(ScriptButton, f32)>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ScriptButton {
+    Key(KeyCode),
+    Mouse(MouseButton),
+}
+
+fn parse_button(name: &str) -> Option<ScriptButton> {
+    match name.trim() {
+        "MouseLeft" => Some(ScriptButton::Mouse(MouseButton::Left)),
+        "MouseRight" => Some(ScriptButton::Mouse(MouseButton::Right)),
+        other => parse_key(other).map(ScriptButton::Key),
+    }
 }
 
 /// Key names as Bevy spells them. Only what a script plausibly needs: letters,
@@ -1178,6 +1195,9 @@ fn parse_key(name: &str) -> Option<KeyCode> {
         "ShiftLeft" => KeyCode::ShiftLeft,
         "Minus" => KeyCode::Minus,
         "Equal" => KeyCode::Equal,
+        "PageUp" => KeyCode::PageUp,
+        "PageDown" => KeyCode::PageDown,
+        "ControlLeft" => KeyCode::ControlLeft,
         _ => return None,
     })
 }
@@ -1185,8 +1205,8 @@ fn parse_key(name: &str) -> Option<KeyCode> {
 /// "3:KeyM,5:F7" -> [(3.0, M), (5.0, F7)]. A malformed entry is reported and
 /// skipped rather than aborting the run: a typo in one step should not cost
 /// the whole capture session.
-fn parse_script(script: &str) -> Vec<(f32, KeyCode, f32)> {
-    let mut events: Vec<(f32, KeyCode, f32)> = script
+fn parse_script(script: &str) -> Vec<(f32, ScriptButton, f32)> {
+    let mut events: Vec<(f32, ScriptButton, f32)> = script
         .split(',')
         .filter(|s| !s.trim().is_empty())
         .filter_map(|step| {
@@ -1196,7 +1216,7 @@ fn parse_script(script: &str) -> Vec<(f32, KeyCode, f32)> {
                     Some((k, h)) => (k, h.trim().parse::<f32>().ok()?),
                     None => (rest, 0.0),
                 };
-                Some((t.trim().parse::<f32>().ok()?, parse_key(k)?, hold))
+                Some((t.trim().parse::<f32>().ok()?, parse_button(k)?, hold))
             })();
             if parsed.is_none() {
                 warn!("DEPTHS_KEYS: ignoring '{}'", step.trim());
@@ -1211,17 +1231,24 @@ fn parse_script(script: &str) -> Vec<(f32, KeyCode, f32)> {
 fn play_scripted_keys(
     time: Res<Time<Real>>,
     mut keyboard: ResMut<ButtonInput<KeyCode>>,
+    mut mouse: ResMut<ButtonInput<MouseButton>>,
     mut script: ResMut<ScriptedKeys>,
 ) {
     let now = time.elapsed_secs();
+    let mut set = |b: ScriptButton, down: bool| match (b, down) {
+        (ScriptButton::Key(k), true) => keyboard.press(k),
+        (ScriptButton::Key(k), false) => keyboard.release(k),
+        (ScriptButton::Mouse(m), true) => mouse.press(m),
+        (ScriptButton::Mouse(m), false) => mouse.release(m),
+    };
     // Release what is due; keep pressing what is still being held, since
     // ButtonInput forgets nothing on its own but other systems may release.
     script.held.retain(|&(key, until)| {
         if now >= until {
-            keyboard.release(key);
+            set(key, false);
             false
         } else {
-            keyboard.press(key);
+            set(key, true);
             true
         }
     });
@@ -1229,7 +1256,7 @@ fn play_scripted_keys(
         if now < at {
             break;
         }
-        keyboard.press(key);
+        set(key, true);
         // A tap's release time is "now", so it lets go on the next frame.
         script.held.push((key, now + hold));
         script.next += 1;

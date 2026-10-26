@@ -169,7 +169,7 @@ pub fn ring_cells(ring: &Module) -> Vec<IVec2> {
 }
 
 /// Where a turret body stands, ship-local: the centre of its ring.
-fn ring_centre(ring: &Module) -> (IVec2, Vec2) {
+pub fn ring_centre(ring: &Module) -> (IVec2, Vec2) {
     let cells = ring_cells(ring);
     let sum = cells.iter().fold(IVec2::ZERO, |a, c| a + *c);
     let centre = sum / cells.len().max(1) as i32;
@@ -285,8 +285,12 @@ pub fn traverse_turrets(
     hull_modules: Query<&Module, Without<DestroyedModule>>,
     rings: Query<&Module>,
     aim: Res<PlayerAimPoint>,
+    build: Option<Res<State<crate::states::BuildState>>>,
 ) {
     let dt = time.delta_secs();
+    // While building, turrets stand squared to the hull, so a turret's cell
+    // lies exactly over a hull cell (building::turret_build).
+    let building = build.is_some_and(|s| *s.get() != crate::states::BuildState::Inactive);
     for (mut body, mut transform, parent, children) in bodies.iter_mut() {
         let mut mass = 0.0;
         for c in children.into_iter().flatten() {
@@ -312,6 +316,13 @@ pub fn traverse_turrets(
             .count() as u32;
         body.traverse_deg_s = if body.motors == 0 { 0.0 } else { super::gun_math::traverse_deg_per_s(body.motors, body.mass_t) };
 
+        if building {
+            if body.angle != 0.0 {
+                body.angle = 0.0;
+                transform.rotation = Quat::IDENTITY;
+            }
+            continue;
+        }
         let Some(target) = aim.0 else { continue };
         // Heading to the aim point, in the ship's frame.
         let centre = ship_gt.affine().transform_point3(transform.translation.with_z(0.0)).truncate();

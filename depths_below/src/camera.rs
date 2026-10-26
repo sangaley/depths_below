@@ -644,6 +644,13 @@ fn update_depth_vignette(
             // below) — the bubble never actually looked like it dropped.
             Without<crate::combat::shields::ShieldBubble>,
             Without<LightConeVisual>,
+            // The build ghost and its spare footprint tiles hide themselves
+            // when unused (ui::build_ui::update_build_ghost). As ship children
+            // they fell under the "everything on the player's ship is shown"
+            // rule below, which turned them back on: four stacked green
+            // squares at the ship's origin, whenever this system ran after
+            // the ghost's.
+            (Without<crate::components::BuildGhost>, Without<crate::components::BuildGhostCell>),
             // --- Writes its own alpha every frame ---
             //
             // Glow layers pulse/shimmer (celestial_visuals::animate_star_glow

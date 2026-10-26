@@ -262,15 +262,26 @@ pub struct DesignCapture<'w, 's> {
     pub ammo_query: Query<'w, 's, &'static SelectedAmmo>,
     pub custom_query: Query<'w, 's, (&'static CustomModule, &'static Children)>,
     pub subcomp_query: Query<'w, 's, &'static SubComponent>,
+    pub turret_query: Query<'w, 's, &'static Children, With<crate::combat::turret_deck::TurretBody>>,
+    pub on_turret_query: Query<'w, 's, &'static crate::combat::turret_deck::OnTurret>,
+    pub pending_turret_query: Query<'w, 's, &'static crate::combat::turret_deck::PendingTurretMount>,
+    pub plate_query: Query<'w, 's, (), With<crate::combat::turret_deck::TurretPlate>>,
 }
 
 impl DesignCapture<'_, '_> {
     /// Read the given ship's children back out as a design. Returns None when
     /// there is nothing to record.
     pub fn capture(&self, children: &Children, name: impl Into<String>) -> Option<Blueprint> {
-        let hull_cells: Vec<BlueprintHullCell> = children
+        // The ship's own blocks, then what stands on its turret decks. A
+        // turret's plating comes with its ring and is never recorded.
+        let blocks: Vec<Entity> = children
             .iter()
-            .filter_map(|child| self.hull_query.get(child).ok())
+            .chain(children.iter().filter_map(|c| self.turret_query.get(c).ok()).flat_map(|t| t.iter()))
+            .filter(|e| !self.plate_query.contains(*e))
+            .collect();
+        let hull_cells: Vec<BlueprintHullCell> = blocks
+            .iter()
+            .filter_map(|&child| self.hull_query.get(child).ok())
             .map(|h| BlueprintHullCell {
                 grid_pos: h.grid_position,
                 layer: h.hull_layer,
@@ -278,9 +289,9 @@ impl DesignCapture<'_, '_> {
             })
             .collect();
 
-        let modules: Vec<BlueprintModule> = children
+        let modules: Vec<BlueprintModule> = blocks
             .iter()
-            .filter_map(|child| self.module_query.get(child).ok())
+            .filter_map(|&child| self.module_query.get(child).ok())
             .map(|(entity, m)| {
                 let tuning = self.tuning_query.get(entity).ok().copied().filter(|t| {
                     t.velocity != 1.0 || t.fire_rate != 1.0 || t.damage != 1.0
@@ -297,8 +308,13 @@ impl DesignCapture<'_, '_> {
                     .ok()
                     .copied()
                     .filter(|a| a.0 != crate::combat::ammo_types::KineticAmmoType::AP);
-                // Turret-deck blocks are captured with their turret in step 5c.
-                let extras = ModuleExtras { tuning, fire_group, ammo, turret: None };
+                let turret = self
+                    .on_turret_query
+                    .get(entity)
+                    .map(|t| t.ring_cell)
+                    .or_else(|_| self.pending_turret_query.get(entity).map(|p| p.0))
+                    .ok();
+                let extras = ModuleExtras { tuning, fire_group, ammo, turret };
 
                 let (custom_name, subcomponents) = match self.custom_query.get(entity) {
                     Ok((custom, module_children)) => (
@@ -343,13 +359,7 @@ pub fn save_blueprint_system(
     keyboard: Res<ButtonInput<KeyCode>>,
     time: Res<Time>,
     ship_query: Query<&Children, With<Ship>>,
-    hull_query: Query<&HullSegment>,
-    module_query: Query<(Entity, &Module)>,
-    tuning_query: Query<&WeaponTuning>,
-    fire_group_query: Query<&FireGroup>,
-    ammo_query: Query<&SelectedAmmo>,
-    custom_query: Query<(&CustomModule, &Children)>,
-    subcomp_query: Query<&SubComponent>,
+    capture: DesignCapture,
     mut resource: ResMut<BlueprintResource>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
@@ -375,75 +385,18 @@ pub fn save_blueprint_system(
         return;
     };
 
-    // Only save entities that are children of the ship
-    let hull_cells: Vec<BlueprintHullCell> = children.iter()
-        .filter_map(|child| hull_query.get(child).ok())
-        .map(|h| BlueprintHullCell {
-            grid_pos: h.grid_position,
-            layer: h.hull_layer,
-            material: h.material,
-        })
-        .collect();
-
-    let modules: Vec<BlueprintModule> = children.iter()
-        .filter_map(|child| module_query.get(child).ok())
-        .map(|(entity, m)| {
-            // Record only non-default per-module state — untouched modules
-            // stay as compact as a v1 entry
-            let tuning = tuning_query.get(entity).ok().copied().filter(|t| {
-                t.velocity != 1.0 || t.fire_rate != 1.0 || t.damage != 1.0
-            });
-            let fire_group = fire_group_query.get(entity).ok()
-                .map(|g| g.group)
-                .filter(|&g| g != 0);
-            let ammo = ammo_query.get(entity).ok().copied()
-                .filter(|a| a.0 != crate::combat::ammo_types::KineticAmmoType::AP);
-            // Turret-deck blocks are captured with their turret in step 5c.
-                let extras = ModuleExtras { tuning, fire_group, ammo, turret: None };
-
-            let (custom_name, subcomponents) = match custom_query.get(entity) {
-                Ok((custom, module_children)) => (
-                    Some(custom.custom_name.clone()),
-                    Some(
-                        module_children.iter()
-                            .filter_map(|c| subcomp_query.get(c).ok())
-                            .map(|sc| sc.subcomponent_type.clone())
-                            .collect(),
-                    ),
-                ),
-                Err(_) => (None, None),
-            };
-
-            BlueprintModule {
-                module_type: m.module_type,
-                grid_pos: m.grid_position,
-                rotation: m.rotation,
-                custom_name,
-                subcomponents,
-                extras: if extras.is_empty() { None } else { Some(extras) },
-            }
-        })
-        .collect();
-
-    if hull_cells.is_empty() && modules.is_empty() {
+    // The same reading of the ship every other "this ship as a design" uses,
+    // turret decks included.
+    let Some(mut blueprint) = capture.capture(children, String::new()) else {
         notifications.write(ShowNotification {
             message: "Nothing to save - build some hull/modules first.".into(),
             notification_type: NotificationType::Warning,
             duration: 2.0,
         });
         return;
-    }
-
-    let timestamp = chrono_lite_timestamp();
-    let name = format!("sub_{}m_{}", modules.len(), timestamp);
-
-    let blueprint = Blueprint {
-        name: name.clone(),
-        hull_cells,
-        modules,
-        created_at: timestamp,
-        version: BLUEPRINT_VERSION,
     };
+    let name = format!("sub_{}m_{}", blueprint.modules.len(), blueprint.created_at);
+    blueprint.name = name.clone();
 
     let summary = blueprint.summary();
 
@@ -793,5 +746,48 @@ mod scale_design_tests {
                 assert!(edge, "{} is Outer inside the hull", c.grid_pos);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod turret_capture_tests {
+    use super::*;
+    use crate::combat::turret_deck::{OnTurret, TurretBody, TurretPlate};
+
+    #[derive(Resource, Default)]
+    struct Captured(Option<Blueprint>);
+
+    fn module(t: ModuleType, at: IVec2) -> Module {
+        Module {
+            module_type: t, health: 1.0, max_health: 1.0, power_consumption: 0.0, power_generation: 0.0,
+            is_active: true, grid_position: at, size: IVec2::ONE, rotation: Rotation::East,
+        }
+    }
+
+    #[test]
+    fn a_design_keeps_what_stands_on_its_turrets_and_not_their_plating() {
+        let mut app = App::new();
+        app.init_resource::<Captured>();
+        app.add_systems(Update, |ship: Query<&Children, With<Ship>>, capture: DesignCapture, mut out: ResMut<Captured>| {
+            out.0 = capture.capture(ship.single().unwrap(), "t");
+        });
+        let ship = app.world_mut().spawn(Ship).id();
+        let ring = app.world_mut().spawn((module(ModuleType::TurretRing, IVec2::new(5, 1)), ChildOf(ship))).id();
+        let body = app.world_mut().spawn((
+            TurretBody { ring, ring_cell: IVec2::new(5, 1), size: 3, angle: 0.0, traverse_deg_s: 0.0, mass_t: 0.0, motors: 0 },
+            ChildOf(ship),
+        )).id();
+        app.world_mut().spawn((HullSegment { grid_position: IVec2::ZERO, ..default() }, TurretPlate, ChildOf(body)));
+        app.world_mut().spawn((module(ModuleType::FiringPiece, IVec2::ZERO), OnTurret { ring_cell: IVec2::new(5, 1) }, ChildOf(body)));
+        app.update();
+
+        let bp = app.world().resource::<Captured>().0.clone().unwrap();
+        assert!(bp.hull_cells.is_empty(), "turret plating is the ring's, not the design's");
+        assert_eq!(bp.modules.len(), 2);
+        let fp = bp.modules.iter().find(|m| m.module_type == ModuleType::FiringPiece).unwrap();
+        assert_eq!(fp.grid_pos, IVec2::ZERO);
+        assert_eq!(fp.extras.and_then(|e| e.turret), Some(IVec2::new(5, 1)));
+        let ring = bp.modules.iter().find(|m| m.module_type == ModuleType::TurretRing).unwrap();
+        assert_eq!(ring.extras.and_then(|e| e.turret), None);
     }
 }

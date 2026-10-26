@@ -25,6 +25,7 @@ pub mod layout;
 pub mod registry;
 pub mod stat_calculator;
 pub mod blueprint;
+pub mod turret_build;
 
 pub use registry::ModuleRegistry;
 pub use stat_calculator::StatCalculator;
@@ -63,10 +64,14 @@ impl Plugin for BuildingPlugin {
                 (
                     update_grid_occupancy,
                     handle_build_input,
+                    turret_build::switch_build_deck,
                     update_ghost_preview,
+                    turret_build::validate_turret_ghost,
                     handle_module_placement,
                     draw_hull_rect_preview,
                     handle_module_removal,
+                    turret_build::turret_deck_clicks,
+                    turret_build::show_turrets_for_deck,
                     blueprint::save_blueprint_system,
                     blueprint::load_blueprint_system,
                     blueprint::delete_blueprint_system,
@@ -875,6 +880,17 @@ fn handle_build_input(
 /// the ship happens to be sitting exactly at world origin with zero
 /// rotation, which is essentially never true once you've actually flown
 /// anywhere. Every cursor→grid conversion must go through here.
+/// DEPTHS_BUILD_CELL=<x>,<y>: a scripted run has no mouse; build mode points
+/// at this ship cell instead (with DEPTHS_KEYS' MouseLeft / MouseRight).
+pub(crate) fn build_cell_override() -> Option<IVec2> {
+    static CELL: std::sync::OnceLock<Option<IVec2>> = std::sync::OnceLock::new();
+    *CELL.get_or_init(|| {
+        let v = std::env::var("DEPTHS_BUILD_CELL").ok()?;
+        let (x, y) = v.split_once(',')?;
+        Some(IVec2::new(x.trim().parse().ok()?, y.trim().parse().ok()?))
+    })
+}
+
 pub fn cursor_to_ship_grid(
     window: &Window,
     camera: &Camera,
@@ -920,7 +936,7 @@ fn update_ghost_preview(
     let Ok((player, ship_gt)) = ship_query.single() else { return };
     let player_ship = Some(player);
 
-    let Some(grid_pos) = cursor_to_ship_grid(window, camera, camera_transform, ship_gt) else {
+    let Some(grid_pos) = build_cell_override().or_else(|| cursor_to_ship_grid(window, camera, camera_transform, ship_gt)) else {
         // Pointing at nothing. Say so, rather than leaving the ghost sitting
         // wherever it was last -- which on the first frame of build mode is
         // the ship's origin, dead centre of the screen.
@@ -933,7 +949,9 @@ fn update_ghost_preview(
         build_state.ghost_position = grid_pos;
 
         // Auto-rotate modules when ghost moves (unless user manually rotated)
-        if ghost_moved && build_state.auto_rotated {
+        // On a turret deck there's no hull around the ghost to face away
+        // from: parts keep the way they're turned.
+        if ghost_moved && build_state.auto_rotated && build_state.deck == BuildDeck::Hull {
             if let BuildSelection::Module(mt) = build_state.current_selection() {
                 // A launcher wants a clear LANE, not merely an empty
                 // neighbour: auto_rotate would happily point a tube into a
@@ -1217,7 +1235,7 @@ fn handle_module_placement(
     player_children: Query<&Children, With<Ship>>,
     hull_blocks: Query<(), With<HullSegment>>,
 ) {
-    if *current_state.get() != BuildState::Placing {
+    if *current_state.get() != BuildState::Placing || build_state.deck == BuildDeck::Turret {
         build_state.hull_rect_anchor = None;
         return;
     }
@@ -1434,12 +1452,16 @@ fn handle_module_removal(
     mut remove_events: MessageWriter<RemoveModuleRequest>,
     mut remove_hull_events: MessageWriter<RemoveHullRequest>,
     mut last_deleted: Local<Option<IVec2>>,
+    turrets: Query<(&crate::combat::turret_deck::HasTurretBody, &crate::combat::turret_deck::TurretBody)>,
+    bodies: Query<&Children, With<crate::combat::turret_deck::TurretBody>>,
+    mut notifications: MessageWriter<ShowNotification>,
 ) {
     let state = *current_state.get();
     let in_deleting = state == BuildState::Deleting;
     let in_placing = state == BuildState::Placing;
 
-    if !in_deleting && !in_placing {
+    // The turret deck takes its own clicks (turret_build::turret_deck_clicks).
+    if (!in_deleting && !in_placing) || build_state.deck == BuildDeck::Turret {
         return;
     }
 
@@ -1468,6 +1490,19 @@ fn handle_module_removal(
                         .filter(|(_, m)| m.module_type.category() == ModuleCategory::Power)
                         .count();
                     if power_count <= 1 {
+                        return;
+                    }
+                }
+                // A ring with a turret built on it would take the turret's
+                // parts down with it, unrefunded.
+                if let Ok((has, _)) = turrets.get(entity) {
+                    let loaded = bodies.get(has.0).is_ok_and(|ch| ch.iter().any(|c| module_query.contains(c)));
+                    if loaded {
+                        notifications.write(ShowNotification {
+                            message: "Clear the turret first (PgUp to its deck)".into(),
+                            notification_type: NotificationType::Warning,
+                            duration: 2.0,
+                        });
                         return;
                     }
                 }

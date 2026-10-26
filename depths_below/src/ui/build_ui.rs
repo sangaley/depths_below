@@ -299,6 +299,9 @@ pub fn update_build_ghost(
     let selection = build_state.current_selection();
     let ghost_pos = build_state.ghost_position;
     let rotation = build_state.rotation;
+    // Over a turret deck the ghost has to stand above the turret (z 1.2 and
+    // up), not down among the hull blocks under it.
+    let ghost_z = if build_state.deck == crate::resources::BuildDeck::Turret { 2.5 } else { 0.3 };
 
     // Footprint cells beyond the first (index 0, covered by the main ghost sprite
     // above) — populated only for modules with a non-rectangular footprint override.
@@ -308,7 +311,7 @@ pub fn update_build_ghost(
         BuildSelection::Hull(_) => {
             transform.translation.x = ghost_pos.x as f32 * 66.0;
             transform.translation.y = ghost_pos.y as f32 * 66.0 - 33.0;
-            transform.translation.z = 0.3;
+            transform.translation.z = ghost_z;
             transform.rotation = Quat::IDENTITY;
             sprite.custom_size = Some(Vec2::new(64.0, 64.0));
         }
@@ -323,7 +326,7 @@ pub fn update_build_ghost(
                 let first = cells.first().copied().unwrap_or(ghost_pos);
                 transform.translation.x = first.x as f32 * 66.0;
                 transform.translation.y = first.y as f32 * 66.0 - 33.0;
-                transform.translation.z = 0.3;
+                transform.translation.z = ghost_z;
                 transform.rotation = Quat::IDENTITY;
                 sprite.custom_size = Some(Vec2::new(60.0, 60.0));
                 extra_cells = cells.iter().skip(1).copied().collect();
@@ -357,7 +360,7 @@ pub fn update_build_ghost(
 
                 transform.translation.x = center_x;
                 transform.translation.y = center_y;
-                transform.translation.z = 0.3;
+                transform.translation.z = ghost_z;
                 transform.rotation = Quat::from_rotation_z(visual_angle);
                 sprite.custom_size = Some(Vec2::new(sprite_w, sprite_h));
             }
@@ -399,7 +402,7 @@ pub fn update_build_ghost(
         if let Some(&cell) = extra_cells.get(cell_marker.0 - 1) {
             c_transform.translation.x = cell.x as f32 * 66.0;
             c_transform.translation.y = cell.y as f32 * 66.0 - 33.0;
-            c_transform.translation.z = 0.3;
+            c_transform.translation.z = ghost_z;
             c_sprite.color = tile_color;
             *c_vis = Visibility::Visible;
         } else {
@@ -413,7 +416,7 @@ pub fn update_build_ghost(
             v_transform.translation = Vec3::new(
                 transform.translation.x,
                 transform.translation.y - 40.0,
-                0.35,
+                ghost_z + 0.05,
             );
             v_text.0 = reason.clone();
             // Red refuses the placement; amber allows it and warns. A blocked
@@ -475,7 +478,7 @@ pub fn update_delete_highlight(
     let ghost_pos = build_state.ghost_position;
     transform.translation.x = ghost_pos.x as f32 * 66.0;
     transform.translation.y = ghost_pos.y as f32 * 66.0 - 33.0;
-    transform.translation.z = 0.3;
+    transform.translation.z = if build_state.deck == crate::resources::BuildDeck::Turret { 2.5 } else { 0.3 };
     sprite.custom_size = Some(Vec2::new(64.0, 64.0));
 
     if occupancy.cells.contains_key(&ghost_pos) {
@@ -1482,7 +1485,7 @@ pub fn update_controls_help(
         hint.0 = if building {
             match current_build_state.get() {
                 BuildState::Placing => {
-                    "Click to place\nDrag to paint\nRight-click to remove\n\nR  rotate\nM  material\nTab  category\nF2  power view\nEsc  done"
+                    "Click to place\nDrag to paint\nRight-click to remove\n\nR  rotate\nM  material\nTab  category\nPgUp/PgDn  turret / hull deck\nF2  power view\nEsc  done"
                 }
                 BuildState::Deleting => "Click or drag to remove\n\nX  leave delete mode\nEsc  done",
                 BuildState::PlacingComponent => {
