@@ -150,6 +150,36 @@ heavy armour plate floor tile for a gun turret, slightly lighter grey than hull 
 thick riveted edges, subtle wear, all four edges seamless so tiles join in any direction
 ```
 
+### Turret armour: `turret_armour.png` (tiles in every direction)
+The turret's rim: the outer plates of its deck, heavier than the floor inside.
+```
+heavy armour plate tile for the outer rim of a gun turret, darker and thicker than the turret
+floor, deep riveted border, subtle weld seams, all four edges seamless so tiles join in any direction
+```
+
+### Turret armour angle piece: `turret_armour_wedge.png`
+The 45-degree pieces that chamfer the rim's corners. Same armour as above, cut on the diagonal:
+the plate fills the **lower-left half** of the tile, the upper-right half is transparent.
+```
+heavy armour plate cut diagonally, the plate filling only the lower-left triangle of the tile,
+a bevelled lit edge along the diagonal cut, upper-right triangle fully transparent
+```
+
+### Gun house: `gun_house.png` (stretched as a 9-slice)
+The housing over a turret's breeches and loaders. It's stretched to fit each turret, so keep the
+detail in the **outer 24 px** (the chamfered corners and edge) and the middle plain enough to stretch.
+```
+top-down armoured gun turret housing roof, chamfered corners, flat steel plate with a raised rim,
+plain centre, the corners and edges carry all the detail, mid-grey, no hatch
+```
+
+### Gun house hatch: `gun_house_hatch.png`
+Drawn on top of the gun house roof, toward the back.
+```
+round armoured commander's hatch seen from above, heavy hinge, brass locking ring, small
+periscope, transparent around it
+```
+
 ### Turret ring: `turret_ring.png`
 The bearing under a turret, on the hull deck. Hidden while the turret stands on it.
 ```
