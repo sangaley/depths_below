@@ -1257,6 +1257,9 @@ struct RackWeapon {
     ammo: u32,
     max: u32,
     alive: bool,
+    /// A turret gun, loaded, still swinging onto what it's aimed at: it
+    /// holds fire until it's on.
+    turning: bool,
 }
 
 /// Folds a stack of identical weapons into one line. A starter carrying four
@@ -1285,11 +1288,16 @@ fn rack_line(name: &str, weapons: &[RackWeapon]) -> RackLine {
     if !live.iter().any(|w| has_rounds(w)) {
         return RackLine { name: label, frac: 0.0, ammo, state: "EMPTY".into(), state_color: ThemeColors::STATUS_DANGER };
     }
-    let ready = live.iter().filter(|w| w.ready && has_rounds(w)).count();
+    let ready = live.iter().filter(|w| w.ready && has_rounds(w) && !w.turning).count();
+    let turning = live.iter().any(|w| w.ready && has_rounds(w) && w.turning);
     let (state, state_color) = if ready == live.len() {
         ("READY".to_string(), ThemeColors::ACCENT_GREEN)
     } else if ready > 0 {
         (format!("{ready}/{} RDY", live.len()), ThemeColors::ACCENT_YELLOW)
+    } else if turning {
+        // Loaded, but its turret hasn't come round to the target yet. Without
+        // this it read READY while holding fire, and looked broken.
+        ("TURNING".to_string(), ThemeColors::ACCENT_YELLOW)
     } else {
         let soonest = live.iter().filter(|w| has_rounds(w)).map(|w| w.remaining).fold(f32::INFINITY, f32::min);
         // Round up: the last tenth of a reload printed as an orange "0.0s",
@@ -1310,6 +1318,8 @@ fn update_weapon_rack(
     ship_query: Query<Entity, With<Ship>>,
     weapon_query: Query<(Entity, &Module, &Weapon, Option<&WeaponCooldown>, Option<&crate::combat::targeting::fire_groups::FireGroup>, &ChildOf, Option<&ModuleTemperature>)>,
     assemblies: Query<&crate::combat::gun_assembly::GunAssembly>,
+    // A turret gun's barrel and where its turret is aiming.
+    aiming: (Query<&crate::combat::gun_assembly::GunMuzzle>, Query<&crate::combat::turret_deck::TurretBody>),
     rows: Query<(Entity, &WeaponRackRow)>,
     mut texts: Query<(&mut Text, &mut TextColor), With<WeaponRackDynText>>,
     mut bars: Query<(&mut Node, &mut BackgroundColor), With<WeaponRackBarFill>>,
@@ -1350,7 +1360,14 @@ fn update_weapon_rack(
                 },
             ))
             .or_default()
-            .push(RackWeapon { frac, ready, remaining, ammo: weapon.ammo, max: weapon.max_ammo, alive: module.health > 0.0 });
+            .push(RackWeapon {
+                frac, ready, remaining, ammo: weapon.ammo, max: weapon.max_ammo, alive: module.health > 0.0,
+                turning: match (aiming.0.get(entity), aiming.1.get(parent.parent()).ok().and_then(|t| t.aim)) {
+                    (Ok(m), Some(aim)) => m.dir.angle_to((aim - m.world).normalize_or_zero()).abs()
+                        > (crate::combat::gun_assembly::SPINAL_ARC_DEG / 2.0).to_radians(),
+                    _ => false,
+                },
+            });
     }
     let lines: Vec<((u8, &'static str), RackLine)> =
         stacks.iter().map(|(key, ws)| (*key, rack_line(key.1, ws))).collect();
@@ -6706,8 +6723,16 @@ mod station_services_tests {
 mod weapon_rack_tests {
     use super::*;
 
+    #[test]
+    fn a_turret_gun_still_coming_round_says_so() {
+        let turning = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 30, max: 30, alive: true, turning: true };
+        assert_eq!(rack_line("170 mm Gun", std::slice::from_ref(&turning)).state, "TURNING");
+        let on = RackWeapon { turning: false, ..turning };
+        assert_eq!(rack_line("170 mm Gun", &[on]).state, "READY");
+    }
+
     fn gun(ready: bool, remaining: f32, alive: bool) -> RackWeapon {
-        RackWeapon { frac: if ready { 1.0 } else { 0.5 }, ready, remaining, ammo: 30, max: 30, alive }
+        RackWeapon { frac: if ready { 1.0 } else { 0.5 }, ready, remaining, ammo: 30, max: 30, alive, turning: false }
     }
 
     #[test]
@@ -6731,9 +6756,9 @@ mod weapon_rack_tests {
     /// A dry magazine is EMPTY, not READY, and a half-dry stack can't all fire.
     #[test]
     fn dry_guns_are_not_ready() {
-        let dry = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 0, max: 30, alive: true };
+        let dry = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 0, max: 30, alive: true, turning: false };
         assert_eq!(rack_line("Cannon", &[dry]).state, "EMPTY");
-        let dry = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 0, max: 30, alive: true };
+        let dry = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 0, max: 30, alive: true, turning: false };
         assert_eq!(rack_line("Cannon", &[gun(true, 0.0, true), dry]).state, "1/2 RDY");
     }
 
@@ -6753,7 +6778,7 @@ mod weapon_rack_tests {
     /// A power-fed gun has no magazine to count.
     #[test]
     fn power_weapons_show_no_fake_ammo() {
-        let beam = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 999, max: 999, alive: true };
+        let beam = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 999, max: 999, alive: true, turning: false };
         assert_eq!(rack_line("Laser", &[beam]).ammo, "power");
     }
 }

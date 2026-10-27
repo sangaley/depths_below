@@ -2234,17 +2234,6 @@
    }
   },
   {
-   "module_type": "TurretRing",
-   "grid_pos": [
-    9,
-    2
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": null
-  },
-  {
    "module_type": "AmmoHoist",
    "grid_pos": [
     19,
@@ -2271,6 +2260,28 @@
    "grid_pos": [
     21,
     2
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    15,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    15,
+    3
    ],
    "rotation": "East",
    "custom_name": null,

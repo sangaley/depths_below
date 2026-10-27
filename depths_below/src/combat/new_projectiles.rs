@@ -284,7 +284,7 @@ pub fn fire_weapons_system(
     assemblies: Query<(&crate::combat::gun_assembly::GunAssembly, Option<&crate::combat::gun_assembly::GunMuzzle>)>,
     // Bundled: this system is at Bevy's parameter cap.
     turrets: (
-        Query<&ChildOf, With<crate::combat::turret_deck::TurretBody>>,
+        Query<(&ChildOf, &crate::combat::turret_deck::TurretBody)>,
         Res<crate::combat::turret_deck::TurretShapes>,
     ),
 ) {
@@ -335,7 +335,7 @@ pub fn fire_weapons_system(
         // current target/cursor — including an AI ship shooting itself when
         // the player had it targeted.
         // A gun on a turret deck is a grandchild: its turret is the parent.
-        let owner = turret_bodies.get(parent.parent()).map(|t| t.parent()).unwrap_or(parent.parent());
+        let owner = turret_bodies.get(parent.parent()).map(|(t, _)| t.parent()).unwrap_or(parent.parent());
         if owner != player_ship { continue; }
         // True kinetic weapons only. This loop has no type match arms below
         // for anything else — every OTHER weapon type (Laser, PlasmaCaster,
@@ -442,6 +442,16 @@ pub fn fire_weapons_system(
         } else {
             continue;
         };
+        // A turret gun shoots at what its turret is turning toward -- one aim
+        // for the turret and every gun on it. Each gun picking its own block
+        // left the barrel pointed one way and the gun waiting on another.
+        let target_pos = match turret_bodies.get(parent.parent()).ok().and_then(|(_, t)| t.aim) {
+            Some(aim) => {
+                let to = aim - weapon_pos;
+                if to.length() > weapon.range { weapon_pos + to.normalize_or_zero() * weapon.range } else { aim }
+            }
+            None => target_pos,
+        };
 
         // Fixed/broadside mounts can't swivel outside their arc — without this
         // check a forward-facing cannon would fire at a target behind the
@@ -455,6 +465,12 @@ pub fn fire_weapons_system(
             None => is_in_firing_arc(ship_physics.rotation, &module.rotation, mount, target_pos - weapon_pos),
         };
         if !in_arc {
+            if crate::combat::gun_assembly::trace() && turret_bodies.contains(parent.parent()) {
+                if let Some(m) = muzzle {
+                    let off = m.dir.angle_to((target_pos - weapon_pos).normalize_or_zero()).to_degrees();
+                    info!("TURRET HOLDS FIRE {:?}: barrel {:.1} deg off its aim, {:.0} away", entity, off, (target_pos - weapon_pos).length());
+                }
+            }
             continue;
         }
         // A firing cut-out: a turret gun holds fire while its line of fire

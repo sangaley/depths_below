@@ -19,11 +19,22 @@ use crate::components::{
     DestroyedModule, HullLayer, HullMaterial, HullSegment, Module, ModuleType, Ship,
 };
 
-/// Where the player is aiming this frame, in world space: a locked block, else
-/// the selected target, else the cursor (or a scripted run's DEPTHS_AIM_AT).
-/// Turrets turn toward it.
+/// Where the player is aiming this frame, in world space, in the order the
+/// guns take it: a scripted run's DEPTHS_AIM_AT, a locked block, (each
+/// turret's own engaged block -- see `traverse_turrets`), the selected
+/// target, the cursor.
 #[derive(Resource, Default, Debug, Clone, Copy)]
-pub struct PlayerAimPoint(pub Option<Vec2>);
+pub struct PlayerAimPoint {
+    pub first: Option<Vec2>,
+    pub then: Option<Vec2>,
+}
+
+impl PlayerAimPoint {
+    /// A turret's aim, given the block its guns have engaged on their own.
+    pub fn for_turret(&self, engaged: Option<Vec2>) -> Option<Vec2> {
+        self.first.or(engaged).or(self.then)
+    }
+}
 
 pub fn update_player_aim_point(
     mut aim: ResMut<PlayerAimPoint>,
@@ -43,10 +54,8 @@ pub fn update_player_aim_point(
         .and_then(|p| ship.single().ok().map(|s| s.transform_point(p.extend(0.0)).truncate()));
     // A scripted run's aim comes first: the real mouse may be sitting over
     // the window and would otherwise steer the run.
-    aim.0 = scripted
-        .or_else(|| lock.aim_point())
-        .or_else(|| selection.target.and_then(|t| targets.get(t).ok()).map(|g| g.translation().truncate()))
-        .or(cursor);
+    aim.first = scripted.or_else(|| lock.aim_point());
+    aim.then = selection.target.and_then(|t| targets.get(t).ok()).map(|g| g.translation().truncate()).or(cursor);
 }
 
 /// The rotating deck above a turret ring.
@@ -68,6 +77,9 @@ pub struct TurretBody {
     /// Its ring has been shot out: it can't turn, and waits where it is for
     /// the ring to be rebuilt under it.
     pub jammed: bool,
+    /// What it's turning toward this frame, in world space: what its guns
+    /// fire at, so a turret and its guns never disagree.
+    pub aim: Option<Vec2>,
     /// How its ring was laid: with `ring_cell` and `size`, enough to lay it
     /// again (meta saves a shot-out ring this way).
     pub ring_rotation: crate::components::Rotation,
@@ -90,7 +102,7 @@ impl TurretBody {
 
     pub fn new(ring: Entity, ring_cell: IVec2, size: i32) -> Self {
         Self {
-            ring, ring_cell, size, angle: 0.0, traverse_deg_s: 0.0, mass_t: 0.0, motors: 0, jammed: false,
+            ring, ring_cell, size, angle: 0.0, traverse_deg_s: 0.0, mass_t: 0.0, motors: 0, jammed: false, aim: None,
             ring_rotation: crate::components::Rotation::North,
         }
     }
@@ -603,6 +615,7 @@ pub fn traverse_turrets(
     aim: Res<PlayerAimPoint>,
     build: Option<Res<State<crate::states::BuildState>>>,
     shapes: Option<Res<TurretShapes>>,
+    engaged: Query<&crate::combat::targeting::auto_engage::AutoAimPoint>,
 ) {
     let dt = time.delta_secs();
     // While building, turrets stand squared to the hull, so a turret's cell
@@ -644,12 +657,18 @@ pub fn traverse_turrets(
             }
             continue;
         }
-        // The player's turrets follow the player's aim; an AI ship's follow
-        // whatever it has picked to fight.
+        // The player's turrets follow the player's aim -- with nothing locked,
+        // the block their first gun has engaged, so the turret turns to what
+        // its guns will actually shoot at. An AI ship's follow whatever it
+        // has picked to fight.
         let target = match ai_target {
             Some(t) => t.entity.map(|e| whereabouts.get(e).map(|g| g.translation().truncate()).unwrap_or(t.position)),
-            None => aim.0,
+            None => {
+                let first_gun = children.into_iter().flatten().find(|c| engaged.contains(**c));
+                aim.for_turret(first_gun.and_then(|c| engaged.get(*c).ok()).map(|a| a.point))
+            }
         };
+        body.aim = target;
         let Some(target) = target else { continue };
         // Heading to the aim point, in the ship's frame.
         let centre = ship_gt.affine().transform_point3(transform.translation.with_z(0.0)).truncate();

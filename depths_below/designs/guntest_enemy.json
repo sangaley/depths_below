@@ -2098,6 +2098,28 @@
    "custom_name": null,
    "subcomponents": null,
    "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    15,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    15,
+    3
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "2026-10-25T00:00:00Z",
