@@ -121,6 +121,9 @@ put("AmmoHoist", 24, 3); put("AntiFlashDoor", 25, 3); put("Magazine", 26, 3)
 put("Magazine", 26, -3); put("BeltConveyor", 25, -3)
 put("AmmoHoist", 24, -3)  # spare hoist, port side
 put("AntiFlashDoor", 23, -3)
+# Turret C draws on the port hoist (the first one round its ring): two more
+# magazines against the one it reaches make one store of three.
+put("Magazine", 26, -2); put("Magazine", 26, -1)
 # ---- midships -----------------------------------------------------------
 both("ShieldEmitter", 30, 6); both("PointDefenseDrone", 31, 8)
 both("RadarArray", 30, 1); put("MemoryCore", 29, 2); put("BatteryBank", 29, -2)
@@ -134,6 +137,7 @@ both("TraverseMotor", 32, 5)
 # its gun spends most of a fight holding fire.
 both("TraverseMotor", 32, 4); both("TraverseMotor", 36, 5)
 both("AmmoHoist", 34, 3); both("AntiFlashDoor", 35, 3); both("Magazine", 36, 3)
+both("Magazine", 36, 4)
 both("ArmorPlate", 36, 7)
 # ---- bridge -------------------------------------------------------------
 put("BridgeWing", 40, 3); put("HelmStation", 43, 3); put("NavigationConsole", 43, 4)

@@ -104,8 +104,10 @@ pub fn trace() -> bool {
 pub const GAME_SPEED_PER_MPS: f32 = 3.0;
 /// The arc a spinal gun can fire in: it has no turret, you aim the ship.
 pub const SPINAL_ARC_DEG: f32 = 8.0;
-/// Metres of shell one Magazine block holds: big shells eat storage.
-pub const MAGAZINE_SHELL_M: f32 = 20.0;
+/// Metres of shell one Magazine block holds: big shells eat storage. At 20
+/// a destroyer's turrets ran dry inside a minute and a half of a capital
+/// fight.
+pub const MAGAZINE_SHELL_M: f32 = 80.0;
 /// Shells a minute an Ammo Hoist lifts into its turret: one every 1.5 s,
 /// shared by the guns up there.
 pub const HOIST_RPM: f32 = 40.0;
@@ -183,8 +185,15 @@ pub fn hoist_reach(hull: &[(Entity, Module)], ring_cells: &[IVec2]) -> TurretFee
             for step in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
                 let n = c + step;
                 let t = kind.get(&n).map(|(_, t)| *t);
-                if t == Some(ModuleType::Magazine) && !reached.contains(&n) {
-                    reached.push(n);
+                if t == Some(ModuleType::Magazine) {
+                    // Magazines side by side are one store: the walk carries
+                    // on through them to the ones behind (and so does a flash).
+                    if !reached.contains(&n) {
+                        reached.push(n);
+                    }
+                    if seen.insert(n) {
+                        queue.push_back(n);
+                    }
                 } else if through(t) && seen.insert(n) {
                     queue.push_back(n);
                 }
@@ -412,7 +421,15 @@ fn assemble_parts(modules: &[(Entity, Module)], shells: &HashMap<Entity, crate::
             for step in [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
                 let n = c + step;
                 match kind(&n) {
-                    Some(ModuleType::Magazine) if !reached.contains(&n) => reached.push(n),
+                    // Magazines side by side are one store.
+                    Some(ModuleType::Magazine) => {
+                        if !reached.contains(&n) {
+                            reached.push(n);
+                        }
+                        if seen_belt.insert(n) {
+                            belt.push_back(n);
+                        }
+                    }
                     t if is_feedway(t) && seen_belt.insert(n) => belt.push_back(n),
                     _ => {}
                 }
@@ -777,10 +794,22 @@ mod gun_assembly_tests {
     fn a_magazine_behind_the_feeder_adds_shells_by_size() {
         let g = &assemble(&small_gun())[0].1;
         assert_eq!(g.magazines.len(), 1);
-        // 20 m of 0.51 m shells.
-        assert_eq!(g.magazine_shells, 39);
+        // 80 m of 0.51 m shells.
+        assert_eq!(g.magazine_shells, 156);
         assert_eq!(g.feed_rpm, FEEDER_RPM);
-        assert_eq!(g.max_ammo(), g.stats.ready_rack + 39);
+        assert_eq!(g.max_ammo(), g.stats.ready_rack + 156);
+    }
+
+    #[test]
+    fn magazines_side_by_side_are_one_store() {
+        let mut s = small_gun();
+        let next = |i: u32| Entity::from_raw_u32(300 + i).unwrap();
+        let mag = s.iter().find(|(_, m)| m.module_type == Magazine).unwrap().1.grid_position;
+        s.push((next(0), m(Magazine, mag.x - 1, mag.y, East)));
+        s.push((next(1), m(Magazine, mag.x - 2, mag.y, East)));
+        let g = &assemble(&s)[0].1;
+        assert_eq!(g.magazines.len(), 3);
+        assert_eq!(g.magazine_shells, (3.0 * MAGAZINE_SHELL_M / g.stats.shell_m) as u32);
     }
 
     #[test]
@@ -805,8 +834,8 @@ mod gun_assembly_tests {
         ]);
         let guns = assemble(&s);
         assert!(guns.iter().all(|(_, g)| g.magazines.len() == 1));
-        // 10 m each of 0.18 m shells (60 mm gauge).
-        assert!(guns.iter().all(|(_, g)| g.magazine_shells == 55), "{:?}", guns.iter().map(|g| g.1.magazine_shells).collect::<Vec<_>>());
+        // 40 m each of 0.18 m shells (60 mm gauge).
+        assert!(guns.iter().all(|(_, g)| g.magazine_shells == 222), "{:?}", guns.iter().map(|g| g.1.magazine_shells).collect::<Vec<_>>());
     }
 
     /// A 3x3 ring over (0..3, 0..3); a hoist beside it at (3, 1); one

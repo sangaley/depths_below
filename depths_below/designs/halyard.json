@@ -7235,6 +7235,28 @@
    "extras": null
   },
   {
+   "module_type": "Magazine",
+   "grid_pos": [
+    1,
+    -2
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    1,
+    -1
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
    "module_type": "ShieldEmitter",
    "grid_pos": [
     5,
@@ -7580,6 +7602,28 @@
    "grid_pos": [
     11,
     -3
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    11,
+    4
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    11,
+    -4
    ],
    "rotation": "South",
    "custom_name": null,
