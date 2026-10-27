@@ -100,7 +100,22 @@ pub fn init_world_simulation(
                 dummy.home_zone = dummy.position;
                 dummy.destination = dummy.position;
             }
-            info!("MOVETEST: single non-shooting {:?} {:?} dummy spawned at (500, 0) for damage-model testing", faction, dummy.class);
+            // A design file (DEPTHS_MOVETEST_ENEMY_DESIGN, ai_ship::spawner)
+            // can be a whole warship: at 500 units it would be born inside
+            // the player's hull, the same as a class.
+            if std::env::var("DEPTHS_MOVETEST_ENEMY_DESIGN").is_ok() {
+                dummy.position = Vec2::new(3200.0, 0.0);
+                dummy.home_zone = dummy.position;
+                dummy.destination = dummy.position;
+            }
+            let shoots = std::env::var("DEPTHS_MOVETEST_ENEMY_SHOOTS").ok().as_deref() == Some("1");
+            info!(
+                "MOVETEST: one {} {:?} {:?} dummy spawned at {:?}",
+                if shoots { "shooting" } else { "non-shooting" },
+                faction,
+                dummy.class,
+                dummy.position
+            );
             sim.add(dummy);
         }
 
