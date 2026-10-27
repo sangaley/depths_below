@@ -805,8 +805,14 @@ pub(crate) fn surviving_fraction(alive: u32, total_now: u32, original: Option<u3
     }
 }
 
+/// A gun: the old fixed weapons, and a gun built from parts (counted once,
+/// by its firing piece).
 pub(crate) fn is_weapon_type(module_type: ModuleType) -> bool {
-    ModuleCategory::Weapons.module_types().contains(&module_type)
+    ModuleCategory::Weapons.module_types().contains(&module_type) || module_type == ModuleType::FiringPiece
+}
+/// Where a ship is commanded from: lose them all and nobody is fighting it.
+pub(crate) fn is_command_type(module_type: ModuleType) -> bool {
+    matches!(module_type, ModuleType::HelmStation | ModuleType::BridgeWing | ModuleType::AICombatCore)
 }
 
 pub(crate) fn is_engine_type(module_type: ModuleType) -> bool {
@@ -858,12 +864,38 @@ pub fn check_ai_cripple(
             <= CRIPPLE_THRESHOLD;
         let immobile = surviving_fraction(engines_alive, engines_total, loadout.map(|l| l.engines))
             <= CRIPPLE_THRESHOLD;
-        if !(toothless && immobile) { continue; }
+        // Every bridge, helm and AI core it was built with gone: nobody is
+        // left to fight it. A ship built with none can't lose them.
+        let (command_alive, _) = subsystem_tally(entity, children, &module_query, |m| is_command_type(m.module_type));
+        let headless = loadout.is_some_and(|l| l.command > 0) && command_alive == 0;
+        // Its reactors down to a quarter of what they made: the guns,
+        // shields and drives it has left have nothing to run on. (Every
+        // reactor gone is a meltdown instead -- check_ai_reactor_destruction.)
+        let power_left: f32 = children
+            .iter()
+            .filter_map(|c| module_query.get(c).ok())
+            .filter(|(m, owned)| owned.root == entity && m.health > 0.0)
+            .map(|(m, _)| m.power_generation)
+            .sum();
+        let powerless = loadout.is_some_and(|l| l.power_mw > 0.0 && power_left <= l.power_mw * CRIPPLE_THRESHOLD);
+        let why = if headless {
+            "its bridge is gone"
+        } else if powerless {
+            "its reactors are failing"
+        } else if toothless && immobile {
+            "derelict adrift"
+        } else {
+            continue;
+        };
 
         state.is_destroyed = true;
         let pos = transform.translation.truncate();
+        info!(
+            "{:?} strikes: {why} (command {command_alive}, power {power_left:.0} MW of {:.0}, guns {guns_alive}, engines {engines_alive})",
+            ship_type, loadout.map_or(0.0, |l| l.power_mw)
+        );
         notifications.write(ShowNotification {
-            message: format!("{} strikes colors - derelict adrift, ripe for salvage.", faction_display_name(*ship_type)),
+            message: format!("{} strikes colors - {why}, ripe for salvage.", faction_display_name(*ship_type)),
             notification_type: NotificationType::Success,
             duration: 4.0,
         });
@@ -1250,7 +1282,7 @@ mod cripple_tests {
             Transform::default(),
             AiShipType::RecursiveKingdom,
             AiShipState::default(),
-            AiLoadout { guns: 4, engines: 2, hull_max: 1000.0 },
+            AiLoadout { guns: 4, engines: 2, hull_max: 1000.0, ..default() },
         )).id();
         app.world_mut().spawn((
             module(ModuleType::Gatling, 100.0),
@@ -1263,6 +1295,49 @@ mod cripple_tests {
             app.world().get::<AiShipState>(ship).unwrap().is_destroyed,
             "one gun of four and no engines left, and the ship did not strike"
         );
+    }
+
+    /// A fully armed, fully driven ship with these modules besides, built
+    /// with `loadout`: does it strike?
+    fn strikes(loadout: AiLoadout, alive: &[(ModuleType, f32)]) -> bool {
+        let mut app = App::new();
+        app.add_message::<AiShipDestroyed>();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, check_ai_cripple);
+        let ship = app.world_mut().spawn((
+            AiShip, Transform::default(), AiShipType::RecursiveKingdom, AiShipState::default(), loadout,
+        )).id();
+        let mut kit = vec![(ModuleType::Gatling, 0.0), (ModuleType::StandardEngine, 0.0)];
+        kit.extend_from_slice(alive);
+        for (t, power) in kit {
+            let mut m = module(t, 100.0);
+            m.power_generation = power;
+            app.world_mut().spawn((m, OwnedByAiShip { root: ship }, ChildOf(ship)));
+        }
+        app.update();
+        app.world().get::<AiShipState>(ship).unwrap().is_destroyed
+    }
+
+    #[test]
+    fn a_ship_with_its_bridge_shot_away_strikes_with_its_guns_still_on() {
+        let built = AiLoadout { guns: 1, engines: 1, command: 2, power_mw: 500.0, ..default() };
+        let reactor = (ModuleType::StandardReactor, 500.0);
+        assert!(!strikes(built, &[reactor, (ModuleType::HelmStation, 0.0)]), "one helm left is enough to fight on");
+        assert!(strikes(built, &[reactor]));
+    }
+
+    #[test]
+    fn a_ship_down_to_a_quarter_of_its_power_strikes() {
+        let built = AiLoadout { guns: 1, engines: 1, command: 1, power_mw: 2000.0, ..default() };
+        let helm = (ModuleType::HelmStation, 0.0);
+        assert!(!strikes(built, &[helm, (ModuleType::StandardReactor, 500.0), (ModuleType::StandardReactor, 500.0)]));
+        assert!(strikes(built, &[helm, (ModuleType::StandardReactor, 500.0)]));
+    }
+
+    #[test]
+    fn a_ship_built_with_no_bridge_cant_lose_one() {
+        let built = AiLoadout { guns: 1, engines: 1, command: 0, power_mw: 0.0, ..default() };
+        assert!(!strikes(built, &[]));
     }
 }
 

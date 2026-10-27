@@ -699,10 +699,14 @@ pub fn spawn_module(
                 explosive_type: ExplosiveType::Fuel,
             });
         }
+        // Stored ammunition goes up hard enough to set off the store beside
+        // it, so a round that finds a packed magazine can gut the ship --
+        // which is what armour round your magazines is for. At 60-70 a bay
+        // couldn't even crack its neighbour and a cook-off was a pop.
         ModuleType::AmmoBay => {
             commands.entity(module_entity).insert(Explosive {
-                blast_radius: 2.0,
-                blast_damage: 60.0,
+                blast_radius: 2.5,
+                blast_damage: 350.0,
                 explosive_type: ExplosiveType::Ammo,
             });
         }
@@ -710,15 +714,15 @@ pub fn spawn_module(
         // few ready rounds.
         ModuleType::Magazine => {
             commands.entity(module_entity).insert(Explosive {
-                blast_radius: 2.0,
-                blast_damage: 70.0,
+                blast_radius: 3.0,
+                blast_damage: 450.0,
                 explosive_type: ExplosiveType::Ammo,
             });
         }
         ModuleType::ClipRack => {
             commands.entity(module_entity).insert(Explosive {
-                blast_radius: 1.0,
-                blast_damage: 30.0,
+                blast_radius: 1.5,
+                blast_damage: 120.0,
                 explosive_type: ExplosiveType::Ammo,
             });
         }

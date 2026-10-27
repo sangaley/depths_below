@@ -169,6 +169,10 @@ pub struct AiLoadout {
     pub engines: u32,
     /// Sum of every hull segment's max health.
     pub hull_max: f32,
+    /// Bridge, helm and AI-core blocks (`ai_ship::combat::is_command_type`).
+    pub command: u32,
+    /// Megawatts its reactors make, every one of them running.
+    pub power_mw: f32,
 }
 
 /// Current high-level behavior of the AI ship

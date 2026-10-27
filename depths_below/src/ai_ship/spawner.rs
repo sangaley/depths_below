@@ -290,7 +290,7 @@ pub fn spawn_ai_ship_wounded(
     let root = spawn_ai_ship_with_design(ship_type, position, commands, registry, asset_server, Some(design));
     if let Some(w) = wounds {
         let (health_mult, _) = faction_difficulty(ship_type);
-        commands.entity(root).insert((built_loadout(&built, health_mult), SpawnIntegrity(w.integrity)));
+        commands.entity(root).insert((built_loadout(&built, health_mult, registry), SpawnIntegrity(w.integrity)));
     }
     if let Some(key) = class {
         commands.entity(root).insert(AiShipClass(key));
@@ -303,15 +303,25 @@ pub fn spawn_ai_ship_wounded(
 
 /// The loadout of a design as built: guns, engines, and the hull health it
 /// starts with (the same per-cell health spawn_ai_hull gives).
-fn built_loadout(design: &Blueprint, health_mult: f32) -> AiLoadout {
+fn built_loadout(design: &Blueprint, health_mult: f32, registry: &ModuleRegistry) -> AiLoadout {
+    let hull_max = design
+        .hull_cells
+        .iter()
+        .map(|c| c.material.health_multiplier() * 100.0 * health_mult)
+        .sum();
+    loadout_of(design, hull_max, registry)
+}
+
+/// What a design carries that a ship can be beaten by losing: its guns,
+/// engines, command and power.
+fn loadout_of(design: &Blueprint, hull_max: f32, registry: &ModuleRegistry) -> AiLoadout {
+    let count = |class: fn(ModuleType) -> bool| design.modules.iter().filter(|m| class(m.module_type)).count() as u32;
     AiLoadout {
-        guns: design.modules.iter().filter(|m| super::combat::is_weapon_type(m.module_type)).count() as u32,
-        engines: design.modules.iter().filter(|m| super::combat::is_engine_type(m.module_type)).count() as u32,
-        hull_max: design
-            .hull_cells
-            .iter()
-            .map(|c| c.material.health_multiplier() * 100.0 * health_mult)
-            .sum(),
+        guns: count(super::combat::is_weapon_type),
+        engines: count(super::combat::is_engine_type),
+        command: count(super::combat::is_command_type),
+        power_mw: design.modules.iter().map(|m| registry.get(m.module_type).power_generation).sum(),
+        hull_max,
     }
 }
 
@@ -435,15 +445,7 @@ pub fn spawn_ai_ship_with_design(
 
     // The loadout as built. Every "how much is left" ratio divides by this,
     // because dead blocks are despawned and can't be counted later.
-    commands.entity(root).insert(AiLoadout {
-        guns: design.modules.iter()
-            .filter(|m| super::combat::is_weapon_type(m.module_type))
-            .count() as u32,
-        engines: design.modules.iter()
-            .filter(|m| super::combat::is_engine_type(m.module_type))
-            .count() as u32,
-        hull_max,
-    });
+    commands.entity(root).insert(loadout_of(&design, hull_max, registry));
 
     // Spawn modules as children, reusing existing spawn_module
     for mp in &design.modules {
