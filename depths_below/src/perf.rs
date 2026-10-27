@@ -16,7 +16,8 @@ use crate::components::{HullSegment, Module, Ship};
 //                          nobody is watching. tools/perf_summary.py reads them.
 //   DEPTHS_PERF_OVERLAY=1 — start with the readout showing (for screenshots).
 //   DEPTHS_PERF_CHURN=<n> — knock out n random blocks of YOUR ship a second
-//                          (DEPTHS_PERF_CHURN_TYPE=<ModuleType>: only that type)
+//                          (DEPTHS_PERF_CHURN_TYPE=<ModuleType>: only that type;
+//                          DEPTHS_PERF_SCRAP=<n>: start with n ScrapMetal to rebuild)
 //                          (health to 0, through the normal destruction
 //                          path), after warm-up. A fight's worth of block loss
 //                          on demand, without needing an enemy to get through
@@ -63,6 +64,7 @@ impl Plugin for PerfPlugin {
         .add_systems(Startup, spawn_perf_overlay)
         .add_systems(First, mark_sim_start)
         .add_systems(Update, churn_player_blocks.run_if(|| churn_rate() > 0.0))
+        .add_systems(Update, give_scrap.run_if(|| std::env::var("DEPTHS_PERF_SCRAP").is_ok()))
         .add_systems(Last, (record_frame, report_perf).chain());
     }
 }
@@ -141,6 +143,7 @@ fn churn_player_blocks(
     state: Res<PerfState>,
     mut owed: Local<f32>,
     player: Query<&Children, With<Ship>>,
+    turret_decks: Query<&Children, With<crate::combat::turret_deck::TurretBody>>,
     mut hulls: Query<&mut HullSegment, Without<crate::components::HullDestroyed>>,
     mut modules: Query<&mut Module, Without<crate::components::DestroyedModule>>,
 ) {
@@ -154,8 +157,10 @@ fn churn_player_blocks(
         // DEPTHS_PERF_CHURN_TYPE=<ModuleType>: only blocks of that type (a
         // test that needs one thing shot out, say a turret ring).
         let only = std::env::var("DEPTHS_PERF_CHURN_TYPE").ok();
+        // What stands on the ship's turret decks counts too.
         let live: Vec<Entity> = children
             .iter()
+            .chain(children.iter().filter_map(|c| turret_decks.get(c).ok()).flat_map(|t| t.iter()))
             .filter(|c| match &only {
                 Some(t) => modules.get(*c).is_ok_and(|m| m.health > 0.0 && format!("{:?}", m.module_type) == *t),
                 None => hulls.get(*c).is_ok_and(|h| h.health > 0.0) || modules.get(*c).is_ok_and(|m| m.health > 0.0),
@@ -171,6 +176,18 @@ fn churn_player_blocks(
             m.health = 0.0;
         }
     }
+}
+
+/// DEPTHS_PERF_SCRAP=<n>: put n ScrapMetal in the hold once, so the crew can
+/// rebuild what churn knocks out.
+fn give_scrap(mut inventory: ResMut<crate::resources::Inventory>, mut done: Local<bool>) {
+    if *done {
+        return;
+    }
+    *done = true;
+    let n = std::env::var("DEPTHS_PERF_SCRAP").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    inventory.max_capacity = inventory.max_capacity.max(n as f32 * 5.0 + 100.0);
+    inventory.add_item(crate::resources::ItemType::ScrapMetal, n);
 }
 
 /// When this frame's First schedule began.

@@ -218,6 +218,61 @@ pub fn ring_centre(ring: &Module) -> (IVec2, Vec2) {
     (centre, crate::building::grid_to_local(centre))
 }
 
+/// One floor tile of a turret's deck, at a cell of its own grid.
+pub fn spawn_plate(commands: &mut Commands, asset_server: &AssetServer, body: Entity, cell: IVec2) {
+    let material = HullMaterial::Steel;
+    let health = 100.0 * material.health_multiplier();
+    commands.spawn((
+        // A shade cooler and lighter-looking than the hull's own plating, so
+        // the deck reads as a separate floor above it.
+        Sprite {
+            image: asset_server.load("sprites/gun_parts/turret_plating.png"),
+            custom_size: Some(Vec2::splat(66.0)),
+            color: TURRET_PLATE_TINT,
+            ..default()
+        },
+        Transform::from_xyz(cell.x as f32 * 66.0, cell.y as f32 * 66.0, 0.0),
+        HullSegment {
+            hull_layer: HullLayer::Outer,
+            material,
+            radiation_shielding: material.radiation_shielding(),
+            health,
+            max_health: health,
+            grid_position: cell,
+            ..default()
+        },
+        crate::components::BaseSpriteColor(TURRET_PLATE_TINT),
+        crate::building::Block::hull(cell, material),
+        TurretPlate,
+        ChildOf(body),
+    ));
+}
+
+/// The crew have rebuilt a turret's floor tile (ship::rebuild).
+#[derive(Message, Debug, Clone, Copy)]
+pub struct RebuildTurretPlate {
+    pub ship: Entity,
+    pub ring_cell: IVec2,
+    pub cell: IVec2,
+}
+
+/// Lay rebuilt floor tiles back on their turret, unless one's already there.
+pub fn rebuild_turret_plates(
+    mut commands: Commands,
+    mut requests: MessageReader<RebuildTurretPlate>,
+    bodies: Query<(Entity, &TurretBody, &ChildOf, Option<&Children>), Without<crate::meta::DespawnAtFrameEnd>>,
+    plates: Query<&HullSegment, (With<TurretPlate>, Without<crate::components::HullDestroyed>)>,
+    asset_server: Res<AssetServer>,
+) {
+    for r in requests.read() {
+        let Some((body, _, _, children)) = bodies.iter().find(|(_, t, p, _)| p.parent() == r.ship && t.ring_cell == r.ring_cell) else { continue };
+        let there = children.into_iter().flatten().any(|c| plates.get(*c).is_ok_and(|h| h.grid_position == r.cell));
+        if !there {
+            spawn_plate(&mut commands, &asset_server, body, r.cell);
+        }
+    }
+}
+
 /// Give every ring a turret body; keep each body on its ring.
 ///
 /// - A ring shot out jams its turret, which stays put -- parts, guns and all
@@ -267,29 +322,8 @@ pub fn ensure_turret_bodies(
                 Name::new("Turret"),
             ))
             .id();
-        let texture = asset_server.load("sprites/gun_parts/turret_plating.png");
-        let material = HullMaterial::Steel;
-        let health = 100.0 * material.health_multiplier();
         for cell in deck_cells(size) {
-            commands.spawn((
-                // A shade cooler and lighter-looking than the hull's own
-                // plating, so the deck reads as a separate floor above it.
-                Sprite { image: texture.clone(), custom_size: Some(Vec2::splat(66.0)), color: TURRET_PLATE_TINT, ..default() },
-                Transform::from_xyz(cell.x as f32 * 66.0, cell.y as f32 * 66.0, 0.0),
-                HullSegment {
-                    hull_layer: HullLayer::Outer,
-                    material,
-                    radiation_shielding: material.radiation_shielding(),
-                    health,
-                    max_health: health,
-                    grid_position: cell,
-                    ..default()
-                },
-                crate::components::BaseSpriteColor(TURRET_PLATE_TINT),
-                crate::building::Block::hull(cell, material),
-                TurretPlate,
-                ChildOf(body),
-            ));
+            spawn_plate(&mut commands, &asset_server, body, cell);
         }
         commands.entity(ring).try_insert(HasTurretBody(body));
     }
