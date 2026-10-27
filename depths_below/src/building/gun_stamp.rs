@@ -229,6 +229,7 @@ mod gun_stamp_tests {
                 part(ModuleType::Loader, -1, 0),
             ],
             shell: None,
+            faction: None,
         }
     }
 

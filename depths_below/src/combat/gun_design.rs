@@ -39,6 +39,10 @@ pub struct GunDesign {
     /// None: the default shell.
     #[serde(default)]
     pub shell: Option<ShellDesign>,
+    /// The faction whose ships carry it (an AiShipType name, e.g.
+    /// "TerranHegemony"); None for the player's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub faction: Option<String>,
 }
 
 /// Clockwise quarter turns from East.
@@ -80,6 +84,7 @@ impl GunDesign {
             description: String::new(),
             parts,
             shell: shell.filter(|s| *s != ShellDesign::default()),
+            faction: None,
         })
     }
 
@@ -246,8 +251,18 @@ mod gun_design_tests {
     }
 
     #[test]
+    fn a_design_from_the_gun_foundry_reads() {
+        // What tools/gun-editor saves: the game's fields plus its own.
+        let json = r#"{"name":"T","description":"","parts":[{"module_type":"FiringPiece","offset":[0,0],"rotation":"East"}],
+            "shell":{"base":"Tracer","casings":3,"bodies":["He"],"head":"Ap"},"faction":"TerranHegemony","savedAt":"2026-10-26T10:00:00Z"}"#;
+        let d: GunDesign = serde_json::from_str(json).unwrap();
+        assert_eq!(d.faction.as_deref(), Some("TerranHegemony"));
+        assert_eq!(d.shell.unwrap().casings, 3);
+    }
+
+    #[test]
     fn names_become_safe_file_names() {
-        let d = GunDesign { name: "280 mm HE / Terran!".into(), description: String::new(), parts: vec![], shell: None };
+        let d = GunDesign { name: "280 mm HE / Terran!".into(), description: String::new(), parts: vec![], shell: None, faction: None };
         assert_eq!(d.file_stem(), "280_mm_he___terran");
     }
 }
