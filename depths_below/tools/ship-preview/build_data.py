@@ -86,7 +86,7 @@ for y in (-4, -2, 0, 2, 4):
     put("FuelInjector", 1, y)
 both("ManeuveringThruster", 12, 8, "North")
 both("ManeuveringThruster", 44, 5, "North")
-both("Afterburner", 2, 4)
+both("Afterburner", 2, 4, "West")
 # ---- engineering -------------------------------------------------------
 put("FusionReactor", 3, -1)
 # The fusion core alone makes 400 MW; two standard reactors carry the rest.
@@ -130,6 +130,9 @@ both("CoolingPump", 32, 2)
 # ---- turrets A/B: flank sponsons ----------------------------------------
 put("TurretRing", 33, 4); put("TurretRing", 33, -6)
 both("TraverseMotor", 32, 5)
+# Three motors a ring: one alone turns a turret ~9 deg/s, slow enough that
+# its gun spends most of a fight holding fire.
+both("TraverseMotor", 32, 4); both("TraverseMotor", 36, 5)
 both("AmmoHoist", 34, 3); both("AntiFlashDoor", 35, 3); both("Magazine", 36, 3)
 both("ArmorPlate", 36, 7)
 # ---- bridge -------------------------------------------------------------
@@ -269,5 +272,24 @@ data = {
     "turrets": [{**tu, "guns": [[[t, x, y, R[r]] for t, x, y, r in g] for g in tu["guns"]]} for tu in turrets],
     "meta": {t: meta[t] for t in used},
 }
+# ---- the same ship as a game design: designs/halyard.json -------------------
+# Turret blocks sit on their ring's turret-local grid ((0, 0) at the ring's
+# centre) and name the ring by its origin cell, as the game saves them.
+# A ship turns about grid (0, 0), so the design is shifted to put that at
+# the middle of the hull (the layout above starts at the stern).
+SHIFT = -round(sum(x for x, _ in hull) / len(hull))
+def module(t, x, y, r, turret=None):
+    return {"module_type": t, "grid_pos": [x, y], "rotation": r, "custom_name": None, "subcomponents": None,
+            "extras": {"turret": [turret[0] + SHIFT, turret[1]]} if turret else None}
+blueprint = {
+    "name": "Halyard",
+    "hull_cells": [{"grid_pos": [x + SHIFT, y], "layer": l, "material": "Steel"} for (x, y), l in sorted(hull.items())],
+    "modules": [module(t, x + SHIFT, y, r) for t, x, y, r in mods]
+             + [module(t, x, y, r, tu["ring"]) for tu in turrets for g in tu["guns"] for t, x, y, r in g],
+    "created_at": "tools/ship-preview/build_data.py",
+    "version": 2,
+}
+with open(os.path.join(CRATE, "designs", "halyard.json"), "w") as f:
+    json.dump(blueprint, f, indent=1)
 open(os.path.join(ROOT, "data.js"), "w").write("window.SHIP=" + json.dumps(data) + ";\n")
 print(len(hull), "hull cells,", len(mods), "hull-deck blocks,", sum(len(g) for tu in turrets for g in tu["guns"]), "turret blocks,", len(used), "block types")

@@ -75,6 +75,25 @@ const COAST_HALF_LIFE: f32 = 1.4;
 /// endless sideways drift. 0.0 = pure Newtonian.
 const VELOCITY_ALIGN_RATE: f32 = 1.2;
 
+/// How much of the full turn rate (and how quickly it builds) a hull of
+/// these cells gets. Turning is about the hull's spread round its middle --
+/// its moment of inertia, every cell weighing the same -- so a long ship
+/// turns slower than a compact one of the same size. The starter-sized ship
+/// keeps the full rate; nothing turns faster than that.
+pub fn turn_scale(cells: impl Iterator<Item = IVec2> + Clone) -> f32 {
+    /// The starter's hull (210 cells), which the turn constants were tuned on.
+    const STARTER_INERTIA: f32 = 13_700.0;
+    let n = cells.clone().count();
+    if n == 0 {
+        return 1.0;
+    }
+    let mid = cells.clone().fold(Vec2::ZERO, |a, c| a + c.as_vec2()) / n as f32;
+    let inertia: f32 = cells.map(|c| (c.as_vec2() - mid).length_squared()).sum();
+    // Gentler than physics (1/I) would have it, so a big ship is heavy to
+    // swing round but never a chore: ~0.4 for an ~800-cell destroyer.
+    (STARTER_INERTIA / inertia.max(1.0)).powf(0.35).clamp(0.2, 1.0)
+}
+
 /// Applies space physics to ship movement (no drag, inertial flight)
 pub fn ship_movement(
     time: Res<Time>,
@@ -92,14 +111,31 @@ pub fn ship_movement(
     // pushing the player from wherever it had drifted to, for free (as
     // update_fuel_consumption already knew: it never billed for it).
     engine_query: Query<(&Engine, &Module, Option<&CalculatedStats>, Option<&ModuleEfficiency>, &ChildOf), Without<crate::ai_ship::components::OwnedByAiShip>>,
-    mut ship_query: Query<(Entity, &mut Transform, &mut Velocity, &mut ShipPhysics), With<Ship>>,
+    mut ship_query: Query<(Entity, &mut Transform, &mut Velocity, &mut ShipPhysics, &crate::building::layout::LayoutVersion, Option<&Children>), With<Ship>>,
+    hull_cells: Query<&HullSegment>,
+    // The hull's turn scale, and the layout it was worked out for.
+    mut turning: Local<Option<(crate::building::layout::LayoutVersion, f32)>>,
     windows_query: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::MainCamera>>,
     debug_tuning: Res<crate::debug::DebugTuning>,
     power_channels: Res<crate::resources::PowerChannels>,
 ) {
-    let Ok((player_ship, mut transform, mut velocity, mut physics)) = ship_query.single_mut() else {
+    let Ok((player_ship, mut transform, mut velocity, mut physics, layout, children)) = ship_query.single_mut() else {
         return;
+    };
+    let turn = match *turning {
+        Some((v, scale)) if v == *layout => scale,
+        _ => {
+            let cells: Vec<IVec2> = children
+                .into_iter()
+                .flatten()
+                .filter_map(|c| hull_cells.get(*c).ok())
+                .map(|h| h.grid_position)
+                .collect();
+            let scale = turn_scale(cells.iter().copied());
+            *turning = Some((*layout, scale));
+            scale
+        }
     };
 
     let dt = time.delta_secs();
@@ -147,8 +183,8 @@ pub fn ship_movement(
             while diff > std::f32::consts::PI { diff -= std::f32::consts::TAU; }
             while diff < -std::f32::consts::PI { diff += std::f32::consts::TAU; }
 
-            let target_rate = (diff * TURN_GAIN).clamp(-MAX_TURN_RATE, MAX_TURN_RATE);
-            let blend = (TURN_RESPONSE * dt).min(1.0);
+            let target_rate = (diff * TURN_GAIN).clamp(-MAX_TURN_RATE * turn, MAX_TURN_RATE * turn);
+            let blend = (TURN_RESPONSE * turn * dt).min(1.0);
             physics.angular_velocity += (target_rate - physics.angular_velocity) * blend;
         }
     } else {
@@ -530,5 +566,33 @@ mod settle_tests {
     fn a_dead_drive_settles_whatever_is_held() {
         assert!(settles(Vec2::Y, false, 0.0));
         assert!(settles(Vec2::Y, true, 0.0));
+    }
+}
+
+#[cfg(test)]
+mod turn_scale_tests {
+    use super::turn_scale;
+    use bevy::prelude::IVec2;
+
+    fn block(w: i32, h: i32, x0: i32) -> Vec<IVec2> {
+        (0..w).flat_map(|x| (0..h).map(move |y| IVec2::new(x0 + x, y))).collect()
+    }
+
+    #[test]
+    fn a_starter_sized_hull_turns_at_the_full_rate() {
+        assert_eq!(turn_scale(block(14, 15, -7).into_iter()), 1.0);
+    }
+
+    #[test]
+    fn a_long_destroyer_turns_at_well_under_half() {
+        let s = turn_scale(block(57, 14, -28).into_iter());
+        assert!((0.3..0.5).contains(&s), "{s}");
+    }
+
+    #[test]
+    fn where_the_grid_starts_doesnt_change_how_it_turns() {
+        let a = turn_scale(block(57, 14, -28).into_iter());
+        let b = turn_scale(block(57, 14, 0).into_iter());
+        assert!((a - b).abs() < 1e-4);
     }
 }

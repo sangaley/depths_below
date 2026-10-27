@@ -816,6 +816,21 @@ impl Plugin for DemoPlugin {
         if std::env::var("DEPTHS_ROT_TRACE").ok().as_deref() == Some("1") {
             app.add_systems(Last, rot_trace);
         }
+        // DEPTHS_SPEED_TRACE=1: once a second, the player ship's speed, turn
+        // rate and mass -- for comparing how ships of different sizes fly.
+        if std::env::var("DEPTHS_SPEED_TRACE").ok().as_deref() == Some("1") {
+            app.add_systems(Last, |time: Res<Time>,
+                                   ship: Query<(&crate::components::Velocity, &crate::components::ShipPhysics), With<crate::components::Ship>>,
+                                   mut last: Local<f32>| {
+                if time.elapsed_secs() - *last < 1.0 {
+                    return;
+                }
+                *last = time.elapsed_secs();
+                if let Ok((v, p)) = ship.single() {
+                    info!("SPEED t={:.0} speed={:.0} turn={:.1}deg/s mass={:.0}", time.elapsed_secs(), v.0.length(), p.angular_velocity.to_degrees(), p.mass);
+                }
+            });
+        }
         if std::env::var("DEPTHS_FLY_TO").ok().as_deref() == Some("station") {
             app.add_systems(PreUpdate, fly_to_station.after(bevy::input::InputSystems));
         }
