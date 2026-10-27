@@ -486,7 +486,7 @@ impl Plugin for CombatPlugin {
             .init_resource::<turret_deck::PlayerAimPoint>()
             .init_resource::<turret_deck::TurretShapes>()
             .add_message::<turret_deck::RebuildTurretPlate>()
-            .add_systems(Update, turret_deck::rebuild_turret_plates)
+            .add_systems(Update, (turret_deck::rebuild_turret_plates, turret_deck::fit_gun_houses))
             .init_resource::<gun_design::GunDesigns>()
             .add_systems(Startup, gun_design::load_gun_designs)
             .add_systems(Update, (

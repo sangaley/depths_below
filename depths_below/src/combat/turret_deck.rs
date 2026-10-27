@@ -173,6 +173,52 @@ pub fn deck_cells(size: i32) -> Vec<IVec2> {
     cells
 }
 
+/// The deck's angle pieces: an empty cell with deck on two sides that meet
+/// gets a 45-degree plate filling the half toward them, which turns the
+/// stepped edge into straight chamfers. (cell, toward): `toward` points from
+/// the piece into the deck, one step on each axis.
+pub fn deck_wedges(size: i32) -> Vec<(IVec2, IVec2)> {
+    let cells: std::collections::HashSet<IVec2> = deck_cells(size).into_iter().collect();
+    let span = deck_radius(size).ceil() as i32 + 1;
+    let mut out = Vec::new();
+    for x in -span..=span {
+        for y in -span..=span {
+            let c = IVec2::new(x, y);
+            if cells.contains(&c) {
+                continue;
+            }
+            for d in [IVec2::new(1, 1), IVec2::new(1, -1), IVec2::new(-1, 1), IVec2::new(-1, -1)] {
+                if cells.contains(&(c + IVec2::new(d.x, 0))) && cells.contains(&(c + IVec2::new(0, d.y))) {
+                    out.push((c, d));
+                    break;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// What a deck tile is: the floor inside, armour round the outside, and the
+/// angle pieces (armour too) on the chamfers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlateKind {
+    Floor,
+    Armour,
+    AngleArmour(IVec2),
+}
+
+pub fn plate_kind(size: i32, cell: IVec2) -> Option<PlateKind> {
+    let cells: std::collections::HashSet<IVec2> = deck_cells(size).into_iter().collect();
+    if cells.contains(&cell) {
+        let edge = [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y].iter().any(|d| !cells.contains(&(cell + *d)));
+        return Some(if edge { PlateKind::Armour } else { PlateKind::Floor });
+    }
+    deck_wedges(size).into_iter().find(|(c, _)| *c == cell).map(|(_, d)| PlateKind::AngleArmour(d))
+}
+
+/// The armour a turret's rim is made of.
+pub const TURRET_ARMOUR: HullMaterial = HullMaterial::Titanium;
+
 /// Tonnes, for working out how fast a turret turns. The Gun Deck preview's
 /// table.
 pub fn part_mass_t(t: ModuleType) -> f32 {
@@ -218,20 +264,35 @@ pub fn ring_centre(ring: &Module) -> (IVec2, Vec2) {
     (centre, crate::building::grid_to_local(centre))
 }
 
-/// One floor tile of a turret's deck, at a cell of its own grid.
-pub fn spawn_plate(commands: &mut Commands, asset_server: &AssetServer, body: Entity, cell: IVec2) {
-    let material = HullMaterial::Steel;
+/// One tile of a turret's deck, at a cell of its own grid.
+pub fn spawn_plate(commands: &mut Commands, asset_server: &AssetServer, body: Entity, cell: IVec2, kind: PlateKind) {
+    let (material, image, angle, facing) = match kind {
+        PlateKind::Floor => (HullMaterial::Steel, "sprites/gun_parts/turret_plating.png", 0.0, None),
+        PlateKind::Armour => (TURRET_ARMOUR, "sprites/gun_parts/turret_armour.png", 0.0, None),
+        // The art carries its plate in the lower-left half; turn it so the
+        // plate sits against the deck. Its open diagonal faces away from the
+        // deck, which is the face `Block::facing` gives the hit resolver.
+        PlateKind::AngleArmour(d) => {
+            let turn = match (d.x, d.y) {
+                (-1, -1) => 0.0,
+                (1, -1) => std::f32::consts::FRAC_PI_2,
+                (1, 1) => std::f32::consts::PI,
+                _ => -std::f32::consts::FRAC_PI_2,
+            };
+            (TURRET_ARMOUR, "sprites/gun_parts/turret_armour_wedge.png", turn, Some((-d.y as f32).atan2(-d.x as f32)))
+        }
+    };
     let health = 100.0 * material.health_multiplier();
     commands.spawn((
-        // A shade cooler and lighter-looking than the hull's own plating, so
-        // the deck reads as a separate floor above it.
+        // A shade cooler than the hull's own plating, so the deck reads as a
+        // separate floor above it.
         Sprite {
-            image: asset_server.load("sprites/gun_parts/turret_plating.png"),
+            image: asset_server.load(image),
             custom_size: Some(Vec2::splat(66.0)),
             color: TURRET_PLATE_TINT,
             ..default()
         },
-        Transform::from_xyz(cell.x as f32 * 66.0, cell.y as f32 * 66.0, 0.0),
+        Transform::from_xyz(cell.x as f32 * 66.0, cell.y as f32 * 66.0, 0.0).with_rotation(Quat::from_rotation_z(angle)),
         HullSegment {
             hull_layer: HullLayer::Outer,
             material,
@@ -242,7 +303,7 @@ pub fn spawn_plate(commands: &mut Commands, asset_server: &AssetServer, body: En
             ..default()
         },
         crate::components::BaseSpriteColor(TURRET_PLATE_TINT),
-        crate::building::Block::hull(cell, material),
+        crate::building::Block { facing, ..crate::building::Block::hull(cell, material) },
         TurretPlate,
         ChildOf(body),
     ));
@@ -265,10 +326,10 @@ pub fn rebuild_turret_plates(
     asset_server: Res<AssetServer>,
 ) {
     for r in requests.read() {
-        let Some((body, _, _, children)) = bodies.iter().find(|(_, t, p, _)| p.parent() == r.ship && t.ring_cell == r.ring_cell) else { continue };
+        let Some((body, t, _, children)) = bodies.iter().find(|(_, t, p, _)| p.parent() == r.ship && t.ring_cell == r.ring_cell) else { continue };
         let there = children.into_iter().flatten().any(|c| plates.get(*c).is_ok_and(|h| h.grid_position == r.cell));
-        if !there {
-            spawn_plate(&mut commands, &asset_server, body, r.cell);
+        if let (false, Some(kind)) = (there, plate_kind(t.size, r.cell)) {
+            spawn_plate(&mut commands, &asset_server, body, r.cell, kind);
         }
     }
 }
@@ -323,7 +384,11 @@ pub fn ensure_turret_bodies(
             ))
             .id();
         for cell in deck_cells(size) {
-            spawn_plate(&mut commands, &asset_server, body, cell);
+            let kind = plate_kind(size, cell).unwrap_or(PlateKind::Floor);
+            spawn_plate(&mut commands, &asset_server, body, cell, kind);
+        }
+        for (cell, toward) in deck_wedges(size) {
+            spawn_plate(&mut commands, &asset_server, body, cell, PlateKind::AngleArmour(toward));
         }
         commands.entity(ring).try_insert(HasTurretBody(body));
     }
@@ -359,6 +424,7 @@ pub fn ensure_turret_bodies(
 pub fn mount_pending_turret_blocks(
     mut commands: Commands,
     mut pending: Query<(Entity, &PendingTurretMount, &ChildOf, &mut Transform)>,
+    modules: Query<&Module>,
     bodies: Query<(Entity, &TurretBody, &ChildOf)>,
     live_rings: Query<(), (With<Module>, Without<DestroyedModule>, Without<crate::meta::DespawnAtFrameEnd>)>,
 ) {
@@ -377,6 +443,10 @@ pub fn mount_pending_turret_blocks(
         // stands at (66x, 66y - 33). The turret's frame has no half-cell
         // offset: (0, 0) is the ring's centre.
         transform.translation.y += 33.0;
+        // What comes out through the front of the gun house is drawn over it.
+        if modules.get(block).is_ok_and(|m| OUT_FRONT.contains(&m.module_type)) {
+            transform.translation.z = GUN_HOUSE_Z + 0.1;
+        }
         commands
             .entity(block)
             .remove::<PendingTurretMount>()
@@ -446,6 +516,71 @@ pub fn measure_turrets(
             .collect();
         let reach = parts.iter().map(|p| p.length()).fold(0.0, f32::max);
         shapes.0.push(TurretShape { body, ship: parent.parent(), centre: tf.translation.truncate(), angle: t.angle, parts, reach });
+    }
+}
+
+/// Parts that come out through the front of a gun house rather than under it.
+pub const OUT_FRONT: [ModuleType; 4] = [ModuleType::GunBarrel, ModuleType::MuzzleBrake, ModuleType::Mantlet, ModuleType::RailMagnet];
+/// Above the parts it covers (they draw at 0.2-0.4 in the turret's frame).
+pub const GUN_HOUSE_Z: f32 = 0.45;
+
+/// The housing over a turret's guns: breeches, loaders and clips under one
+/// armoured roof, mantlets and barrels out through its front. Cosmetic: the
+/// parts under it are what rounds hit.
+#[derive(Component)]
+pub struct GunHouse;
+
+/// Fit each turret's gun house to the parts on it, whenever they change.
+pub fn fit_gun_houses(
+    mut commands: Commands,
+    bodies: Query<(Entity, &Children), (With<TurretBody>, Changed<crate::building::layout::LayoutVersion>)>,
+    parts: Query<&Module, Without<DestroyedModule>>,
+    houses: Query<(), With<GunHouse>>,
+    asset_server: Res<AssetServer>,
+) {
+    for (body, children) in bodies.iter() {
+        for c in children.iter() {
+            if houses.contains(c) {
+                commands.entity(c).try_despawn();
+            }
+        }
+        let housed: Vec<IVec2> = children
+            .iter()
+            .filter_map(|c| parts.get(c).ok())
+            .filter(|m| !OUT_FRONT.contains(&m.module_type))
+            .map(|m| m.grid_position)
+            .collect();
+        if housed.is_empty() {
+            continue;
+        }
+        let lo = housed.iter().fold(IVec2::MAX, |a, c| a.min(*c));
+        let hi = housed.iter().fold(IVec2::MIN, |a, c| a.max(*c));
+        let size = (hi - lo + IVec2::ONE).as_vec2() * 66.0 - Vec2::splat(6.0);
+        let centre = (lo + hi).as_vec2() * 33.0;
+        let house = commands
+            .spawn((
+                Sprite {
+                    image: asset_server.load("sprites/gun_parts/gun_house.png"),
+                    custom_size: Some(size),
+                    image_mode: bevy::sprite::SpriteImageMode::Sliced(bevy::sprite::TextureSlicer {
+                        border: bevy::sprite::BorderRect::all(24.0),
+                        center_scale_mode: bevy::sprite::SliceScaleMode::Stretch,
+                        sides_scale_mode: bevy::sprite::SliceScaleMode::Stretch,
+                        max_corner_scale: 1.0,
+                    }),
+                    ..default()
+                },
+                Transform::from_translation(centre.extend(GUN_HOUSE_Z)),
+                GunHouse,
+                ChildOf(body),
+            ))
+            .id();
+        // The commander's hatch, toward the back of the roof.
+        commands.spawn((
+            Sprite { image: asset_server.load("sprites/gun_parts/gun_house_hatch.png"), custom_size: Some(Vec2::splat(30.0)), ..default() },
+            Transform::from_xyz(-size.x * 0.22, 0.0, 0.01),
+            ChildOf(house),
+        ));
     }
 }
 
@@ -673,6 +808,38 @@ mod turret_deck_tests {
         deck.ship = Entity::from_raw_u32(9).unwrap();
         let all = vec![gun.clone(), deck];
         assert_eq!(fouling(&gun, std::f32::consts::FRAC_PI_2, &all), 0);
+    }
+
+    #[test]
+    fn a_small_deck_is_an_octagon_of_plates_and_angle_pieces() {
+        let wedges = deck_wedges(3);
+        assert_eq!(wedges.len(), 4, "one angle piece at each corner step: {wedges:?}");
+        assert!(wedges.contains(&(IVec2::new(2, 2), IVec2::new(-1, -1))), "pointing back into the deck");
+        assert_eq!(plate_kind(3, IVec2::ZERO), Some(PlateKind::Floor));
+        assert_eq!(plate_kind(3, IVec2::new(2, 0)), Some(PlateKind::Armour), "the rim is armour");
+        assert_eq!(plate_kind(3, IVec2::new(2, 2)), Some(PlateKind::AngleArmour(IVec2::new(-1, -1))));
+        assert_eq!(plate_kind(3, IVec2::new(4, 0)), None);
+    }
+
+    #[test]
+    fn an_angle_piece_faces_away_from_the_deck() {
+        // Its open diagonal looks out, so a round from outside meets the
+        // slope and one crossing the empty corner misses it.
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, bevy::asset::AssetPlugin::default()));
+        app.init_asset::<Image>();
+        let body = app.world_mut().spawn_empty().id();
+        let assets = app.world().resource::<AssetServer>().clone();
+        app.world_mut().commands().queue(move |w: &mut World| {
+            let mut q = bevy::ecs::world::CommandQueue::default();
+            let mut c = Commands::new(&mut q, w);
+            spawn_plate(&mut c, &assets, body, IVec2::new(2, 2), PlateKind::AngleArmour(IVec2::new(-1, -1)));
+            q.apply(w);
+        });
+        app.update();
+        let block = app.world_mut().query::<&crate::building::Block>().single(app.world()).unwrap();
+        let facing = block.facing.expect("an angle piece declares its face");
+        assert!((Vec2::from_angle(facing) - Vec2::new(1.0, 1.0).normalize()).length() < 1e-5, "{facing}");
     }
 
     #[test]

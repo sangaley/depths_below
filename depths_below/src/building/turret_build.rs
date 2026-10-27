@@ -253,13 +253,23 @@ pub fn turret_deck_clicks(
 pub fn show_turrets_for_deck(
     current_state: Res<State<BuildState>>,
     build_state: Res<BuildingState>,
-    mut bodies: Query<&mut Visibility, With<TurretBody>>,
+    mut bodies: Query<&mut Visibility, (With<TurretBody>, Without<turret_deck::GunHouse>)>,
+    mut houses: Query<&mut Visibility, With<turret_deck::GunHouse>>,
 ) {
-    let hide = *current_state.get() != BuildState::Inactive && build_state.deck == BuildDeck::Hull;
+    let building = *current_state.get() != BuildState::Inactive;
+    let hide = building && build_state.deck == BuildDeck::Hull;
     let want = if hide { Visibility::Hidden } else { Visibility::Inherited };
     for mut v in bodies.iter_mut() {
         if *v != want {
             *v = want;
+        }
+    }
+    // Building on a turret, its gun house comes off so the parts under it
+    // can be seen.
+    let house = if building && build_state.deck == BuildDeck::Turret { Visibility::Hidden } else { Visibility::Inherited };
+    for mut v in houses.iter_mut() {
+        if *v != house {
+            *v = house;
         }
     }
 }
