@@ -50,6 +50,10 @@ table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 th { font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
 td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+.looks { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.closeup-wrap { background: var(--space); border-radius: 4px; overflow-x: auto; }
+#closeup { display: block; width: 100%; min-width: 640px; max-width: 1100px; margin: 0 auto; image-rendering: pixelated; }
+h2 small { font-family: var(--mono); font-weight: 400; font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--dim); margin-left: 8px; }
 .zones { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 13.5px; line-height: 1.4; }
 .zones b { font-weight: 600; }
 .note { color: var(--dim); font-size: 13px; line-height: 1.45; margin: 0; }
@@ -67,12 +71,20 @@ td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align:
       <button type="button" id="v-top" class="on">Turrets on</button>
       <button type="button" id="v-hull">Hull deck (turrets lifted)</button>
       <button type="button" id="v-labels" class="on">Labels</button>
+      <span class="label" style="margin-left:12px">Turret look</span>
+      <span id="looks" class="looks"></span>
       <span class="label" style="margin-left:auto">Bow →</span>
     </div>
     <div class="scroller" id="scroller">
       <canvas id="ship" aria-label="Top-down plan of the Halyard destroyer"></canvas>
       <div id="tip" hidden></div>
     </div>
+  </section>
+
+  <section class="panel closeup-panel">
+    <h2>Turret look <small id="look-note"></small></h2>
+    <div class="closeup-wrap"><canvas id="closeup" aria-label="Close-up of turret C and turret A"></canvas></div>
+    <p class="note" id="look-desc"></p>
   </section>
 
   <div class="cols">
@@ -270,6 +282,14 @@ td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align:
   var S = window.SHIP, META = S.meta, T = 30, PAD = 2;
   var ROTS = ["North", "East", "South", "West"];
   var showTurrets = true, showLabels = true;
+  // How a turret is drawn: which of the looks being chosen between.
+  var LOOKS = [
+    ["angle", "Angle pieces", "Square plates and 45-degree angle pieces, every gun part out in the open."],
+    ["armour", "Armoured edge", "The same deck, with its outer plates and angle pieces in darker armour, so the turret has a rim you can read at a glance."],
+    ["house", "Gun house", "A chamfered housing over each gun's breech, loaders and clips; the mantlet and barrels come out through its front. The parts are still under it, and still named when you point at them."],
+    ["both", "Edge and house", "Armoured edge and gun house together."]
+  ];
+  var look = "angle";
   var hull = new Map(), mods = [], owner = new Map();
   S.hull.forEach(function (h) { hull.set(key(h[0], h[1]), h[2]); });
   function rotOff(r, x, y) { return [[x, y], [y, -x], [-x, -y], [-y, x]][r]; }
@@ -325,8 +345,9 @@ td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align:
       var d = META[m.t];
       drawModule(m.t, (px(minx) + px(maxx) + T) / 2, (py(maxy) + py(miny) + T) / 2, m.r, d.w, d.h);
     });
-    if (showTurrets) S.turrets.forEach(drawTurret);
+    if (showTurrets) S.turrets.forEach(function (tu) { drawTurret(tu); });
     if (showLabels) drawLabels();
+    drawCloseup();
   }
 
   function deckRadius(size) { return size / 2 + 1.05; }
@@ -364,8 +385,10 @@ td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align:
     sh.list.forEach(function (c) { ctx.rect(c[0] * T - T / 2, -c[1] * T - T / 2, T, T); });
     sh.wedges.forEach(function (w) { var t = tri(w); ctx.moveTo(t[0][0], t[0][1]); ctx.lineTo(t[1][0], t[1][1]); ctx.lineTo(t[2][0], t[2][1]); ctx.closePath(); });
   }
-  function drawTurret(tu) {
-    var c = turretCentre(tu), sh = deckShape(tu.size), pl = img.plating;
+  function drawTurret(tu, c) {
+    c = c || turretCentre(tu);
+    var sh = deckShape(tu.size), pl = img.plating;
+    var armour = look === "armour" || look === "both", house = look === "house" || look === "both";
     // Shadow first: the deck stands above the hull, lit from the upper left.
     ctx.save(); ctx.translate(c[0] + T * 0.22, c[1] + T * 0.3); ctx.rotate(-tu.angle);
     ctx.fillStyle = "rgba(0,0,0,0.38)"; shapePath(sh); ctx.fill(); ctx.restore();
@@ -379,8 +402,32 @@ td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align:
       ctx.restore();
     });
     ctx.fillStyle = "rgba(120,160,215,0.16)"; shapePath(sh); ctx.fill();
+    // Armoured edge: every plate on the deck's outside, and every angle piece.
+    if (armour) {
+      ctx.fillStyle = "rgba(14,18,26,0.55)"; ctx.beginPath();
+      sh.list.forEach(function (q) {
+        var outside = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(function (d) { return !sh.cells.has(key(q[0] + d[0], q[1] + d[1])); });
+        if (outside) ctx.rect(q[0] * T - T / 2, -q[1] * T - T / 2, T, T);
+      });
+      sh.wedges.forEach(function (w) { var t = tri(w); ctx.moveTo(t[0][0], t[0][1]); ctx.lineTo(t[1][0], t[1][1]); ctx.lineTo(t[2][0], t[2][1]); ctx.closePath(); });
+      ctx.fill();
+      // A bright seam where armour meets the deck inside it.
+      ctx.strokeStyle = "rgba(200,215,235,0.28)"; ctx.lineWidth = 1.2; ctx.beginPath();
+      sh.list.forEach(function (q) {
+        var outside = function (x, y) { return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(function (d) { return !sh.cells.has(key(x + d[0], y + d[1])); }); };
+        if (outside(q[0], q[1])) return;
+        [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) {
+          var nx = q[0] + d[0], ny = q[1] + d[1];
+          if (!sh.cells.has(key(nx, ny)) || !outside(nx, ny)) return;
+          var cx = q[0] * T, cy = -q[1] * T, h = T / 2;
+          if (d[0]) { ctx.moveTo(cx + d[0] * h, cy - h); ctx.lineTo(cx + d[0] * h, cy + h); }
+          else { ctx.moveTo(cx - h, cy - d[1] * h); ctx.lineTo(cx + h, cy - d[1] * h); }
+        });
+      });
+      ctx.stroke();
+    }
     // The rim: every plate edge that faces open space, and every angle face.
-    ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(10,14,20,0.9)"; ctx.beginPath();
+    ctx.lineWidth = armour ? 3.2 : 2.5; ctx.strokeStyle = "rgba(10,14,20,0.9)"; ctx.beginPath();
     sh.list.forEach(function (q) {
       [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) {
         var nx = q[0] + d[0], ny = q[1] + d[1];
@@ -395,8 +442,79 @@ td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align:
     sh.wedges.forEach(function (w) { var t = tri(w); ctx.moveTo(t[1][0], t[1][1]); ctx.lineTo(t[2][0], t[2][1]); });
     ctx.stroke();
     // Its guns, in the turret's own grid.
-    tu.guns.forEach(function (g) { g.forEach(function (p) { drawModule(p[0], p[1] * T, -p[2] * T, p[3], 1, 1); }); });
+    var OUT_FRONT = { GunBarrel: 1, MuzzleBrake: 1, Mantlet: 1, RailMagnet: 1 };
+    tu.guns.forEach(function (g) { g.forEach(function (p) { if (!house || !OUT_FRONT[p[0]]) drawModule(p[0], p[1] * T, -p[2] * T, p[3], 1, 1); }); });
+    if (house) {
+      drawGunHouse(tu);
+      tu.guns.forEach(function (g) { g.forEach(function (p) { if (OUT_FRONT[p[0]]) drawModule(p[0], p[1] * T, -p[2] * T, p[3], 1, 1); }); });
+    }
     ctx.restore();
+  }
+
+  // A raised housing over the guns' breeches, in the turret's frame.
+  function drawGunHouse(tu) {
+    var xs = [], ys = [];
+    tu.guns.forEach(function (g) { g.forEach(function (p) {
+      if (p[0] === "GunBarrel" || p[0] === "MuzzleBrake" || p[0] === "Mantlet" || p[0] === "RailMagnet") return;
+      xs.push(p[1]); ys.push(p[2]);
+    }); });
+    var x0 = (Math.min.apply(null, xs) - 0.45) * T, x1 = (Math.max.apply(null, xs) + 0.45) * T;
+    var y0 = -(Math.max.apply(null, ys) + 0.45) * T, y1 = -(Math.min.apply(null, ys) - 0.45) * T, k = T * 0.45;
+    function outline() {
+      ctx.beginPath();
+      ctx.moveTo(x0 + k, y0); ctx.lineTo(x1 - k * 0.6, y0); ctx.lineTo(x1, y0 + k * 0.6); ctx.lineTo(x1, y1 - k * 0.6);
+      ctx.lineTo(x1 - k * 0.6, y1); ctx.lineTo(x0 + k, y1); ctx.lineTo(x0, y1 - k); ctx.lineTo(x0, y0 + k); ctx.closePath();
+    }
+    ctx.save(); ctx.translate(T * 0.12, T * 0.16); outline(); ctx.fillStyle = "rgba(0,0,0,0.35)"; ctx.fill(); ctx.restore();
+    var gr = ctx.createLinearGradient(x0, y0, x1, y1);
+    gr.addColorStop(0, "#56627a"); gr.addColorStop(1, "#343c4c");
+    outline(); ctx.fillStyle = gr; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = "rgba(10,14,20,0.95)"; ctx.stroke();
+    // Top edge catching the light, a commander's hatch, and vents over the breech.
+    ctx.strokeStyle = "rgba(220,230,245,0.35)"; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(x0 + k + 2, y0 + 2); ctx.lineTo(x1 - k * 0.6 - 2, y0 + 2); ctx.stroke();
+    var hx = x0 + (x1 - x0) * 0.3, hy = y0 + (y1 - y0) * 0.5;
+    ctx.beginPath(); ctx.arc(hx, hy, T * 0.32, 0, Math.PI * 2); ctx.fillStyle = "#2a313d"; ctx.fill(); ctx.strokeStyle = "rgba(200,215,235,0.4)"; ctx.stroke();
+    ctx.beginPath(); ctx.arc(hx, hy, T * 0.16, 0, Math.PI * 2); ctx.strokeStyle = "rgba(240,194,122,0.7)"; ctx.stroke();
+    ctx.strokeStyle = "rgba(10,14,20,0.6)"; ctx.lineWidth = 2;
+    for (var i = 0; i < 3; i++) {
+      var vx = x0 + (x1 - x0) * (0.55 + i * 0.1);
+      ctx.beginPath(); ctx.moveTo(vx, y0 + (y1 - y0) * 0.25); ctx.lineTo(vx, y1 - (y1 - y0) * 0.25); ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(200,215,235,0.45)";
+    [[x0 + 4, y0 + k + 3], [x0 + 4, y1 - k - 3], [x1 - 4, y0 + k * 0.6 + 3], [x1 - 4, y1 - k * 0.6 - 3]].forEach(function (b) { ctx.fillRect(b[0] - 1, b[1] - 1, 2, 2); });
+  }
+
+  // ---- the close-up: turret C and turret A, twice the size ----
+  var closeCanvas = document.getElementById("closeup"), closeCtx = closeCanvas.getContext("2d"), mainCtx = ctx;
+  function drawCloseup() {
+    var Z = 2, wCells = 18, hCells = 9;
+    closeCanvas.width = wCells * T * Z; closeCanvas.height = hCells * T * Z;
+    ctx = closeCtx; ctx.imageSmoothingEnabled = false;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "#0b0f17"; ctx.fillRect(0, 0, closeCanvas.width, closeCanvas.height);
+    ctx.setTransform(Z, 0, 0, Z, 0, 0);
+    // A patch of plain hull under each, for scale.
+    var deckTile = img["hull_steel15"];
+    for (var x = 0; x < wCells; x++) for (var y = 1; y < hCells - 1; y++) if (deckTile && deckTile.width) ctx.drawImage(deckTile, x * T, y * T, T, T);
+    var C = S.turrets.filter(function (t) { return t.id === "C"; })[0], A = S.turrets.filter(function (t) { return t.id === "A"; })[0];
+    drawTurret(C, [5 * T, 4.5 * T]);
+    drawTurret(A, [13 * T, 4.5 * T]);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx = mainCtx;
+  }
+
+  function renderLooks() {
+    var box = document.getElementById("looks"); box.textContent = "";
+    LOOKS.forEach(function (l) {
+      var b = document.createElement("button"); b.type = "button"; b.textContent = l[1];
+      if (l[0] === look) b.className = "on";
+      b.addEventListener("click", function () { look = l[0]; renderLooks(); draw(); });
+      box.appendChild(b);
+    });
+    var cur = LOOKS.filter(function (l) { return l[0] === look; })[0];
+    document.getElementById("look-note").textContent = cur[1];
+    document.getElementById("look-desc").textContent = cur[2] + " Pick the one you like and it goes into the game.";
   }
 
   var LABELS = [
@@ -458,6 +576,7 @@ td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align:
     document.getElementById("v-hull").classList.toggle("on", !top);
     draw();
   }
+  renderLooks();
   document.getElementById("v-top").addEventListener("click", function () { setView(true); });
   document.getElementById("v-hull").addEventListener("click", function () { setView(false); });
   document.getElementById("v-labels").addEventListener("click", function (e) { showLabels = !showLabels; e.currentTarget.classList.toggle("on", showLabels); draw(); });
