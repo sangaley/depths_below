@@ -839,14 +839,15 @@ fn is_engine_module(module: &Module) -> bool {
 /// the game (wreck.rs scores loot by how intact the hull still is).
 pub fn check_ai_cripple(
     mut ai_ships: Query<
-        (Entity, &Transform, &AiShipType, &Children, &mut AiShipState, Option<&BountyTarget>, Option<&AiLoadout>, Has<crate::diplomacy::FactionStation>),
+        (Entity, &Transform, &AiShipType, &Children, &mut AiShipState, Option<&BountyTarget>, Option<&AiLoadout>, Has<crate::diplomacy::FactionStation>, Option<&super::air::AiCrewComplement>),
         (With<AiShip>, Without<ReactorMeltdown>),
     >,
     module_query: Query<(&Module, &OwnedByAiShip)>,
+    crew_query: Query<&crate::components::CrewMember, With<OwnedByAiShip>>,
     mut destroyed_events: MessageWriter<AiShipDestroyed>,
     mut notifications: MessageWriter<ShowNotification>,
 ) {
-    for (entity, transform, ship_type, children, mut state, bounty, loadout, station) in ai_ships.iter_mut() {
+    for (entity, transform, ship_type, children, mut state, bounty, loadout, station, complement) in ai_ships.iter_mut() {
         if state.is_destroyed { continue; }
         // A station has no engines by design, and an unarmed one (the
         // Silence's Monastery) no guns: neither has anything to strike.
@@ -878,10 +879,16 @@ pub fn check_ai_cripple(
             .map(|(m, _)| m.power_generation)
             .sum();
         let powerless = loadout.is_some_and(|l| l.power_mw > 0.0 && power_left <= l.power_mw * CRIPPLE_THRESHOLD);
+        // Most of its crew dead -- suffocated, vented, burned: nobody left
+        // to work the ship.
+        let crew_alive = children.iter().filter_map(|c| crew_query.get(c).ok()).filter(|c| c.health > 0.0).count() as u32;
+        let crewless = complement.is_some_and(|c| c.0 > 0 && crew_alive as f32 <= c.0 as f32 * CRIPPLE_THRESHOLD);
         let why = if headless {
             "its bridge is gone"
         } else if powerless {
             "its reactors are failing"
+        } else if crewless {
+            "its crew are dead"
         } else if toothless && immobile {
             "derelict adrift"
         } else {
@@ -891,8 +898,8 @@ pub fn check_ai_cripple(
         state.is_destroyed = true;
         let pos = transform.translation.truncate();
         info!(
-            "{:?} strikes: {why} (command {command_alive}, power {power_left:.0} MW of {:.0}, guns {guns_alive}, engines {engines_alive})",
-            ship_type, loadout.map_or(0.0, |l| l.power_mw)
+            "{:?} strikes: {why} (command {command_alive}, power {power_left:.0} MW of {:.0}, crew {crew_alive} of {}, guns {guns_alive}, engines {engines_alive})",
+            ship_type, loadout.map_or(0.0, |l| l.power_mw), complement.map_or(0, |c| c.0)
         );
         notifications.write(ShowNotification {
             message: format!("{} strikes colors - {why}, ripe for salvage.", faction_display_name(*ship_type)),
@@ -1332,6 +1339,34 @@ mod cripple_tests {
         let helm = (ModuleType::HelmStation, 0.0);
         assert!(!strikes(built, &[helm, (ModuleType::StandardReactor, 500.0), (ModuleType::StandardReactor, 500.0)]));
         assert!(strikes(built, &[helm, (ModuleType::StandardReactor, 500.0)]));
+    }
+
+    #[test]
+    fn a_ship_that_has_lost_most_of_its_crew_strikes() {
+        let crewed = |alive: u32| {
+            let mut app = App::new();
+            app.add_message::<AiShipDestroyed>();
+            app.add_message::<ShowNotification>();
+            app.add_systems(Update, check_ai_cripple);
+            let ship = app.world_mut().spawn((
+                AiShip, Transform::default(), AiShipType::RecursiveKingdom, AiShipState::default(),
+                AiLoadout { guns: 1, engines: 1, ..default() }, super::super::air::AiCrewComplement(8),
+            )).id();
+            for t in [ModuleType::Gatling, ModuleType::StandardEngine] {
+                app.world_mut().spawn((module(t, 100.0), OwnedByAiShip { root: ship }, ChildOf(ship)));
+            }
+            for i in 0..8 {
+                let health = if i < alive { 100.0 } else { 0.0 };
+                app.world_mut().spawn((
+                    crate::components::CrewMember { name: "Kade".into(), health, max_health: 100.0, oxygen: 100.0, morale: 100.0, state: crate::components::CrewState::Idle },
+                    OwnedByAiShip { root: ship }, ChildOf(ship),
+                ));
+            }
+            app.update();
+            app.world().get::<AiShipState>(ship).unwrap().is_destroyed
+        };
+        assert!(!crewed(4), "half the crew is still a crew");
+        assert!(crewed(2));
     }
 
     #[test]

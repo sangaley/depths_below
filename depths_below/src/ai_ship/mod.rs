@@ -10,6 +10,7 @@ mod scavenger;
 pub mod simulation;
 mod crew;
 pub mod interior;
+pub mod air;
 mod power;
 pub mod roster;
 pub mod fleet;
@@ -116,6 +117,19 @@ impl Plugin for AiShipPlugin {
                     interior::reveal_breached_interior
                         .after(interior::record_ai_breaches)
                         .after(interior::conceal_new_ai_interiors),
+                )
+                    .run_if(in_state(GameState::Exploring)),
+            )
+            // The air aboard, and the crew breathing it. Before the cripple
+            // check so a crew that dies this frame is counted this frame.
+            .add_systems(
+                Update,
+                (
+                    air::fill_ai_air,
+                    air::breathe_ai_ships
+                        .after(air::fill_ai_air)
+                        .after(interior::record_ai_breaches)
+                        .before(combat::check_ai_cripple),
                 )
                     .run_if(in_state(GameState::Exploring)),
             );

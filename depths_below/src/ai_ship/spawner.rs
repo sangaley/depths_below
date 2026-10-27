@@ -527,6 +527,7 @@ pub fn spawn_ai_ship_with_design(
     let full_complement = typical_complement.max(total_stations as u32);
     let crew_complement = roll_crew_complement(&mut rng, min_floor, typical_complement, full_complement);
     super::crew::spawn_ai_crew(commands, root, crew_complement);
+    commands.entity(root).insert(super::air::AiCrewComplement(crew_complement));
 
     root
 }
