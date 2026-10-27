@@ -235,7 +235,8 @@ pub fn ensure_turret_bodies(
         (Entity, &Module, &ChildOf, &Transform, Option<&HasTurretBody>, Has<DestroyedModule>),
         (Without<crate::meta::DespawnAtFrameEnd>, Without<TurretBody>),
     >,
-    mut bodies: Query<(Entity, &mut TurretBody, &ChildOf, &mut Transform)>,
+    // A body on its way out with a load is no longer anyone's to take on.
+    mut bodies: Query<(Entity, &mut TurretBody, &ChildOf, &mut Transform), Without<crate::meta::DespawnAtFrameEnd>>,
     asset_server: Res<AssetServer>,
 ) {
     for (ring, module, parent, _, has, destroyed) in rings.iter() {
@@ -297,6 +298,9 @@ pub fn ensure_turret_bodies(
             Ok((_, _, ring_parent, ring_tf, _, destroyed)) => {
                 if destroyed && !t.jammed {
                     t.jammed = true;
+                    if crate::combat::gun_assembly::trace() {
+                        info!("TURRET JAMMED {:?}: its ring at {:?} was shot out", body, t.ring_cell);
+                    }
                 }
                 // The ring broke away with a severed section: the turret goes
                 // where it went. A ring's sprite stands at its footprint's
@@ -563,6 +567,26 @@ mod turret_deck_tests {
         assert_eq!(same, body, "the same turret, parts and all");
         assert_eq!(t.ring, new_ring);
         assert!(!t.jammed);
+    }
+
+    #[test]
+    fn a_load_builds_turrets_fresh_rather_than_adopting_the_old_jammed_one() {
+        let (mut app, ship, ring) = app_with_ring();
+        let (old, _) = the_body(&mut app).unwrap();
+        app.world_mut().entity_mut(ring).insert(DestroyedModule { original_type: ModuleType::TurretRing });
+        app.update();
+        app.world_mut().entity_mut(ring).despawn();
+        // The load marks the old turret to go, and lays the saved ring.
+        app.world_mut().entity_mut(old).insert(crate::meta::DespawnAtFrameEnd);
+        let new_ring = spawn_ring(&mut app, ship);
+        app.update();
+        let fresh = app
+            .world_mut()
+            .query::<(Entity, &TurretBody)>()
+            .iter(app.world())
+            .find(|(e, _)| *e != old)
+            .map(|(e, t)| (e, t.ring));
+        assert_eq!(fresh.map(|f| f.1), Some(new_ring), "a new turret on the loaded ring");
     }
 
     #[test]

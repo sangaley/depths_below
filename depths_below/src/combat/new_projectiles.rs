@@ -1058,6 +1058,13 @@ pub fn check_projectile_hits(
                     }
                 }
                 let Some(LayerHit { layer, is_turret: on_turret, gt: layer_gt, cell_from: _, dir_local, step, block, surface }) = best else { continue };
+                if crate::combat::gun_assembly::trace() {
+                    if on_turret {
+                        info!("TURRET HIT on ship {:?}, turret {:?}: block {:?} at turret cell {:?}, {:.0} damage", ai_entity, layer, step.entity, step.cell, proj.damage);
+                    } else if proj.effect.is_some() {
+                        info!("BUILT ROUND HIT ship {:?}: block {:?} at hull cell {:?}, {:.0} damage", ai_entity, step.entity, step.cell, proj.damage);
+                    }
+                }
                 // From here on the hit is resolved on the layer it landed on.
                 let Ok(grid) = grid_query.get(layer) else { continue };
                 let ai_gt = &layer_gt;

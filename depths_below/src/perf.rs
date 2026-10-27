@@ -16,6 +16,7 @@ use crate::components::{HullSegment, Module, Ship};
 //                          nobody is watching. tools/perf_summary.py reads them.
 //   DEPTHS_PERF_OVERLAY=1 — start with the readout showing (for screenshots).
 //   DEPTHS_PERF_CHURN=<n> — knock out n random blocks of YOUR ship a second
+//                          (DEPTHS_PERF_CHURN_TYPE=<ModuleType>: only that type)
 //                          (health to 0, through the normal destruction
 //                          path), after warm-up. A fight's worth of block loss
 //                          on demand, without needing an enemy to get through
@@ -150,9 +151,15 @@ fn churn_player_blocks(
     *owed += churn_rate() * time.delta_secs();
     while *owed >= 1.0 {
         *owed -= 1.0;
+        // DEPTHS_PERF_CHURN_TYPE=<ModuleType>: only blocks of that type (a
+        // test that needs one thing shot out, say a turret ring).
+        let only = std::env::var("DEPTHS_PERF_CHURN_TYPE").ok();
         let live: Vec<Entity> = children
             .iter()
-            .filter(|c| hulls.get(*c).is_ok_and(|h| h.health > 0.0) || modules.get(*c).is_ok_and(|m| m.health > 0.0))
+            .filter(|c| match &only {
+                Some(t) => modules.get(*c).is_ok_and(|m| m.health > 0.0 && format!("{:?}", m.module_type) == *t),
+                None => hulls.get(*c).is_ok_and(|h| h.health > 0.0) || modules.get(*c).is_ok_and(|m| m.health > 0.0),
+            })
             .collect();
         if live.is_empty() {
             return;

@@ -571,10 +571,11 @@ fn rebuild_entities_from_save(
         ResMut<crate::ship::rebuild::RebuildQueue>,
         ResMut<crate::ship::towing::Towing>,
         ResMut<crate::ui::PendingWarpTarget>,
+        Query<Entity, With<crate::combat::turret_deck::TurretBody>>,
     ),
 ) {
     let (mut galaxy, mut looted, mut sim, textures, time, members, ai_ships, mut faction_stations, mut border_war, mut people, mut work) = world;
-    let (mut rebuild_queue, mut towing, mut dash_target) = flight;
+    let (mut rebuild_queue, mut towing, mut dash_target, turret_bodies) = flight;
     let Some(save) = pending.save_data.take() else { return };
     let slot = pending.slot;
 
@@ -583,7 +584,11 @@ fn rebuild_entities_from_save(
     // Despawned here, mid-frame, any system that had already queued a
     // command for one of them this frame crashed the load; which ones did
     // depended on scheduling order, so it came and went as systems were added.
-    for entity in module_entities.iter().chain(hull_entities.iter()).chain(crew_entities.iter()) {
+    // Turret bodies too. One whose ring was shot out is kept waiting for its
+    // ring to be rebuilt -- it would outlive the load, stripped of its plating
+    // (a HullSegment, so it goes above), and the loaded ring would take it on
+    // instead of building the turret fresh.
+    for entity in module_entities.iter().chain(hull_entities.iter()).chain(crew_entities.iter()).chain(turret_bodies.iter()) {
         commands.entity(entity).try_insert((DespawnAtFrameEnd, Visibility::Hidden));
     }
 

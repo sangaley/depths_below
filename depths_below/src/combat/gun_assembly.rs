@@ -626,6 +626,9 @@ pub fn flash_down_hoists(
     mut notifications: MessageWriter<crate::events::ShowNotification>,
 ) {
     for (part, turret) in gone.iter() {
+        if trace() {
+            info!("TURRET PART DESTROYED: {:?} on turret {:?}", part.original_type, turret.parent());
+        }
         // What holds shells: the ready rack, and the round in a loader.
         if !matches!(part.original_type, ModuleType::ClipRack | ModuleType::Loader) {
             continue;
@@ -641,6 +644,9 @@ pub fn flash_down_hoists(
                 mag.health = 0.0;
                 lit += 1;
             }
+        }
+        if trace() {
+            info!("TURRET FLASH down the hoist on {:?}: {} magazine(s) lit, {} behind doors", ship.parent(), lit, feed.magazines.len() - feed.flash.len());
         }
         if player.contains(ship.parent()) {
             let (message, kind) = if lit > 0 {

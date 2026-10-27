@@ -1198,6 +1198,7 @@ fn parse_key(name: &str) -> Option<KeyCode> {
         "PageUp" => KeyCode::PageUp,
         "PageDown" => KeyCode::PageDown,
         "ControlLeft" => KeyCode::ControlLeft,
+        "Backslash" => KeyCode::Backslash,
         _ => return None,
     })
 }
