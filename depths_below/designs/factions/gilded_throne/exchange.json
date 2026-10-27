@@ -13950,14 +13950,6 @@
   {
    "module_type": "SmallCargo",
    "grid_pos": [
-    -19,
-    -2
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "SmallCargo",
-   "grid_pos": [
     -18,
     -2
    ],
@@ -14368,14 +14360,6 @@
    "grid_pos": [
     -2,
     18
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "SmallCargo",
-   "grid_pos": [
-    -2,
-    19
    ],
    "rotation": "North"
   },
@@ -15578,6 +15562,28 @@
     -1
    ],
    "rotation": "North"
+  },
+  {
+   "module_type": "HelmStation",
+   "grid_pos": [
+    -19,
+    -2
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "HelmStation",
+   "grid_pos": [
+    -2,
+    19
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",

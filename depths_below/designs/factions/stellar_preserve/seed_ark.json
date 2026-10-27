@@ -10348,14 +10348,6 @@
    "rotation": "North"
   },
   {
-   "module_type": "OxygenScrubber",
-   "grid_pos": [
-    -29,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
    "module_type": "EmergencyBulkhead",
    "grid_pos": [
     -29,
@@ -11038,14 +11030,6 @@
   {
    "module_type": "MemoryCore",
    "grid_pos": [
-    25,
-    -2
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MemoryCore",
-   "grid_pos": [
     -12,
     2
    ],
@@ -11242,6 +11226,28 @@
     -1
    ],
    "rotation": "North"
+  },
+  {
+   "module_type": "HelmStation",
+   "grid_pos": [
+    -29,
+    -9
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "HelmStation",
+   "grid_pos": [
+    25,
+    -2
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",

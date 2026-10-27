@@ -6022,22 +6022,6 @@
   {
    "module_type": "BasicQuarters",
    "grid_pos": [
-    9,
-    -6
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BasicQuarters",
-   "grid_pos": [
-    -6,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BasicQuarters",
-   "grid_pos": [
     -9,
     6
    ],
@@ -6094,24 +6078,8 @@
   {
    "module_type": "MedBay",
    "grid_pos": [
-    9,
-    -7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
     3,
     7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    -7,
-    -9
    ],
    "rotation": "North"
   },
@@ -7714,6 +7682,28 @@
     18
    ],
    "rotation": "North"
+  },
+  {
+   "module_type": "AICombatCore",
+   "grid_pos": [
+    -7,
+    -9
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AICombatCore",
+   "grid_pos": [
+    9,
+    -6
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",

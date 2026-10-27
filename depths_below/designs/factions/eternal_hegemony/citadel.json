@@ -16550,14 +16550,6 @@
   {
    "module_type": "MemoryCore",
    "grid_pos": [
-    -25,
-    -22
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MemoryCore",
-   "grid_pos": [
     -3,
     7
    ],
@@ -16592,14 +16584,6 @@
    "grid_pos": [
     -3,
     -7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MemoryCore",
-   "grid_pos": [
-    -25,
-    22
    ],
    "rotation": "North"
   },
@@ -18506,6 +18490,28 @@
     1
    ],
    "rotation": "East"
+  },
+  {
+   "module_type": "HelmStation",
+   "grid_pos": [
+    -25,
+    -22
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "HelmStation",
+   "grid_pos": [
+    -25,
+    22
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",

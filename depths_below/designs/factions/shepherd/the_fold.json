@@ -11558,22 +11558,6 @@
   {
    "module_type": "BasicQuarters",
    "grid_pos": [
-    -3,
-    24
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BasicQuarters",
-   "grid_pos": [
-    -2,
-    24
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BasicQuarters",
-   "grid_pos": [
     -1,
     24
    ],
@@ -11624,22 +11608,6 @@
    "grid_pos": [
     -24,
     -4
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BasicQuarters",
-   "grid_pos": [
-    -24,
-    -3
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BasicQuarters",
-   "grid_pos": [
-    -24,
-    -2
    ],
    "rotation": "North"
   },
@@ -13002,6 +12970,28 @@
     1
    ],
    "rotation": "East"
+  },
+  {
+   "module_type": "AICombatCore",
+   "grid_pos": [
+    -24,
+    -2
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AICombatCore",
+   "grid_pos": [
+    -3,
+    24
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",

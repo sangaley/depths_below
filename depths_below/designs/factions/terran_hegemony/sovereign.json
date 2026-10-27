@@ -9366,14 +9366,6 @@
   {
    "module_type": "MedBay",
    "grid_pos": [
-    -12,
-    -1
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
     -14,
     10
    ],
@@ -9928,14 +9920,6 @@
    "grid_pos": [
     2,
     10
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MemoryCore",
-   "grid_pos": [
-    -12,
-    0
    ],
    "rotation": "North"
   },
@@ -10178,6 +10162,17 @@
     0
    ],
    "rotation": "East"
+  },
+  {
+   "module_type": "AICombatCore",
+   "grid_pos": [
+    -12,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",

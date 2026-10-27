@@ -8686,14 +8686,6 @@
   {
    "module_type": "BasicQuarters",
    "grid_pos": [
-    8,
-    16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BasicQuarters",
-   "grid_pos": [
     11,
     -15
    ],
@@ -8920,14 +8912,6 @@
    "grid_pos": [
     14,
     -1
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "MedBay",
-   "grid_pos": [
-    12,
-    -13
    ],
    "rotation": "North"
   },
@@ -9762,6 +9746,28 @@
     -3
    ],
    "rotation": "North"
+  },
+  {
+   "module_type": "HelmStation",
+   "grid_pos": [
+    8,
+    16
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "HelmStation",
+   "grid_pos": [
+    12,
+    -13
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",
