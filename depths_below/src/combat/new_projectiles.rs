@@ -785,17 +785,35 @@ pub fn spawn_ai_round(
     range: f32,
     ammo_type: AmmoType,
     loaded: Option<crate::combat::ammo_types::KineticAmmoType>,
+    // A gun built from parts fires its own shell: `speed` is already its
+    // muzzle velocity, and the shell sets the rest.
+    built: Option<&crate::combat::gun_assembly::GunAssembly>,
 ) {
     let direction = (aim_point - muzzle).normalize_or_zero();
-    let speed = speed * ammo_type.speed_mult();
+    let speed = if built.is_some() { speed } else { speed * ammo_type.speed_mult() };
     let lifetime = (range / speed.max(1.0)).max(0.1);
+    let loaded = built.map(|g| g.parts.shell.analogue()).or(loaded);
     let (damage_type, damage_mult, penetration) = round_profile(loaded, module_type);
+    let (damage_mult, penetration, effect, caliber, size) = match built {
+        Some(g) => {
+            let pen = crate::combat::gun_assembly::penetration_for(&g.stats);
+            let gauge = g.stats.gauge_mm;
+            (
+                1.0,
+                pen,
+                Some(g.parts.shell.hit_behavior(gauge, pen)),
+                crate::combat::gun_assembly::caliber_for(&g.stats),
+                Vec2::new(18.0 + gauge * 0.12, 6.0 + gauge * 0.04),
+            )
+        }
+        None => (damage_mult, penetration, None, caliber_scale(module_type), ammo_type.projectile_size()),
+    };
     commands.spawn((
         Sprite {
             image: asset_server.load(crate::sprite_map::effect_sprite_path("enemy_projectile")),
             // Enemy fire reads red whatever it's loaded with.
             color: Color::srgb(1.0, 0.2, 0.2),
-            custom_size: Some(ammo_type.projectile_size() * fx_scale()),
+            custom_size: Some(size * fx_scale()),
             ..default()
         },
         Transform {
@@ -813,8 +831,8 @@ pub fn spawn_ai_round(
             penetration,
             has_penetrated: false,
             ammo: loaded,
-            effect: None,
-            caliber: caliber_scale(module_type),
+            effect,
+            caliber,
             last_hit: None,
             prev_pos: muzzle,
             bounces: 0,

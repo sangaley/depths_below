@@ -352,6 +352,7 @@ pub(crate) fn builtin_starter_design() -> crate::building::blueprint::Blueprint 
         modules,
         created_at: "builtin".into(),
         version: BLUEPRINT_VERSION,
+        guns: Vec::new(),
     }
 }
 

@@ -89,7 +89,13 @@ pub fn ai_weapon_fire_system(
     velocity_query: Query<&Velocity>,
     mut fired_events: MessageWriter<WeaponFired>,
     standing: Res<crate::diplomacy::FactionStanding>,
+    // Guns built from parts, the hull's and those on its turrets' decks.
+    built: (
+        Query<&Children, With<crate::combat::turret_deck::TurretBody>>,
+        Query<(&crate::combat::gun_assembly::GunAssembly, Option<&crate::combat::gun_assembly::GunMuzzle>)>,
+    ),
 ) {
+    let (turret_decks, assemblies) = &built;
     // DEPTHS_MOVETEST_ENEMY spawns a target dummy that's shot-free by
     // default (for testing movement/damage-model in isolation). Set
     // DEPTHS_MOVETEST_ENEMY_SHOOTS=1 too to let it fire back.
@@ -207,7 +213,13 @@ pub fn ai_weapon_fire_system(
         // "in range" on its own.
         let dist_to_target = ai_pos.distance(centroid);
 
-        for child in children.iter() {
+        // The hull's own weapons, then whatever stands on its turrets.
+        let guns: Vec<Entity> = children
+            .iter()
+            .chain(children.iter().filter_map(|c| turret_decks.get(c).ok()).flat_map(|t| t.iter()))
+            .collect();
+        for child in guns {
+            let gun = assemblies.get(child).ok();
             let Ok((mut weapon, mut cooldown, module, ammo_storage, _owned, eff, weapon_gt, mount, loaded)) =
                 weapon_query.get_mut(child)
             else {
@@ -229,8 +241,9 @@ pub fn ai_weapon_fire_system(
                 continue;
             }
 
-            // Each gun shoots from where it actually is...
-            let muzzle = weapon_gt.translation().truncate();
+            // Each gun shoots from where it actually is -- a built gun from
+            // the end of its barrel...
+            let muzzle = gun.and_then(|(_, m)| m.map(|m| m.world)).unwrap_or_else(|| weapon_gt.translation().truncate());
 
             // ...and is in range from there. Measured from the ship's centre
             // this was the same thing on a small hull, but a capital or a
@@ -248,12 +261,18 @@ pub fn ai_weapon_fire_system(
             // weapon SITS on an enemy hull now decides what it can shoot at,
             // exactly as it does on yours.
             let to_target = aim_base - muzzle;
-            if !crate::combat::is_in_firing_arc(
-                ai_transform.rotation.to_euler(EulerRot::ZYX).0,
-                &module.rotation,
-                mount,
-                to_target.normalize_or_zero(),
-            ) {
+            // A built gun bears where its barrel points: a spinal gun along
+            // the hull, a turret gun wherever its turret has turned.
+            let bears = match gun.and_then(|(_, m)| m.copied()) {
+                Some(m) => m.dir.dot(to_target.normalize_or_zero()) >= (mount.firing_arc / 2.0).to_radians().cos(),
+                None => crate::combat::is_in_firing_arc(
+                    ai_transform.rotation.to_euler(EulerRot::ZYX).0,
+                    &module.rotation,
+                    mount,
+                    to_target.normalize_or_zero(),
+                ),
+            };
+            if !bears {
                 continue;
             }
 
@@ -281,9 +300,11 @@ pub fn ai_weapon_fire_system(
             // most of "they don't hit me." Enemies fire at the untuned base
             // speed; the player can still tune theirs faster. (× the loaded
             // ammo's own velocity profile, same as the player.)
-            let base_speed =
-                crate::building::customization::tuning::base_projectile_speed(module.module_type);
-            let proj_speed = base_speed * ammo_storage.ammo_type.speed_mult();
+            let base_speed = match gun {
+                Some((g, _)) => g.stats.velocity_mps * crate::combat::gun_assembly::GAME_SPEED_PER_MPS,
+                None => crate::building::customization::tuning::base_projectile_speed(module.module_type),
+            };
+            let proj_speed = if gun.is_some() { base_speed } else { base_speed * ammo_storage.ammo_type.speed_mult() };
 
             // Lead the shot: aim where the subsystem/centroid WILL be by the
             // time the round gets there — turns "sprays where you were" into
@@ -348,7 +369,11 @@ pub fn ai_weapon_fire_system(
                 weapon.range,
                 ammo_storage.ammo_type,
                 loaded.map(|a| a.0),
+                gun.map(|(g, _)| g),
             );
+            if let (Some((g, _)), true) = (gun, crate::combat::gun_assembly::trace()) {
+                info!("AI GUN fired {:?} on {:?}: {:.0} mm at {:.0} u/s, {:.0} damage", child, ai_entity, g.stats.gauge_mm, proj_speed, weapon.damage);
+            }
         }
     }
 }

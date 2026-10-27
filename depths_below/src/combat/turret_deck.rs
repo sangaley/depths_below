@@ -414,7 +414,12 @@ pub fn traverse_turrets(
     mut bodies: Query<(Entity, &mut TurretBody, &mut Transform, &ChildOf, Option<&Children>)>,
     parts: Query<&Module, Without<DestroyedModule>>,
     plates: Query<(), (With<TurretPlate>, Without<crate::components::HullDestroyed>)>,
-    ships: Query<(&GlobalTransform, Option<&Children>), With<Ship>>,
+    ships: Query<
+        (&GlobalTransform, Option<&Children>, Option<&crate::ai_ship::components::AiShipTarget>),
+        Or<(With<Ship>, With<crate::ai_ship::components::AiShip>)>,
+    >,
+    // Where an AI ship's target is now.
+    whereabouts: Query<&GlobalTransform>,
     hull_modules: Query<&Module, Without<DestroyedModule>>,
     rings: Query<&Module>,
     aim: Res<PlayerAimPoint>,
@@ -437,8 +442,8 @@ pub fn traverse_turrets(
         body.mass_t = mass;
         // Motors: Traverse Motor blocks on the hull deck touching the ring.
         let ring_cells: Vec<IVec2> = rings.get(body.ring).map(ring_cells).unwrap_or_default();
-        let Ok((ship_gt, ship_children)) = ships.get(parent.parent()) else {
-            // Not the player's ship: AI turrets aim with AI weapons later.
+        // A turret on a severed section has no ship to aim for.
+        let Ok((ship_gt, ship_children, ai_target)) = ships.get(parent.parent()) else {
             continue;
         };
         body.motors = ship_children
@@ -461,7 +466,13 @@ pub fn traverse_turrets(
             }
             continue;
         }
-        let Some(target) = aim.0 else { continue };
+        // The player's turrets follow the player's aim; an AI ship's follow
+        // whatever it has picked to fight.
+        let target = match ai_target {
+            Some(t) => t.entity.map(|e| whereabouts.get(e).map(|g| g.translation().truncate()).unwrap_or(t.position)),
+            None => aim.0,
+        };
+        let Some(target) = target else { continue };
         // Heading to the aim point, in the ship's frame.
         let centre = ship_gt.affine().transform_point3(transform.translation.with_z(0.0)).truncate();
         let world = (target - centre).to_angle();

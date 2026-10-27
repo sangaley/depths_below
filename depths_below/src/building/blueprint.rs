@@ -30,6 +30,57 @@ pub struct Blueprint {
     pub created_at: String,
     /// Version tag for forward-compat; see BLUEPRINT_VERSION
     pub version: u32,
+    /// Saved gun designs fitted by name (combat::gun_design), laid down as
+    /// their parts when the design is read: draw a faction's gun once, fit
+    /// it to every ship that carries it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub guns: Vec<GunPlacement>,
+}
+
+/// One saved gun design fitted to a ship design.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct GunPlacement {
+    /// The gun design's name, or its file name without `.json`.
+    pub design: String,
+    /// Where its firing piece goes: a hull cell, or a turret cell when
+    /// `turret` is set.
+    pub at: IVec2,
+    #[serde(default = "east")]
+    pub facing: Rotation,
+    /// On the turret standing on the ring at this hull cell.
+    #[serde(default)]
+    pub turret: Option<IVec2>,
+}
+
+fn east() -> Rotation {
+    Rotation::East
+}
+
+/// Lay a design's fitted guns down as modules. A gun design nobody can find
+/// is reported and left out.
+pub fn expand_gun_placements(bp: &mut Blueprint, designs: &[crate::combat::gun_design::GunDesign]) {
+    for fit in std::mem::take(&mut bp.guns) {
+        let found = designs.iter().find(|d| d.name == fit.design || d.file_stem() == fit.design);
+        let Some(gun) = found else {
+            warn!("Design '{}' fits gun '{}', which isn't in designs/guns", bp.name, fit.design);
+            continue;
+        };
+        for (module_type, grid_pos, rotation) in gun.placed(fit.at, fit.facing) {
+            let extras = ModuleExtras {
+                turret: fit.turret,
+                shell: gun.shell.clone().filter(|_| module_type == ModuleType::FiringPiece),
+                ..default()
+            };
+            bp.modules.push(BlueprintModule {
+                module_type,
+                grid_pos,
+                rotation,
+                custom_name: None,
+                subcomponents: None,
+                extras: (!extras.is_empty()).then_some(extras),
+            });
+        }
+    }
 }
 
 impl Blueprint {
@@ -365,6 +416,7 @@ impl DesignCapture<'_, '_> {
             modules,
             created_at: chrono_lite_timestamp(),
             version: BLUEPRINT_VERSION,
+            guns: Vec::new(),
         })
     }
 }
@@ -586,7 +638,12 @@ pub fn load_design_file(path: impl AsRef<Path>) -> Option<Blueprint> {
     let path = path.as_ref();
     let data = fs::read_to_string(path).ok()?;
     match serde_json::from_str::<Blueprint>(&data) {
-        Ok(bp) if bp.version <= BLUEPRINT_VERSION => Some(bp),
+        Ok(mut bp) if bp.version <= BLUEPRINT_VERSION => {
+            if !bp.guns.is_empty() {
+                expand_gun_placements(&mut bp, &crate::combat::gun_design::read_gun_designs());
+            }
+            Some(bp)
+        }
         Ok(bp) => {
             warn!("Design {:?} has unsupported version {}", path, bp.version);
             None
@@ -724,6 +781,7 @@ mod scale_design_tests {
             ],
             created_at: String::new(),
             version: 1,
+            guns: Vec::new(),
         }
     }
 
@@ -760,6 +818,42 @@ mod scale_design_tests {
                 assert!(edge, "{} is Outer inside the hull", c.grid_pos);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod gun_placement_tests {
+    use super::*;
+    use crate::combat::gun_design::{GunDesign, GunDesignPart};
+
+    #[test]
+    fn a_fitted_gun_is_laid_down_as_its_parts() {
+        let gun = GunDesign {
+            name: "Little Gun".into(),
+            description: String::new(),
+            parts: vec![
+                GunDesignPart { module_type: ModuleType::FiringPiece, offset: IVec2::ZERO, rotation: Rotation::East },
+                GunDesignPart { module_type: ModuleType::GunBarrel, offset: IVec2::X, rotation: Rotation::East },
+            ],
+            shell: Some(crate::combat::shell::ShellDesign { head: crate::combat::shell::ShellHead::He, ..default() }),
+            faction: None,
+        };
+        let mut bp = Blueprint {
+            name: "ship".into(), hull_cells: vec![], modules: vec![], created_at: String::new(), version: BLUEPRINT_VERSION,
+            guns: vec![
+                GunPlacement { design: "little_gun".into(), at: IVec2::new(3, 3), facing: Rotation::North, turret: Some(IVec2::new(1, 1)) },
+                GunPlacement { design: "nothing by this name".into(), at: IVec2::ZERO, facing: Rotation::East, turret: None },
+            ],
+        };
+        expand_gun_placements(&mut bp, &[gun]);
+        assert!(bp.guns.is_empty());
+        assert_eq!(bp.modules.len(), 2, "the unknown gun is left out");
+        let barrel = bp.modules.iter().find(|m| m.module_type == ModuleType::GunBarrel).unwrap();
+        assert_eq!((barrel.grid_pos, barrel.rotation), (IVec2::new(3, 4), Rotation::North));
+        let fp = bp.modules.iter().find(|m| m.module_type == ModuleType::FiringPiece).unwrap();
+        let extras = fp.extras.as_ref().unwrap();
+        assert_eq!(extras.turret, Some(IVec2::new(1, 1)));
+        assert_eq!(extras.shell.as_ref().unwrap().head, crate::combat::shell::ShellHead::He);
     }
 }
 

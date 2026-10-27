@@ -26,6 +26,13 @@ static CLASS_CACHE: OnceLock<Mutex<HashMap<(AiShipType, &'static str), Option<Bl
 /// class is None or its file can't be read. Never writes a file: a class that
 /// fails to load is a mistake to fix, not something to paper over on disk.
 fn class_design(ship_type: AiShipType, class: Option<&'static str>) -> Blueprint {
+    // DEPTHS_MOVETEST_ENEMY_DESIGN=<path>: in a movement test, every enemy
+    // flies this design file (to watch an AI fight with a given ship).
+    if crate::demo::skip_ai_ship_spawn() {
+        if let Some(bp) = std::env::var("DEPTHS_MOVETEST_ENEMY_DESIGN").ok().and_then(blueprint::load_design_file) {
+            return bp;
+        }
+    }
     let Some(key) = class else { return faction_design(ship_type) };
     let cache = CLASS_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     let loaded = {
