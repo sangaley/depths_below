@@ -58,7 +58,19 @@ fn dim(c: Color) -> Color {
     Color::srgb(s.red * CONCEAL, s.green * CONCEAL, s.blue * CONCEAL)
 }
 
+/// The closed hull over a concealed cell: plating in the ship's paint
+/// (ai_ship::livery), a shade darker than its outer skin -- the way a
+/// Cosmoteer ship reads as a painted hull, not a black hole.
+fn roof(paint: &super::livery::Livery, material: crate::components::HullMaterial, cell: IVec2, lo: IVec2, hi: IVec2) -> Color {
+    let c = paint.paint(super::spawner::hull_tint(material), paint.accent_at(cell, lo, hi)).to_srgba();
+    Color::srgb(c.red * 0.82, c.green * 0.82, c.blue * 0.82)
+}
+
 /// Conceals the inboard blocks of any AI ship that just spawned.
+///
+/// The inside isn't drawn dark any more: the deck shows as closed plating in
+/// the faction's paint, and the machinery on it is kept out of sight until a
+/// hole opens it (`reveal_breached_interior`).
 ///
 /// Concealment lives in `BaseSpriteColor`, not in the live sprite colour,
 /// because `tint_damaged_modules` rewrites every module's colour from that
@@ -69,8 +81,9 @@ fn dim(c: Color) -> Color {
 pub fn conceal_new_ai_interiors(
     mut commands: Commands,
     all_hull: Query<(&HullSegment, &ChildOf), With<OwnedByAiShip>>,
+    factions: Query<&super::components::AiShipType>,
     mut new_hull: Query<
-        (Entity, &HullSegment, &mut Sprite, &BaseSpriteColor),
+        (Entity, &HullSegment, &ChildOf, &mut Sprite, &BaseSpriteColor),
         (Added<OwnedByAiShip>, Without<Module>),
     >,
     mut new_modules: Query<
@@ -86,22 +99,30 @@ pub fn conceal_new_ai_interiors(
     // on the skin -- a turret, a sensor mast -- and stays visible, because you
     // can see those from outside a real ship too.
     let mut inboard: HashMap<(Entity, IVec2), bool> = HashMap::new();
+    // Each ship's extent, for its paint pattern.
+    let mut extent: HashMap<Entity, (IVec2, IVec2)> = HashMap::new();
     for (hull, parent) in all_hull.iter() {
         inboard.insert(
             (parent.parent(), hull.grid_position),
             !matches!(hull.hull_layer, crate::components::HullLayer::Outer),
         );
+        let e = extent.entry(parent.parent()).or_insert((IVec2::MAX, IVec2::MIN));
+        *e = (e.0.min(hull.grid_position), e.1.max(hull.grid_position));
     }
 
-    for (entity, hull, mut sprite, base) in new_hull.iter_mut() {
-        if hull.hull_layer != crate::components::HullLayer::Hallway {
+    for (entity, hull, parent, mut sprite, base) in new_hull.iter_mut() {
+        if hull.hull_layer == crate::components::HullLayer::Outer {
             continue;
         }
         let true_color = base.0;
-        sprite.color = dim(true_color);
+        let hidden = match (factions.get(parent.parent()), extent.get(&parent.parent())) {
+            (Ok(faction), Some(&(lo, hi))) => roof(&super::livery::livery(*faction), hull.material, hull.grid_position, lo, hi),
+            _ => dim(true_color),
+        };
+        sprite.color = hidden;
         commands
             .entity(entity)
-            .insert((Concealed(true_color), BaseSpriteColor(dim(true_color))));
+            .insert((Concealed(true_color), BaseSpriteColor(hidden)));
     }
 
     for (entity, module, parent, mut sprite, base) in new_modules.iter_mut() {
@@ -122,10 +143,12 @@ pub fn conceal_new_ai_interiors(
         if true_color.to_srgba().alpha <= 0.01 {
             continue;
         }
-        sprite.color = dim(true_color);
+        // Out of sight under the closed deck.
+        let hidden = Color::NONE;
+        sprite.color = hidden;
         commands
             .entity(entity)
-            .insert((Concealed(true_color), BaseSpriteColor(dim(true_color))));
+            .insert((Concealed(true_color), BaseSpriteColor(hidden)));
     }
 }
 

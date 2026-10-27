@@ -4,6 +4,7 @@ pub mod screen_effects;
 pub mod block_visuals;
 pub mod hull_seams;
 pub mod ship_roof;
+pub mod far_view;
 pub mod block_height;
 pub mod starfield;
 pub mod procedural_textures;
@@ -72,6 +73,14 @@ impl Plugin for VfxPlugin {
                 (ship_roof::update_ship_roof, ship_roof::raise_weapons_over_roof).run_if(in_state(GameState::Exploring)),
             )
             .add_systems(OnExit(GameState::Exploring), (ship_roof::clear_ship_roof, ship_roof::lower_weapons))
+            // Far out, every enemy carries its faction and class.
+            .add_systems(
+                Update,
+                (far_view::attach_far_view, far_view::measure_far_view, far_view::show_far_view)
+                    .chain()
+                    .run_if(in_state(GameState::Exploring)),
+            )
+            .add_systems(OnExit(GameState::Exploring), far_view::clear_far_labels)
             // Tall blocks (towers, masts, guns) cast a shadow, so they read as
             // standing up off the hull. Wherever ships are drawn: the berth
             // and the builder show the ship too.

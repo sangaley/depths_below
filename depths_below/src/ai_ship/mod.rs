@@ -11,6 +11,7 @@ pub mod simulation;
 mod crew;
 pub mod interior;
 pub mod air;
+pub mod livery;
 mod power;
 pub mod roster;
 pub mod fleet;
@@ -125,6 +126,8 @@ impl Plugin for AiShipPlugin {
             .add_systems(
                 Update,
                 (
+                    // Before concealment reads a block's true colour.
+                    livery::apply_paint.before(interior::conceal_new_ai_interiors),
                     air::fill_ai_air,
                     air::breathe_ai_ships
                         .after(air::fill_ai_air)

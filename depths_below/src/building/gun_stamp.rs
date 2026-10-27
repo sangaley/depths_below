@@ -230,6 +230,7 @@ mod gun_stamp_tests {
             ],
             shell: None,
             faction: None,
+            point_defence: false,
         }
     }
 

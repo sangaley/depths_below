@@ -43,6 +43,10 @@ pub struct GunDesign {
     /// "TerranHegemony"); None for the player's own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub faction: Option<String>,
+    /// Fitted on point defence: shoots incoming missiles, never ships
+    /// (combat::missile_defence).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub point_defence: bool,
 }
 
 /// Clockwise quarter turns from East.
@@ -85,6 +89,7 @@ impl GunDesign {
             parts,
             shell: shell.filter(|s| *s != ShellDesign::default()),
             faction: None,
+            point_defence: false,
         })
     }
 
@@ -262,7 +267,7 @@ mod gun_design_tests {
 
     #[test]
     fn names_become_safe_file_names() {
-        let d = GunDesign { name: "280 mm HE / Terran!".into(), description: String::new(), parts: vec![], shell: None, faction: None };
+        let d = GunDesign { name: "280 mm HE / Terran!".into(), description: String::new(), parts: vec![], shell: None, faction: None, point_defence: false };
         assert_eq!(d.file_stem(), "280_mm_he___terran");
     }
 }

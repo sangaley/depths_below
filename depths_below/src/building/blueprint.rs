@@ -69,6 +69,7 @@ pub fn expand_gun_placements(bp: &mut Blueprint, designs: &[crate::combat::gun_d
             let extras = ModuleExtras {
                 turret: fit.turret,
                 shell: gun.shell.clone().filter(|_| module_type == ModuleType::FiringPiece),
+                point_defence: gun.point_defence && module_type == ModuleType::FiringPiece,
                 ..default()
             };
             bp.modules.push(BlueprintModule {
@@ -860,6 +861,7 @@ mod gun_placement_tests {
             ],
             shell: Some(crate::combat::shell::ShellDesign { head: crate::combat::shell::ShellHead::He, ..default() }),
             faction: None,
+            point_defence: false,
         };
         let mut bp = Blueprint {
             name: "ship".into(), hull_cells: vec![], modules: vec![], created_at: String::new(), version: BLUEPRINT_VERSION,

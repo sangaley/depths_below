@@ -441,7 +441,9 @@ pub fn spawn_ai_ship_with_design(
     crate::ship::lay_hallways_with(registry, &mut hull_cells, &design.modules);
 
     // Spawn hull segments as children
-    let hull_max = spawn_ai_hull(commands, asset_server, root, &hull_cells, health_mult);
+    let paint = super::livery::livery(ship_type);
+    let hull_max = spawn_ai_hull(commands, asset_server, root, &hull_cells, health_mult, &paint);
+    let (lo, hi) = hull_cells.iter().fold((IVec2::MAX, IVec2::MIN), |(lo, hi), c| (lo.min(c.grid_pos), hi.max(c.grid_pos)));
 
     // The loadout as built. Every "how much is left" ratio divides by this,
     // because dead blocks are despawned and can't be counted later.
@@ -459,6 +461,11 @@ pub fn spawn_ai_ship_with_design(
             registry,
         );
         commands.entity(module_entity).insert(OwnedByAiShip { root });
+        // Armour plates wear the faction's paint, like the hull they sit on.
+        if super::livery::is_plating(mp.module_type) {
+            let accent = paint.accent_at(mp.grid_pos, lo, hi);
+            commands.entity(module_entity).insert(super::livery::Paint(paint.paint(Color::srgb(0.6, 0.6, 0.65), accent)));
+        }
 
         // Faction design state — a design file can ship tuned guns, fire
         // groups, ammo choices, and they apply here like on the player ship
@@ -570,8 +577,10 @@ fn spawn_ai_hull(
     parent: Entity,
     hull_cells: &[BlueprintHullCell],
     health_mult: f32,
+    paint: &super::livery::Livery,
 ) -> f32 {
     let mut hull_max = 0.0;
+    let (lo, hi) = hull_cells.iter().fold((IVec2::MAX, IVec2::MIN), |(lo, hi), c| (lo.min(c.grid_pos), hi.max(c.grid_pos)));
     for cell in hull_cells {
         let health = cell.material.health_multiplier() * 100.0 * health_mult;
         let radiation_shielding = cell.material.radiation_shielding();
@@ -579,7 +588,13 @@ fn spawn_ai_hull(
         let x = cell.grid_pos.x as f32 * 66.0;
         let y = cell.grid_pos.y as f32 * 66.0 - 33.0;
 
-        let hull_color = hull_tint(cell.material);
+        // The outer plating wears the faction's paint (ai_ship::livery);
+        // what's inside keeps the bare metal.
+        let hull_color = if cell.layer == HullLayer::Outer {
+            paint.paint(hull_tint(cell.material), paint.accent_at(cell.grid_pos, lo, hi))
+        } else {
+            hull_tint(cell.material)
+        };
 
         let hull_entity = commands.spawn((
             (Sprite {
