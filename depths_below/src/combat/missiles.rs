@@ -124,12 +124,13 @@ pub fn fire_missiles_system(
         &GlobalTransform, &FireGroup, &ChildOf,
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&ModuleTemperature>,
+        Option<&super::missile_design::MissileLoadout>,
     ), Without<DestroyedModule>>,
     // One query, not three: everything a missile may chase, and the lookup
     // for whatever is already locked. Bevy caps a system at 16 parameters
     // and this one was at the ceiling.
     target_query: Query<
-        (Entity, &Transform, Option<&Creature>),
+        (Entity, &Transform, Option<&Creature>, Option<&Velocity>),
         (Without<Ship>, Or<(With<crate::ai_ship::components::AiShip>, With<Creature>)>),
     >,
     machine_stats: Query<&crate::building::multiblock::components::MachineStats>,
@@ -166,13 +167,18 @@ pub fn fire_missiles_system(
     // by every launcher below.
     let candidates: Vec<(Entity, Vec2)> = target_query
         .iter()
-        .filter(|(_, _, creature)| creature.is_none_or(|c| c.health > 0.0))
-        .map(|(e, t, _)| (e, t.translation.truncate()))
+        .filter(|(_, _, creature, _)| creature.is_none_or(|c| c.health > 0.0))
+        .map(|(e, t, _, _)| (e, t.translation.truncate()))
         .collect();
 
-    for (entity, module, has_station, staffing, mut weapon, mut cooldown, global_transform, fire_group, parent, tuning, temp) in weapon_query.iter_mut() {
+    for (entity, module, has_station, staffing, mut weapon, mut cooldown, global_transform, fire_group, parent, tuning, temp, loadout) in weapon_query.iter_mut() {
         // A gun with nobody on it does not fire.
         if !crate::combat::weapon_is_crewed(has_station, staffing) {
+            if loadout.is_some() || super::missile_design::is_built_launcher(module.module_type) {
+                if super::gun_assembly::trace() && time.elapsed_secs() % 5.0 < time.delta_secs() {
+                    info!("MISSILE launcher {:?} unmanned", module.module_type);
+                }
+            }
             continue;
         }
         // Player ship only — see fire_weapons_system for why this matters:
@@ -181,9 +187,17 @@ pub fn fire_missiles_system(
         // player's own target selection.
         if parent.parent() != player_ship { continue; }
         // Only missile-type weapons
+        let built = super::missile_design::launcher_spec(module.module_type);
         if !matches!(module.module_type,
             ModuleType::HeavyMissile | ModuleType::GuidedMissile | ModuleType::ClusterRocket
-        ) { continue; }
+        ) && built.is_none() { continue; }
+        // A design too long for its launcher can't be loaded.
+        let design = built.map(|spec| {
+            let d = super::missile_design::design_of(module.module_type, loadout);
+            let s = super::missile_design::stats(&d, spec);
+            (d, s)
+        });
+        if design.as_ref().is_some_and(|(_, s)| s.parts > s.launcher.max_parts) { continue; }
 
         if !module.is_active { continue; }
 
@@ -257,7 +271,25 @@ pub fn fire_missiles_system(
         // every layout puts bow tubes at East and stern engines at West.
         // Without this the missile left 90 degrees off the tube it visibly
         // came out of.
-        let launch_dir = Vec2::from_angle(ship_physics.rotation + module.rotation.facing_angle());
+        let mut launch_dir = Vec2::from_angle(ship_physics.rotation + module.rotation.facing_angle());
+        // Where fire control wants a designed missile to go until its seeker
+        // takes over: where the target will be when it gets there.
+        let target_now = homing_target.and_then(|e| target_query.get(e).ok())
+            .map(|(_, t, _, v)| (t.translation.truncate(), v.map(|v| v.0).unwrap_or(Vec2::ZERO)));
+        let launch_aim = match (&design, target_now) {
+            (Some((_, s)), Some((at, vel))) => {
+                let tgo = weapon_pos.distance(at) / (s.top_speed * 0.8).max(600.0);
+                Some(at + vel * tgo)
+            }
+            (Some(_), None) => cursor_world.or(Some(weapon_pos + launch_dir * 3000.0)),
+            _ => None,
+        };
+        // A silo launches up out of the deck: the missile can go any way.
+        if module.module_type == ModuleType::VlsSilo {
+            if let Some(aim) = launch_aim {
+                launch_dir = (aim - weapon_pos).normalize_or(launch_dir);
+            }
+        }
 
         // Bay chain length is missile size — see MachineStats.
         let bay_count = machine_stats.get(entity)
@@ -287,7 +319,7 @@ pub fn fire_missiles_system(
             from_player: true,
         });
 
-        launch_missiles(&mut commands, &MissileLaunch {
+        let launch = MissileLaunch {
             weapon: entity,
             ship: player_ship,
             launch_cell: module.grid_position,
@@ -300,7 +332,11 @@ pub fn fire_missiles_system(
             damage: weapon.damage,
             bays: bay_count,
             thrust_mult: tuning.map(|t| t.velocity).unwrap_or(1.0),
-        });
+        };
+        match &design {
+            Some((d, s)) => launch_built(&mut commands, &launch, s, d.head, launch_aim.unwrap_or(weapon_pos + launch_dir * 3000.0), true),
+            None => { launch_missiles(&mut commands, &launch); }
+        }
 
         // (No launch notification. There was a yellow "Heavy missile
         // launched!" for every one of our own shots: two launchers on the
@@ -412,6 +448,81 @@ pub fn launch_missiles(commands: &mut Commands, l: &MissileLaunch) -> u32 {
         ));
     }
     volley
+}
+
+/// A missile built from a design (combat::missile_design): its numbers and
+/// what its seeker is doing. It flies on the same `MissileProjectile` as the
+/// fixed-list missiles; `move_missiles` and `check_missile_hits` read this
+/// for everything the design decides.
+#[derive(Component, Clone, Debug)]
+pub struct BuiltMissile {
+    pub stats: super::missile_design::MissileStats,
+    pub head: super::missile_design::MissileHead,
+    /// The seeker has the target.
+    pub locked: bool,
+    /// Where fire control sent it, until the seeker locks.
+    pub launch_aim: Vec2,
+    /// A command link's steering error, growing with distance from its ship.
+    pub wander: Vec2,
+    pub hp: f32,
+    /// Launched by the player: a command link follows the player's aim.
+    pub player: bool,
+}
+
+/// Put one designed missile in the air.
+pub fn launch_built(
+    commands: &mut Commands,
+    l: &MissileLaunch,
+    s: &super::missile_design::MissileStats,
+    head: super::missile_design::MissileHead,
+    launch_aim: Vec2,
+    player: bool,
+) {
+    use super::missile_design::MissileHead;
+    let dir = l.launch_dir;
+    let vel = dir * s.launcher.eject + l.ship_velocity;
+    let length = 16.0 + 16.0 * s.k.sqrt() + 3.0 * s.parts as f32;
+    if super::gun_assembly::trace() {
+        info!("MISSILE launched from {:?}: {:?} seeker, target {:?}, {:.0} u/s top, aiming {:.0} u off", l.module_type, head, l.target, s.top_speed, l.muzzle.distance(launch_aim));
+    }
+    commands.spawn((
+        (Sprite {
+                color: Color::srgb(0.78, 0.8, 0.84),
+                custom_size: Some(Vec2::new(length, 6.0 + 6.0 * s.k.sqrt())),
+                ..default()
+            }, Transform {
+                translation: Vec3::new(l.muzzle.x, l.muzzle.y, 0.5),
+                rotation: Quat::from_rotation_z(dir.y.atan2(dir.x)),
+                ..default()
+            }),
+        MissileProjectile {
+            damage: s.he_damage,
+            target: if head == MissileHead::DumbNose { None } else { l.target },
+            burn_fuel: s.burn_s,
+            // A designed missile's agility is its fins and its age, not a
+            // budget it spends.
+            reserve_fuel: f32::MAX,
+            thrust: s.accel,
+            max_lateral: s.lateral,
+            arm_distance: 80.0,
+            blast_radius: s.he_radius.max(s.frag_radius).max(60.0),
+            owner: l.weapon,
+            eject_time: s.launcher.popup,
+            launch_dir: dir,
+            life: s.life_s,
+            terminal_range: 0.0,
+            prev_pos: l.muzzle,
+            owner_ship: Some(l.ship),
+            launch_cell: l.launch_cell,
+            launch_axis: l.launch_axis,
+            ..default()
+        },
+        BuiltMissile { stats: *s, head, locked: head == MissileHead::CommandLink, launch_aim, wander: Vec2::ZERO, hp: s.toughness, player },
+        MissileTrail::default(),
+        Velocity(vel),
+        GravityAffected { mass: 1.0 + s.mass_t },
+        GravityForce::default(),
+    ));
 }
 
 /// Per-missile exhaust bookkeeping.
@@ -565,13 +676,20 @@ pub fn spawn_missile_trails(
 pub fn move_missiles(
     time: Res<Time>,
     mut commands: Commands,
-    mut missile_query: Query<(Entity, &mut MissileProjectile, &mut Transform, &mut Velocity)>,
+    mut missile_query: Query<(Entity, &mut MissileProjectile, &mut Transform, &mut Velocity, Option<&mut BuiltMissile>)>,
     target_query: Query<(&Transform, Option<&Velocity>), Without<MissileProjectile>>,
     hulls: Query<(&GlobalTransform, &crate::building::ShipGrid)>,
+    // What a designed missile's seeker sees on its target.
+    seeing: (
+        Query<(Option<&crate::combat::shields::ShipShield>, Option<&Children>), Without<MissileProjectile>>,
+        Query<(&Module, &GlobalTransform), Without<DestroyedModule>>,
+        Res<super::turret_deck::PlayerAimPoint>,
+    ),
 ) {
     let dt = time.delta_secs();
+    let (ships_seen, blocks_seen, player_aim) = (&seeing.0, &seeing.1, &seeing.2);
 
-    for (entity, mut missile, mut transform, mut velocity) in missile_query.iter_mut() {
+    for (entity, mut missile, mut transform, mut velocity, built) in missile_query.iter_mut() {
         let pos = transform.translation.truncate();
         missile.prev_pos = pos;
 
@@ -609,7 +727,15 @@ pub fn move_missiles(
 
         // === EJECT: gas charge only. Motor cold, seeker caged. ===
         let ejecting = missile.eject_time > 0.0;
-        if ejecting {
+        if let Some(mut built) = built {
+            if ejecting {
+                missile.eject_time -= dt;
+            } else if fly_built(&mut missile, &mut built, &mut velocity, pos, dt, in_channel, &target_query, ships_seen, blocks_seen, player_aim) {
+                // Stalled: out of speed and out of the fight.
+                commands.entity(entity).try_despawn();
+                continue;
+            }
+        } else if ejecting {
             missile.eject_time -= dt;
         } else {
             // === BURN: motor lit. ===
@@ -695,6 +821,108 @@ pub fn move_missiles(
             transform.rotation = Quat::from_rotation_z(facing.y.atan2(facing.x));
         }
     }
+}
+
+/// Where a designed missile's seeker would put it on `target`: a heat seeker
+/// on the engines, anything else on the middle of the ship.
+fn seeker_point(
+    head: super::missile_design::MissileHead,
+    target: Entity,
+    target_tf: &Transform,
+    ships: &Query<(Option<&crate::combat::shields::ShipShield>, Option<&Children>), Without<MissileProjectile>>,
+    blocks: &Query<(&Module, &GlobalTransform), Without<DestroyedModule>>,
+) -> Vec2 {
+    let Ok((shield, children)) = ships.get(target) else { return target_tf.translation.truncate() };
+    if head == super::missile_design::MissileHead::Heat {
+        let (mut sum, mut n) = (Vec2::ZERO, 0.0);
+        for c in children.into_iter().flatten() {
+            if let Ok((m, gt)) = blocks.get(*c) {
+                if m.health > 0.0 && m.module_type.category() == crate::components::ModuleCategory::Propulsion {
+                    sum += gt.translation().truncate();
+                    n += 1.0;
+                }
+            }
+        }
+        if n > 0.0 {
+            return sum / n;
+        }
+    }
+    shield.map(|s| s.world_center(target_tf)).unwrap_or(target_tf.translation.truncate())
+}
+
+/// One frame of a designed missile under power and guidance. Returns true
+/// when it has stalled and should go.
+#[allow(clippy::too_many_arguments)]
+fn fly_built(
+    missile: &mut MissileProjectile,
+    built: &mut BuiltMissile,
+    velocity: &mut Velocity,
+    pos: Vec2,
+    dt: f32,
+    in_channel: bool,
+    targets: &Query<(&Transform, Option<&Velocity>), Without<MissileProjectile>>,
+    ships: &Query<(Option<&crate::combat::shields::ShipShield>, Option<&Children>), Without<MissileProjectile>>,
+    blocks: &Query<(&Module, &GlobalTransform), Without<DestroyedModule>>,
+    player_aim: &super::turret_deck::PlayerAimPoint,
+) -> bool {
+    use super::missile_design::{MissileHead, Seeker, MAX_SPEED, STALL_SPEED};
+    let s = built.stats;
+    let mut speed = velocity.0.length();
+    let mut heading = velocity.0.y.atan2(velocity.0.x);
+    let burning = missile.burn_fuel > 0.0;
+    if burning {
+        missile.burn_fuel -= dt;
+        speed = (speed + missile.thrust * dt).min(MAX_SPEED);
+    } else {
+        speed *= (-s.drag * dt).exp();
+        if speed < STALL_SPEED {
+            return true;
+        }
+    }
+    if built.head != MissileHead::DumbNose && !in_channel {
+        // What the seeker sees, and whether it has it.
+        let seen = missile.target.and_then(|t| targets.get(t).ok().map(|(tf, v)| (t, tf, v)));
+        let target_point = seen.map(|(t, tf, v)| (seeker_point(built.head, t, tf, ships, blocks), v.map(|v| v.0).unwrap_or(Vec2::ZERO)));
+        match (s.seeker, target_point) {
+            (Seeker::Heat { range, cone_deg } | Seeker::Radar { range, cone_deg }, Some((at, _))) => {
+                let off = Vec2::from_angle(heading).angle_to(at - pos).abs().to_degrees();
+                let dist = pos.distance(at);
+                if !built.locked && dist < range && off < cone_deg {
+                    built.locked = true;
+                } else if built.locked && off > cone_deg + 15.0 {
+                    // Overshot: lost it. Carry on the way it was going.
+                    built.locked = false;
+                    built.launch_aim = pos + Vec2::from_angle(heading) * 4000.0;
+                }
+            }
+            _ => {}
+        }
+        let mut aim = built.launch_aim;
+        if built.head == MissileHead::CommandLink {
+            // Your aim, if it's yours; the target, if it's an AI's.
+            let point = if built.player { player_aim.first.or(player_aim.then) } else { None }
+                .or(target_point.map(|(at, _)| at));
+            if let Some(p) = point {
+                // Looser the farther it has flown from the ship guiding it.
+                let spread = 30.0 + missile.traveled * 0.02;
+                built.wander += Vec2::new(rand::random::<f32>() - 0.5, rand::random::<f32>() - 0.5) * spread * dt * 3.0;
+                built.wander *= 0.98;
+                aim = p + built.wander;
+            }
+        } else if built.locked {
+            if let Some((at, vel)) = target_point {
+                let tgo = (pos.distance(at) / speed.max(500.0)).min(3.0);
+                aim = at + vel * tgo * 0.9;
+            }
+        }
+        let want = (aim - pos).to_angle();
+        let err = (want - heading + std::f32::consts::PI).rem_euclid(std::f32::consts::TAU) - std::f32::consts::PI;
+        let lateral = if burning { s.lateral_burning } else { s.lateral };
+        let cap = turn_ceiling(missile.age).min(lateral / speed.max(150.0));
+        heading += (err * 4.0).clamp(-cap, cap) * dt;
+    }
+    velocity.0 = Vec2::from_angle(heading) * speed;
+    false
 }
 
 /// Largest creature hit radius (Leviathan) — used to size the spatial grid query margin.

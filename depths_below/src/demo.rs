@@ -824,7 +824,7 @@ impl Plugin for DemoPlugin {
             app.add_systems(
                 PostUpdate,
                 (move |mut player: Query<(&mut Transform, &mut ShipPhysics, &mut crate::components::Velocity), (With<Ship>, Without<AiShip>)>,
-                       mut enemies: Query<&mut Transform, (With<AiShip>, Without<Ship>)>| {
+                       mut enemies: Query<(&mut Transform, Option<&mut crate::components::Velocity>), (With<AiShip>, Without<Ship>)>| {
                     for (mut t, mut p, mut v) in &mut player {
                         t.translation.x = 0.0;
                         t.translation.y = 0.0;
@@ -833,9 +833,13 @@ impl Plugin for DemoPlugin {
                         p.angular_velocity = 0.0;
                         v.0 = Vec2::ZERO;
                     }
-                    for mut t in &mut enemies {
+                    // Held still, velocity and all: a leading shot reads it.
+                    for (mut t, v) in &mut enemies {
                         t.translation.x = range;
                         t.translation.y = 0.0;
+                        if let Some(mut v) = v {
+                            v.0 = Vec2::ZERO;
+                        }
                     }
                 })
                 .before(bevy::transform::TransformSystems::Propagate),

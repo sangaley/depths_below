@@ -603,6 +603,7 @@ pub fn build_registry() -> ModuleRegistry {
     // --- LAUNCHERS FOR DESIGNED MISSILES (combat::missile_design) ---
     // Damage, range and fire rate here are only the starting figures: each
     // launcher's own missile design overwrites them (fit_missile_loadouts).
+    // Like a built gun's firing piece they need no crew of their own.
     defs.insert(ModuleType::LaunchPad, ModuleDef {
         name: "Launch Pad",
         description: "Launches one small missile you design: 120 mm, up to 4 parts. Cheap and quick to reload.",
@@ -622,7 +623,7 @@ pub fn build_registry() -> ModuleRegistry {
             weapon: Some(WeaponStats { damage: 60.0, range: 5200.0, fire_rate: 0.3, max_ammo: 12, power_cost: 10.0 }),
             ..Default::default()
         },
-        crew_station: true,
+        crew_station: false,
     });
     defs.insert(ModuleType::RailLauncher, ModuleDef {
         name: "Rail Launcher",
@@ -643,7 +644,7 @@ pub fn build_registry() -> ModuleRegistry {
             weapon: Some(WeaponStats { damage: 260.0, range: 6900.0, fire_rate: 0.15, max_ammo: 8, power_cost: 20.0 }),
             ..Default::default()
         },
-        crew_station: true,
+        crew_station: false,
     });
     defs.insert(ModuleType::VlsSilo, ModuleDef {
         name: "VLS Silo",
@@ -664,7 +665,7 @@ pub fn build_registry() -> ModuleRegistry {
             weapon: Some(WeaponStats { damage: 2000.0, range: 7200.0, fire_rate: 0.07, max_ammo: 6, power_cost: 35.0 }),
             ..Default::default()
         },
-        crew_station: true,
+        crew_station: false,
     });
 
     defs.insert(ModuleType::ClusterRocket, ModuleDef {
