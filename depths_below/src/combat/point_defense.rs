@@ -162,28 +162,41 @@ pub fn intercept_missiles(
     }
 }
 
+/// What one point defence hit takes off a designed missile's toughness.
+pub const PD_HIT: f32 = 25.0;
+
 /// Check if PD projectiles hit incoming missiles — destroy them.
 /// Uses the missile spatial grid to only distance-check missiles near each PD shot.
 pub fn pd_missile_collision(
     mut commands: Commands,
     proj_query: Query<(Entity, &PointDefenseRound, &Transform)>,
-    missile_query: Query<(&Transform, &MissileProjectile)>,
+    mut missile_query: Query<(&Transform, &MissileProjectile, Option<&mut super::missiles::BuiltMissile>)>,
     missile_grid: Res<crate::spatial::MissileGrid>,
 ) {
     for (proj_entity, pd, proj_transform) in proj_query.iter() {
         let proj_pos = proj_transform.translation.truncate();
 
-        for (missile_entity, _) in missile_grid.0.nearby(proj_pos, 20.0) {
-            let Ok((missile_transform, missile)) = missile_query.get(missile_entity) else { continue };
+        for (missile_entity, _) in missile_grid.0.nearby(proj_pos, 32.0) {
+            let Ok((missile_transform, missile, built)) = missile_query.get_mut(missile_entity) else { continue };
             // A battery does not shoot down its own salvo on the way out.
             if missile.owner_ship == Some(pd.ship) { continue; }
             let missile_pos = missile_transform.translation.truncate();
             let dist = proj_pos.distance(missile_pos);
+            // A designed missile's size makes it easier to hit, and its
+            // toughness lets it take a few (missile_design: 25 a hit).
+            let radius = built.as_ref().map_or(20.0, |b| 14.0 + 10.0 * b.stats.k.sqrt());
 
-            if dist < 20.0 {
+            if dist < radius {
+                commands.entity(proj_entity).try_despawn();
+                if let Some(mut b) = built {
+                    b.hp -= PD_HIT;
+                    if b.hp > 0.0 {
+                        spawn_hit_effect(&mut commands, missile_pos, Color::srgb(0.9, 0.9, 0.7), 8.0);
+                        break;
+                    }
+                }
                 // Missile destroyed by point defense!
                 commands.entity(missile_entity).try_despawn();
-                commands.entity(proj_entity).try_despawn();
 
                 // Small explosion
                 spawn_hit_effect(&mut commands, missile_pos, Color::srgb(1.0, 0.6, 0.2), 15.0);

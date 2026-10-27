@@ -467,6 +467,8 @@ pub struct BuiltMissile {
     pub hp: f32,
     /// Launched by the player: a command link follows the player's aim.
     pub player: bool,
+    /// The decoy it has been fooled into chasing (missile_defence).
+    pub decoy: Option<Entity>,
 }
 
 /// Put one designed missile in the air.
@@ -517,7 +519,7 @@ pub fn launch_built(
             launch_axis: l.launch_axis,
             ..default()
         },
-        BuiltMissile { stats: *s, head, locked: head == MissileHead::CommandLink, launch_aim, wander: Vec2::ZERO, hp: s.toughness, player },
+        BuiltMissile { stats: *s, head, locked: head == MissileHead::CommandLink, launch_aim, wander: Vec2::ZERO, hp: s.toughness, player, decoy: None },
         MissileTrail::default(),
         Velocity(vel),
         GravityAffected { mass: 1.0 + s.mass_t },
@@ -684,10 +686,11 @@ pub fn move_missiles(
         Query<(Option<&crate::combat::shields::ShipShield>, Option<&Children>), Without<MissileProjectile>>,
         Query<(&Module, &GlobalTransform), Without<DestroyedModule>>,
         Res<super::turret_deck::PlayerAimPoint>,
+        Query<&Transform, (With<super::missile_defence::MissileDecoy>, Without<MissileProjectile>)>,
     ),
 ) {
     let dt = time.delta_secs();
-    let (ships_seen, blocks_seen, player_aim) = (&seeing.0, &seeing.1, &seeing.2);
+    let (ships_seen, blocks_seen, player_aim, decoys) = (&seeing.0, &seeing.1, &seeing.2, &seeing.3);
 
     for (entity, mut missile, mut transform, mut velocity, built) in missile_query.iter_mut() {
         let pos = transform.translation.truncate();
@@ -730,7 +733,7 @@ pub fn move_missiles(
         if let Some(mut built) = built {
             if ejecting {
                 missile.eject_time -= dt;
-            } else if fly_built(&mut missile, &mut built, &mut velocity, pos, dt, in_channel, &target_query, ships_seen, blocks_seen, player_aim) {
+            } else if fly_built(&mut missile, &mut built, &mut velocity, pos, dt, in_channel, &target_query, ships_seen, blocks_seen, player_aim, decoys) {
                 // Stalled: out of speed and out of the fight.
                 commands.entity(entity).try_despawn();
                 continue;
@@ -823,6 +826,114 @@ pub fn move_missiles(
     }
 }
 
+/// What a block can take from a warhead: health off a module or hull plate,
+/// and how much it actually lost.
+fn take(
+    e: Entity,
+    amount: f32,
+    modules: &mut Query<(&mut Module, &GlobalTransform), Without<DestroyedModule>>,
+    hulls: &mut Query<(&mut HullSegment, &GlobalTransform), Without<HullDestroyed>>,
+) -> f32 {
+    if amount <= 0.0 {
+        return 0.0;
+    }
+    if let Ok((mut m, _)) = modules.get_mut(e) {
+        let dealt = amount.min(m.health);
+        m.health -= dealt;
+        return dealt;
+    }
+    if let Ok((mut h, _)) = hulls.get_mut(e) {
+        let dealt = amount.min(h.health);
+        h.health -= dealt;
+        return dealt;
+    }
+    0.0
+}
+
+/// A designed missile going off at `at` (combat::missile_design's rules):
+/// HE takes 70% off plate and all of it off what's inside; frag 30% off
+/// plate and 130% off what's inside and off weapon mounts; a shaped charge
+/// is a jet straight on through the blocks behind, losing 8% a block; EMP
+/// switches blocks off. A burst near the hull rather than on it is 85%
+/// against plate and wastes most of a shaped charge. Returns the damage done.
+#[allow(clippy::too_many_arguments)]
+fn burst_built(
+    commands: &mut Commands,
+    at: Vec2,
+    heading: Vec2,
+    s: &super::missile_design::MissileStats,
+    contact: Option<Entity>,
+    children: &Children,
+    modules: &mut Query<(&mut Module, &GlobalTransform), Without<DestroyedModule>>,
+    hulls: &mut Query<(&mut HullSegment, &GlobalTransform), Without<HullDestroyed>>,
+    blocks: &Query<&crate::building::Block>,
+    grid: &crate::building::ShipGrid,
+    ship_gt: &GlobalTransform,
+) -> f32 {
+    use crate::components::ModuleCategory;
+    let airburst = contact.is_none();
+    let mut total = 0.0;
+    // Where each block is and what it is: plate, a weapon mount, or inside.
+    let mut nearby: Vec<(Entity, f32, bool, bool)> = Vec::new();
+    let reach = s.he_radius.max(s.frag_radius).max(s.emp_radius);
+    for c in children.iter() {
+        let (pos, plate, mount) = if let Ok((m, gt)) = modules.get(c) {
+            let thick = blocks.get(c).map(|b| b.thickness).unwrap_or(0.0);
+            let cat = m.module_type.category();
+            (gt.translation().truncate(), thick > 0.0, matches!(cat, ModuleCategory::Weapons | ModuleCategory::Guns))
+        } else if let Ok((_, gt)) = hulls.get(c) {
+            (gt.translation().truncate(), true, false)
+        } else {
+            continue;
+        };
+        let d = pos.distance(at);
+        if d < reach {
+            nearby.push((c, d, plate, mount));
+        }
+    }
+    let plate_share = |base: f32| if airburst { base * 0.85 } else { base };
+    for &(e, d, plate, mount) in &nearby {
+        let mut dmg = 0.0;
+        if s.he_damage > 0.0 && d < s.he_radius {
+            dmg += s.he_damage * (1.0 - d / s.he_radius) * if plate { plate_share(0.7) } else { 1.0 };
+        }
+        if s.frag_damage > 0.0 && d < s.frag_radius {
+            let mul = if mount { 1.3 } else if plate { plate_share(0.3) } else { 1.3 };
+            dmg += s.frag_damage * (1.0 - d / s.frag_radius) * mul;
+        }
+        total += take(e, dmg, modules, hulls);
+        if s.emp_radius > 0.0 && d < s.emp_radius && modules.contains(e) {
+            commands.entity(e).try_insert(super::energy_weapons::IonDisabled { timer: super::missile_design::EMP_SECONDS });
+        }
+    }
+    if s.shaped_damage > 0.0 {
+        // The jet carries on along the missile's line, block after block.
+        let mut energy = s.shaped_damage * if airburst { 0.3 } else { 1.0 };
+        let mut seen: Vec<Entity> = Vec::new();
+        for step in 0..80 {
+            if energy < 5.0 {
+                break;
+            }
+            let p = at + heading * (step as f32 * 33.0);
+            let here = crate::building::world_to_cell(ship_gt, p);
+            let Some(e) = grid.get(IVec2::new(here.x.round() as i32, here.y.round() as i32)) else { continue };
+            if seen.contains(&e) {
+                continue;
+            }
+            seen.push(e);
+            let dealt = take(e, energy, modules, hulls);
+            total += dealt;
+            energy = (energy - dealt) * 0.92;
+        }
+    }
+    if s.he_damage + s.frag_damage + s.shaped_damage == 0.0 && s.emp_radius == 0.0 {
+        if let Some(e) = contact {
+            total += take(e, s.ram_damage * s.top_speed / 1000.0, modules, hulls);
+        }
+    }
+    total
+}
+
 /// Where a designed missile's seeker would put it on `target`: a heat seeker
 /// on the engines, anything else on the middle of the ship.
 fn seeker_point(
@@ -864,8 +975,22 @@ fn fly_built(
     ships: &Query<(Option<&crate::combat::shields::ShipShield>, Option<&Children>), Without<MissileProjectile>>,
     blocks: &Query<(&Module, &GlobalTransform), Without<DestroyedModule>>,
     player_aim: &super::turret_deck::PlayerAimPoint,
+    decoys: &Query<&Transform, (With<super::missile_defence::MissileDecoy>, Without<MissileProjectile>)>,
 ) -> bool {
     use super::missile_design::{MissileHead, Seeker, MAX_SPEED, STALL_SPEED};
+    // Fooled: it chases the decoy, and is spent when it gets there or the
+    // decoy burns out.
+    if let Some(d) = built.decoy {
+        match decoys.get(d) {
+            Ok(tf) if tf.translation.truncate().distance(pos) < 60.0 => return true,
+            Ok(_) => {}
+            Err(_) => {
+                built.decoy = None;
+                built.locked = false;
+                built.launch_aim = pos + velocity.0.normalize_or(Vec2::X) * 4000.0;
+            }
+        }
+    }
     let s = built.stats;
     let mut speed = velocity.0.length();
     let mut heading = velocity.0.y.atan2(velocity.0.x);
@@ -898,7 +1023,9 @@ fn fly_built(
             _ => {}
         }
         let mut aim = built.launch_aim;
-        if built.head == MissileHead::CommandLink {
+        if let Some(tf) = built.decoy.and_then(|d| decoys.get(d).ok()) {
+            aim = tf.translation.truncate();
+        } else if built.head == MissileHead::CommandLink {
             // Your aim, if it's yours; the target, if it's an AI's.
             let point = if built.player { player_aim.first.or(player_aim.then) } else { None }
                 .or(target_point.map(|(at, _)| at));
@@ -1010,7 +1137,7 @@ pub fn check_missile_hits(
     // 5-damage plain warhead the moment it reached the target's bubble, so
     // the disable never happened at all.
     missile_query: Query<
-        (Entity, &MissileProjectile, &Transform),
+        (Entity, &MissileProjectile, &Transform, Option<&BuiltMissile>),
         Without<super::energy_weapons::EmpWarhead>,
     >,
     mut creature_query: Query<(&Transform, &mut Creature), Without<Ship>>,
@@ -1038,7 +1165,7 @@ pub fn check_missile_hits(
         (With<Ship>, Without<crate::ai_ship::components::AiShip>),
     >,
 ) {
-    'missiles: for (missile_entity, missile, missile_transform) in missile_query.iter() {
+    'missiles: for (missile_entity, missile, missile_transform, built) in missile_query.iter() {
         // === HULLS ===
         //
         // Missiles are the exception to the rule that a round ignores the
@@ -1175,6 +1302,48 @@ pub fn check_missile_hits(
             if shield.is_up() && dist_to_ship < shield.radius && shield.covers_arc(missile_pos - center) {
                 shield.absorb(missile.damage);
                 spawn_explosion(&mut commands, &fx, missile_pos, missile.blast_radius * 0.7, Color::srgb(0.5, 0.8, 1.0));
+                commands.entity(missile_entity).try_despawn();
+                continue 'missiles;
+            }
+
+            // A designed missile's own fuse and warheads (missile_design).
+            if let Some(built) = built {
+                let Ok((ship_gt, grid)) = parent_hulls.get(ai_entity) else { continue };
+                let s = &built.stats;
+                let here = crate::building::world_to_cell(ship_gt, missile_pos);
+                let cell = IVec2::new(here.x.round() as i32, here.y.round() as i32);
+                let contact = grid.get(cell);
+                let fused = contact.is_some() || (s.proximity && dist_to_ship < shield.radius + s.fuse_radius && {
+                    let r = (s.fuse_radius / 66.0).ceil() as i32;
+                    (-r..=r).any(|dx| (-r..=r).any(|dy| {
+                        let c = cell + IVec2::new(dx, dy);
+                        grid.get(c).is_some()
+                            && ship_gt.transform_point(crate::building::grid_to_local(c).extend(0.0)).truncate().distance(missile_pos) < s.fuse_radius
+                    }))
+                });
+                if !fused { continue; }
+                let heading = (missile_pos - missile.prev_pos).normalize_or(missile.launch_dir);
+                let dealt = burst_built(
+                    &mut commands, missile_pos, heading, s, contact, children,
+                    &mut ai_module_query, &mut ai_hull_query, &block_query, grid, ship_gt,
+                );
+                let radius = s.he_radius.max(s.frag_radius).max(s.emp_radius).max(50.0);
+                let colour = if s.emp_radius > 0.0 && s.he_damage + s.frag_damage == 0.0 { Color::srgb(0.48, 0.66, 1.0) } else { Color::srgb(1.0, 0.5, 0.1) };
+                spawn_explosion(&mut commands, &fx, missile_pos, radius, colour);
+                if dealt > 0.0 {
+                    spawn_floating_damage(&mut commands, missile_pos, dealt, Color::srgb(1.0, 0.4, 0.1));
+                }
+                if super::gun_assembly::trace() {
+                    info!("MISSILE burst on {:?} ({}): {:.0} damage", ai_entity, if contact.is_some() { "contact" } else { "proximity" }, dealt);
+                }
+                ai_damage_events.write(crate::events::AiShipDamaged {
+                    target: ai_entity,
+                    source: crate::events::DamageSource::Explosion,
+                    amount: 0.0,
+                    position: Some(missile_pos),
+                    direction: None,
+                    attacker: owner_ship,
+                });
                 commands.entity(missile_entity).try_despawn();
                 continue 'missiles;
             }

@@ -29,6 +29,7 @@ pub mod gun_math;
 pub mod shell;
 pub mod gun_design;
 pub mod missile_design;
+pub mod missile_defence;
 pub mod gun_assembly;
 pub mod turret_deck;
 
@@ -497,6 +498,8 @@ impl Plugin for CombatPlugin {
                 turret_deck::measure_turrets,
                 turret_deck::traverse_turrets,
             ).chain())
+            .add_systems(Update, (missile_defence::throw_decoys, missile_defence::seduce_seekers, missile_defence::age_decoys).chain()
+                .after(missiles::move_missiles))
             .add_systems(Update, missile_design::fit_missile_loadouts
                 .before(crate::building::multiblock::enhancers::apply_weapon_enhancers))
             .add_systems(Update, (gun_assembly::assemble_guns, gun_assembly::run_gun_racks, gun_assembly::place_muzzles, gun_assembly::flash_down_hoists).chain()
