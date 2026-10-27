@@ -370,6 +370,7 @@ mod rebuild_crew_tests {
             .add_message::<PlaceHullRequest>()
             .add_message::<PlaceModuleRequest>()
             .add_message::<ShowNotification>()
+            .add_message::<crate::combat::turret_deck::RebuildTurretPlate>()
             .add_systems(Update, crew_rebuild_system);
         app.insert_resource(RebuildQueue {
             ghosts: vec![GhostBlock {
