@@ -49,6 +49,10 @@ pub struct ShellStripRow;
 #[derive(Component)]
 pub struct ShellReadout;
 
+/// Saves the gun, parts and shell, as a design in designs/guns.
+#[derive(Component)]
+pub struct SaveGunDesignButton;
+
 /// What a click does to a design. Pure, so the rules are testable.
 pub fn apply(design: &mut ShellDesign, action: ShellAction) {
     match action {
@@ -188,6 +192,67 @@ pub fn spawn_shell_section(commands: &mut Commands, content: Entity, design: &Sh
         ))
         .id();
     commands.entity(content).add_child(readout);
+
+    let save = commands
+        .spawn((
+            Node {
+                padding: UiRect::new(Val::Px(10.0), Val::Px(10.0), Val::Px(4.0), Val::Px(4.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                margin: UiRect::top(Val::Px(6.0)),
+                align_self: AlignSelf::FlexStart,
+                ..default()
+            },
+            BackgroundColor(CHIP_BG),
+            BorderColor::all(ACCENT),
+            Interaction::None,
+            Button,
+            SaveGunDesignButton,
+            Tooltip {
+                text: "Save this gun -- its parts and its shell -- as a design.".into(),
+                detail: Some("Build mode: T picks a saved design, Enter stamps it.".into()),
+            },
+        ))
+        .id();
+    let save_label = commands
+        .spawn((
+            Text::new("SAVE AS GUN DESIGN"),
+            TextFont { font_size: FontSize::Px(11.0), ..default() },
+            TextColor(ACCENT),
+        ))
+        .id();
+    commands.entity(save).add_child(save_label);
+    commands.entity(content).add_child(save);
+}
+
+/// The save button: write the gun under the window to designs/guns.
+pub fn save_gun_design_click(
+    buttons: Query<&Interaction, (With<SaveGunDesignButton>, Changed<Interaction>)>,
+    windows: Query<&TuningWindow>,
+    guns: Query<&GunAssembly>,
+    shells: Query<&GunShell>,
+    modules: Query<&crate::components::Module>,
+    mut designs: ResMut<crate::combat::gun_design::GunDesigns>,
+    mut notifications: MessageWriter<crate::events::ShowNotification>,
+) {
+    if !buttons.iter().any(|i| *i == Interaction::Pressed) {
+        return;
+    }
+    let Ok(tw) = windows.single() else { return };
+    let Ok(gun) = guns.get(tw.module_entity) else { return };
+    let blocks: Vec<crate::components::Module> = gun.members.iter().filter_map(|e| modules.get(*e).ok().cloned()).collect();
+    let shell = shells.get(tw.module_entity).ok().map(|s| s.0.clone());
+    let head = shell.as_ref().map(|s| s.head).unwrap_or_default();
+    let name = format!("{:.0} mm {}", gun.stats.gauge_mm, head.name());
+    let Some(design) = crate::combat::gun_design::GunDesign::capture(name, &blocks, shell) else { return };
+    let (message, kind) = match crate::combat::gun_design::write_gun_design(&design) {
+        Ok(path) => {
+            designs.0 = crate::combat::gun_design::read_gun_designs();
+            info!("Gun design saved to {:?}", path);
+            (format!("Saved gun design '{}' ({})", design.name, path.display()), crate::events::NotificationType::Success)
+        }
+        Err(e) => (format!("Couldn't save the gun design: {e}"), crate::events::NotificationType::Danger),
+    };
+    notifications.write(crate::events::ShowNotification { message, notification_type: kind, duration: 3.5 });
 }
 
 fn fill_strip(commands: &mut Commands, strip: Entity, design: &ShellDesign) {
@@ -346,6 +411,42 @@ mod shell_designer_tests {
         let shell = app.world().get::<GunShell>(fp).expect("the gun has a designed shell now");
         assert_eq!(shell.0.head, ShellHead::He);
         assert_eq!(shell.0.casings, 2, "the rest of the default design kept");
+    }
+
+    #[test]
+    fn the_save_button_writes_the_gun_and_its_shell_as_a_design() {
+        use crate::combat::gun_design::{read_gun_designs, GunDesigns};
+        use crate::components::{Module, ModuleType, Rotation};
+        let dir = std::env::temp_dir().join(format!("depths_gun_designs_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::env::set_var("DEPTHS_GUN_DESIGN_DIR", &dir);
+
+        let mut app = App::new();
+        app.add_message::<crate::events::ShowNotification>();
+        app.init_resource::<GunDesigns>();
+        app.add_systems(Update, save_gun_design_click);
+        let m = |t, x, y| Module {
+            module_type: t, health: 1.0, max_health: 1.0, power_consumption: 0.0, power_generation: 0.0,
+            is_active: true, grid_position: IVec2::new(x, y), size: IVec2::ONE, rotation: Rotation::South,
+        };
+        let barrel = app.world_mut().spawn(m(ModuleType::GunBarrel, 3, 2)).id();
+        let fp = app.world_mut().spawn(m(ModuleType::FiringPiece, 3, 3)).id();
+        let shell = ShellDesign { head: ShellHead::He, ..default() };
+        app.world_mut().entity_mut(fp).insert((
+            GunAssembly { members: vec![fp, barrel], ..default() },
+            GunShell(shell.clone()),
+        ));
+        app.world_mut().spawn(TuningWindow { module_entity: fp, module_type: ModuleType::FiringPiece });
+        app.world_mut().spawn((SaveGunDesignButton, Interaction::Pressed));
+        app.update();
+
+        let saved = read_gun_designs();
+        std::env::remove_var("DEPTHS_GUN_DESIGN_DIR");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].shell, Some(shell));
+        assert!(saved[0].parts.iter().any(|p| p.module_type == ModuleType::GunBarrel && p.offset == IVec2::new(1, 0)), "{:?}", saved[0].parts);
+        assert_eq!(app.world().resource::<GunDesigns>().0.len(), 1, "and the list knows about it");
     }
 
     #[test]

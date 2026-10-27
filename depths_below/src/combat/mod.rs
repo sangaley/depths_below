@@ -27,6 +27,7 @@ pub mod limits;
 pub mod impact;
 pub mod gun_math;
 pub mod shell;
+pub mod gun_design;
 pub mod gun_assembly;
 pub mod turret_deck;
 
@@ -484,6 +485,8 @@ impl Plugin for CombatPlugin {
             // tuning into the numbers it writes.
             .init_resource::<turret_deck::PlayerAimPoint>()
             .init_resource::<turret_deck::TurretShapes>()
+            .init_resource::<gun_design::GunDesigns>()
+            .add_systems(Startup, gun_design::load_gun_designs)
             .add_systems(Update, (
                 turret_deck::ensure_turret_bodies,
                 turret_deck::mount_pending_turret_blocks,

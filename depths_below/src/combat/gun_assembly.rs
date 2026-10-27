@@ -148,7 +148,15 @@ fn is_feedway(t: Option<ModuleType>) -> bool {
 /// the magazines shared out between them. Pure, so it can be tested without
 /// a world.
 pub fn assemble(modules: &[(Entity, Module)]) -> Vec<(Entity, GunAssembly)> {
-    let mut guns = assemble_parts(modules, &HashMap::new());
+    assemble_with_shells(modules, &HashMap::new())
+}
+
+/// `assemble`, with each firing piece's shell design.
+pub fn assemble_with_shells(
+    modules: &[(Entity, Module)],
+    shells: &HashMap<Entity, crate::combat::shell::ShellDesign>,
+) -> Vec<(Entity, GunAssembly)> {
+    let mut guns = assemble_parts(modules, shells);
     share_magazines(&mut guns);
     guns
 }

@@ -207,6 +207,7 @@ impl Plugin for UiPlugin {
                     windows::tuning::tuning_window_refresh,
                     windows::shell_designer::shell_designer_click,
                     windows::shell_designer::shell_designer_refresh,
+                    windows::shell_designer::save_gun_design_click,
                 ).run_if(in_state(GameState::StationDocked)),
             )
             .add_systems(OnExit(GameState::StationDocked), windows::tuning::despawn_tuning_windows)
