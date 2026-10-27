@@ -73,6 +73,8 @@ pub fn ai_weapon_fire_system(
         // (apply_module_extras on spawn); nothing ever read it at fire time,
         // so every AI shot resolved as unspecialised regardless.
         Option<&crate::building::customization::tuning::SelectedAmmo>,
+        // A launcher's missile design (combat::missile_design).
+        Option<&crate::combat::missile_design::MissileLoadout>,
     )>,
     player_query: Query<(Entity, &Transform), With<Ship>>,
     target_transform_query: Query<&Transform>,
@@ -220,7 +222,7 @@ pub fn ai_weapon_fire_system(
             .collect();
         for child in guns {
             let gun = assemblies.get(child).ok();
-            let Ok((mut weapon, mut cooldown, module, ammo_storage, _owned, eff, weapon_gt, mount, loaded)) =
+            let Ok((mut weapon, mut cooldown, module, ammo_storage, _owned, eff, weapon_gt, mount, loaded, missile)) =
                 weapon_query.get_mut(child)
             else {
                 continue;
@@ -263,7 +265,9 @@ pub fn ai_weapon_fire_system(
             let to_target = aim_base - muzzle;
             // A built gun bears where its barrel points: a spinal gun along
             // the hull, a turret gun wherever its turret has turned.
-            let bears = match gun.and_then(|(_, m)| m.copied()) {
+            // A silo launches up out of the deck: it bears on anything.
+            let silo = module.module_type == ModuleType::VlsSilo;
+            let bears = silo || match gun.and_then(|(_, m)| m.copied()) {
                 Some(m) => m.dir.dot(to_target.normalize_or_zero()) >= (mount.firing_arc / 2.0).to_radians().cos(),
                 None => crate::combat::is_in_firing_arc(
                     ai_transform.rotation.to_euler(EulerRot::ZYX).0,
@@ -336,6 +340,31 @@ pub fn ai_weapon_fire_system(
             // tubes routed through the legacy straight-line path, so none of
             // the eject, guidance, channel or collision behaviour applied to
             // anything an enemy fired.
+            // A designed missile: the launcher's own design, led onto the
+            // target the way the player's fire control does it.
+            if let Some(spec) = crate::combat::missile_design::launcher_spec(module.module_type) {
+                let design = crate::combat::missile_design::design_of(module.module_type, missile);
+                let s = crate::combat::missile_design::stats(&design, spec);
+                let tgo = muzzle.distance(aim_base) / (s.top_speed * 0.8).max(600.0);
+                let launch_aim = aim_base + target_vel * tgo;
+                let facing = Vec2::from_angle(ai_transform.rotation.to_euler(EulerRot::ZYX).0 + module.rotation.facing_angle());
+                let launch_dir = if silo { (launch_aim - muzzle).normalize_or(facing) } else { facing };
+                crate::combat::missiles::launch_built(&mut commands, &crate::combat::missiles::MissileLaunch {
+                    weapon: child,
+                    ship: ai_entity,
+                    launch_cell: module.grid_position,
+                    launch_axis: module.rotation.facing_offset(),
+                    muzzle,
+                    launch_dir,
+                    ship_velocity: Vec2::ZERO,
+                    target: ai_target.entity,
+                    module_type: module.module_type,
+                    damage: weapon.damage,
+                    bays: 1,
+                    thrust_mult: 1.0,
+                }, &s, design.head, launch_aim, false);
+                continue;
+            }
             if crate::building::is_launcher(module.module_type) {
                 let bays = 1;
                 crate::combat::missiles::launch_missiles(&mut commands, &crate::combat::missiles::MissileLaunch {

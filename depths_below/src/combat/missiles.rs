@@ -850,12 +850,24 @@ fn take(
     0.0
 }
 
+/// Whether any block of this ship is within `radius` of `at` (`cell` is the
+/// cell `at` falls in): a proximity fuse's test.
+fn near_a_block(grid: &crate::building::ShipGrid, ship_gt: &GlobalTransform, cell: IVec2, at: Vec2, radius: f32) -> bool {
+    let r = (radius / 66.0).ceil() as i32;
+    (-r..=r).any(|dx| (-r..=r).any(|dy| {
+        let c = cell + IVec2::new(dx, dy);
+        grid.get(c).is_some()
+            && ship_gt.transform_point(crate::building::grid_to_local(c).extend(0.0)).truncate().distance(at) < radius
+    }))
+}
+
 /// A designed missile going off at `at` (combat::missile_design's rules):
 /// HE takes 70% off plate and all of it off what's inside; frag 30% off
 /// plate and 130% off what's inside and off weapon mounts; a shaped charge
 /// is a jet straight on through the blocks behind, losing 8% a block; EMP
 /// switches blocks off. A burst near the hull rather than on it is 85%
-/// against plate and wastes most of a shaped charge. Returns the damage done.
+/// against plate and wastes most of a shaped charge. Returns the damage done
+/// and the hull plates it touched.
 #[allow(clippy::too_many_arguments)]
 fn burst_built(
     commands: &mut Commands,
@@ -869,10 +881,11 @@ fn burst_built(
     blocks: &Query<&crate::building::Block>,
     grid: &crate::building::ShipGrid,
     ship_gt: &GlobalTransform,
-) -> f32 {
+) -> (f32, Vec<Entity>) {
     use crate::components::ModuleCategory;
     let airburst = contact.is_none();
     let mut total = 0.0;
+    let mut plates = Vec::new();
     // Where each block is and what it is: plate, a weapon mount, or inside.
     let mut nearby: Vec<(Entity, f32, bool, bool)> = Vec::new();
     let reach = s.he_radius.max(s.frag_radius).max(s.emp_radius);
@@ -901,6 +914,9 @@ fn burst_built(
             let mul = if mount { 1.3 } else if plate { plate_share(0.3) } else { 1.3 };
             dmg += s.frag_damage * (1.0 - d / s.frag_radius) * mul;
         }
+        if dmg > 0.0 && hulls.contains(e) {
+            plates.push(e);
+        }
         total += take(e, dmg, modules, hulls);
         if s.emp_radius > 0.0 && d < s.emp_radius && modules.contains(e) {
             commands.entity(e).try_insert(super::energy_weapons::IonDisabled { timer: super::missile_design::EMP_SECONDS });
@@ -921,6 +937,9 @@ fn burst_built(
                 continue;
             }
             seen.push(e);
+            if hulls.contains(e) {
+                plates.push(e);
+            }
             let dealt = take(e, energy, modules, hulls);
             total += dealt;
             energy = (energy - dealt) * 0.92;
@@ -931,7 +950,7 @@ fn burst_built(
             total += take(e, s.ram_damage * s.top_speed / 1000.0, modules, hulls);
         }
     }
-    total
+    (total, plates)
 }
 
 /// Where a designed missile's seeker would put it on `target`: a heat seeker
@@ -1156,12 +1175,19 @@ pub fn check_missile_hits(
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
     mut notifications: MessageWriter<ShowNotification>,
     parent_hulls: Query<(&GlobalTransform, &crate::building::ShipGrid)>,
-    mut ship_damage_events: MessageWriter<crate::events::ShipDamaged>,
+    // What a hit on the player's ship tells the rest of the game: the hit,
+    // and any hull it holed. One tuple: this system is at Bevy's ceiling.
+    mut player_hit: (
+        MessageWriter<crate::events::ShipDamaged>,
+        MessageWriter<crate::events::HullBreached>,
+        MessageWriter<crate::events::RoomDepressurized>,
+        Res<crate::building::rooms::RoomMap>,
+    ),
     // The player's shield rides along here (a 16th parameter would hit
     // Bevy's ceiling). Without<AiShip> is what lets this &mut ShipShield sit
     // beside ai_ship_query's.
     mut player_query: Query<
-        (Entity, &Transform, Option<&mut crate::combat::shields::ShipShield>),
+        (Entity, &Transform, Option<&mut crate::combat::shields::ShipShield>, Option<&Children>),
         (With<Ship>, Without<crate::ai_ship::components::AiShip>),
     >,
 ) {
@@ -1178,7 +1204,7 @@ pub fn check_missile_hits(
         //
         // Checked BEFORE arming: the whole point is the ones that never get
         // clear of the tube.
-        let player_ship = player_query.single().ok().map(|(e, _, _)| e);
+        let player_ship = player_query.single().ok().map(|(e, _, _, _)| e);
         let missile_pos_now = missile_transform.translation.truncate();
         for ship in [missile.owner_ship, player_ship].into_iter().flatten() {
             let Ok((ship_gt, grid)) = parent_hulls.get(ship) else { continue };
@@ -1191,7 +1217,7 @@ pub fn check_missile_hits(
             // missile is already inside a block. Without it an enemy missile
             // flew straight through a live shield into the hull.
             if !own && Some(ship) == player_ship {
-                if let Ok((_, ship_tf, Some(mut shield))) = player_query.single_mut() {
+                if let Ok((_, ship_tf, Some(mut shield), _)) = player_query.single_mut() {
                     let center = shield.world_center(ship_tf);
                     if shield.is_up()
                         && missile_pos_now.distance(center) < shield.radius
@@ -1207,6 +1233,49 @@ pub fn check_missile_hits(
 
             let here = crate::building::world_to_cell(ship_gt, missile_pos_now);
             let cell = IVec2::new(here.x.round() as i32, here.y.round() as i32);
+
+            // An enemy's designed missile on the player's ship: its own fuse
+            // and warheads, the same as one of ours on theirs.
+            if let Some(built) = built.filter(|_| !own) {
+                let s = &built.stats;
+                let contact = grid.get(cell);
+                let fused = contact.is_some() || (s.proximity && near_a_block(grid, ship_gt, cell, missile_pos_now, s.fuse_radius));
+                if !fused { continue; }
+                let Ok((_, _, _, Some(children))) = player_query.get(ship) else { continue };
+                let heading = (missile_pos_now - missile.prev_pos).normalize_or(missile.launch_dir);
+                let (dealt, hulls_hit) = burst_built(
+                    &mut commands, missile_pos_now, heading, s, contact, children,
+                    &mut ai_module_query, &mut ai_hull_query, &block_query, grid, ship_gt,
+                );
+                // Holes in the plating let the air out, as a gun's would.
+                for h in hulls_hit {
+                    let Ok((mut hull, _)) = ai_hull_query.get_mut(h) else { continue };
+                    let pct = if hull.max_health > 0.0 { hull.health / hull.max_health } else { 0.0 };
+                    if pct < 0.3 && !hull.is_depressurized {
+                        hull.is_depressurized = true;
+                        player_hit.1.write(crate::events::HullBreached { segment: h, severity: 1.0 - pct });
+                        if let Some(&room_id) = player_hit.3.tile_to_room.get(&hull.grid_position) {
+                            player_hit.2.write(crate::events::RoomDepressurized { room_id, severity: 1.0 - pct });
+                        }
+                    }
+                }
+                spawn_explosion(&mut commands, &fx, missile_pos_now, s.he_radius.max(s.frag_radius).max(s.emp_radius).max(50.0), Color::srgb(1.0, 0.45, 0.1));
+                player_hit.0.write(crate::events::ShipDamaged {
+                    source: crate::events::DamageSource::Explosion,
+                    amount: dealt,
+                    position: Some(missile_pos_now),
+                    direction: Some((missile.prev_pos - missile_pos_now).normalize_or_zero()),
+                    applied: true,
+                });
+                notifications.write(ShowNotification {
+                    message: format!("MISSILE IMPACT -{dealt:.0}"),
+                    notification_type: NotificationType::Danger,
+                    duration: 2.5,
+                });
+                commands.entity(missile_entity).try_despawn();
+                continue 'missiles;
+            }
+
             let Some(hit) = grid.get(cell) else { continue };
 
             if own {
@@ -1261,7 +1330,7 @@ pub fn check_missile_hits(
                 // Direction points from the ship TOWARD the attacker — the
                 // convention process_ship_damage walks inward along.
                 let from = (missile.prev_pos - missile_pos_now).normalize_or_zero();
-                ship_damage_events.write(crate::events::ShipDamaged {
+                player_hit.0.write(crate::events::ShipDamaged {
                     source: crate::events::DamageSource::Explosion,
                     // Real amount when it is an ENEMY warhead: the player's
                     // damage pipeline applies it, and nothing else does. Zero
@@ -1313,17 +1382,11 @@ pub fn check_missile_hits(
                 let here = crate::building::world_to_cell(ship_gt, missile_pos);
                 let cell = IVec2::new(here.x.round() as i32, here.y.round() as i32);
                 let contact = grid.get(cell);
-                let fused = contact.is_some() || (s.proximity && dist_to_ship < shield.radius + s.fuse_radius && {
-                    let r = (s.fuse_radius / 66.0).ceil() as i32;
-                    (-r..=r).any(|dx| (-r..=r).any(|dy| {
-                        let c = cell + IVec2::new(dx, dy);
-                        grid.get(c).is_some()
-                            && ship_gt.transform_point(crate::building::grid_to_local(c).extend(0.0)).truncate().distance(missile_pos) < s.fuse_radius
-                    }))
-                });
+                let fused = contact.is_some()
+                    || (s.proximity && dist_to_ship < shield.radius + s.fuse_radius && near_a_block(grid, ship_gt, cell, missile_pos, s.fuse_radius));
                 if !fused { continue; }
                 let heading = (missile_pos - missile.prev_pos).normalize_or(missile.launch_dir);
-                let dealt = burst_built(
+                let (dealt, _) = burst_built(
                     &mut commands, missile_pos, heading, s, contact, children,
                     &mut ai_module_query, &mut ai_hull_query, &block_query, grid, ship_gt,
                 );
@@ -1649,6 +1712,9 @@ mod missile_hits_blocks_tests {
         app.init_resource::<crate::spatial::CreatureGrid>();
         app.add_message::<crate::events::AiShipDamaged>();
         app.add_message::<crate::events::ShipDamaged>();
+        app.add_message::<crate::events::HullBreached>();
+        app.add_message::<crate::events::RoomDepressurized>();
+        app.init_resource::<crate::building::rooms::RoomMap>();
         app.add_message::<ShowNotification>();
         app.add_systems(Update, check_missile_hits);
 
@@ -1762,6 +1828,9 @@ mod missile_hits_blocks_tests {
         app.init_resource::<crate::spatial::CreatureGrid>();
         app.add_message::<crate::events::AiShipDamaged>();
         app.add_message::<crate::events::ShipDamaged>();
+        app.add_message::<crate::events::HullBreached>();
+        app.add_message::<crate::events::RoomDepressurized>();
+        app.init_resource::<crate::building::rooms::RoomMap>();
         app.add_message::<ShowNotification>();
         app.add_systems(Update, check_missile_hits);
 
