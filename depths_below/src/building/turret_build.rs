@@ -36,6 +36,12 @@ pub fn allowed_on_turret(t: ModuleType) -> bool {
         && !turret_deck::is_turret_ring(t)
 }
 
+/// A barrel reaches out past its turret's deck (and is no cover there --
+/// combat::new_projectiles); everything else stands on the deck.
+pub fn may_overhang(t: ModuleType) -> bool {
+    matches!(t, ModuleType::GunBarrel | ModuleType::MuzzleBrake)
+}
+
 /// One of the player's turrets, as build mode sees it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DeckUnder {
@@ -48,7 +54,7 @@ pub struct DeckUnder {
 
 /// The player's turret whose deck covers this hull cell -- the nearest, if
 /// two decks overlap.
-fn deck_under(cell: IVec2, decks: &[DeckUnder]) -> Option<DeckUnder> {
+pub(crate) fn deck_under(cell: IVec2, decks: &[DeckUnder]) -> Option<DeckUnder> {
     decks
         .iter()
         .filter(|d| on_deck(cell - d.centre, d.size))
@@ -56,11 +62,11 @@ fn deck_under(cell: IVec2, decks: &[DeckUnder]) -> Option<DeckUnder> {
         .copied()
 }
 
-fn on_deck(local: IVec2, size: i32) -> bool {
+pub(crate) fn on_deck(local: IVec2, size: i32) -> bool {
     local.as_vec2().length() <= turret_deck::deck_radius(size)
 }
 
-fn player_decks(
+pub(crate) fn player_decks(
     player: Entity,
     bodies: &Query<(Entity, &TurretBody, &ChildOf, Option<&Children>)>,
     rings: &Query<&Module, Without<DestroyedModule>>,
@@ -156,7 +162,7 @@ pub fn validate_turret_ghost(
         let def = registry.get(mt);
         let local = build_state.ghost_position - deck.centre;
         let cells = GridOccupancy::cells_for(local, def.size, build_state.rotation, footprints::footprint_override(mt));
-        if !cells.iter().all(|c| on_deck(*c, deck.size)) {
+        if !may_overhang(mt) && !cells.iter().all(|c| on_deck(*c, deck.size)) {
             return Err("Off the edge of the turret".into());
         }
         let taken = turret_cells(deck.body, &bodies, &parts);
@@ -177,7 +183,7 @@ pub fn validate_turret_ghost(
 }
 
 /// The turret-local cells a turret's parts stand on.
-fn turret_cells(
+pub(crate) fn turret_cells(
     body: Entity,
     bodies: &Query<(Entity, &TurretBody, &ChildOf, Option<&Children>)>,
     parts: &Query<&Module, Without<DestroyedModule>>,

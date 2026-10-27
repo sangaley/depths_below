@@ -28,23 +28,33 @@ pub fn template_input(
     mut place_events: MessageWriter<PlaceModuleRequest>,
     mut notifications: MessageWriter<ShowNotification>,
     current_build_state: Res<State<BuildState>>,
+    // Saved gun designs follow the built-in templates in the cycle
+    // (building::gun_stamp places them).
+    gun_designs: Res<crate::combat::gun_design::GunDesigns>,
 ) {
     if *current_build_state.get() == BuildState::Inactive { return; }
 
     let templates = weapon_templates();
-    if templates.is_empty() { return; }
+    let total = templates.len() + gun_designs.0.len();
+    if total == 0 { return; }
 
-    // T = cycle through templates
+    // T = cycle through templates, then saved gun designs
     if keyboard.just_pressed(KeyCode::KeyT) {
         let next = match template_state.selected_index {
             Some(i) => {
-                if i + 1 >= templates.len() { None } else { Some(i + 1) }
+                if i + 1 >= total { None } else { Some(i + 1) }
             }
             None => Some(0),
         };
         template_state.selected_index = next;
 
-        if let Some(idx) = next {
+        if let Some(design) = next.and_then(|i| i.checked_sub(templates.len())).and_then(|i| gun_designs.0.get(i)) {
+            notifications.write(ShowNotification {
+                message: format!("Gun design: {} ({}c) - {}. R turns it, Enter places it.", design.name, design.cost(&registry), design.summary()),
+                notification_type: NotificationType::Info,
+                duration: 4.0,
+            });
+        } else if let Some(idx) = next {
             let t = &templates[idx];
             notifications.write(ShowNotification {
                 message: format!("Template: {} ({}c) - {}", t.name, t.cost(&registry), t.description),
@@ -63,7 +73,8 @@ pub fn template_input(
     // Enter = place selected template at ghost position
     if keyboard.just_pressed(KeyCode::Enter) {
         let Some(idx) = template_state.selected_index else { return };
-        let template = &templates[idx];
+        // A saved gun design: building::gun_stamp's.
+        let Some(template) = templates.get(idx) else { return };
         let cost = template.cost(&registry);
 
         let origin = build_state.ghost_position;

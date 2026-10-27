@@ -26,6 +26,7 @@ pub mod registry;
 pub mod stat_calculator;
 pub mod blueprint;
 pub mod turret_build;
+pub mod gun_stamp;
 
 pub use registry::ModuleRegistry;
 pub use stat_calculator::StatCalculator;
@@ -172,6 +173,8 @@ impl Plugin for BuildingPlugin {
                     clipboard::paste_ghost_preview,
                     templates::template_input,
                     template_ghost::update_template_ghost,
+                    gun_stamp::stamp_gun_design,
+                    gun_stamp::gun_stamp_ghost,
                     template_ghost::chain_delete_system,
                 ).run_if(in_state(GameState::StationDocked)),
             );
