@@ -816,6 +816,31 @@ impl Plugin for DemoPlugin {
         if std::env::var("DEPTHS_ROT_TRACE").ok().as_deref() == Some("1") {
             app.add_systems(Last, rot_trace);
         }
+        // DEPTHS_TTK_RANGE=<units>: a firing range. The player ship sits at the
+        // origin, nose to +x, and every AI ship is held that far off along +x,
+        // so a time-to-kill run measures the guns -- not where the mouse
+        // happened to be or how far the enemy wandered.
+        if let Some(range) = std::env::var("DEPTHS_TTK_RANGE").ok().and_then(|v| v.parse::<f32>().ok()) {
+            app.add_systems(
+                PostUpdate,
+                (move |mut player: Query<(&mut Transform, &mut ShipPhysics, &mut crate::components::Velocity), (With<Ship>, Without<AiShip>)>,
+                       mut enemies: Query<&mut Transform, (With<AiShip>, Without<Ship>)>| {
+                    for (mut t, mut p, mut v) in &mut player {
+                        t.translation.x = 0.0;
+                        t.translation.y = 0.0;
+                        t.rotation = Quat::IDENTITY;
+                        p.rotation = 0.0;
+                        p.angular_velocity = 0.0;
+                        v.0 = Vec2::ZERO;
+                    }
+                    for mut t in &mut enemies {
+                        t.translation.x = range;
+                        t.translation.y = 0.0;
+                    }
+                })
+                .before(bevy::transform::TransformSystems::Propagate),
+            );
+        }
         // DEPTHS_SPEED_TRACE=1: once a second, the player ship's speed, turn
         // rate and mass -- for comparing how ships of different sizes fly.
         if std::env::var("DEPTHS_SPEED_TRACE").ok().as_deref() == Some("1") {

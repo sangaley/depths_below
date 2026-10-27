@@ -68,6 +68,35 @@ pub const MAX_BOUNCES: u8 = 2;
 /// lasts one frame. Capped to something you can follow.
 pub const RICOCHET_MAX_SPEED: f32 = 1500.0;
 
+/// Penetration a round spends on a block with no armour of its own (an
+/// unplated module): even the soft insides of a ship slow a round down.
+pub const PIERCE_COST_MIN: f32 = 5.0;
+/// Below this a round coming out the back of a block has nothing left worth
+/// carrying on with.
+pub const PIERCE_MIN_DAMAGE: f32 = 5.0;
+/// The share of a designed shell's blast a block at the very rim takes.
+pub const HE_EDGE: f32 = 0.4;
+
+/// What an armour-piercing round carries into the next block, if anything.
+///
+/// A block soaks up to the health it has left; what the round had beyond
+/// that -- the overkill -- keeps going, less what it loses in the hole, for
+/// as long as it has penetration left to spend on the plates in its way. A
+/// round that didn't kill the block still gets one layer further in (the
+/// rule AP always had), so a light gun keeps its second block.
+///
+/// `penetration` is what the round has left after paying for this block.
+pub fn pierce_onward(damage: f32, overkill: f32, penetration: f32, first: bool, falloff: f32) -> Option<f32> {
+    let carried = if overkill > 0.0 {
+        overkill
+    } else if first {
+        damage
+    } else {
+        0.0
+    } * (1.0 - falloff);
+    (carried >= PIERCE_MIN_DAMAGE && (first || penetration > 0.0)).then_some(carried)
+}
+
 /// Closest approach between point `p` and segment `a -> b`.
 /// Returns (distance, t) where t is 0 at `a` and 1 at `b`.
 ///
@@ -1105,6 +1134,11 @@ pub fn check_projectile_hits(
 
                 // Primary hit: damage the struck block, remember where.
                 let mut penetrated = false;
+                // What the round had beyond the block's health, and the
+                // armour it went through to get there: an AP round carries
+                // the first on, paying the second (see pierce_onward).
+                let mut overkill = 0.0;
+                let mut armour_met = 0.0;
                 let primary: Option<(Entity, Vec2)> = if let Ok((_, gt)) = ai_module_query.get(step.entity) {
                     // A cell holding armour resolves to the plate (hull wins
                     // the cell in update_ship_grids), so reaching a module
@@ -1112,7 +1146,9 @@ pub fn check_projectile_hits(
                     let hit_pos = gt.translation().truncate();
                     let impact = crate::combat::impact::resolve_impact(proj.damage, &block, surface.span, obl, Some(0.0));
                     penetrated = impact.outcome == crate::combat::impact::ImpactOutcome::Penetrated;
+                    armour_met = impact.effective_thickness;
                     ai_module_query.get_mut(step.entity).ok().map(|(mut module, _)| {
+                        overkill = (impact.to_block - module.health).max(0.0);
                         module.health = (module.health - impact.to_block).max(0.0);
                         spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.6, 0.2), 12.0);
                         // Biting hits spray back along the round's own path —
@@ -1141,7 +1177,9 @@ pub fn check_projectile_hits(
                     };
                     let impact = crate::combat::impact::resolve_impact(proj.damage, &block, surface.span, obl, Some(pass));
                     penetrated = impact.outcome == crate::combat::impact::ImpactOutcome::Penetrated;
+                    armour_met = impact.effective_thickness;
                     let hull_hit = ai_hull_query.get_mut(step.entity).ok().map(|(mut hull, gt)| {
+                        overkill = (impact.to_block - hull.health).max(0.0);
                         hull.health = (hull.health - impact.to_block).max(0.0);
                         let hit_pos = gt.translation().truncate();
                         spawn_hit_effect(&mut commands, hit_pos, Color::srgb(1.0, 0.5, 0.2), 16.0);
@@ -1278,17 +1316,32 @@ pub fn check_projectile_hits(
                 // this hit and flies on into the block behind.
                 let mut penetrates = false;
                 let behavior = proj.effect.or_else(|| proj.ammo.map(|a| a.hit_behavior(proj.damage)));
+                // A designed shell's blast weakens towards its rim; the old
+                // fixed-list rounds keep the flat blast they were tuned with.
+                let blast_edge = if proj.effect.is_some() { HE_EDGE } else { 1.0 };
                 if let Some(behavior) = behavior {
                     use crate::combat::ammo_types::AmmoHitBehavior::*;
                     match behavior {
                         Penetrate { damage_falloff, .. } => {
-                            // AP/APFSDS: continue into the next block with
-                            // reduced energy (one extra layer for now).
-                            if !proj.has_penetrated {
+                            // AP/APFSDS: whatever the block couldn't soak
+                            // goes on into the one behind it, block after
+                            // block, until the round runs out of damage or
+                            // of penetration. A heavy round bores a tunnel;
+                            // a light one stops a block or two in.
+                            let first = !proj.has_penetrated;
+                            proj.penetration -= armour_met.max(PIERCE_COST_MIN);
+                            if let Some(carried) = pierce_onward(proj.damage, overkill, proj.penetration, first, damage_falloff) {
                                 penetrates = true;
                                 proj.has_penetrated = true;
                                 proj.last_hit = Some(hit_entity);
-                                proj.damage *= 1.0 - damage_falloff;
+                                proj.damage = carried;
+                                // Go on from the block it just went through.
+                                // The next frame sweeps from where the round
+                                // is: left at the end of this frame's step, it
+                                // would skip whatever lay between here and
+                                // there.
+                                proj_transform.translation.x = hit_pos.x;
+                                proj_transform.translation.y = hit_pos.y;
                             }
                         }
                         PenetrateExplode { blast_damage, blast_radius, .. }
@@ -1296,7 +1349,7 @@ pub fn check_projectile_hits(
                             let radius = blast_radius * proj.caliber;
                             splash_blocks(
                                 &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
-                                hit_entity, hit_pos, radius, blast_damage,
+                                hit_entity, hit_pos, radius, blast_damage, blast_edge,
                             );
                             spawn_explosion(&mut commands, &fx, hit_pos, radius * IMPACT_BLAST_SCALE, Color::srgb(1.0, 0.5, 0.1));
                         }
@@ -1304,7 +1357,7 @@ pub fn check_projectile_hits(
                             let radius = fragment_radius * proj.caliber;
                             splash_blocks(
                                 &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
-                                hit_entity, hit_pos, radius, fragment_damage,
+                                hit_entity, hit_pos, radius, fragment_damage, blast_edge,
                             );
                             spawn_explosion(&mut commands, &fx, hit_pos, radius * IMPACT_BLAST_SCALE, Color::srgb(1.0, 0.9, 0.4));
                         }
@@ -1368,7 +1421,7 @@ pub fn check_projectile_hits(
                             let radius = crush_radius * proj.caliber;
                             splash_blocks(
                                 &mut commands, children, &mut ai_module_query, &mut ai_hull_query,
-                                hit_entity, hit_pos, radius, crush_damage,
+                                hit_entity, hit_pos, radius, crush_damage, 1.0,
                             );
                             spawn_explosion(&mut commands, &fx, hit_pos, radius * IMPACT_BLAST_SCALE, Color::srgb(0.4, 0.2, 0.6));
                         }
@@ -1575,18 +1628,24 @@ fn splash_blocks(
     center: Vec2,
     radius: f32,
     damage: f32,
+    edge: f32,
 ) {
+    // `edge`: the share of the damage a block at the rim takes (1.0: the
+    // same all the way out).
+    let at = |pos: Vec2| damage * (1.0 + (edge - 1.0) * (center.distance(pos) / radius.max(1.0)));
     for child in children.iter() {
         if child == exclude { continue; }
         if let Ok((mut module, gt)) = module_query.get_mut(child) {
             let pos = gt.translation().truncate();
             if center.distance(pos) < radius {
+                let damage = at(pos);
                 module.health = (module.health - damage).max(0.0);
                 spawn_floating_damage(commands, pos, damage, Color::srgb(1.0, 0.55, 0.2));
             }
         } else if let Ok((mut hull, gt)) = hull_query.get_mut(child) {
             let pos = gt.translation().truncate();
             if center.distance(pos) < radius {
+                let damage = at(pos);
                 hull.health = (hull.health - damage).max(0.0);
                 spawn_floating_damage(commands, pos, damage, Color::srgb(1.0, 0.45, 0.25));
             }
@@ -1885,5 +1944,44 @@ mod shared_hit_tests {
         let (mut app, _, plates) = setup(true);
         app.update();
         assert_eq!(app.world().get::<HullSegment>(plates[0]).unwrap().health, 100.0);
+    }
+}
+
+#[cfg(test)]
+mod pierce_tests {
+    use super::pierce_onward;
+
+    /// Blocks of 100 health, steel-plated (15), hit by the Halyard's 280 mm
+    /// round: 434 damage, ~142 penetration, 0.2 lost per hole.
+    fn blocks_through(mut damage: f32, mut pen: f32, health: f32, plate: f32) -> u32 {
+        let mut n = 0;
+        let mut first = true;
+        loop {
+            n += 1;
+            let overkill = (damage - health).max(0.0);
+            pen -= plate.max(super::PIERCE_COST_MIN);
+            match pierce_onward(damage, overkill, pen, first, 0.2) {
+                Some(d) if n < 50 => damage = d,
+                _ => return n,
+            }
+            first = false;
+        }
+    }
+
+    #[test]
+    fn a_heavy_round_bores_through_several_blocks() {
+        assert!(blocks_through(434.0, 142.0, 100.0, 15.0) >= 4);
+    }
+
+    #[test]
+    fn a_light_round_still_gets_its_second_block_and_no_more() {
+        assert_eq!(blocks_through(87.0, 47.0, 100.0, 15.0), 2);
+    }
+
+    #[test]
+    fn armour_stops_what_damage_alone_would_not() {
+        // The same round into 40-thick plate runs out of penetration first.
+        assert!(blocks_through(434.0, 142.0, 30.0, 40.0) <= 5);
+        assert!(blocks_through(434.0, 142.0, 30.0, 0.0) > 5);
     }
 }
