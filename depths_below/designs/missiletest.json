@@ -2301,7 +2301,18 @@
    "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
-   "extras": null
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Fuel",
+      "Frag",
+      "Frag",
+      "ProximityFuse"
+     ],
+     "head": "CommandLink"
+    }
+   }
   },
   {
    "module_type": "VlsSilo",

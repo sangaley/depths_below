@@ -199,6 +199,8 @@ fn spawn_tuning_window(
 ) {
     let title = if module_type == ModuleType::FiringPiece {
         "BUILT GUN - SHELL & TUNING".to_string()
+    } else if crate::combat::missile_design::is_built_launcher(module_type) {
+        format!("{} - MISSILE & TUNING", module_type.name()).to_uppercase()
     } else {
         format!("{:?} - WEAPON TUNING", module_type).to_uppercase()
     };
@@ -276,6 +278,10 @@ fn spawn_tuning_window(
     // SHELL DESIGNER — built guns design their shell instead of picking one.
     if module_type == ModuleType::FiringPiece {
         super::shell_designer::spawn_shell_section(commands, content, &Default::default());
+    }
+    // MISSILE DESIGNER — a launcher's missile is designed part by part.
+    if crate::combat::missile_design::is_built_launcher(module_type) {
+        super::missile_designer::spawn_missile_section(commands, content, &crate::combat::missile_design::MissileDesign::default_for(module_type));
     }
 
     // SLIDERS

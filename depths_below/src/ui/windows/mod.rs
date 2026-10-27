@@ -9,3 +9,4 @@ pub mod power_routing;
 
 pub mod tuning;
 pub mod shell_designer;
+pub mod missile_designer;
