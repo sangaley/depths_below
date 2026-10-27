@@ -332,10 +332,13 @@ pub fn is_blowout_panel(module_type: ModuleType) -> bool {
 }
 
 /// Whether a module is a missile launcher, and so subject to the silo rule.
+/// A VLS Silo isn't: it launches up out of the deck, so nothing beside it
+/// is in the way.
 pub fn is_launcher(module_type: ModuleType) -> bool {
     matches!(
         module_type,
         ModuleType::HeavyMissile | ModuleType::GuidedMissile | ModuleType::ClusterRocket
+            | ModuleType::LaunchPad | ModuleType::RailLauncher
     )
 }
 

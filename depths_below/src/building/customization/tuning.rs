@@ -93,6 +93,8 @@ pub fn is_tunable_weapon(module_type: ModuleType) -> bool {
         | ModuleType::HeavyMissile | ModuleType::GuidedMissile | ModuleType::ClusterRocket
         // A gun built from parts: its sliders sit on top of its parts and shell.
         | ModuleType::FiringPiece
+        // A launcher: its window is where its missile is designed.
+        | ModuleType::LaunchPad | ModuleType::RailLauncher | ModuleType::VlsSilo
     )
 }
 

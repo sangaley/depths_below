@@ -438,6 +438,9 @@ impl ModuleCategory {
                 ModuleType::HeavyMissile,
                 ModuleType::GuidedMissile,
                 ModuleType::ClusterRocket,
+                ModuleType::LaunchPad,
+                ModuleType::RailLauncher,
+                ModuleType::VlsSilo,
                 ModuleType::MiningDrill,
                 ModuleType::TractorBeam,
                 ModuleType::EMPPulse,
@@ -627,6 +630,11 @@ pub enum ModuleType {
     HeavyMissile,
     GuidedMissile,
     ClusterRocket,
+    // Launchers for missiles you design (combat::missile_design): the
+    // launcher sets the gauge and how many parts fit.
+    LaunchPad,    // 1x1, 120 mm, 4 parts
+    RailLauncher, // 1x3, 250 mm, 6 parts
+    VlsSilo,      // 2x2, 400 mm, 9 parts, fires any way
     // Weapons — Utility (3)
     MiningDrill,
     TractorBeam,
@@ -901,6 +909,7 @@ impl ModuleType {
             ModuleType::IonDisruptor |
             ModuleType::HeavyMissile | ModuleType::GuidedMissile |
             ModuleType::ClusterRocket |
+            ModuleType::LaunchPad | ModuleType::RailLauncher | ModuleType::VlsSilo |
             ModuleType::MiningDrill | ModuleType::TractorBeam |
             ModuleType::EMPPulse |
             ModuleType::AmmoAutoloader |
@@ -1042,6 +1051,9 @@ impl ModuleType {
             ModuleType::HeavyMissile => "Heavy Missile Launcher",
             ModuleType::GuidedMissile => "Guided Missile",
             ModuleType::ClusterRocket => "Cluster Rocket",
+            ModuleType::LaunchPad => "Launch Pad",
+            ModuleType::RailLauncher => "Rail Launcher",
+            ModuleType::VlsSilo => "VLS Silo",
             ModuleType::MiningDrill => "Mining Drill",
             ModuleType::TractorBeam => "Tractor Beam",
             ModuleType::EMPPulse => "EMP Pulse",

@@ -239,7 +239,8 @@ fn weapon_fired_audio(
                 (pick(&mut rng, &audio.shots).clone(), 0.5),
             ModuleType::Laser | ModuleType::PlasmaCaster | ModuleType::IonDisruptor | ModuleType::EMPPulse =>
                 (pick(&mut rng, &audio.lasers).clone(), 0.55),
-            ModuleType::HeavyMissile | ModuleType::GuidedMissile | ModuleType::ClusterRocket =>
+            ModuleType::HeavyMissile | ModuleType::GuidedMissile | ModuleType::ClusterRocket
+            | ModuleType::LaunchPad | ModuleType::RailLauncher | ModuleType::VlsSilo =>
                 (audio.rocket.clone(), 0.65),
             _ => continue,
         };

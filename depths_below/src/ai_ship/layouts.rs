@@ -78,6 +78,7 @@ impl AiShipLayout {
                     ammo: l.ammo.map(SelectedAmmo),
                     turret: None,
                     shell: None,
+                    missile: None,
                 });
                 BlueprintModule {
                     module_type: m.module_type,

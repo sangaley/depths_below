@@ -228,6 +228,7 @@ pub(crate) fn builtin_starter_design() -> crate::building::blueprint::Blueprint 
             ammo: ammo.map(crate::building::customization::tuning::SelectedAmmo),
             turret: None,
             shell: None,
+            missile: None,
         }),
     };
 
@@ -788,7 +789,9 @@ pub fn spawn_module(
         // pass resets every weapon from its BaseWeaponStats before folding
         // tuning in, and a weapon without one would compound its tuning
         // every frame.
-        if module_type == ModuleType::FiringPiece {
+        // A launcher's likewise come from its missile design
+        // (combat::missile_design::fit_missile_loadouts).
+        if module_type == ModuleType::FiringPiece || crate::combat::missile_design::is_built_launcher(module_type) {
             if let CompanionData::Weapon { damage, range, fire_rate, ammo, .. } = &def.companion {
                 commands.entity(module_entity).insert(crate::building::multiblock::components::BaseWeaponStats {
                     damage: *damage,

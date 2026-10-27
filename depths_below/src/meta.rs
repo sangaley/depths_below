@@ -137,6 +137,7 @@ fn collect_save_data(
         Option<&crate::building::customization::tuning::SelectedAmmo>,
         Option<&crate::combat::turret_deck::OnTurret>,
         Option<&crate::combat::shell::GunShell>,
+        Option<&crate::combat::missile_design::MissileLoadout>,
     ), PlayerBlocks>,
     hull_query: &Query<(&HullSegment, &Transform), PlayerBlocks>,
     crew_query: &Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
@@ -164,7 +165,7 @@ fn collect_save_data(
     // Collect modules
     let modules: Vec<ModuleData> = module_query
         .iter()
-        .map(|(module, custom, tuning, selected_ammo, on_turret, shell)| {
+        .map(|(module, custom, tuning, selected_ammo, on_turret, shell, missile)| {
             let custom_data = custom.map(|c| CustomModuleData {
                 custom_name: c.custom_name.clone(),
                 subcomponents: Vec::new(),
@@ -181,6 +182,7 @@ fn collect_save_data(
                 selected_ammo: selected_ammo.map(|s| s.0),
                 turret: on_turret.map(|t| t.ring_cell),
                 shell: shell.map(|s| s.0.clone()),
+                missile: missile.map(|m| m.0.clone()),
             }
         })
         .collect();
@@ -336,6 +338,7 @@ fn handle_save_request(
         Option<&crate::building::customization::tuning::SelectedAmmo>,
         Option<&crate::combat::turret_deck::OnTurret>,
         Option<&crate::combat::shell::GunShell>,
+        Option<&crate::combat::missile_design::MissileLoadout>,
     ), PlayerBlocks>,
     // With the turrets standing on the ship: bundled, this system is at the cap.
     hull_and_turrets: (
@@ -397,6 +400,7 @@ fn handle_save_request(
                     selected_ammo: None,
                     turret: None,
                     shell: None,
+                    missile: None,
                 });
             }
         }
@@ -696,6 +700,9 @@ fn rebuild_entities_from_save(
         }
         if let Some(shell) = &module_data.shell {
             commands.entity(entity).insert(crate::combat::shell::GunShell(shell.clone()));
+        }
+        if let Some(missile) = &module_data.missile {
+            commands.entity(entity).insert(crate::combat::missile_design::MissileLoadout(missile.clone()));
         }
         if let Some(ring_cell) = module_data.turret {
             commands.entity(entity).insert(crate::combat::turret_deck::PendingTurretMount(ring_cell));

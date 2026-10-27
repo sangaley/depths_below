@@ -60,6 +60,7 @@ pub struct KeptSettings<'w, 's> {
     group: Query<'w, 's, &'static crate::combat::targeting::fire_groups::FireGroup>,
     ammo: Query<'w, 's, &'static crate::building::customization::tuning::SelectedAmmo>,
     shell: Query<'w, 's, &'static crate::combat::shell::GunShell>,
+    missile: Query<'w, 's, &'static crate::combat::missile_design::MissileLoadout>,
     turrets: Query<'w, 's, (&'static crate::combat::turret_deck::TurretBody, &'static ChildOf)>,
 }
 
@@ -71,6 +72,7 @@ impl KeptSettings<'_, '_> {
             ammo: self.ammo.get(e).ok().copied().filter(|a| a.0 != crate::combat::ammo_types::KineticAmmoType::AP),
             turret,
             shell: self.shell.get(e).ok().map(|s| s.0.clone()),
+            missile: self.missile.get(e).ok().map(|m| m.0.clone()),
         }
     }
 }

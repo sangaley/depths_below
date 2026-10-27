@@ -56,6 +56,9 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::IonDisruptor => "sprites/modules/ion_disruptor.png",
         // Missile weapons
         ModuleType::HeavyMissile => "sprites/modules/heavy_missile.png",
+        ModuleType::LaunchPad => "sprites/modules/launch_pad.png",
+        ModuleType::RailLauncher => "sprites/modules/rail_launcher.png",
+        ModuleType::VlsSilo => "sprites/modules/vls_silo.png",
         ModuleType::GuidedMissile => "sprites/modules/guided_missile.png",
         ModuleType::ClusterRocket => "sprites/modules/cluster_rocket.png",
         // Utility weapons
@@ -327,7 +330,8 @@ pub fn sprite_base_rotation(module_type: ModuleType) -> f32 {
         || matches!(module_type,
             ModuleType::Laser | ModuleType::PlasmaCaster | ModuleType::IonDisruptor
             | ModuleType::EMPPulse | ModuleType::HeavyMissile | ModuleType::GuidedMissile
-            | ModuleType::ClusterRocket | ModuleType::TractorBeam | ModuleType::SalvageArm);
+            | ModuleType::ClusterRocket | ModuleType::LaunchPad | ModuleType::RailLauncher
+            | ModuleType::VlsSilo | ModuleType::TractorBeam | ModuleType::SalvageArm);
     if is_engine {
         -std::f32::consts::PI
     } else if is_weapon {

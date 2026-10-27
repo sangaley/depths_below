@@ -670,6 +670,9 @@ fn ammo_hud_abbrev(module_type: ModuleType) -> &'static str {
         ModuleType::HeavyMissile => "HM",
         ModuleType::GuidedMissile => "GM",
         ModuleType::ClusterRocket => "CR",
+        ModuleType::LaunchPad => "LP",
+        ModuleType::RailLauncher => "RL",
+        ModuleType::VlsSilo => "VLS",
         ModuleType::EMPPulse => "EMP",
         _ => "WPN",
     }
@@ -1222,6 +1225,9 @@ fn weapon_rack_name(m: ModuleType) -> &'static str {
         ModuleType::HeavyMissile => "Heavy Missile",
         ModuleType::GuidedMissile => "Guided Missile",
         ModuleType::ClusterRocket => "Cluster Rocket",
+        ModuleType::LaunchPad => "Launch Pad",
+        ModuleType::RailLauncher => "Rail Launcher",
+        ModuleType::VlsSilo => "VLS Silo",
         ModuleType::EMPPulse => "EMP Pulse",
         _ => "Weapon",
     }

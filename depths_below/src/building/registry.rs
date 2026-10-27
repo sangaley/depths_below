@@ -600,6 +600,73 @@ pub fn build_registry() -> ModuleRegistry {
         crew_station: true,
     });
 
+    // --- LAUNCHERS FOR DESIGNED MISSILES (combat::missile_design) ---
+    // Damage, range and fire rate here are only the starting figures: each
+    // launcher's own missile design overwrites them (fit_missile_loadouts).
+    defs.insert(ModuleType::LaunchPad, ModuleDef {
+        name: "Launch Pad",
+        description: "Launches one small missile you design: 120 mm, up to 4 parts. Cheap and quick to reload.",
+        category: ModuleCategory::Weapons,
+        size: IVec2::new(1, 1),
+        health: 70.0,
+        power_generation: 0.0,
+        power_consumption: 10.0,
+        color: Color::srgb(0.75, 0.45, 0.25),
+        companion: CompanionData::Weapon {
+            damage: 60.0, range: 5200.0, fire_rate: 0.3, ammo: 12,
+            mount_type: MountType::Fixed, ammo_type: AmmoType::Missile,
+        },
+        customizable: true,
+        cost: 90,
+        base_stats: CalculatedStats {
+            weapon: Some(WeaponStats { damage: 60.0, range: 5200.0, fire_rate: 0.3, max_ammo: 12, power_cost: 10.0 }),
+            ..Default::default()
+        },
+        crew_station: true,
+    });
+    defs.insert(ModuleType::RailLauncher, ModuleDef {
+        name: "Rail Launcher",
+        description: "Launches a missile you design along its rail: 250 mm, up to 6 parts. Face it at the target.",
+        category: ModuleCategory::Weapons,
+        size: IVec2::new(1, 3),
+        health: 120.0,
+        power_generation: 0.0,
+        power_consumption: 20.0,
+        color: Color::srgb(0.75, 0.45, 0.25),
+        companion: CompanionData::Weapon {
+            damage: 260.0, range: 6900.0, fire_rate: 0.15, ammo: 8,
+            mount_type: MountType::Fixed, ammo_type: AmmoType::Missile,
+        },
+        customizable: true,
+        cost: 220,
+        base_stats: CalculatedStats {
+            weapon: Some(WeaponStats { damage: 260.0, range: 6900.0, fire_rate: 0.15, max_ammo: 8, power_cost: 20.0 }),
+            ..Default::default()
+        },
+        crew_station: true,
+    });
+    defs.insert(ModuleType::VlsSilo, ModuleDef {
+        name: "VLS Silo",
+        description: "Launches a big missile you design up out of the deck: 400 mm, up to 9 parts. Strikes in any direction, turns late, reloads slowly.",
+        category: ModuleCategory::Weapons,
+        size: IVec2::new(2, 2),
+        health: 220.0,
+        power_generation: 0.0,
+        power_consumption: 35.0,
+        color: Color::srgb(0.75, 0.45, 0.25),
+        companion: CompanionData::Weapon {
+            damage: 2000.0, range: 7200.0, fire_rate: 0.07, ammo: 6,
+            mount_type: MountType::Fixed, ammo_type: AmmoType::Missile,
+        },
+        customizable: true,
+        cost: 480,
+        base_stats: CalculatedStats {
+            weapon: Some(WeaponStats { damage: 2000.0, range: 7200.0, fire_rate: 0.07, max_ammo: 6, power_cost: 35.0 }),
+            ..Default::default()
+        },
+        crew_station: true,
+    });
+
     defs.insert(ModuleType::ClusterRocket, ModuleDef {
         name: "Cluster Rocket",
         description: "Fires a spread of unguided rockets. Area saturation. Quantity over quality.",

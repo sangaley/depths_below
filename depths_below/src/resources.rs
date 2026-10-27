@@ -278,6 +278,9 @@ pub struct ModuleData {
     /// A built gun's shell design (combat::shell), on its firing piece.
     #[serde(default)]
     pub shell: Option<crate::combat::shell::ShellDesign>,
+    /// A launcher's missile design (combat::missile_design).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub missile: Option<crate::combat::missile_design::MissileDesign>,
 }
 
 fn default_rotation() -> Rotation { Rotation::North }

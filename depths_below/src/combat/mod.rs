@@ -28,6 +28,7 @@ pub mod impact;
 pub mod gun_math;
 pub mod shell;
 pub mod gun_design;
+pub mod missile_design;
 pub mod gun_assembly;
 pub mod turret_deck;
 
@@ -496,6 +497,8 @@ impl Plugin for CombatPlugin {
                 turret_deck::measure_turrets,
                 turret_deck::traverse_turrets,
             ).chain())
+            .add_systems(Update, missile_design::fit_missile_loadouts
+                .before(crate::building::multiblock::enhancers::apply_weapon_enhancers))
             .add_systems(Update, (gun_assembly::assemble_guns, gun_assembly::run_gun_racks, gun_assembly::place_muzzles, gun_assembly::flash_down_hoists).chain()
                 .before(crate::building::multiblock::enhancers::apply_weapon_enhancers))
             // Player weapons: kinetic projectiles + missiles (new physics system)
