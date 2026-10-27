@@ -163,22 +163,69 @@ td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align:
 
   function deckRadius(size) { return size / 2 + 1.05; }
   function turretCentre(tu) { return [px(tu.centre[0]) + T / 2, py(tu.centre[1]) + T / 2]; }
-  function drawTurret(tu) {
-    var c = turretCentre(tu), R = deckRadius(tu.size) * T;
-    // Shadow first: the deck stands above the hull, lit from the upper left.
-    ctx.save(); ctx.fillStyle = "rgba(0,0,0,0.38)";
-    ctx.beginPath(); ctx.arc(c[0] + T * 0.22, c[1] + T * 0.3, R, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-    // The deck: one round plate, turning with the turret.
-    ctx.save(); ctx.translate(c[0], c[1]); ctx.rotate(-tu.angle);
-    ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.save(); ctx.clip();
-    var pl = img.plating;
-    for (var gx = -Math.ceil(R / T) - 1; gx <= Math.ceil(R / T); gx++) for (var gy = -Math.ceil(R / T) - 1; gy <= Math.ceil(R / T); gy++) {
-      if (pl && pl.width) ctx.drawImage(pl, gx * T - T / 2, gy * T - T / 2, T, T);
+  // A turret's deck, Cosmoteer-style: square plates on every cell within its
+  // reach (combat::turret_deck::deck_cells), and a 45-degree angle piece in
+  // each empty cell that has deck on two sides that meet, filling the half
+  // toward them -- which turns the staircase edge into straight chamfers.
+  var shapes = {};
+  function deckShape(size) {
+    if (shapes[size]) return shapes[size];
+    var r = deckRadius(size), span = Math.ceil(r) + 1, cells = new Set(), list = [], wedges = [], wedgeAt = new Map();
+    for (var x = -span; x <= span; x++) for (var y = -span; y <= span; y++) {
+      if (Math.hypot(x, y) <= r) { cells.add(key(x, y)); list.push([x, y]); }
     }
-    ctx.fillStyle = "rgba(120,160,215,0.16)"; ctx.fillRect(-R, -R, 2 * R, 2 * R);
-    ctx.restore();
-    ctx.lineWidth = 3; ctx.strokeStyle = "rgba(10,14,20,0.9)"; ctx.beginPath(); ctx.arc(0, 0, R - 1.5, 0, Math.PI * 2); ctx.stroke();
-    ctx.lineWidth = 1; ctx.strokeStyle = "rgba(190,210,235,0.35)"; ctx.beginPath(); ctx.arc(0, 0, R - 4, 0, Math.PI * 2); ctx.stroke();
+    for (var x2 = -span; x2 <= span; x2++) for (var y2 = -span; y2 <= span; y2++) {
+      if (cells.has(key(x2, y2))) continue;
+      var corners = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+      for (var i = 0; i < 4; i++) {
+        var dx = corners[i][0], dy = corners[i][1];
+        if (cells.has(key(x2 + dx, y2)) && cells.has(key(x2, y2 + dy))) {
+          var w = [x2, y2, dx, dy]; wedges.push(w); wedgeAt.set(key(x2, y2), w); break;
+        }
+      }
+    }
+    return (shapes[size] = { cells: cells, list: list, wedges: wedges, wedgeAt: wedgeAt });
+  }
+  // Turret-grid cell (x, y) to canvas, in the turret's own frame.
+  function tri(w) {
+    var x = w[0], y = w[1], dx = w[2], dy = w[3];
+    return [[x + dx / 2, y + dy / 2], [x + dx / 2, y - dy / 2], [x - dx / 2, y + dy / 2]].map(function (p) { return [p[0] * T, -p[1] * T]; });
+  }
+  function shapePath(sh) {
+    ctx.beginPath();
+    sh.list.forEach(function (c) { ctx.rect(c[0] * T - T / 2, -c[1] * T - T / 2, T, T); });
+    sh.wedges.forEach(function (w) { var t = tri(w); ctx.moveTo(t[0][0], t[0][1]); ctx.lineTo(t[1][0], t[1][1]); ctx.lineTo(t[2][0], t[2][1]); ctx.closePath(); });
+  }
+  function drawTurret(tu) {
+    var c = turretCentre(tu), sh = deckShape(tu.size), pl = img.plating;
+    // Shadow first: the deck stands above the hull, lit from the upper left.
+    ctx.save(); ctx.translate(c[0] + T * 0.22, c[1] + T * 0.3); ctx.rotate(-tu.angle);
+    ctx.fillStyle = "rgba(0,0,0,0.38)"; shapePath(sh); ctx.fill(); ctx.restore();
+    ctx.save(); ctx.translate(c[0], c[1]); ctx.rotate(-tu.angle);
+    // Plates, then angle pieces cut from the same plating.
+    sh.list.forEach(function (q) { if (pl && pl.width) ctx.drawImage(pl, q[0] * T - T / 2, -q[1] * T - T / 2, T, T); });
+    sh.wedges.forEach(function (w) {
+      var t = tri(w);
+      ctx.save(); ctx.beginPath(); ctx.moveTo(t[0][0], t[0][1]); ctx.lineTo(t[1][0], t[1][1]); ctx.lineTo(t[2][0], t[2][1]); ctx.closePath(); ctx.clip();
+      if (pl && pl.width) ctx.drawImage(pl, w[0] * T - T / 2, -w[1] * T - T / 2, T, T);
+      ctx.restore();
+    });
+    ctx.fillStyle = "rgba(120,160,215,0.16)"; shapePath(sh); ctx.fill();
+    // The rim: every plate edge that faces open space, and every angle face.
+    ctx.lineWidth = 2.5; ctx.strokeStyle = "rgba(10,14,20,0.9)"; ctx.beginPath();
+    sh.list.forEach(function (q) {
+      [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) {
+        var nx = q[0] + d[0], ny = q[1] + d[1];
+        if (sh.cells.has(key(nx, ny))) return;
+        var w = sh.wedgeAt.get(key(nx, ny));
+        if (w && ((nx + w[2] === q[0] && ny === q[1]) || (nx === q[0] && ny + w[3] === q[1]))) return;
+        var cx = q[0] * T, cy = -q[1] * T, h = T / 2;
+        if (d[0]) { ctx.moveTo(cx + d[0] * h, cy - h); ctx.lineTo(cx + d[0] * h, cy + h); }
+        else { ctx.moveTo(cx - h, cy - d[1] * h); ctx.lineTo(cx + h, cy - d[1] * h); }
+      });
+    });
+    sh.wedges.forEach(function (w) { var t = tri(w); ctx.moveTo(t[1][0], t[1][1]); ctx.lineTo(t[2][0], t[2][1]); });
+    ctx.stroke();
     // Its guns, in the turret's own grid.
     tu.guns.forEach(function (g) { g.forEach(function (p) { drawModule(p[0], p[1] * T, -p[2] * T, p[3], 1, 1); }); });
     ctx.restore();
@@ -205,9 +252,9 @@ td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align:
     if (!showTurrets) return null;
     for (var i = 0; i < S.turrets.length; i++) {
       var tu = S.turrets[i], c = turretCentre(tu), dx = wx - c[0], dy = wy - c[1];
-      if (Math.hypot(dx, dy) > deckRadius(tu.size) * T) continue;
       var a = tu.angle, lx = (dx * Math.cos(a) - dy * Math.sin(a)) / T, ly = -(dx * Math.sin(a) + dy * Math.cos(a)) / T;
-      var gx = Math.round(lx), gy = Math.round(ly);
+      var gx = Math.round(lx), gy = Math.round(ly), sh = deckShape(tu.size);
+      if (!sh.cells.has(key(gx, gy)) && !sh.wedgeAt.has(key(gx, gy))) continue;
       for (var g = 0; g < tu.guns.length; g++) for (var p = 0; p < tu.guns[g].length; p++) {
         var part = tu.guns[g][p];
         if (part[1] === gx && part[2] === gy) return { t: part[0], where: tu.label };
