@@ -107,6 +107,9 @@ pub fn intercept_missiles(
     // Each intercept weapon targets the closest threat
     for (module, mut weapon, mut cooldown, global_transform) in intercept_weapons.iter_mut() {
         if !module.is_active { continue; }
+        // A built gun on point defence fires its own shells from its own
+        // turret (fire_weapons_system), not these.
+        if module.module_type == ModuleType::FiringPiece { continue; }
         cooldown.timer.tick(time.delta());
         if !cooldown.timer.is_finished() { continue; }
         if weapon.ammo <= 0 { continue; }
@@ -152,6 +155,7 @@ pub fn intercept_missiles(
                 last_hit: None,
                 prev_pos: weapon_pos,
                 bounces: 0,
+                flak: None,
             },
             Velocity(direction * proj_speed),
             PointDefenseRound { ship: player_ship },
@@ -165,43 +169,74 @@ pub fn intercept_missiles(
 /// What one point defence hit takes off a designed missile's toughness.
 pub const PD_HIT: f32 = 25.0;
 
-/// Check if PD projectiles hit incoming missiles — destroy them.
-/// Uses the missile spatial grid to only distance-check missiles near each PD shot.
+/// Point defence rounds against missiles. A flak round (a shell with a
+/// proximity fuse) bursts when an enemy missile comes inside its fuse, and
+/// every enemy missile within the burst takes its flak damage; any other
+/// round has to hit one. A designed missile soaks hits up to its toughness
+/// (a bigger one is easier to hit); a fixed-list missile goes down to one.
+#[allow(clippy::type_complexity)]
 pub fn pd_missile_collision(
     mut commands: Commands,
-    proj_query: Query<(Entity, &PointDefenseRound, &Transform)>,
+    proj_query: Query<(Entity, &PointDefenseRound, &Projectile, &Transform)>,
     mut missile_query: Query<(&Transform, &MissileProjectile, Option<&mut super::missiles::BuiltMissile>)>,
     missile_grid: Res<crate::spatial::MissileGrid>,
 ) {
-    for (proj_entity, pd, proj_transform) in proj_query.iter() {
+    for (proj_entity, pd, proj, proj_transform) in proj_query.iter() {
         let proj_pos = proj_transform.translation.truncate();
+        let enemy = |m: &MissileProjectile| m.owner_ship != Some(pd.ship);
+
+        if let Some(flak) = proj.flak {
+            let fused = missile_grid.0.nearby(proj_pos, flak.fuse).any(|(e, _)| {
+                missile_query.get(e).is_ok_and(|(t, m, _)| enemy(m) && t.translation.truncate().distance(proj_pos) < flak.fuse)
+            });
+            if !fused { continue; }
+            commands.entity(proj_entity).try_despawn();
+            spawn_hit_effect(&mut commands, proj_pos, Color::srgb(1.0, 0.8, 0.45), flak.burst * 0.35);
+            let caught: Vec<Entity> = missile_grid.0.nearby(proj_pos, flak.burst).map(|(e, _)| e).collect();
+            for e in caught {
+                let Ok((t, m, built)) = missile_query.get_mut(e) else { continue };
+                if !enemy(m) || t.translation.truncate().distance(proj_pos) > flak.burst { continue; }
+                let at = t.translation.truncate();
+                if hurt_missile(built, flak.damage) {
+                    commands.entity(e).try_despawn();
+                    spawn_hit_effect(&mut commands, at, Color::srgb(1.0, 0.6, 0.2), 15.0);
+                    if super::gun_assembly::trace() {
+                        info!("FLAK downed a missile");
+                    }
+                }
+            }
+            continue;
+        }
 
         for (missile_entity, _) in missile_grid.0.nearby(proj_pos, 32.0) {
             let Ok((missile_transform, missile, built)) = missile_query.get_mut(missile_entity) else { continue };
             // A battery does not shoot down its own salvo on the way out.
-            if missile.owner_ship == Some(pd.ship) { continue; }
+            if !enemy(missile) { continue; }
             let missile_pos = missile_transform.translation.truncate();
-            let dist = proj_pos.distance(missile_pos);
-            // A designed missile's size makes it easier to hit, and its
-            // toughness lets it take a few (missile_design: 25 a hit).
             let radius = built.as_ref().map_or(20.0, |b| 14.0 + 10.0 * b.stats.k.sqrt());
-
-            if dist < radius {
-                commands.entity(proj_entity).try_despawn();
-                if let Some(mut b) = built {
-                    b.hp -= PD_HIT;
-                    if b.hp > 0.0 {
-                        spawn_hit_effect(&mut commands, missile_pos, Color::srgb(0.9, 0.9, 0.7), 8.0);
-                        break;
-                    }
-                }
-                // Missile destroyed by point defense!
+            if proj_pos.distance(missile_pos) >= radius { continue; }
+            commands.entity(proj_entity).try_despawn();
+            // A built gun's round does its own damage; the old PD rounds 25.
+            let damage = if proj.effect.is_some() { proj.damage } else { PD_HIT };
+            if hurt_missile(built, damage) {
                 commands.entity(missile_entity).try_despawn();
-
-                // Small explosion
                 spawn_hit_effect(&mut commands, missile_pos, Color::srgb(1.0, 0.6, 0.2), 15.0);
-                break;
+            } else {
+                spawn_hit_effect(&mut commands, missile_pos, Color::srgb(0.9, 0.9, 0.7), 8.0);
             }
+            break;
         }
+    }
+}
+
+/// Takes `damage` off a missile; true when it's down. A fixed-list missile
+/// has no toughness and goes down to anything.
+fn hurt_missile(built: Option<Mut<super::missiles::BuiltMissile>>, damage: f32) -> bool {
+    match built {
+        Some(mut b) => {
+            b.hp -= damage;
+            b.hp <= 0.0
+        }
+        None => true,
     }
 }

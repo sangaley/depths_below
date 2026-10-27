@@ -138,6 +138,7 @@ fn collect_save_data(
         Option<&crate::combat::turret_deck::OnTurret>,
         Option<&crate::combat::shell::GunShell>,
         Option<&crate::combat::missile_design::MissileLoadout>,
+        Has<crate::combat::targeting::fire_groups::InterceptMode>,
     ), PlayerBlocks>,
     hull_query: &Query<(&HullSegment, &Transform), PlayerBlocks>,
     crew_query: &Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
@@ -165,7 +166,7 @@ fn collect_save_data(
     // Collect modules
     let modules: Vec<ModuleData> = module_query
         .iter()
-        .map(|(module, custom, tuning, selected_ammo, on_turret, shell, missile)| {
+        .map(|(module, custom, tuning, selected_ammo, on_turret, shell, missile, point_defence)| {
             let custom_data = custom.map(|c| CustomModuleData {
                 custom_name: c.custom_name.clone(),
                 subcomponents: Vec::new(),
@@ -183,6 +184,7 @@ fn collect_save_data(
                 turret: on_turret.map(|t| t.ring_cell),
                 shell: shell.map(|s| s.0.clone()),
                 missile: missile.map(|m| m.0.clone()),
+                point_defence,
             }
         })
         .collect();
@@ -339,6 +341,7 @@ fn handle_save_request(
         Option<&crate::combat::turret_deck::OnTurret>,
         Option<&crate::combat::shell::GunShell>,
         Option<&crate::combat::missile_design::MissileLoadout>,
+        Has<crate::combat::targeting::fire_groups::InterceptMode>,
     ), PlayerBlocks>,
     // With the turrets standing on the ship: bundled, this system is at the cap.
     hull_and_turrets: (
@@ -401,6 +404,7 @@ fn handle_save_request(
                     turret: None,
                     shell: None,
                     missile: None,
+                    point_defence: false,
                 });
             }
         }
@@ -703,6 +707,9 @@ fn rebuild_entities_from_save(
         }
         if let Some(missile) = &module_data.missile {
             commands.entity(entity).insert(crate::combat::missile_design::MissileLoadout(missile.clone()));
+        }
+        if module_data.point_defence {
+            commands.entity(entity).insert(crate::combat::targeting::fire_groups::InterceptMode);
         }
         if let Some(ring_cell) = module_data.turret {
             commands.entity(entity).insert(crate::combat::turret_deck::PendingTurretMount(ring_cell));

@@ -281,6 +281,9 @@ pub struct ModuleData {
     /// A launcher's missile design (combat::missile_design).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub missile: Option<crate::combat::missile_design::MissileDesign>,
+    /// On point defence (combat::missile_defence).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub point_defence: bool,
 }
 
 fn default_rotation() -> Rotation { Rotation::North }

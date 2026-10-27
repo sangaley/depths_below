@@ -194,11 +194,14 @@ pub struct ModuleExtras {
     /// the launcher's default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub missile: Option<crate::combat::missile_design::MissileDesign>,
+    /// On point defence: shoots at incoming missiles (combat::missile_defence).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub point_defence: bool,
 }
 
 impl ModuleExtras {
     pub fn is_empty(&self) -> bool {
-        self.tuning.is_none() && self.fire_group.is_none() && self.ammo.is_none() && self.turret.is_none() && self.shell.is_none() && self.missile.is_none()
+        self.tuning.is_none() && self.fire_group.is_none() && self.ammo.is_none() && self.turret.is_none() && self.shell.is_none() && self.missile.is_none() && !self.point_defence
     }
 }
 
@@ -221,6 +224,9 @@ pub fn apply_module_extras(commands: &mut Commands, entity: Entity, extras: &Mod
     }
     if let Some(missile) = &extras.missile {
         commands.entity(entity).try_insert(crate::combat::missile_design::MissileLoadout(missile.clone()));
+    }
+    if extras.point_defence {
+        commands.entity(entity).try_insert(crate::combat::targeting::fire_groups::InterceptMode);
     }
 }
 
@@ -332,6 +338,7 @@ pub struct DesignCapture<'w, 's> {
     pub plate_query: Query<'w, 's, (), With<crate::combat::turret_deck::TurretPlate>>,
     pub shell_query: Query<'w, 's, &'static crate::combat::shell::GunShell>,
     pub missile_query: Query<'w, 's, &'static crate::combat::missile_design::MissileLoadout>,
+    pub pd_query: Query<'w, 's, (), With<crate::combat::targeting::fire_groups::InterceptMode>>,
 }
 
 impl DesignCapture<'_, '_> {
@@ -394,7 +401,8 @@ impl DesignCapture<'_, '_> {
                     .ok()
                     .map(|l| l.0.clone())
                     .filter(|d| *d != crate::combat::missile_design::MissileDesign::default_for(m.module_type));
-                let extras = ModuleExtras { tuning, fire_group, ammo, turret, shell, missile };
+                let point_defence = self.pd_query.contains(entity);
+                let extras = ModuleExtras { tuning, fire_group, ammo, turret, shell, missile, point_defence };
 
                 let (custom_name, subcomponents) = match self.custom_query.get(entity) {
                     Ok((custom, module_children)) => (

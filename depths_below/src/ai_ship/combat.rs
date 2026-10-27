@@ -75,6 +75,8 @@ pub fn ai_weapon_fire_system(
         Option<&crate::building::customization::tuning::SelectedAmmo>,
         // A launcher's missile design (combat::missile_design).
         Option<&crate::combat::missile_design::MissileLoadout>,
+        // On point defence: shoots at incoming missiles, nothing else.
+        Has<crate::combat::targeting::fire_groups::InterceptMode>,
     )>,
     player_query: Query<(Entity, &Transform), With<Ship>>,
     target_transform_query: Query<&Transform>,
@@ -95,9 +97,10 @@ pub fn ai_weapon_fire_system(
     built: (
         Query<&Children, With<crate::combat::turret_deck::TurretBody>>,
         Query<(&crate::combat::gun_assembly::GunAssembly, Option<&crate::combat::gun_assembly::GunMuzzle>)>,
+        Query<&crate::combat::turret_deck::TurretBody>,
     ),
 ) {
-    let (turret_decks, assemblies) = &built;
+    let (turret_decks, assemblies, turret_bodies) = &built;
     // DEPTHS_MOVETEST_ENEMY spawns a target dummy that's shot-free by
     // default (for testing movement/damage-model in isolation). Set
     // DEPTHS_MOVETEST_ENEMY_SHOOTS=1 too to let it fire back.
@@ -216,13 +219,18 @@ pub fn ai_weapon_fire_system(
         let dist_to_target = ai_pos.distance(centroid);
 
         // The hull's own weapons, then whatever stands on its turrets.
-        let guns: Vec<Entity> = children
+        let guns: Vec<(Entity, Option<Entity>)> = children
             .iter()
-            .chain(children.iter().filter_map(|c| turret_decks.get(c).ok()).flat_map(|t| t.iter()))
+            .map(|c| (c, None))
+            .chain(
+                children.iter()
+                    .filter_map(|t| turret_decks.get(t).ok().map(|deck| (t, deck)))
+                    .flat_map(|(t, deck)| deck.iter().map(move |g| (g, Some(t)))),
+            )
             .collect();
-        for child in guns {
+        for (child, turret) in guns {
             let gun = assemblies.get(child).ok();
-            let Ok((mut weapon, mut cooldown, module, ammo_storage, _owned, eff, weapon_gt, mount, loaded, missile)) =
+            let Ok((mut weapon, mut cooldown, module, ammo_storage, _owned, eff, weapon_gt, mount, loaded, missile, point_defence)) =
                 weapon_query.get_mut(child)
             else {
                 continue;
@@ -246,6 +254,29 @@ pub fn ai_weapon_fire_system(
             // Each gun shoots from where it actually is -- a built gun from
             // the end of its barrel...
             let muzzle = gun.and_then(|(_, m)| m.map(|m| m.world)).unwrap_or_else(|| weapon_gt.translation().truncate());
+
+            // On point defence: the missile its turret has engaged, if any,
+            // and never the ship (combat::missile_defence).
+            if point_defence && module.module_type == ModuleType::FiringPiece {
+                let Some(aim) = turret.and_then(|t| turret_bodies.get(t).ok()).filter(|b| b.pd_engaged).and_then(|b| b.aim) else { continue };
+                let Some((g, m)) = gun else { continue };
+                if m.is_some_and(|m| m.dir.dot((aim - muzzle).normalize_or_zero()) < (mount.firing_arc / 2.0).to_radians().cos()) {
+                    continue;
+                }
+                cooldown.timer.tick(time.delta());
+                if !cooldown.timer.is_finished() { continue; }
+                cooldown.timer.reset();
+                if !crate::combat::INFINITE_AMMO {
+                    weapon.ammo = weapon.ammo.saturating_sub(1);
+                }
+                let round = crate::combat::new_projectiles::spawn_ai_round(
+                    &mut commands, &asset_server, child, module.module_type, muzzle, aim,
+                    weapon.damage * efficiency, g.stats.velocity_mps * crate::combat::gun_assembly::GAME_SPEED_PER_MPS,
+                    weapon.range, ammo_storage.ammo_type, loaded.map(|a| a.0), Some(g),
+                );
+                commands.entity(round).insert(crate::combat::point_defense::PointDefenseRound { ship: ai_entity });
+                continue;
+            }
 
             // ...and is in range from there. Measured from the ship's centre
             // this was the same thing on a small hull, but a capital or a

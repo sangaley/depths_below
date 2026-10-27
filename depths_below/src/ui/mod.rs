@@ -209,6 +209,8 @@ impl Plugin for UiPlugin {
                     windows::shell_designer::shell_designer_refresh,
                     windows::shell_designer::save_gun_design_click,
                     windows::missile_designer::missile_designer_click,
+                    windows::shell_designer::point_defence_click,
+                    windows::shell_designer::point_defence_refresh,
                     windows::missile_designer::missile_designer_refresh,
                 ).run_if(in_state(GameState::StationDocked)),
             )

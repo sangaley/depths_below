@@ -229,6 +229,7 @@ pub(crate) fn builtin_starter_design() -> crate::building::blueprint::Blueprint 
             turret: None,
             shell: None,
             missile: None,
+            point_defence: false,
         }),
     };
 

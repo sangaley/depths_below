@@ -53,6 +53,14 @@ pub struct ShellReadout;
 #[derive(Component)]
 pub struct SaveGunDesignButton;
 
+/// Puts the gun on point defence, or takes it off (combat::missile_defence).
+#[derive(Component)]
+pub struct PointDefenceButton;
+
+fn point_defence_label(on: bool) -> &'static str {
+    if on { "POINT DEFENCE: ON - missiles only" } else { "POINT DEFENCE: OFF" }
+}
+
 /// What a click does to a design. Pure, so the rules are testable.
 pub fn apply(design: &mut ShellDesign, action: ShellAction) {
     match action {
@@ -153,6 +161,7 @@ pub fn spawn_shell_section(commands: &mut Commands, content: Entity, design: &Sh
             ShellBody::Frag => "Fragmentation: harms crew, spares the plate.",
             ShellBody::Emp => "EMP: knocks out systems around the hit for longer, further out.",
             ShellBody::Incendiary => "Incendiary: starts a fire.",
+            ShellBody::ProximityFuse => "Proximity fuse: bursts beside an enemy missile instead of having to hit it. Flak: load frag or HE with it.",
         };
         let c = chip(commands, &format!("+ {}", body.name()), ShellAction::AddBody(body), false, tip);
         commands.entity(adds).add_child(c);
@@ -193,6 +202,36 @@ pub fn spawn_shell_section(commands: &mut Commands, content: Entity, design: &Sh
         .id();
     commands.entity(content).add_child(readout);
 
+    let pd = commands
+        .spawn((
+            Node {
+                padding: UiRect::new(Val::Px(10.0), Val::Px(10.0), Val::Px(4.0), Val::Px(4.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                margin: UiRect::top(Val::Px(6.0)),
+                align_self: AlignSelf::FlexStart,
+                ..default()
+            },
+            BackgroundColor(CHIP_BG),
+            BorderColor::all(WindowStyle::BORDER_COLOR),
+            Interaction::None,
+            Button,
+            PointDefenceButton,
+            Tooltip {
+                text: "On a turret, point defence swings it onto the incoming missile that will land first and fires by itself -- and never at ships.".into(),
+                detail: Some("Small, fast guns on light turrets do it best. A proximity fuse in the shell makes it flak.".into()),
+            },
+        ))
+        .id();
+    let pd_label = commands
+        .spawn((
+            Text::new(point_defence_label(false)),
+            TextFont { font_size: FontSize::Px(11.0), ..default() },
+            TextColor(WindowStyle::TEXT_COLOR),
+        ))
+        .id();
+    commands.entity(pd).add_child(pd_label);
+    commands.entity(content).add_child(pd);
+
     let save = commands
         .spawn((
             Node {
@@ -222,6 +261,46 @@ pub fn spawn_shell_section(commands: &mut Commands, content: Entity, design: &Sh
         .id();
     commands.entity(save).add_child(save_label);
     commands.entity(content).add_child(save);
+}
+
+/// The point defence switch: on or off for the gun under the window.
+pub fn point_defence_click(
+    mut commands: Commands,
+    buttons: Query<&Interaction, (With<PointDefenceButton>, Changed<Interaction>)>,
+    windows: Query<&TuningWindow>,
+    on: Query<(), With<crate::combat::targeting::fire_groups::InterceptMode>>,
+) {
+    if !buttons.iter().any(|i| *i == Interaction::Pressed) {
+        return;
+    }
+    let Ok(tw) = windows.single() else { return };
+    if on.contains(tw.module_entity) {
+        commands.entity(tw.module_entity).remove::<crate::combat::targeting::fire_groups::InterceptMode>();
+    } else {
+        commands.entity(tw.module_entity).try_insert(crate::combat::targeting::fire_groups::InterceptMode);
+    }
+}
+
+/// Keep the switch saying what the gun is set to.
+pub fn point_defence_refresh(
+    windows: Query<&TuningWindow>,
+    on: Query<(), With<crate::combat::targeting::fire_groups::InterceptMode>>,
+    mut buttons: Query<(&mut BorderColor, &Children), With<PointDefenceButton>>,
+    mut texts: Query<(&mut Text, &mut TextColor)>,
+) {
+    let Ok(tw) = windows.single() else { return };
+    let set = on.contains(tw.module_entity);
+    for (mut border, children) in buttons.iter_mut() {
+        *border = BorderColor::all(if set { ACCENT } else { WindowStyle::BORDER_COLOR });
+        for c in children.iter() {
+            if let Ok((mut text, mut colour)) = texts.get_mut(c) {
+                if text.0 != point_defence_label(set) {
+                    text.0 = point_defence_label(set).into();
+                }
+                colour.0 = if set { ACCENT } else { WindowStyle::TEXT_COLOR };
+            }
+        }
+    }
 }
 
 /// The save button: write the gun under the window to designs/guns.
@@ -368,6 +447,9 @@ pub fn shell_designer_refresh(
 
 /// One line on what the shell does when it lands.
 pub fn on_hit(design: &ShellDesign) -> &'static str {
+    if design.has_proximity_fuse() {
+        return "flak: bursts beside missiles";
+    }
     match (design.head, design.dominant_payload()) {
         (ShellHead::Ap, Some(ShellBody::He)) => "punches in, then bursts",
         (_, Some(ShellBody::He)) => "bursts on the surface",

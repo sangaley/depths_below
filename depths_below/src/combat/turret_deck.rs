@@ -80,6 +80,9 @@ pub struct TurretBody {
     /// What it's turning toward this frame, in world space: what its guns
     /// fire at, so a turret and its guns never disagree.
     pub aim: Option<Vec2>,
+    /// A point defence gun on it has a missile to shoot at, and `aim` is
+    /// where to meet it (combat::missile_defence).
+    pub pd_engaged: bool,
     /// How its ring was laid: with `ring_cell` and `size`, enough to lay it
     /// again (meta saves a shot-out ring this way).
     pub ring_rotation: crate::components::Rotation,
@@ -102,7 +105,7 @@ impl TurretBody {
 
     pub fn new(ring: Entity, ring_cell: IVec2, size: i32) -> Self {
         Self {
-            ring, ring_cell, size, angle: 0.0, traverse_deg_s: 0.0, mass_t: 0.0, motors: 0, jammed: false, aim: None,
+            ring, ring_cell, size, angle: 0.0, traverse_deg_s: 0.0, mass_t: 0.0, motors: 0, jammed: false, aim: None, pd_engaged: false,
             ring_rotation: crate::components::Rotation::North,
         }
     }
@@ -605,7 +608,7 @@ pub fn traverse_turrets(
     parts: Query<&Module, Without<DestroyedModule>>,
     plates: Query<(), (With<TurretPlate>, Without<crate::components::HullDestroyed>)>,
     ships: Query<
-        (&GlobalTransform, Option<&Children>, Option<&crate::ai_ship::components::AiShipTarget>),
+        (&GlobalTransform, Option<&Children>, Option<&crate::ai_ship::components::AiShipTarget>, Option<&crate::components::Velocity>),
         Or<(With<Ship>, With<crate::ai_ship::components::AiShip>)>,
     >,
     // Where an AI ship's target is now.
@@ -616,6 +619,11 @@ pub fn traverse_turrets(
     build: Option<Res<State<crate::states::BuildState>>>,
     shapes: Option<Res<TurretShapes>>,
     engaged: Query<&crate::combat::targeting::auto_engage::AutoAimPoint>,
+    // Point defence guns, and the missiles they might shoot at.
+    pd: (
+        Query<&crate::combat::gun_assembly::GunAssembly, With<crate::combat::targeting::fire_groups::InterceptMode>>,
+        Query<(&Transform, &crate::components::Velocity, &crate::combat::new_projectiles::MissileProjectile), Without<TurretBody>>,
+    ),
 ) {
     let dt = time.delta_secs();
     // While building, turrets stand squared to the hull, so a turret's cell
@@ -634,7 +642,7 @@ pub fn traverse_turrets(
         // Motors: Traverse Motor blocks on the hull deck touching the ring.
         let ring_cells: Vec<IVec2> = rings.get(body.ring).map(ring_cells).unwrap_or_default();
         // A turret on a severed section has no ship to aim for.
-        let Ok((ship_gt, ship_children, ai_target)) = ships.get(parent.parent()) else {
+        let Ok((ship_gt, ship_children, ai_target, ship_vel)) = ships.get(parent.parent()) else {
             continue;
         };
         body.motors = ship_children
@@ -661,13 +669,34 @@ pub fn traverse_turrets(
         // the block their first gun has engaged, so the turret turns to what
         // its guns will actually shoot at. An AI ship's follow whatever it
         // has picked to fight.
-        let target = match ai_target {
+        // A point defence gun on it takes the turret onto the incoming
+        // missile that will arrive first, whoever's ship it is.
+        let ship = parent.parent();
+        let pd_aim = children.into_iter().flatten().find_map(|c| pd.0.get(*c).ok()).and_then(|g| {
+            let from = ship_gt.affine().transform_point3(transform.translation.with_z(0.0)).truncate();
+            crate::combat::missile_defence::pd_solution(
+                ship_gt.translation().truncate(),
+                from,
+                g.stats.velocity_mps * crate::combat::gun_assembly::GAME_SPEED_PER_MPS,
+                ship_vel.map(|v| v.0).unwrap_or(Vec2::ZERO),
+                crate::combat::gun_assembly::range_for(&g.stats).min(crate::combat::missile_defence::PD_RANGE),
+                pd.1.iter().filter(|(_, _, m)| m.owner_ship != Some(ship)).map(|(t, v, _)| (t.translation.truncate(), v.0)),
+            )
+        });
+        body.pd_engaged = pd_aim.is_some();
+        if crate::combat::gun_assembly::trace() && (time.elapsed_secs() % 1.0) < dt
+            && children.into_iter().flatten().any(|c| pd.0.contains(*c))
+        {
+            let near = pd.1.iter().filter(|(t, _, m)| m.owner_ship != Some(ship) && t.translation.truncate().distance(ship_gt.translation().truncate()) < 6000.0).count();
+            info!("PD turret {:?}: {} enemy missiles within 6,000 u, engaged {}", entity, near, body.pd_engaged);
+        }
+        let target = if pd_aim.is_some() { pd_aim } else { match ai_target {
             Some(t) => t.entity.map(|e| whereabouts.get(e).map(|g| g.translation().truncate()).unwrap_or(t.position)),
             None => {
                 let first_gun = children.into_iter().flatten().find(|c| engaged.contains(**c));
                 aim.for_turret(first_gun.and_then(|c| engaged.get(*c).ok()).map(|a| a.point))
             }
-        };
+        } };
         body.aim = target;
         let Some(target) = target else { continue };
         // Heading to the aim point, in the ship's frame.

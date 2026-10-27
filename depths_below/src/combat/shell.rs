@@ -43,6 +43,9 @@ pub enum ShellBody {
     Frag,
     Emp,
     Incendiary,
+    /// Not a payload: it bursts the shell beside an enemy missile instead of
+    /// waiting to hit something. Flak (combat::missile_defence).
+    ProximityFuse,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -80,7 +83,7 @@ impl ShellHead {
 }
 
 impl ShellBody {
-    pub const ALL: [ShellBody; 5] = [Self::Solid, Self::He, Self::Frag, Self::Emp, Self::Incendiary];
+    pub const ALL: [ShellBody; 6] = [Self::Solid, Self::He, Self::Frag, Self::Emp, Self::Incendiary, Self::ProximityFuse];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -89,6 +92,7 @@ impl ShellBody {
             Self::Frag => "Frag",
             Self::Emp => "EMP",
             Self::Incendiary => "Incendiary",
+            Self::ProximityFuse => "Prox fuse",
         }
     }
 
@@ -99,6 +103,7 @@ impl ShellBody {
             Self::Frag => "FR",
             Self::Emp => "EM",
             Self::Incendiary => "IN",
+            Self::ProximityFuse => "PX",
         }
     }
 }
@@ -188,6 +193,28 @@ impl ShellDesign {
         head + self.bodies.iter().map(|b| if *b == ShellBody::Solid { 1.0 } else { 0.3 }).sum::<f32>()
     }
 
+    /// Bursts beside an enemy missile (flak).
+    pub fn has_proximity_fuse(&self) -> bool {
+        self.bodies.contains(&ShellBody::ProximityFuse)
+    }
+
+    /// How close an enemy missile has to come for a fused shell to burst,
+    /// and how far the burst reaches, in u. None without a fuse.
+    pub fn flak_radii(&self, gauge_mm: f32) -> Option<(f32, f32)> {
+        self.has_proximity_fuse().then(|| {
+            let fuse = 40.0 + 0.35 * gauge_mm;
+            (fuse, fuse * 1.6)
+        })
+    }
+
+    /// What a flak burst does to each missile it reaches, before the shell's
+    /// own kinetic share: its frag and HE payload, scaled by gauge.
+    pub fn flak_damage(&self, gauge_mm: f32) -> f32 {
+        let g = gauge_mm / 100.0;
+        let p = self.payload();
+        (FLAK_PER_FRAG * p.frag + HE_DAMAGE_PER_UNIT * 2.0 * p.he) * g * g
+    }
+
     pub fn solid_bodies(&self) -> usize {
         self.bodies.iter().filter(|b| **b == ShellBody::Solid).count()
     }
@@ -199,7 +226,7 @@ impl ShellDesign {
             ShellBody::Frag => p.frag += 1.0,
             ShellBody::Emp => p.emp += 1.0,
             ShellBody::Incendiary => p.incendiary += 1.0,
-            ShellBody::Solid => {}
+            ShellBody::Solid | ShellBody::ProximityFuse => {}
         };
         for b in &self.bodies {
             add(*b);
@@ -330,6 +357,8 @@ impl ShellDesign {
 pub const MAX_PROPELLANT_VELOCITY: f32 = 1800.0;
 /// Blast per HE unit per block caught, times (gauge / 100 mm) squared.
 pub const HE_DAMAGE_PER_UNIT: f32 = 6.0;
+/// Flak damage per unit of frag at 100 mm, against a missile.
+pub const FLAK_PER_FRAG: f32 = 40.0;
 /// Crew harm per frag unit, times gauge / 100 mm.
 pub const FRAG_DOSE_PER_UNIT: f32 = 12.0;
 /// Extra damage a HEAT jet does, times (gauge / 100 mm) squared, whatever

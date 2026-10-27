@@ -137,9 +137,82 @@ pub fn age_decoys(time: Res<Time>, mut commands: Commands, mut decoys: Query<(En
     }
 }
 
+/// How far out a point defence gun reaches for missiles.
+pub const PD_RANGE: f32 = 4000.0;
+
+/// Where a round at `speed` from `from` meets something at `at` moving at
+/// `vel` (relative to the shooter). None if it can't catch it.
+pub fn intercept(from: Vec2, speed: f32, at: Vec2, vel: Vec2) -> Option<Vec2> {
+    let d = at - from;
+    let a = vel.length_squared() - speed * speed;
+    let b = 2.0 * d.dot(vel);
+    let c = d.length_squared();
+    let t = if a.abs() < 1e-3 {
+        if b >= 0.0 { return None; }
+        -c / b
+    } else {
+        let disc = b * b - 4.0 * a * c;
+        if disc < 0.0 {
+            return None;
+        }
+        let r = disc.sqrt();
+        let (t1, t2) = ((-b - r) / (2.0 * a), (-b + r) / (2.0 * a));
+        let t = [t1, t2].into_iter().filter(|t| *t > 0.0).fold(f32::INFINITY, f32::min);
+        if !t.is_finite() {
+            return None;
+        }
+        t
+    };
+    Some(at + vel * t)
+}
+
+/// What a point defence gun should shoot at: of the enemy missiles closing on
+/// `ship_pos` within `reach` of the gun at `from`, the one that will get
+/// there first; and where to aim (rounds at `speed`, the shooter moving at
+/// `shooter_vel`) to meet it. `missiles`: (position, velocity).
+pub fn pd_solution(
+    ship_pos: Vec2,
+    from: Vec2,
+    speed: f32,
+    shooter_vel: Vec2,
+    reach: f32,
+    missiles: impl Iterator<Item = (Vec2, Vec2)>,
+) -> Option<Vec2> {
+    missiles
+        .filter(|(p, _)| p.distance(from) < reach)
+        .filter_map(|(p, v)| {
+            let to_ship = ship_pos - p;
+            let closing = v.dot(to_ship.normalize_or_zero());
+            (closing > 50.0).then(|| (to_ship.length() / closing, p, v))
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .and_then(|(_, p, v)| intercept(from, speed, p, v - shooter_vel))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_round_leads_a_crossing_missile() {
+        // A missile 1,000 u off, crossing at 500 u/s; rounds at 2,500 u/s.
+        let p = intercept(Vec2::ZERO, 2500.0, Vec2::new(1000.0, 0.0), Vec2::new(0.0, 500.0)).unwrap();
+        assert!(p.y > 100.0 && p.y < 300.0, "{p:?}");
+        let t = p.length() / 2500.0;
+        assert!((p - (Vec2::new(1000.0, 0.0) + Vec2::new(0.0, 500.0) * t)).length() < 1.0);
+    }
+
+    #[test]
+    fn point_defence_takes_the_missile_that_arrives_first() {
+        let ship = Vec2::ZERO;
+        // A slow near one and a fast farther one: the fast one lands first.
+        let slow = (Vec2::new(800.0, 0.0), Vec2::new(-200.0, 0.0));
+        let fast = (Vec2::new(0.0, 1500.0), Vec2::new(0.0, -1500.0));
+        let going_away = (Vec2::new(-500.0, 0.0), Vec2::new(-900.0, 0.0));
+        let aim = pd_solution(ship, ship, 3000.0, Vec2::ZERO, PD_RANGE, [slow, fast, going_away].into_iter()).unwrap();
+        assert!(aim.x.abs() < 1.0 && aim.y > 0.0, "{aim:?}");
+        assert!(pd_solution(ship, ship, 3000.0, Vec2::ZERO, PD_RANGE, [going_away].into_iter()).is_none());
+    }
 
     #[test]
     fn decoys_fool_heat_seekers_and_chaff_fools_radar() {

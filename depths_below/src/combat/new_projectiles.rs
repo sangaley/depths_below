@@ -54,6 +54,31 @@ pub struct Projectile {
     /// notch between two sloped plates would otherwise skip off the same
     /// corner every frame forever.
     pub bounces: u8,
+    /// A flak round's fuse (a shell with a proximity fuse, combat::shell):
+    /// it bursts beside an enemy missile instead of having to hit one.
+    pub flak: Option<Flak>,
+}
+
+/// How a flak round goes off: within `fuse` of an enemy missile, it bursts,
+/// and every enemy missile within `burst` takes `damage`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Flak {
+    pub fuse: f32,
+    pub burst: f32,
+    pub damage: f32,
+}
+
+impl Flak {
+    /// A built gun's flak, if its shell has a fuse; `kinetic` is the round's
+    /// own damage, half of which the burst carries too.
+    pub fn of(gun: &crate::combat::gun_assembly::GunAssembly, kinetic: f32) -> Option<Flak> {
+        let shell = &gun.parts.shell;
+        shell.flak_radii(gun.stats.gauge_mm).map(|(fuse, burst)| Flak {
+            fuse,
+            burst,
+            damage: shell.flak_damage(gun.stats.gauge_mm) + kinetic * 0.5,
+        })
+    }
 }
 
 /// How many times one round may skip before it's spent.
@@ -300,7 +325,8 @@ pub fn fire_weapons_system(
         Option<&crate::building::customization::tuning::WeaponTuning>,
         Option<&crate::building::customization::tuning::SelectedAmmo>,
         Option<&ModuleTemperature>,
-        Option<&crate::combat::targeting::AutoAimPoint>,
+        // Its auto-engage point, and whether it's on point defence.
+        (Option<&crate::combat::targeting::AutoAimPoint>, Has<crate::combat::targeting::fire_groups::InterceptMode>),
     ), Without<DestroyedModule>>,
     target_transform_query: Query<&Transform, Without<Ship>>,
     target_velocity_query: Query<&Velocity, Without<Ship>>,
@@ -352,7 +378,7 @@ pub fn fire_weapons_system(
         .map(|(m, _)| (m.grid_position, m.module_type, m.is_active))
         .collect();
 
-    for (entity, module, has_station, staffing, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, customization, tuning, selected_ammo, temp, auto_aim) in weapon_query.iter_mut() {
+    for (entity, module, has_station, staffing, mut weapon, mut cooldown, global_transform, fire_group, mount, parent, customization, tuning, selected_ammo, temp, (auto_aim, point_defence)) in weapon_query.iter_mut() {
         // A gun with nobody on it does not fire.
         if !crate::combat::weapon_is_crewed(has_station, staffing) {
             continue;
@@ -398,8 +424,15 @@ pub fn fire_weapons_system(
         }
 
         // Check if this weapon's fire group is active
+        // A gun on point defence fires by itself at the missile its turret
+        // has engaged (missile_defence), and at nothing else; built guns
+        // only -- an old gun on intercept mode is point_defense's.
+        let pd_engaged = point_defence
+            && module.module_type == ModuleType::FiringPiece
+            && turret_bodies.get(parent.parent()).is_ok_and(|(_, t)| t.pd_engaged);
+        if point_defence && module.module_type == ModuleType::FiringPiece && !pd_engaged { continue; }
         let group_firing = fire_state.firing[fire_group.group as usize % 4];
-        if !group_firing { continue; }
+        if !group_firing && !pd_engaged { continue; }
 
         // Check ammo
         if !crate::combat::INFINITE_AMMO && weapon.ammo <= 0 { continue; }
@@ -421,7 +454,10 @@ pub fn fire_weapons_system(
         // A right-click lock names a specific BLOCK — that's the aim point,
         // capped to range like any other. Falls through to the ship-level
         // selection and then the cursor when nothing is locked.
-        let (target_pos, target_vel) = if let Some(point) = aiming.aim_lock.aim_point() {
+        let (target_pos, target_vel) = if pd_engaged {
+            // The turret's aim is already where the round meets the missile.
+            (turret_bodies.get(parent.parent()).ok().and_then(|(_, t)| t.aim).unwrap_or(weapon_pos), Vec2::ZERO)
+        } else if let Some(point) = aiming.aim_lock.aim_point() {
             let to_point = point - weapon_pos;
             let aim = if to_point.length() > weapon.range {
                 weapon_pos + to_point.normalize_or_zero() * weapon.range
@@ -663,11 +699,12 @@ pub fn fire_weapons_system(
                     last_hit: None,
                     prev_pos: weapon_pos,
                     bounces: 0,
+                    flak: assembly.and_then(|a| Flak::of(a, weapon.damage * ammo_damage_mult * debug_tuning.damage_mult)),
                 },
                 Velocity(vel),
                 GravityAffected { mass: 0.5 }, // Projectiles affected by gravity (slightly)
                 GravityForce::default(),
-            ));
+            )).insert_if(crate::combat::point_defense::PointDefenseRound { ship: player_ship }, || pd_engaged);
         }
 
         // Muzzle flash
@@ -833,7 +870,7 @@ pub fn spawn_ai_round(
     // A gun built from parts fires its own shell: `speed` is already its
     // muzzle velocity, and the shell sets the rest.
     built: Option<&crate::combat::gun_assembly::GunAssembly>,
-) {
+) -> Entity {
     let direction = (aim_point - muzzle).normalize_or_zero();
     let speed = if built.is_some() { speed } else { speed * ammo_type.speed_mult() };
     let lifetime = (range / speed.max(1.0)).max(0.1);
@@ -881,9 +918,10 @@ pub fn spawn_ai_round(
             last_hit: None,
             prev_pos: muzzle,
             bounces: 0,
+            flak: built.and_then(|g| Flak::of(g, damage * damage_mult * AI_ROUND_DAMAGE_SCALE)),
         },
         Velocity(direction * speed),
-    ));
+    )).id()
 }
 
 /// What a round landing on the PLAYER's ship sets off besides block damage --
@@ -1869,6 +1907,7 @@ mod shared_hit_tests {
                 // Last frame it was two cells below the row: this step crosses (0, 0).
                 prev_pos: crate::building::grid_to_local(IVec2::new(0, -2)),
                 bounces: 0,
+                flak: None,
             },
             Velocity(Vec2::new(0.0, 2000.0)),
         ));
