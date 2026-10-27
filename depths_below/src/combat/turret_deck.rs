@@ -193,6 +193,9 @@ pub fn part_mass_t(t: ModuleType) -> f32 {
 }
 pub const PLATE_MASS_T: f32 = 0.5;
 
+/// The tint on a turret deck's floor tiles.
+pub const TURRET_PLATE_TINT: Color = Color::srgb(0.86, 0.92, 1.0);
+
 /// The hull cells a ring covers. From its real footprint: a square block
 /// laid with a turn still grows from its origin cell in the turned
 /// direction, so origin + (half, half) is only right facing North.
@@ -268,7 +271,9 @@ pub fn ensure_turret_bodies(
         let health = 100.0 * material.health_multiplier();
         for cell in deck_cells(size) {
             commands.spawn((
-                Sprite { image: texture.clone(), custom_size: Some(Vec2::splat(66.0)), ..default() },
+                // A shade cooler and lighter-looking than the hull's own
+                // plating, so the deck reads as a separate floor above it.
+                Sprite { image: texture.clone(), custom_size: Some(Vec2::splat(66.0)), color: TURRET_PLATE_TINT, ..default() },
                 Transform::from_xyz(cell.x as f32 * 66.0, cell.y as f32 * 66.0, 0.0),
                 HullSegment {
                     hull_layer: HullLayer::Outer,
@@ -279,7 +284,7 @@ pub fn ensure_turret_bodies(
                     grid_position: cell,
                     ..default()
                 },
-                crate::components::BaseSpriteColor(Color::WHITE),
+                crate::components::BaseSpriteColor(TURRET_PLATE_TINT),
                 crate::building::Block::hull(cell, material),
                 TurretPlate,
                 ChildOf(body),

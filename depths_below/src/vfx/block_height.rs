@@ -55,6 +55,10 @@ pub fn block_height(module: ModuleType) -> Option<f32> {
 /// Guns, and the barrels that turn on top of them.
 const GUN_HEIGHT: f32 = 13.0;
 
+/// A turret deck stands on its ring, above the hull and everything on it:
+/// its floor casts the shadow that shows it's a layer of its own.
+const TURRET_DECK_HEIGHT: f32 = 18.0;
+
 /// The shadow sprite under a tall block or barrel.
 #[derive(Component)]
 pub struct HeightShadow {
@@ -85,6 +89,7 @@ pub fn attach_height_shadows(
     mut commands: Commands,
     mut blocks: Query<(Entity, &Module, &Sprite, &mut Transform), (Without<CastsShadow>, Without<DestroyedModule>)>,
     barrels: Query<(Entity, &Sprite), (With<TurretBarrel>, Without<CastsShadow>)>,
+    decks: Query<(Entity, &Sprite), (With<crate::combat::turret_deck::TurretPlate>, Without<CastsShadow>)>,
 ) {
     for (entity, module, sprite, mut tf) in &mut blocks {
         let Some(height) = block_height(module.module_type) else { continue };
@@ -98,6 +103,11 @@ pub fn attach_height_shadows(
     }
     for (entity, sprite) in &barrels {
         cast(&mut commands, entity, sprite, GUN_HEIGHT);
+    }
+    // Each floor tile casts; a tile's shadow falls under its neighbours, so
+    // only the deck's outer edge shows one, on the hull below.
+    for (entity, sprite) in &decks {
+        cast(&mut commands, entity, sprite, TURRET_DECK_HEIGHT);
     }
 }
 
