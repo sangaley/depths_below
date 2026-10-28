@@ -29,6 +29,10 @@ use crate::components::{DestroyedModule, HullSegment, Module, ModuleType, Ship};
 pub const CAVITY_CHARGE: f32 = 100.0;
 /// Charge a second one pump adds.
 pub const PUMP_RATE: f32 = 12.0;
+/// What a pump draws from the ship while its bank fills: lasers are paid
+/// for in power. A full bank's pumps only idle.
+pub const PUMP_POWER_MW: f32 = 60.0;
+pub const PUMP_IDLE_MW: f32 = 2.0;
 /// How far point defence reaches for a missile.
 pub const PD_REACH: f32 = 3500.0;
 /// How deep a pulse carries.
@@ -292,13 +296,40 @@ pub fn assemble_lasers(
     built.retain(|e| ships.contains(e) || turrets.contains(e));
 }
 
-/// Pumps fill their bank while they're up and powered.
-pub fn charge_lasers(time: Res<Time>, mut banks: Query<&mut LaserBank>, modules: Query<&Module, Without<DestroyedModule>>) {
+/// Pumps fill their bank while they're up and powered, drawing hard on the
+/// ship's power until it's full. Short of power, the player's banks fill
+/// only as fast as the reactors can feed everything aboard.
+pub fn charge_lasers(
+    time: Res<Time>,
+    mut banks: Query<(&mut LaserBank, &ChildOf)>,
+    mut modules: Query<&mut Module, Without<DestroyedModule>>,
+    player: Query<(), With<Ship>>,
+    power: Option<Res<crate::resources::PowerState>>,
+) {
     let dt = time.delta_secs();
-    for mut bank in banks.iter_mut() {
-        let live = bank.pumps.iter().filter(|p| modules.get(**p).is_ok_and(|m| m.health > 0.0 && m.is_active)).count();
+    let supplied = power.map_or(1.0, |p| {
+        if p.power_balance < 0.0 && p.total_power_consumption > 0.0 {
+            (p.total_power_generation / p.total_power_consumption).clamp(0.0, 1.0)
+        } else {
+            1.0
+        }
+    });
+    for (mut bank, parent) in banks.iter_mut() {
+        let full = bank.charge >= bank.stats.storage - 0.01;
+        let draw = if full { PUMP_IDLE_MW } else { PUMP_POWER_MW };
+        let mut live = 0;
+        for p in bank.pumps.clone() {
+            let Ok(mut m) = modules.get_mut(p) else { continue };
+            if m.power_consumption != draw {
+                m.power_consumption = draw;
+            }
+            if m.health > 0.0 && m.is_active {
+                live += 1;
+            }
+        }
+        let fed = if player.contains(parent.parent()) { supplied } else { 1.0 };
         let storage = bank.stats.storage;
-        bank.charge = (bank.charge + PUMP_RATE * live as f32 * dt).min(storage);
+        bank.charge = (bank.charge + PUMP_RATE * live as f32 * fed * dt).min(storage);
     }
 }
 

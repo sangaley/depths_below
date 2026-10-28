@@ -1608,9 +1608,9 @@ pub fn build_registry() -> ModuleRegistry {
     });
 
     defs.insert(ModuleType::LaserPump, ModuleDef {
-        name: "Laser Pump", description: "Beside a counted cavity: +12 charge a second for 6 MW of ship power.",
+        name: "Laser Pump", description: "Beside a counted cavity: +12 charge a second, drawing 60 MW of ship power while its bank fills (2 MW once it's full). Lasers are paid for in power.",
         category: ModuleCategory::Lasers, size: IVec2::new(1, 1), health: 90.0,
-        power_generation: 0.0, power_consumption: 6.0, color: Color::srgb(0.55, 0.30, 0.30),
+        power_generation: 0.0, power_consumption: 60.0, color: Color::srgb(0.55, 0.30, 0.30),
         companion: CompanionData::None, customizable: false, cost: 45,
         base_stats: CalculatedStats::default(), crew_station: false,
     });

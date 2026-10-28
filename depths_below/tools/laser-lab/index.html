@@ -179,7 +179,7 @@
       <h2>Rules</h2>
       <dl>
         <dt>The bank</dt><dd>One <b>Laser Core</b> per laser. <b>Couplers</b> extend it. A <b>Cavity</b> counts if it touches the core, a coupler, or a counted cavity. A <b>Pump</b> counts if it touches a counted cavity. Q-switches, doublers and destabilisers count only touching the core or a coupler. Everything is 1×1 and touches along an edge.</dd>
-        <dt>Charge</dt><dd>Each cavity stores <code>100</code> charge. Each pump adds <code>12/s</code> and draws <code>6 MW</code> from the ship while the bank isn't full.</dd>
+        <dt>Charge</dt><dd>Each cavity stores <code>100</code> charge. Each pump adds <code>12/s</code> and draws <code>60 MW</code> from the ship while the bank fills, <code>2 MW</code> once it's full: lasers are paid for in power. Short of power, banks fill only as fast as the reactors can feed everything aboard.</dd>
         <dt>Firing</dt><dd>While firing, the bank lets go of <code>1 − 0.75^(1 + destabilisers)</code> of what it holds each second: 25% with none, 58% with two, 76% with four. A charged bank opens with a big burst, then settles where the pumps keep up.</dd>
         <dt>Q-switches</dt><dd>None: one steady beam, <code>0.75</code> damage per charge, intensity 60. One to four: pulses at <code>1, 2, 4, 8</code> a second, <code>1.0</code> damage per charge, intensity 40. Each pulse carries what the bank let go since the last one.</dd>
         <dt>Intensity</dt><dd>Lasers burn, they don't punch. Against a block with armour <code>t</code> the beam does <code>min(1, intensity / t)</code> of its damage (at least 10%). Each Frequency Doubler adds <code>15</code> intensity and halves the wavelength (1064 → 532 → 355 → 266 → 213 nm); four count.</dd>
@@ -200,7 +200,7 @@ const PARTS = {
   C: { name: "Laser Core", code: "CO", color: "#e8eef8", desc: "The heart of the laser. Everything else hangs off it." },
   K: { name: "Coupler", code: "CP", color: "#9aa7bc", desc: "Extends the core: cavities and modifiers can touch it instead." },
   V: { name: "Cavity", code: "CV", color: "#5b84e6", desc: "Stores 100 charge. Chain them: each one touching a counted cavity counts." },
-  P: { name: "Pump", code: "PU", color: "#5fc9a3", desc: "Beside a cavity: +12 charge a second for 6 MW of ship power." },
+  P: { name: "Pump", code: "PU", color: "#5fc9a3", desc: "Beside a cavity: +12 charge a second for 60 MW of ship power while the bank fills." },
   Q: { name: "Q-switch", code: "QS", color: "#e0a24a", desc: "On the core: turns the steady beam into pulses, 1, 2, 4 or 8 a second." },
   D: { name: "Frequency Doubler", code: "FD", color: "#b48cff", desc: "On the core: +15 intensity, so the beam burns through more armour." },
   X: { name: "Destabiliser", code: "DS", color: "#ff7a5c", desc: "On the core: lets the bank go faster. Bigger bursts, drains sooner." },
@@ -312,7 +312,7 @@ function analyse() {
   const drain = 1 - Math.pow(0.75, xs + 1);
   const dpc = qn ? 1.0 : 0.75;
   const out = { live, net, cavities: cav.size, pumps, qs, ds, xs, qn, dn, loose,
-    storage, recharge, power: 6 * pumps, drain, dpc,
+    storage, recharge, power: 60 * pumps, drain, dpc,
     shots: [0, 1, 2, 4, 8][qn],
     intensity: (qn ? 40 : 60) + 15 * dn,
     wavelength: Math.round(1064 / (1 + dn)),
