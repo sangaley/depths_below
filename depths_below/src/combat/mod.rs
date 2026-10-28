@@ -499,7 +499,12 @@ impl Plugin for CombatPlugin {
                 turret_deck::traverse_turrets,
             ).chain())
             .add_systems(Update, (missile_defence::throw_decoys, missile_defence::seduce_seekers, missile_defence::age_decoys).chain()
-                .after(missiles::move_missiles))
+                .after(missiles::move_missiles)
+                .after(missile_defence::spot_missiles))
+            // Warners first: point defence and decoys act on what they see.
+            .add_systems(Update, missile_defence::spot_missiles
+                .after(missiles::move_missiles)
+                .before(turret_deck::traverse_turrets))
             .add_systems(Update, missile_design::fit_missile_loadouts
                 .before(crate::building::multiblock::enhancers::apply_weapon_enhancers))
             .add_systems(Update, (gun_assembly::assemble_guns, gun_assembly::run_gun_racks, gun_assembly::place_muzzles, gun_assembly::flash_down_hoists).chain()

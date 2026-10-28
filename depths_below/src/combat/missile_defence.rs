@@ -9,6 +9,11 @@
 //! (`MissileStats::fool_chance`); fooled, it chases the decoy and is lost
 //! when the decoy burns out. A command link or a dumb nose has no seeker to
 //! fool. Both blocks did nothing at all before this.
+//!
+//! Nothing here sees a missile on its own: a ship's Missile Warners spot
+//! enemy missiles (`spot_missiles`), and its decoys and point defence guns
+//! act only on what they've spotted, the way From the Depths needs munition
+//! warners before its CIWS will engage.
 
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
@@ -26,6 +31,65 @@ pub const DECOY_INTERVAL: f32 = 4.0;
 /// Seconds a decoy lasts.
 pub const DECOY_LIFE: f32 = 4.0;
 
+/// How far a Missile Warner sees an incoming missile.
+pub const WARNER_RANGE: f32 = 4500.0;
+
+/// On every ship: the enemy missiles its warners can see this frame, and
+/// how many warners it has left to see them with.
+#[derive(Component, Debug, Default, Clone)]
+pub struct MissileWarning {
+    pub spotted: Vec<Entity>,
+    pub warners: u32,
+}
+
+impl MissileWarning {
+    pub fn sees(&self, missile: Entity) -> bool {
+        self.spotted.contains(&missile)
+    }
+}
+
+/// Which enemy missiles each ship's warners see: those within
+/// `WARNER_RANGE` of a live Missile Warner. A ship with none sees nothing.
+#[allow(clippy::type_complexity)]
+pub fn spot_missiles(
+    mut commands: Commands,
+    mut ships: Query<(Entity, Option<&Children>, Option<&mut MissileWarning>), Or<(With<Ship>, With<crate::ai_ship::components::AiShip>)>>,
+    warners: Query<(&Module, &GlobalTransform), Without<DestroyedModule>>,
+    missiles: Query<(Entity, &Transform, &MissileProjectile)>,
+) {
+    for (ship, children, warning) in ships.iter_mut() {
+        let eyes: Vec<Vec2> = children
+            .into_iter()
+            .flatten()
+            .filter_map(|c| warners.get(*c).ok())
+            .filter(|(m, _)| m.module_type == ModuleType::MissileWarner && m.health > 0.0)
+            .map(|(_, gt)| gt.translation().truncate())
+            .collect();
+        let spotted = spotted_by(
+            &eyes,
+            missiles.iter().filter(|(_, _, m)| m.owner_ship != Some(ship)).map(|(e, t, _)| (e, t.translation.truncate())),
+        );
+        let now = MissileWarning { spotted, warners: eyes.len() as u32 };
+        match warning {
+            Some(mut w) => *w = now,
+            None => {
+                commands.entity(ship).try_insert(now);
+            }
+        }
+    }
+}
+
+/// Of these missiles, the ones within `WARNER_RANGE` of a warner at `eyes`.
+pub fn spotted_by(eyes: &[Vec2], missiles: impl Iterator<Item = (Entity, Vec2)>) -> Vec<Entity> {
+    if eyes.is_empty() {
+        return Vec::new();
+    }
+    missiles
+        .filter(|(_, p)| eyes.iter().any(|e| e.distance_squared(*p) < WARNER_RANGE * WARNER_RANGE))
+        .map(|(e, _)| e)
+        .collect()
+}
+
 #[derive(Component, Debug)]
 pub struct MissileDecoy {
     /// A heat decoy (fools heat seekers); otherwise chaff (fools radar).
@@ -41,18 +105,20 @@ fn fools(heat: bool, head: MissileHead) -> bool {
     (heat && head == MissileHead::Heat) || (!heat && head == MissileHead::Radar)
 }
 
-/// Throw decoys and chaff while enemy designed missiles are inbound.
+/// Throw decoys and chaff while enemy designed missiles the ship's warners
+/// have spotted are inbound.
 #[allow(clippy::type_complexity)]
 pub fn throw_decoys(
     time: Res<Time>,
     mut commands: Commands,
-    ships: Query<(Entity, &GlobalTransform, &Children, Option<&Velocity>), Or<(With<Ship>, With<crate::ai_ship::components::AiShip>)>>,
+    ships: Query<(Entity, &GlobalTransform, &Children, Option<&Velocity>, Option<&MissileWarning>), Or<(With<Ship>, With<crate::ai_ship::components::AiShip>)>>,
     launchers: Query<(Entity, &Module, &GlobalTransform), Without<DestroyedModule>>,
-    missiles: Query<(&Transform, &MissileProjectile, &BuiltMissile)>,
+    missiles: Query<(Entity, &Transform, &MissileProjectile, &BuiltMissile)>,
     mut ready_at: Local<HashMap<Entity, f32>>,
 ) {
     let now = time.elapsed_secs();
-    for (ship, ship_gt, children, velocity) in ships.iter() {
+    for (ship, ship_gt, children, velocity, warning) in ships.iter() {
+        let Some(warning) = warning.filter(|w| !w.spotted.is_empty()) else { continue };
         let here = ship_gt.translation().truncate();
         for (launcher, module, gt) in children.iter().filter_map(|c| launchers.get(c).ok()) {
             let heat = match module.module_type {
@@ -65,8 +131,8 @@ pub fn throw_decoys(
             }
             let inbound: Vec<Vec2> = missiles
                 .iter()
-                .filter(|(_, m, b)| m.owner_ship != Some(ship) && fools(heat, b.head))
-                .map(|(t, _, _)| t.translation.truncate())
+                .filter(|(e, _, m, b)| m.owner_ship != Some(ship) && fools(heat, b.head) && warning.sees(*e))
+                .map(|(_, t, _, _)| t.translation.truncate())
                 .filter(|p| p.distance(here) < DECOY_RANGE)
                 .collect();
             if inbound.is_empty() {
@@ -212,6 +278,19 @@ mod tests {
         let aim = pd_solution(ship, ship, 3000.0, Vec2::ZERO, PD_RANGE, [slow, fast, going_away].into_iter()).unwrap();
         assert!(aim.x.abs() < 1.0 && aim.y > 0.0, "{aim:?}");
         assert!(pd_solution(ship, ship, 3000.0, Vec2::ZERO, PD_RANGE, [going_away].into_iter()).is_none());
+    }
+
+    #[test]
+    fn only_a_warner_sees_a_missile_and_only_in_range() {
+        let near = (Entity::from_raw_u32(1).unwrap(), Vec2::new(1000.0, 0.0));
+        let far = (Entity::from_raw_u32(2).unwrap(), Vec2::new(WARNER_RANGE + 1500.0, 0.0));
+        // No warner, nothing seen, however close.
+        assert!(spotted_by(&[], [near, far].into_iter()).is_empty());
+        let one = [Vec2::ZERO];
+        assert_eq!(spotted_by(&one, [near, far].into_iter()), vec![near.0]);
+        // A warner at the far end of the ship sees past the near one's reach.
+        let two = [Vec2::ZERO, Vec2::new(2000.0, 0.0)];
+        assert_eq!(spotted_by(&two, [near, far].into_iter()), vec![near.0, far.0]);
     }
 
     #[test]

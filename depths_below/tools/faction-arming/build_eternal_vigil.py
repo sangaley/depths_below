@@ -13,7 +13,8 @@ Laid out block by block, in the Eternal grammar (tools/fleet-concepts/eternal.py
   bridge and a helm amidships, combat cores forward -- so one hit can't take it;
 - six 20 mm CIWS turrets on point defence (crown points, waist, stern pods),
   four Launch Pads, two Rail Launchers, four VLS Silos, a Decoy Launcher and
-  a Chaff Dispenser. Titanium, symmetrical.
+  a Chaff Dispenser; eight Missile Warners round the hull to see what's
+  coming. Titanium, symmetrical.
 
 Run from depths_below/: python3 tools/faction-arming/build_eternal_vigil.py
 """
@@ -91,7 +92,7 @@ L = {
     "y": "RepairBay", "b": "BatteryBank", "c": "Capacitor", "p": "CoolingPump", "v": "HeatVent",
     "R": "StandardReactor", "f": "FuelTank", "t": "TargetingComputer", "A": "RadarArray", "l": "Floodlight",
     "a": "ArmorPlate", "Z": "Magazine", "M": "TraverseMotor", "h": "AmmoHoist", "e": "EngineeringStation",
-    "T": "ManeuveringThruster", "S": "SurgicalBay", "W": "AdvancedRadar",
+    "T": "ManeuveringThruster", "S": "SurgicalBay", "W": "AdvancedRadar", "w": "MissileWarner",
 }
 
 # Stern: engines vent aft (East, as every Eternal hull has them).
@@ -112,7 +113,7 @@ row(6, 1, "fffccp+i")
 row(7, 1, "fffbb")
 both("Magazine", 6, 7); both("AmmoHoist", 7, 7)
 both("TurretRingSmall", 7, 8); both("TraverseMotor", 8, 8); both("TraverseMotor", 8, 7)   # stern CIWS
-row(8, 1, "  T")
+row(8, 1, "w T")   # a warner on each stern pod
 
 # Aft block, x 10..23: the nave's pillars, then crew.
 row(1, 10, "sQsQsQsQsQsQsm")
@@ -138,7 +139,7 @@ row(6, 19, "QQO v")
 put("DecoyLauncher", 22, 6); put("ChaffDispenser", 22, -6)
 row(7, 12, "QQOF")
 row(7, 19, "tQQla")
-row(8, 12, "lsA")
+row(8, 12, "wsA")
 both("RailLauncher", 20, 8, "East")
 row(8, 23, "a")
 row(10, 19, "aa")
@@ -174,7 +175,7 @@ row(5, 35, "b+ts")
 row(6, 35, "QOvl")
 row(7, 28, "QQOF")
 row(7, 35, "tQa")
-row(8, 28, "lsA")
+row(8, 28, "wsA")
 both("RailLauncher", 35, 8, "East")
 row(10, 35, "a")
 
@@ -193,7 +194,7 @@ row(1, 49, "aaaaaaaa")
 put("ArmorPlate", 56, 0)
 row(2, 48, "sla")
 row(3, 47, "tbZhMaa")
-row(4, 47, "AsM")
+row(4, 47, "wsM")
 both("TurretRingSmall", 50, 4)
 both("LaunchPad", 52, 4, "East"); both("LaunchPad", 53, 4, "East")
 both("ArmorPlate", 51, 4)
@@ -300,7 +301,7 @@ with open(OUT, "w") as f:
     f.write("\n")
 count = lambda t: sum(1 for m in mods if m[0] == t)
 print(OUT, len(hull), "hull,", len(design["modules"]), "modules,", len(guns), "fitted guns, shift", shift)
-for t in ["TurretRing", "TurretRingSmall", "LaunchPad", "RailLauncher", "VlsSilo", "Magazine", "BasicQuarters",
+for t in ["MissileWarner", "TurretRing", "TurretRingSmall", "LaunchPad", "RailLauncher", "VlsSilo", "Magazine", "BasicQuarters",
           "StandardReactor", "HelmStation", "AICombatCore", "BridgeWing", "StandardEngine"]:
     print(" ", t, count(t))
 print("  plates", len(plates))

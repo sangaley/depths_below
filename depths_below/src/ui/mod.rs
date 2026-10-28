@@ -1280,6 +1280,9 @@ struct RackWeapon {
     /// Fed by power, not a magazine (beams carry 999 rounds as a stand-in).
     /// A magazine of 20 mm shells holds over 999 real ones.
     power: bool,
+    /// On point defence with no Missile Warner left aboard: it can't see a
+    /// missile to shoot.
+    blind: bool,
 }
 
 /// Folds a stack of identical weapons into one line. A starter carrying four
@@ -1311,6 +1314,9 @@ fn rack_line(name: &str, weapons: &[RackWeapon]) -> RackLine {
     // Point defence isn't yours to fire: say so, rather than READY over a
     // gun that won't answer Space.
     if live.iter().all(|w| w.auto) {
+        if live.iter().any(|w| w.blind) {
+            return RackLine { name: label, frac: 0.0, ammo, state: "BLIND".into(), state_color: ThemeColors::STATUS_DANGER };
+        }
         return RackLine { name: label, frac: 1.0, ammo, state: "AUTO PD".into(), state_color: ThemeColors::ACCENT_CYAN };
     }
     let ready = live.iter().filter(|w| w.ready && has_rounds(w) && !w.turning).count();
@@ -1340,7 +1346,7 @@ fn rack_line(name: &str, weapons: &[RackWeapon]) -> RackLine {
 /// or losing a gun in the yard updates the rack on next entry to flight.
 fn update_weapon_rack(
     rack_root: Query<Entity, With<WeaponRackRoot>>,
-    ship_query: Query<Entity, With<Ship>>,
+    ship_query: Query<(Entity, Option<&crate::combat::missile_defence::MissileWarning>), With<Ship>>,
     weapon_query: Query<(Entity, &Module, &Weapon, Option<&WeaponCooldown>, Option<&crate::combat::targeting::fire_groups::FireGroup>, &ChildOf, Option<&ModuleTemperature>)>,
     assemblies: Query<&crate::combat::gun_assembly::GunAssembly>,
     // A turret gun's barrel and where its turret is aiming.
@@ -1355,7 +1361,8 @@ fn update_weapon_rack(
 ) {
     use theme::*;
     let Ok(root) = rack_root.single() else { return };
-    let Ok(player) = ship_query.single() else { return };
+    let Ok((player, warning)) = ship_query.single() else { return };
+    let blind = warning.is_some_and(|w| w.warners == 0);
 
     let mut stacks: std::collections::BTreeMap<(u8, &'static str), Vec<RackWeapon>> = std::collections::BTreeMap::new();
     for (entity, module, weapon, cd, fg, parent, temp) in weapon_query.iter() {
@@ -1395,6 +1402,7 @@ fn update_weapon_rack(
                 },
                 auto: module.module_type == ModuleType::FiringPiece && point_defence.contains(entity),
                 power: weapon.max_ammo >= 999 && assemblies.get(entity).is_err(),
+                blind: blind && module.module_type == ModuleType::FiringPiece && point_defence.contains(entity),
             });
     }
     let lines: Vec<((u8, &'static str), RackLine)> =
@@ -6753,14 +6761,14 @@ mod weapon_rack_tests {
 
     #[test]
     fn a_turret_gun_still_coming_round_says_so() {
-        let turning = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 30, max: 30, alive: true, turning: true, auto: false, power: false };
+        let turning = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 30, max: 30, alive: true, turning: true, auto: false, power: false, blind: false };
         assert_eq!(rack_line("170 mm Gun", std::slice::from_ref(&turning)).state, "TURNING");
         let on = RackWeapon { turning: false, ..turning };
         assert_eq!(rack_line("170 mm Gun", &[on]).state, "READY");
     }
 
     fn gun(ready: bool, remaining: f32, alive: bool) -> RackWeapon {
-        RackWeapon { frac: if ready { 1.0 } else { 0.5 }, ready, remaining, ammo: 30, max: 30, alive, turning: false, auto: false, power: false }
+        RackWeapon { frac: if ready { 1.0 } else { 0.5 }, ready, remaining, ammo: 30, max: 30, alive, turning: false, auto: false, power: false, blind: false }
     }
 
     #[test]
@@ -6769,6 +6777,8 @@ mod weapon_rack_tests {
         assert_eq!(rack_line("20 mm Gun", &[pd]).state, "AUTO PD");
         let dry = RackWeapon { auto: true, ammo: 0, ..gun(true, 0.0, true) };
         assert_eq!(rack_line("20 mm Gun", &[dry]).state, "EMPTY");
+        let blind = RackWeapon { auto: true, blind: true, ..gun(true, 0.0, true) };
+        assert_eq!(rack_line("20 mm Gun", &[blind]).state, "BLIND");
     }
 
     #[test]
@@ -6792,9 +6802,9 @@ mod weapon_rack_tests {
     /// A dry magazine is EMPTY, not READY, and a half-dry stack can't all fire.
     #[test]
     fn dry_guns_are_not_ready() {
-        let dry = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 0, max: 30, alive: true, turning: false, auto: false, power: false };
+        let dry = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 0, max: 30, alive: true, turning: false, auto: false, power: false, blind: false };
         assert_eq!(rack_line("Cannon", &[dry]).state, "EMPTY");
-        let dry = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 0, max: 30, alive: true, turning: false, auto: false, power: false };
+        let dry = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 0, max: 30, alive: true, turning: false, auto: false, power: false, blind: false };
         assert_eq!(rack_line("Cannon", &[gun(true, 0.0, true), dry]).state, "1/2 RDY");
     }
 
@@ -6814,7 +6824,7 @@ mod weapon_rack_tests {
     /// A power-fed gun has no magazine to count.
     #[test]
     fn power_weapons_show_no_fake_ammo() {
-        let beam = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 999, max: 999, alive: true, turning: false, auto: false, power: true };
+        let beam = RackWeapon { frac: 1.0, ready: true, remaining: 0.0, ammo: 999, max: 999, alive: true, turning: false, auto: false, power: true, blind: false };
         assert_eq!(rack_line("Laser", &[beam]).ammo, "power");
     }
 }

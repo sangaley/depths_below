@@ -2324,6 +2324,28 @@
    "custom_name": null,
    "subcomponents": null,
    "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    22,
+    0
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    0,
+    0
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "2026-10-25T00:00:00Z",

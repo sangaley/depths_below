@@ -1969,6 +1969,22 @@ pub fn build_registry() -> ModuleRegistry {
         crew_station: false,
     });
 
+    defs.insert(ModuleType::MissileWarner, ModuleDef {
+        name: "Missile Warner",
+        description: "Spots enemy missiles out to 4,500. Point defence guns and decoy launchers only act on missiles a warner has seen: place them round the ship, and keep them alive.",
+        category: ModuleCategory::Detection,
+        size: IVec2::new(1, 1),
+        health: 40.0,
+        power_generation: 0.0,
+        power_consumption: 4.0,
+        color: Color::srgb(0.85, 0.4, 0.2),
+        companion: CompanionData::None,
+        customizable: false,
+        cost: 30,
+        base_stats: CalculatedStats::default(),
+        crew_station: false,
+    });
+
     // ========================================================================
     // STORAGE — NEW (2)
     // ========================================================================

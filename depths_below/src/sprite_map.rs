@@ -72,6 +72,7 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::HydrophoneArray => "sprites/modules/passive_sonar_2x1.png",
         ModuleType::ThermalImager => "sprites/modules/depth_sensor.png",
         ModuleType::ProximityAlarm => "sprites/modules/depth_sensor.png",
+        ModuleType::MissileWarner => "sprites/modules/missile_warner.png",
         // Storage
         ModuleType::SmallCargo => "sprites/modules/cargo_hold.png",
         ModuleType::LargeCargo => "sprites/modules/cargo_hold_2x1.png",

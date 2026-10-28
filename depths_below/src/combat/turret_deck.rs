@@ -621,7 +621,13 @@ pub fn traverse_turrets(
     parts: Query<&Module, Without<DestroyedModule>>,
     plates: Query<(), (With<TurretPlate>, Without<crate::components::HullDestroyed>)>,
     ships: Query<
-        (&GlobalTransform, Option<&Children>, Option<&crate::ai_ship::components::AiShipTarget>, Option<&crate::components::Velocity>),
+        (
+            &GlobalTransform,
+            Option<&Children>,
+            Option<&crate::ai_ship::components::AiShipTarget>,
+            Option<&crate::components::Velocity>,
+            Option<&crate::combat::missile_defence::MissileWarning>,
+        ),
         Or<(With<Ship>, With<crate::ai_ship::components::AiShip>)>,
     >,
     // Where an AI ship's target is now.
@@ -636,7 +642,8 @@ pub fn traverse_turrets(
     // Point defence guns, and the missiles they might shoot at.
     pd: (
         Query<&crate::combat::gun_assembly::GunAssembly, With<crate::combat::targeting::fire_groups::InterceptMode>>,
-        Query<(&Transform, &crate::components::Velocity, &crate::combat::new_projectiles::MissileProjectile), Without<TurretBody>>,
+        // A point defence gun sees only the missiles its ship's warners do.
+        Query<(Entity, &Transform, &crate::components::Velocity), (With<crate::combat::new_projectiles::MissileProjectile>, Without<TurretBody>)>,
     ),
 ) {
     let dt = time.delta_secs();
@@ -664,7 +671,7 @@ pub fn traverse_turrets(
         // Motors: Traverse Motor blocks on the hull deck touching the ring.
         let ring_cells: Vec<IVec2> = rings.get(body.ring).map(ring_cells).unwrap_or_default();
         // A turret on a severed section has no ship to aim for.
-        let Ok((ship_gt, ship_children, ai_target, ship_vel)) = ships.get(parent.parent()) else {
+        let Ok((ship_gt, ship_children, ai_target, ship_vel, warning)) = ships.get(parent.parent()) else {
             continue;
         };
         body.motors = ship_children
@@ -702,15 +709,19 @@ pub fn traverse_turrets(
                 g.stats.velocity_mps * crate::combat::gun_assembly::GAME_SPEED_PER_MPS,
                 ship_vel.map(|v| v.0).unwrap_or(Vec2::ZERO),
                 crate::combat::gun_assembly::range_for(&g.stats).min(crate::combat::missile_defence::PD_RANGE),
-                pd.1.iter().filter(|(_, _, m)| m.owner_ship != Some(ship)).map(|(t, v, _)| (t.translation.truncate(), v.0)),
+                warning
+                    .into_iter()
+                    .flat_map(|w| w.spotted.iter())
+                    .filter_map(|e| pd.1.get(*e).ok())
+                    .map(|(_, t, v)| (t.translation.truncate(), v.0)),
             )
         });
         body.pd_engaged = pd_aim.is_some();
         if crate::combat::gun_assembly::trace() && (time.elapsed_secs() % 1.0) < dt
             && children.into_iter().flatten().any(|c| pd.0.contains(*c))
         {
-            let near = pd.1.iter().filter(|(t, _, m)| m.owner_ship != Some(ship) && t.translation.truncate().distance(ship_gt.translation().truncate()) < 6000.0).count();
-            info!("PD turret {:?}: {} enemy missiles within 6,000 u, engaged {}, {:.0} t, {:.0} deg/s", entity, near, body.pd_engaged, body.mass_t, body.traverse_deg_s);
+            let (spotted, warners) = warning.map_or((0, 0), |w| (w.spotted.len(), w.warners));
+            info!("PD turret {:?}: {} enemy missiles spotted by {} warners, engaged {}, {:.0} t, {:.0} deg/s", entity, spotted, warners, body.pd_engaged, body.mass_t, body.traverse_deg_s);
         }
         // A point defence turret is the ship's, not the gunner's: it turns
         // only onto missiles, and holds where it is between them -- never

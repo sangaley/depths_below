@@ -110,13 +110,18 @@ def main():
     for cell in [(-5, 5), (-5, -7)]:
         clear_and_place(s, "VlsSilo", cell, "North", {"missile": VLS_MISSILE})
 
+    # Missile Warners, fore and aft on both sides: point defence and decoys
+    # act only on missiles a warner has seen.
+    for cell in [(-17, 3), (-17, -3), (22, 3), (22, -3)]:
+        clear_and_place(s, "MissileWarner", cell)
+
     clear_and_place(s, "DecoyLauncher", (-15, -1))
     clear_and_place(s, "ChaffDispenser", (-9, -5))
 
     out = os.path.join(kit.ROOT, "designs/halyard_mk2.json")
     s.save(out)
     print(out, len(s.d["hull_cells"]), "hull,", len(s.d["modules"]), "modules +", len(s.d["guns"]), "fitted guns")
-    for t in ["LaunchPad", "RailLauncher", "VlsSilo", "TurretRingSmall", "DecoyLauncher", "ChaffDispenser", "Magazine"]:
+    for t in ["LaunchPad", "RailLauncher", "VlsSilo", "TurretRingSmall", "DecoyLauncher", "ChaffDispenser", "MissileWarner", "Magazine"]:
         print(" ", t, s.count(t))
 
 

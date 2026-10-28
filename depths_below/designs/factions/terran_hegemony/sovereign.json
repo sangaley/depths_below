@@ -10317,6 +10317,50 @@
    "custom_name": null,
    "subcomponents": null,
    "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    25,
+    -1
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    -26,
+    -4
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    -2,
+    16
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    -2,
+    -16
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",

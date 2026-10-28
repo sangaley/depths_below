@@ -7596,6 +7596,22 @@
    "rotation": "North"
   },
   {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    -24,
+    8
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    -24,
+    -8
+   ],
+   "rotation": "North"
+  },
+  {
    "module_type": "ManeuveringThruster",
    "grid_pos": [
     -22,
@@ -8844,7 +8860,7 @@
    "rotation": "North"
   },
   {
-   "module_type": "Floodlight",
+   "module_type": "MissileWarner",
    "grid_pos": [
     -13,
     8
@@ -8852,7 +8868,7 @@
    "rotation": "North"
   },
   {
-   "module_type": "Floodlight",
+   "module_type": "MissileWarner",
    "grid_pos": [
     -13,
     -8
@@ -10260,7 +10276,7 @@
    "rotation": "North"
   },
   {
-   "module_type": "Floodlight",
+   "module_type": "MissileWarner",
    "grid_pos": [
     3,
     8
@@ -10268,7 +10284,7 @@
    "rotation": "North"
   },
   {
-   "module_type": "Floodlight",
+   "module_type": "MissileWarner",
    "grid_pos": [
     3,
     -8
@@ -11148,7 +11164,7 @@
    "rotation": "North"
   },
   {
-   "module_type": "RadarArray",
+   "module_type": "MissileWarner",
    "grid_pos": [
     22,
     4
@@ -11156,7 +11172,7 @@
    "rotation": "North"
   },
   {
-   "module_type": "RadarArray",
+   "module_type": "MissileWarner",
    "grid_pos": [
     22,
     -4

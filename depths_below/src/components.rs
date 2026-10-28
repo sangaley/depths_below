@@ -479,6 +479,7 @@ impl ModuleCategory {
                 ModuleType::HydrophoneArray,
                 ModuleType::ThermalImager,
                 ModuleType::ProximityAlarm,
+                ModuleType::MissileWarner,
                 ModuleType::CreatureScanner,
                 ModuleType::MineralScanner,
                 ModuleType::PressureSensor,
@@ -649,6 +650,7 @@ pub enum ModuleType {
     HydrophoneArray,
     ThermalImager,
     ProximityAlarm,
+    MissileWarner,        // Spots incoming missiles for point defence and decoys
 
     // Storage (7)
     SmallCargo,
@@ -963,7 +965,7 @@ impl ModuleType {
             ModuleType::RadarArray | ModuleType::AdvancedRadar |
             ModuleType::PassiveRadar | ModuleType::DepthScanner |
             ModuleType::HydrophoneArray | ModuleType::ThermalImager |
-            ModuleType::ProximityAlarm |
+            ModuleType::ProximityAlarm | ModuleType::MissileWarner |
             ModuleType::CreatureScanner |
             ModuleType::MineralScanner |
             ModuleType::PressureSensor => ModuleCategory::Detection,
@@ -1066,6 +1068,7 @@ impl ModuleType {
             ModuleType::HydrophoneArray => "Signal Interceptor",
             ModuleType::ThermalImager => "Thermal Imager",
             ModuleType::ProximityAlarm => "Proximity Alarm",
+            ModuleType::MissileWarner => "Missile Warner",
             ModuleType::SmallCargo => "Small Cargo",
             ModuleType::LargeCargo => "Large Cargo",
             ModuleType::AmmoBay => "Ammo Bay",

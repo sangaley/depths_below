@@ -8741,28 +8741,6 @@
    "extras": null
   },
   {
-   "module_type": "MaintenanceLocker",
-   "grid_pos": [
-    -17,
-    3
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": null
-  },
-  {
-   "module_type": "MaintenanceLocker",
-   "grid_pos": [
-    -17,
-    -3
-   ],
-   "rotation": "South",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": null
-  },
-  {
    "module_type": "FuelTank",
    "grid_pos": [
     -22,
@@ -9907,17 +9885,6 @@
    "extras": null
   },
   {
-   "module_type": "Searchlight",
-   "grid_pos": [
-    22,
-    3
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": null
-  },
-  {
    "module_type": "AutopilotCore",
    "grid_pos": [
     13,
@@ -9976,17 +9943,6 @@
    "module_type": "ThermalImager",
    "grid_pos": [
     21,
-    -3
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": null
-  },
-  {
-   "module_type": "Searchlight",
-   "grid_pos": [
-    22,
     -3
    ],
    "rotation": "North",
@@ -11408,6 +11364,50 @@
      "head": "Radar"
     }
    }
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    -17,
+    3
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    -17,
+    -3
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    22,
+    3
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    22,
+    -3
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   },
   {
    "module_type": "DecoyLauncher",
