@@ -1582,6 +1582,40 @@ pub fn build_registry() -> ModuleRegistry {
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
+    // Gun house roof fittings: on a turret's roof (PgUp twice in build mode),
+    // in place of an armour plate. Each counts for the turret it stands on.
+    defs.insert(ModuleType::Rangefinder, ModuleDef {
+        name: "Rangefinder", description: "On a turret's roof: its guns' spread tightens by 15% (two at most count).",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 70.0,
+        power_generation: 0.0, power_consumption: 2.0, color: Color::srgb(0.40, 0.45, 0.50),
+        companion: CompanionData::None, customizable: false, cost: 40,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::RoofVent, ModuleDef {
+        name: "Roof Vent", description: "On a turret's roof: cools every gun under it like a Breech Cooler each (two at most count).",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 90.0,
+        power_generation: 0.0, power_consumption: 1.0, color: Color::srgb(0.40, 0.42, 0.45),
+        companion: CompanionData::None, customizable: false, cost: 30,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::Periscope, ModuleDef {
+        name: "Periscope", description: "On a turret's roof: a gun sight. Its guns lead their shots as if a Targeting Computer stood beside them, and the turret turns 15% quicker (two at most count).",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 50.0,
+        power_generation: 0.0, power_consumption: 1.0, color: Color::srgb(0.35, 0.50, 0.60),
+        companion: CompanionData::None, customizable: false, cost: 35,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::ArmouredHatch, ModuleDef {
+        name: "Armoured Hatch", description: "On a turret's roof: crew get in to the parts under it, and rebuild them twice as fast.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 140.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.42, 0.44, 0.48),
+        companion: CompanionData::None, customizable: false, cost: 25,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
     defs.insert(ModuleType::OverchargeCapacitor, ModuleDef {
         name: "Overcharge Capacitor", description: "Stores energy for a single devastating shot. 3x damage, 15s cooldown. Worth the wait.",
         category: ModuleCategory::Weapons, size: IVec2::new(1, 1), health: 50.0,
@@ -1914,6 +1948,61 @@ pub fn build_registry() -> ModuleRegistry {
         category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 190.0,
         power_generation: 0.0, power_consumption: 0.0, color: crate::sprite_map::HULL_TONE,
         companion: CompanionData::None, customizable: false, cost: 64,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    // More angle pieces: each a cell cut by one line (building::module_shape).
+    defs.insert(ModuleType::BevelledArmorPlate, ModuleDef {
+        name: "Bevelled Armor Plate",
+        description: "A full plate with one corner chipped off at 45 degrees: nearly all the steel of a flat plate, and no square corner to catch a round. Rotate to pick the corner.",
+        category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 230.0,
+        power_generation: 0.0, power_consumption: 0.0, color: crate::sprite_map::HULL_TONE,
+        companion: CompanionData::None, customizable: false, cost: 58,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::SlopeArmorPlateLow, ModuleDef {
+        name: "Slope Plate (low)",
+        description: "The low half of a long, shallow slope: lay it beside a Slope Plate (high) and the two make one face rising a cell over two. Shallow slopes turn rounds away better than any wedge.",
+        category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 140.0,
+        power_generation: 0.0, power_consumption: 0.0, color: crate::sprite_map::HULL_TONE,
+        companion: CompanionData::None, customizable: false, cost: 52,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::SlopeArmorPlateHigh, ModuleDef {
+        name: "Slope Plate (high)",
+        description: "The high half of a long, shallow slope: lay it beside a Slope Plate (low).",
+        category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 210.0,
+        power_generation: 0.0, power_consumption: 0.0, color: crate::sprite_map::HULL_TONE,
+        companion: CompanionData::None, customizable: false, cost: 60,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::SlopeArmorPlateLowMirror, ModuleDef {
+        name: "Slope Plate (low, mirrored)",
+        description: "The low half of a long slope, mirrored for the other side of the ship.",
+        category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 140.0,
+        power_generation: 0.0, power_consumption: 0.0, color: crate::sprite_map::HULL_TONE,
+        companion: CompanionData::None, customizable: false, cost: 52,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::SlopeArmorPlateHighMirror, ModuleDef {
+        name: "Slope Plate (high, mirrored)",
+        description: "The high half of a long slope, mirrored for the other side of the ship.",
+        category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 210.0,
+        power_generation: 0.0, power_consumption: 0.0, color: crate::sprite_map::HULL_TONE,
+        companion: CompanionData::None, customizable: false, cost: 60,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::HalfArmorPlate, ModuleDef {
+        name: "Half Armor Plate",
+        description: "Half a cell of plate: a thin skirt, a step in a roof line, light armour where a full plate is too heavy.",
+        category: ModuleCategory::Utility, size: IVec2::new(1, 1), health: 120.0,
+        power_generation: 0.0, power_consumption: 0.0, color: crate::sprite_map::HULL_TONE,
+        companion: CompanionData::None, customizable: false, cost: 34,
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 

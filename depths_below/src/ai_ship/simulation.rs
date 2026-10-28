@@ -1346,8 +1346,12 @@ fn wounds_of(
         }
         if h.is_none() && m.is_none() {
             for part in deck.into_iter().flat_map(|d| d.iter()) {
+                // The roof over a turret's guns is laid again when the ship
+                // comes back (combat::gun_house); only its guns are recorded.
                 if let Ok((_, Some(m), Some(on), _)) = blocks.get(part) {
-                    parts.insert((on.ring_cell, m.grid_position));
+                    if !crate::combat::gun_house::is_roof_block(m.module_type) {
+                        parts.insert((on.ring_cell, m.grid_position));
+                    }
                 }
             }
         }

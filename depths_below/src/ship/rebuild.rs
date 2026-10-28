@@ -220,7 +220,7 @@ pub fn crew_rebuild_system(
     mut stall_notified: Local<bool>,
     turret_work: (
         Query<Entity, With<Ship>>,
-        Query<(&crate::combat::turret_deck::TurretBody, &ChildOf)>,
+        Query<(&crate::combat::turret_deck::TurretBody, &ChildOf, Option<&crate::combat::gun_house::RoofFittings>)>,
         MessageWriter<crate::combat::turret_deck::RebuildTurretPlate>,
     ),
 ) {
@@ -229,7 +229,7 @@ pub fn crew_rebuild_system(
     // down anyway it would land on the hull at turret-grid cells.
     if let Ok(ship) = ship_query.single() {
         queue.ghosts.retain(|g| {
-            let keep = g.turret.is_none_or(|rc| turrets.iter().any(|(t, p)| p.parent() == ship && t.ring_cell == rc));
+            let keep = g.turret.is_none_or(|rc| turrets.iter().any(|(t, p, _)| p.parent() == ship && t.ring_cell == rc));
             if !keep {
                 for &sprite in &g.sprites {
                     commands.entity(sprite).try_despawn();
@@ -278,7 +278,16 @@ pub fn crew_rebuild_system(
         *stall_notified = false;
     }
 
-    ghost.progress += idle_crew as f32 * time.delta_secs();
+    // An Armoured Hatch on a turret's roof lets the crew in to the parts
+    // under it: they go back twice as fast (combat::gun_house).
+    let under_roof = matches!(ghost.kind, GhostKind::Module { module_type, .. } if !crate::combat::gun_house::is_roof_block(module_type));
+    let hatch = under_roof
+        && ship_query.single().is_ok_and(|ship| {
+            ghost.turret.is_some_and(|rc| {
+                turrets.iter().any(|(t, p, f)| p.parent() == ship && t.ring_cell == rc && f.is_some_and(|f| f.hatches > 0))
+            })
+        });
+    ghost.progress += idle_crew as f32 * time.delta_secs() * if hatch { 2.0 } else { 1.0 };
     if ghost.progress < ghost.work_needed {
         return;
     }

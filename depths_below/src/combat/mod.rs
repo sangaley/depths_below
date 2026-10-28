@@ -32,6 +32,7 @@ pub mod missile_design;
 pub mod missile_defence;
 pub mod gun_assembly;
 pub mod turret_deck;
+pub mod gun_house;
 
 /// Dev switch: no weapon consumes ammunition while true (player and AI).
 ///
@@ -488,7 +489,7 @@ impl Plugin for CombatPlugin {
             .init_resource::<turret_deck::PlayerAimPoint>()
             .init_resource::<turret_deck::TurretShapes>()
             .add_message::<turret_deck::RebuildTurretPlate>()
-            .add_systems(Update, (turret_deck::rebuild_turret_plates, turret_deck::fit_gun_houses))
+            .add_systems(Update, (turret_deck::rebuild_turret_plates, gun_house::lay_default_roofs, gun_house::count_roof_fittings))
             .init_resource::<gun_design::GunDesigns>()
             .add_systems(Startup, gun_design::load_gun_designs)
             .add_systems(Update, (

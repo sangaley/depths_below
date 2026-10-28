@@ -98,6 +98,12 @@ pub fn is_plating(t: ModuleType) -> bool {
         t,
         ModuleType::ArmorPlate
             | ModuleType::AngledArmorPlate
+            | ModuleType::BevelledArmorPlate
+            | ModuleType::SlopeArmorPlateLow
+            | ModuleType::SlopeArmorPlateHigh
+            | ModuleType::SlopeArmorPlateLowMirror
+            | ModuleType::SlopeArmorPlateHighMirror
+            | ModuleType::HalfArmorPlate
             | ModuleType::CornerArmorPlate
             | ModuleType::StaggeredArmorPlate
             | ModuleType::HullReinforcePlate

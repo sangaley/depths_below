@@ -1,7 +1,7 @@
 //! Building on a turret deck.
 //!
-//! PageUp lifts build mode onto the turret decks, PageDown drops it back to
-//! the hull. While building, every turret stands squared to the hull
+//! PageUp lifts build mode onto the turret decks, and again onto the gun
+//! house roofs over them (combat::gun_house); PageDown steps back down. While building, every turret stands squared to the hull
 //! (combat::turret_deck::traverse_turrets), so a turret's cell (x, y) sits
 //! exactly over hull cell `centre + (x, y)`: the ghost, the cursor and the
 //! click all work in hull cells as they always have, and only the checks and
@@ -34,6 +34,13 @@ pub fn allowed_on_turret(t: ModuleType) -> bool {
                 | ModuleType::AntiFlashDoor
         )
         && !turret_deck::is_turret_ring(t)
+        && !crate::combat::gun_house::is_roof_block(t)
+}
+
+/// Can this stand on a turret's roof? Armour plates, angle pieces and the
+/// roof fittings.
+pub fn allowed_on_roof(t: ModuleType) -> bool {
+    crate::combat::gun_house::is_roof_block(t)
 }
 
 /// A barrel reaches out past its turret's deck (and is no cover there --
@@ -81,7 +88,7 @@ pub(crate) fn player_decks(
         .collect()
 }
 
-/// PageUp: turret decks. PageDown: hull deck.
+/// PageUp: up a level (hull, turret decks, roofs). PageDown: down one.
 pub fn switch_build_deck(
     keyboard: Res<ButtonInput<KeyCode>>,
     current_state: Res<State<BuildState>>,
@@ -96,9 +103,15 @@ pub fn switch_build_deck(
         return;
     }
     let want = if keyboard.just_pressed(KeyCode::PageUp) {
-        BuildDeck::Turret
+        match build_state.deck {
+            BuildDeck::Hull => BuildDeck::Turret,
+            _ => BuildDeck::Roof,
+        }
     } else if keyboard.just_pressed(KeyCode::PageDown) {
-        BuildDeck::Hull
+        match build_state.deck {
+            BuildDeck::Roof => BuildDeck::Turret,
+            _ => BuildDeck::Hull,
+        }
     } else {
         return;
     };
@@ -106,7 +119,7 @@ pub fn switch_build_deck(
         return;
     }
     let Ok(player) = ship.single() else { return };
-    if want == BuildDeck::Turret && !bodies.iter().any(|(_, _, p, _)| p.parent() == player) {
+    if want != BuildDeck::Hull && !bodies.iter().any(|(_, _, p, _)| p.parent() == player) {
         info!("Build deck: no turret on the player's ship");
         notifications.write(ShowNotification {
             message: "No turrets yet: lay a Turret Ring on the hull deck first.".into(),
@@ -120,7 +133,8 @@ pub fn switch_build_deck(
     info!("Build deck: {:?}", want);
     notifications.write(ShowNotification {
         message: match want {
-            BuildDeck::Turret => "Turret deck (PgDn: back to the hull)".into(),
+            BuildDeck::Turret => "Turret deck (PgUp: gun house roof, PgDn: hull)".into(),
+            BuildDeck::Roof => "Gun house roof: plates, angle pieces, fittings (PgDn: turret deck)".into(),
             BuildDeck::Hull => "Hull deck".into(),
         },
         notification_type: NotificationType::Info,
@@ -142,12 +156,13 @@ pub fn validate_turret_ghost(
     registry: Res<ModuleRegistry>,
     currency: Res<Currency>,
 ) {
-    if build_state.deck != BuildDeck::Turret
+    if build_state.deck == BuildDeck::Hull
         || *current_state.get() != BuildState::Placing
         || !build_state.cursor_on_grid
     {
         return;
     }
+    let roof = build_state.deck == BuildDeck::Roof;
     let Ok(player) = ship.single() else { return };
     let decks = player_decks(player, &bodies, &rings);
     let verdict = (|| -> Result<(), String> {
@@ -156,8 +171,15 @@ pub fn validate_turret_ghost(
             BuildSelection::Module(mt) => mt,
             BuildSelection::Hull(_) => return Err("A turret's plating comes with its ring".into()),
         };
-        if !allowed_on_turret(mt) {
-            return Err(format!("{} goes on the hull deck", mt.name()));
+        if roof && !allowed_on_roof(mt) {
+            return Err(format!("{} doesn't go on a roof: plates, angle pieces and roof fittings do", mt.name()));
+        }
+        if !roof && !allowed_on_turret(mt) {
+            return Err(if allowed_on_roof(mt) {
+                format!("{} goes on the roof (PgUp)", mt.name())
+            } else {
+                format!("{} goes on the hull deck", mt.name())
+            });
         }
         let def = registry.get(mt);
         let local = build_state.ghost_position - deck.centre;
@@ -165,9 +187,9 @@ pub fn validate_turret_ghost(
         if !may_overhang(mt) && !cells.iter().all(|c| on_deck(*c, deck.size)) {
             return Err("Off the edge of the turret".into());
         }
-        let taken = turret_cells(deck.body, &bodies, &parts);
+        let taken = turret_cells(deck.body, &bodies, &parts, roof);
         if cells.iter().any(|c| taken.contains(c)) {
-            return Err("Overlaps a part on this turret".into());
+            return Err(if roof { "Overlaps the roof here".into() } else { "Overlaps a part on this turret".into() });
         }
         let hull = player_hull.iter().filter(|p| p.parent() == player).count();
         if player_modules.iter().count() + hull >= crate::combat::limits::MAX_SHIP_BLOCKS {
@@ -182,16 +204,19 @@ pub fn validate_turret_ghost(
     build_state.placement_reason = verdict.err();
 }
 
-/// The turret-local cells a turret's parts stand on.
+/// The turret-local cells a turret's parts stand on -- or, `roof`, its roof
+/// blocks: the two levels don't get in each other's way.
 pub(crate) fn turret_cells(
     body: Entity,
     bodies: &Query<(Entity, &TurretBody, &ChildOf, Option<&Children>)>,
     parts: &Query<&Module, Without<DestroyedModule>>,
+    roof: bool,
 ) -> Vec<IVec2> {
     let Ok((_, _, _, Some(children))) = bodies.get(body) else { return Vec::new() };
     children
         .iter()
         .filter_map(|c| parts.get(c).ok())
+        .filter(|m| crate::combat::gun_house::is_roof_block(m.module_type) == roof)
         .flat_map(|m| {
             GridOccupancy::cells_for(m.grid_position, m.size, m.rotation, footprints::footprint_override(m.module_type))
         })
@@ -211,9 +236,10 @@ pub fn turret_deck_clicks(
     mut place: MessageWriter<PlaceModuleRequest>,
     mut remove: MessageWriter<RemoveModuleRequest>,
 ) {
-    if build_state.deck != BuildDeck::Turret || !build_state.cursor_on_grid {
+    if build_state.deck == BuildDeck::Hull || !build_state.cursor_on_grid {
         return;
     }
+    let roof = build_state.deck == BuildDeck::Roof;
     let state = *current_state.get();
     let Ok(player) = ship.single() else { return };
     let decks = player_decks(player, &bodies, &rings);
@@ -224,10 +250,14 @@ pub fn turret_deck_clicks(
         || (state == BuildState::Placing && mouse.just_pressed(MouseButton::Right));
     if removing {
         let Ok((_, _, _, Some(children))) = bodies.get(deck.body) else { return };
-        let hit = children.iter().filter_map(|c| parts.get(c).ok()).find(|(_, m)| {
-            GridOccupancy::cells_for(m.grid_position, m.size, m.rotation, footprints::footprint_override(m.module_type))
-                .contains(&local)
-        });
+        let hit = children
+            .iter()
+            .filter_map(|c| parts.get(c).ok())
+            .filter(|(_, m)| crate::combat::gun_house::is_roof_block(m.module_type) == roof)
+            .find(|(_, m)| {
+                GridOccupancy::cells_for(m.grid_position, m.size, m.rotation, footprints::footprint_override(m.module_type))
+                    .contains(&local)
+            });
         if let Some((entity, _)) = hit {
             remove.write(RemoveModuleRequest { module: entity });
         }
@@ -250,11 +280,12 @@ pub fn turret_deck_clicks(
 
 /// Building on the hull, the turrets are lifted out of the way so the deck
 /// under them can be seen; on the turret deck they are there to build on.
+#[allow(clippy::type_complexity)]
 pub fn show_turrets_for_deck(
     current_state: Res<State<BuildState>>,
     build_state: Res<BuildingState>,
-    mut bodies: Query<&mut Visibility, (With<TurretBody>, Without<turret_deck::GunHouse>)>,
-    mut houses: Query<&mut Visibility, With<turret_deck::GunHouse>>,
+    mut bodies: Query<&mut Visibility, (With<TurretBody>, Without<turret_deck::OnTurret>)>,
+    mut roofs: Query<(&mut Visibility, &Module), With<turret_deck::OnTurret>>,
 ) {
     let building = *current_state.get() != BuildState::Inactive;
     let hide = building && build_state.deck == BuildDeck::Hull;
@@ -264,11 +295,11 @@ pub fn show_turrets_for_deck(
             *v = want;
         }
     }
-    // Building on a turret, its gun house comes off so the parts under it
+    // Building on a turret's deck, its roof comes off so the parts under it
     // can be seen.
     let house = if building && build_state.deck == BuildDeck::Turret { Visibility::Hidden } else { Visibility::Inherited };
-    for mut v in houses.iter_mut() {
-        if *v != house {
+    for (mut v, m) in roofs.iter_mut() {
+        if crate::combat::gun_house::is_roof_block(m.module_type) && *v != house {
             *v = house;
         }
     }

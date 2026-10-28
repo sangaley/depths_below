@@ -117,7 +117,7 @@ impl StampWorld<'_, '_> {
             let player = self.ship.single().ok()?;
             let decks = player_decks(player, &self.bodies, &self.rings);
             let deck = deck_under(origin, &decks);
-            let taken = deck.map(|d| turret_cells(d.body, &self.bodies, &self.rings)).unwrap_or_default();
+            let taken = deck.map(|d| turret_cells(d.body, &self.bodies, &self.rings, false)).unwrap_or_default();
             if deck.is_none() {
                 let plan = StampPlan { parts: vec![], turret: None, problem: Some("Not over a turret".into()) };
                 return Some((design, plan));

@@ -995,6 +995,8 @@ pub enum BuildDeck {
     #[default]
     Hull,
     Turret,
+    /// The gun house roof over the turrets' guns (combat::gun_house).
+    Roof,
 }
 
 const HULL_LAYERS: [HullLayer; 5] = [
@@ -1025,6 +1027,14 @@ const HULL_PLATING: [ModuleType; 2] = [
 /// from drifting apart again.
 const STRUCTURAL_PALETTE: &[ModuleType] = &[
     ModuleType::ArmorPlate,
+    // The other angle pieces, beside the plate they're cut from (the 45-degree
+    // wedges ride in HULL_PLATING).
+    ModuleType::BevelledArmorPlate,
+    ModuleType::SlopeArmorPlateLow,
+    ModuleType::SlopeArmorPlateHigh,
+    ModuleType::SlopeArmorPlateLowMirror,
+    ModuleType::SlopeArmorPlateHighMirror,
+    ModuleType::HalfArmorPlate,
     ModuleType::CornerArmorPlate,
     ModuleType::StaggeredArmorPlate,
     ModuleType::HullBeam,

@@ -176,6 +176,10 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
             "sprites/gun_parts/turret_ring.png",
         ModuleType::TraverseMotor => "sprites/gun_parts/traverse_motor.png",
         ModuleType::AmmoHoist => "sprites/gun_parts/ammo_hoist.png",
+        ModuleType::Rangefinder => "sprites/gun_parts/rangefinder.png",
+        ModuleType::RoofVent => "sprites/gun_parts/roof_vent.png",
+        ModuleType::Periscope => "sprites/gun_parts/periscope.png",
+        ModuleType::ArmouredHatch => "sprites/gun_parts/armoured_hatch.png",
         ModuleType::AntiFlashDoor => "sprites/gun_parts/anti_flash_door.png",
         ModuleType::OverchargeCapacitor => "sprites/modules/battery.png",
         ModuleType::BoreEvacuator => "sprites/modules/hull_beam.png",
@@ -219,6 +223,12 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::StaggeredArmorPlate => "sprites/modules/hull_beam_3x2.png",
         ModuleType::AngledHullPlate => "sprites/modules/hull_beam.png",
         ModuleType::AngledArmorPlate => "sprites/modules/hull_beam.png",
+        ModuleType::BevelledArmorPlate => "sprites/modules/bevelled_plate.png",
+        ModuleType::SlopeArmorPlateLow => "sprites/modules/slope_low.png",
+        ModuleType::SlopeArmorPlateHigh => "sprites/modules/slope_high.png",
+        ModuleType::SlopeArmorPlateLowMirror => "sprites/modules/slope_low_mirror.png",
+        ModuleType::SlopeArmorPlateHighMirror => "sprites/modules/slope_high_mirror.png",
+        ModuleType::HalfArmorPlate => "sprites/modules/half_plate.png",
     })
 }
 

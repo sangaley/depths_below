@@ -210,6 +210,11 @@ pub struct ShipGrid {
     pub cells: HashMap<IVec2, Entity>,
 }
 
+/// A turret's gun house roof, as a grid of its own over the turret's
+/// ShipGrid (combat::gun_house): a round walks this one first.
+#[derive(Component, Default)]
+pub struct RoofGrid(pub ShipGrid);
+
 /// Per-block hit-resolution data, ADDITIVE alongside Module/HullSegment
 /// (same pattern as ShipGrid). `ShipGrid` answers "which block is at this
 /// cell"; `Block` answers "what does a round meet when it gets there".
@@ -236,6 +241,12 @@ pub struct Block {
     /// presents the same diagonal slab whichever side you approach from, so
     /// the normal is fixed in the hull's frame rather than derived per-face.
     pub facing: Option<f32>,
+    /// Where the cut runs, for a shaped block: its material is the part of
+    /// the cell with `p . facing <= cut` (p from the cell's centre, in
+    /// cells). 0 cuts through the centre -- a wedge, a half plate; more
+    /// keeps more of the cell (a bevel only chips the corner); less keeps
+    /// less (the low half of a long slope).
+    pub cut: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -246,13 +257,13 @@ pub enum BlockKind {
 
 impl Block {
     pub fn hull(cell: IVec2, material: HullMaterial) -> Self {
-        Self { cell, kind: BlockKind::Hull, thickness: material.damage_absorption(), facing: None }
+        Self { cell, kind: BlockKind::Hull, thickness: material.damage_absorption(), facing: None, cut: 0.0 }
     }
 
     /// A module with no armour value — machinery, which is what most modules
     /// are. Also the fallback when a struck block has no Block component.
     pub fn module(cell: IVec2) -> Self {
-        Self { cell, kind: BlockKind::Module, thickness: 0.0, facing: None }
+        Self { cell, kind: BlockKind::Module, thickness: 0.0, facing: None, cut: 0.0 }
     }
 
     /// A module as actually spawned: plating modules carry real armour and
@@ -263,6 +274,7 @@ impl Block {
             kind: BlockKind::Module,
             thickness: module_thickness(module_type),
             facing: module_facing(module_type, rotation),
+            cut: module_shape(module_type).map_or(0.0, |(_, cut)| cut),
         }
     }
 }
@@ -280,6 +292,10 @@ fn module_thickness(module_type: ModuleType) -> f32 {
         ModuleType::ArmorPlate | ModuleType::CornerArmorPlate => 40.0,
         ModuleType::AblativeArmor => 35.0,       // spends itself instead of the hull
         ModuleType::AngledArmorPlate => 30.0,    // less steel than a flat plate...
+        ModuleType::BevelledArmorPlate => 38.0,  // a plate with its corner chipped
+        ModuleType::SlopeArmorPlateLow | ModuleType::SlopeArmorPlateHigh
+        | ModuleType::SlopeArmorPlateLowMirror | ModuleType::SlopeArmorPlateHighMirror => 32.0,
+        ModuleType::HalfArmorPlate => 22.0,      // half the steel of a plate
         ModuleType::HullReinforcePlate => 30.0,
         ModuleType::AngledHullPlate => 15.0,     // ...and this one is only framing
         _ => 0.0,
@@ -294,12 +310,30 @@ fn module_thickness(module_type: ModuleType) -> f32 {
 /// the next corner, which is what `R` in build mode has always been picking;
 /// it just didn't mean anything until now.
 fn module_facing(module_type: ModuleType, rotation: Rotation) -> Option<f32> {
-    match module_type {
-        ModuleType::AngledArmorPlate | ModuleType::AngledHullPlate => {
-            Some(std::f32::consts::FRAC_PI_4 + rotation.to_radians())
-        }
-        _ => None,
-    }
+    module_shape(module_type).map(|(angle, _)| angle + rotation.to_radians())
+}
+
+/// A shaped block's cut, facing North: the outward normal of its cut face
+/// (radians) and where the cut runs (`Block::cut`). Every angle piece is a
+/// cell cut by one straight line.
+pub fn module_shape(module_type: ModuleType) -> Option<(f32, f32)> {
+    use std::f32::consts::{FRAC_PI_2, FRAC_PI_4};
+    // A slope rising one cell over two: the low half and the high half meet
+    // at mid-height on the shared edge.
+    let shallow = (1.0f32).atan2(-0.5);
+    let shallow_mirror = (1.0f32).atan2(0.5);
+    let half_step = 0.25 / (1.25f32).sqrt();
+    Some(match module_type {
+        ModuleType::AngledArmorPlate | ModuleType::AngledHullPlate => (FRAC_PI_4, 0.0),
+        // Legs of 0.4 cell chipped off the corner.
+        ModuleType::BevelledArmorPlate => (FRAC_PI_4, 0.6 / std::f32::consts::SQRT_2),
+        ModuleType::SlopeArmorPlateLow => (shallow, -half_step),
+        ModuleType::SlopeArmorPlateHigh => (shallow, half_step),
+        ModuleType::SlopeArmorPlateLowMirror => (shallow_mirror, -half_step),
+        ModuleType::SlopeArmorPlateHighMirror => (shallow_mirror, half_step),
+        ModuleType::HalfArmorPlate => (FRAC_PI_2, 0.0),
+        _ => return None,
+    })
 }
 
 /// What a cell does to a missile trying to leave its tube.
@@ -324,6 +358,12 @@ pub fn is_blowout_panel(module_type: ModuleType) -> bool {
         module_type,
         ModuleType::AngledHullPlate
             | ModuleType::AngledArmorPlate
+            | ModuleType::BevelledArmorPlate
+            | ModuleType::SlopeArmorPlateLow
+            | ModuleType::SlopeArmorPlateHigh
+            | ModuleType::SlopeArmorPlateLowMirror
+            | ModuleType::SlopeArmorPlateHighMirror
+            | ModuleType::HalfArmorPlate
             | ModuleType::ArmorPlate
             | ModuleType::CornerArmorPlate
             | ModuleType::StaggeredArmorPlate
@@ -693,14 +733,21 @@ pub fn update_ship_grids(
         // A ship that just lost its last block still gets an empty grid
         // written rather than keeping a stale one.
         let mut cells: HashMap<IVec2, Entity> = HashMap::new();
+        // A turret's gun house roof is a level of its own over its parts
+        // (combat::gun_house): its own grid, which a round meets first.
+        let mut roof: HashMap<IVec2, Entity> = HashMap::new();
         let children = children.map(|c| c.iter().collect::<Vec<_>>()).unwrap_or_default();
         for &child in &children {
             if let Ok(module) = modules.get(child) {
                 let footprint = footprints::footprint_override(module.module_type);
+                let level = if is_turret && crate::combat::gun_house::is_roof_block(module.module_type) { &mut roof } else { &mut cells };
                 for cell in ShipGrid::cells_for(module.grid_position, module.size, module.rotation, footprint) {
-                    cells.insert(cell, child);
+                    level.insert(cell, child);
                 }
             }
+        }
+        if is_turret {
+            commands.entity(ship).try_insert(RoofGrid(ShipGrid { cells: roof }));
         }
         // Hull is always 1x1, and spawns at `grid * 66.0` (y offset -33.0) on
         // player and AI ships alike, so the transform inverts cleanly. Modules
@@ -1241,7 +1288,7 @@ fn handle_module_placement(
     player_children: Query<&Children, With<Ship>>,
     hull_blocks: Query<(), With<HullSegment>>,
 ) {
-    if *current_state.get() != BuildState::Placing || build_state.deck == BuildDeck::Turret {
+    if *current_state.get() != BuildState::Placing || build_state.deck != BuildDeck::Hull {
         build_state.hull_rect_anchor = None;
         return;
     }
@@ -1467,7 +1514,7 @@ fn handle_module_removal(
     let in_placing = state == BuildState::Placing;
 
     // The turret deck takes its own clicks (turret_build::turret_deck_clicks).
-    if (!in_deleting && !in_placing) || build_state.deck == BuildDeck::Turret {
+    if (!in_deleting && !in_placing) || build_state.deck != BuildDeck::Hull {
         return;
     }
 

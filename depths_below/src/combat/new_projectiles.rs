@@ -339,7 +339,7 @@ pub fn fire_weapons_system(
     assemblies: Query<(&crate::combat::gun_assembly::GunAssembly, Option<&crate::combat::gun_assembly::GunMuzzle>)>,
     // Bundled: this system is at Bevy's parameter cap.
     turrets: (
-        Query<(&ChildOf, &crate::combat::turret_deck::TurretBody)>,
+        Query<(&ChildOf, &crate::combat::turret_deck::TurretBody, Option<&crate::combat::gun_house::RoofFittings>)>,
         Res<crate::combat::turret_deck::TurretShapes>,
     ),
 ) {
@@ -390,7 +390,7 @@ pub fn fire_weapons_system(
         // current target/cursor — including an AI ship shooting itself when
         // the player had it targeted.
         // A gun on a turret deck is a grandchild: its turret is the parent.
-        let owner = turret_bodies.get(parent.parent()).map(|(t, _)| t.parent()).unwrap_or(parent.parent());
+        let owner = turret_bodies.get(parent.parent()).map(|(t, _, _)| t.parent()).unwrap_or(parent.parent());
         if owner != player_ship { continue; }
         // True kinetic weapons only. This loop has no type match arms below
         // for anything else — every OTHER weapon type (Laser, PlasmaCaster,
@@ -429,7 +429,7 @@ pub fn fire_weapons_system(
         // only -- an old gun on intercept mode is point_defense's.
         let pd_engaged = point_defence
             && module.module_type == ModuleType::FiringPiece
-            && turret_bodies.get(parent.parent()).is_ok_and(|(_, t)| t.pd_engaged);
+            && turret_bodies.get(parent.parent()).is_ok_and(|(_, t, _)| t.pd_engaged);
         if point_defence && module.module_type == ModuleType::FiringPiece && !pd_engaged { continue; }
         let group_firing = fire_state.firing[fire_group.group as usize % 4];
         if !group_firing && !pd_engaged { continue; }
@@ -456,7 +456,7 @@ pub fn fire_weapons_system(
         // selection and then the cursor when nothing is locked.
         let (target_pos, target_vel) = if pd_engaged {
             // The turret's aim is already where the round meets the missile.
-            (turret_bodies.get(parent.parent()).ok().and_then(|(_, t)| t.aim).unwrap_or(weapon_pos), Vec2::ZERO)
+            (turret_bodies.get(parent.parent()).ok().and_then(|(_, t, _)| t.aim).unwrap_or(weapon_pos), Vec2::ZERO)
         } else if let Some(point) = aiming.aim_lock.aim_point() {
             let to_point = point - weapon_pos;
             let aim = if to_point.length() > weapon.range {
@@ -510,7 +510,7 @@ pub fn fire_weapons_system(
         // A turret gun shoots at what its turret is turning toward -- one aim
         // for the turret and every gun on it. Each gun picking its own block
         // left the barrel pointed one way and the gun waiting on another.
-        let target_pos = match turret_bodies.get(parent.parent()).ok().and_then(|(_, t)| t.aim) {
+        let target_pos = match turret_bodies.get(parent.parent()).ok().and_then(|(_, t, _)| t.aim) {
             Some(aim) => {
                 let to = aim - weapon_pos;
                 if to.length() > weapon.range { weapon_pos + to.normalize_or_zero() * weapon.range } else { aim }
@@ -563,7 +563,9 @@ pub fn fire_weapons_system(
         }
 
         // Determine prediction tier — Targeting Computer must be ADJACENT to this weapon
-        let has_adjacent_tc = crate::combat::targeting::lead_prediction::check_adjacent_targeting_computer(
+        // A periscope on a turret's roof is its guns' sight (combat::gun_house).
+        let sighted = turret_bodies.get(parent.parent()).is_ok_and(|(_, _, f)| f.is_some_and(|f| f.sighted()));
+        let has_adjacent_tc = sighted || crate::combat::targeting::lead_prediction::check_adjacent_targeting_computer(
             module.grid_position, &all_modules,
         );
         let tier = get_weapon_prediction_tier(module, customization, has_adjacent_tc);
@@ -1006,7 +1008,8 @@ pub fn check_projectile_hits(
     owner_parent_query: Query<&ChildOf>,
     turret_bodies: Query<(), With<crate::combat::turret_deck::TurretBody>>,
     turret_layers: Query<(&GlobalTransform, &Children), With<crate::combat::turret_deck::TurretBody>>,
-    grid_query: Query<&crate::building::ShipGrid>,
+    // Each ship's and turret's grid, and each turret's gun house roof over it.
+    grids: (Query<&crate::building::ShipGrid>, Query<&crate::building::RoofGrid>),
     block_query: Query<&crate::building::Block>,
     mut ai_damage_events: MessageWriter<crate::events::AiShipDamaged>,
     mut player_hits: PlayerHitEffects,
@@ -1083,9 +1086,13 @@ pub fn check_projectile_hits(
                 // (spall, splash, a ricochet off the plate) stays on the layer
                 // that was hit. Barrels don't count as cover: a barrel
                 // reaching out past its deck is walked through, not hit.
+                // A turret's gun house roof stands over its parts, so it is
+                // walked after the turret and wins the tie: a round meets the
+                // roof first (combat::gun_house).
                 struct LayerHit {
                     layer: Entity,
                     is_turret: bool,
+                    roof: bool,
                     gt: GlobalTransform,
                     cell_from: Vec2,
                     dir_local: Vec2,
@@ -1094,11 +1101,15 @@ pub fn check_projectile_hits(
                     surface: crate::combat::impact::SurfaceHit,
                 }
                 let mut best: Option<LayerHit> = None;
-                let layers = std::iter::once((ai_entity, false, *ai_gt)).chain(
-                    children.iter().filter_map(|c| turret_layers.get(c).ok().map(|(gt, _)| (c, true, *gt))),
+                let layers = std::iter::once((ai_entity, false, false, *ai_gt)).chain(
+                    children
+                        .iter()
+                        .filter_map(|c| turret_layers.get(c).ok().map(|(gt, _)| (c, *gt)))
+                        .flat_map(|(c, gt)| [(c, true, false, gt), (c, true, true, gt)]),
                 );
-                for (layer, is_turret, layer_gt) in layers {
-                    let Ok(layer_grid) = grid_query.get(layer) else { continue };
+                for (layer, is_turret, roof, layer_gt) in layers {
+                    let layer_grid = if roof { grids.1.get(layer).map(|r| &r.0) } else { grids.0.get(layer) };
+                    let Ok(layer_grid) = layer_grid else { continue };
                     let inv = layer_gt.affine().inverse();
                     // Hull cell (x, y) stands at (66x, 66y - 33); a turret's
                     // has no half-cell offset.
@@ -1139,22 +1150,24 @@ pub fn check_projectile_hits(
                                 if is_turret { step.t_enter <= b.step.t_enter + 1e-3 } else { step.t_enter < b.step.t_enter }
                             });
                             if nearer {
-                                best = Some(LayerHit { layer, is_turret, gt: layer_gt, cell_from, dir_local, step, block, surface });
+                                best = Some(LayerHit { layer, is_turret, roof, gt: layer_gt, cell_from, dir_local, step, block, surface });
                             }
                             break;
                         }
                     }
                 }
-                let Some(LayerHit { layer, is_turret: on_turret, gt: layer_gt, cell_from: _, dir_local, step, block, surface }) = best else { continue };
+                let Some(LayerHit { layer, is_turret: on_turret, roof: on_roof, gt: layer_gt, cell_from: _, dir_local, step, block, surface }) = best else { continue };
                 if crate::combat::gun_assembly::trace() {
                     if on_turret {
-                        info!("TURRET HIT on ship {:?}, turret {:?}: block {:?} at turret cell {:?}, {:.0} damage", ai_entity, layer, step.entity, step.cell, proj.damage);
+                        let kind = ai_module_query.get(step.entity).map(|(m, _)| format!("{:?}", m.module_type)).unwrap_or_else(|_| "deck plate".into());
+                        info!("TURRET HIT on ship {:?}, turret {:?}{}: {} {:?} at turret cell {:?}, {:.0} damage", ai_entity, layer, if on_roof { " roof" } else { "" }, kind, step.entity, step.cell, proj.damage);
                     } else if proj.effect.is_some() {
                         info!("BUILT ROUND HIT ship {:?}: block {:?} at hull cell {:?}, {:.0} damage", ai_entity, step.entity, step.cell, proj.damage);
                     }
                 }
                 // From here on the hit is resolved on the layer it landed on.
-                let Ok(grid) = grid_query.get(layer) else { continue };
+                let grid = if on_roof { grids.1.get(layer).map(|r| &r.0) } else { grids.0.get(layer) };
+                let Ok(grid) = grid else { continue };
                 let ai_gt = &layer_gt;
                 let children = if on_turret {
                     match turret_layers.get(layer) { Ok((_, c)) => c, Err(_) => continue }

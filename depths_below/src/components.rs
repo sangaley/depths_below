@@ -470,6 +470,10 @@ impl ModuleCategory {
                 ModuleType::TraverseMotor,
                 ModuleType::AmmoHoist,
                 ModuleType::AntiFlashDoor,
+                ModuleType::Rangefinder,
+                ModuleType::RoofVent,
+                ModuleType::Periscope,
+                ModuleType::ArmouredHatch,
             ],
             ModuleCategory::Detection => &[
                 ModuleType::RadarArray,
@@ -552,6 +556,12 @@ impl ModuleCategory {
                 // was the 16th here, which made the pair effectively unfindable.
                 ModuleType::ArmorPlate,
                 ModuleType::AngledArmorPlate,
+                ModuleType::BevelledArmorPlate,
+                ModuleType::SlopeArmorPlateLow,
+                ModuleType::SlopeArmorPlateHigh,
+                ModuleType::SlopeArmorPlateLowMirror,
+                ModuleType::SlopeArmorPlateHighMirror,
+                ModuleType::HalfArmorPlate,
                 ModuleType::AngledHullPlate,
                 ModuleType::CornerArmorPlate,
                 ModuleType::StaggeredArmorPlate,
@@ -780,6 +790,12 @@ pub enum ModuleType {
     TraverseMotor,        // Turns the turret on the ring it touches
     AmmoHoist,            // Beside a ring: lifts shells into the turret above
     AntiFlashDoor,        // A conveyor a turret cook-off can't flash past
+    // Gun house roof fittings (combat::gun_house): they stand on a turret's
+    // roof, over its gun parts, and each does something for that turret.
+    Rangefinder,          // Tighter spread for the turret's guns
+    RoofVent,             // Cooling for the turret's guns: they fire hotter for longer
+    Periscope,            // A gun sight: the turret's guns lead like a targeting computer's, and it turns quicker
+    ArmouredHatch,        // Crew get at the parts under the roof: faster repairs
     OverchargeCapacitor,  // One-shot damage boost, long cooldown
     BoreEvacuator,        // Clears barrel fumes, faster follow-up shots
     MagneticAccelerator,  // Boosts projectile velocity (railgun/coilgun)
@@ -829,6 +845,13 @@ pub enum ModuleType {
     StaggeredArmorPlate,  // S-shaped armor — no single straight seam runs through it
     AngledHullPlate,      // Wedge-cut hull framing piece — visual taper, rotation sets which corner
     AngledArmorPlate,     // Wedge-cut armor plate — visual taper, rotation sets which corner
+    // More angle pieces: each is a cell cut by one straight line (Block::cut).
+    BevelledArmorPlate,        // A plate with one corner chipped off at 45 degrees
+    SlopeArmorPlateLow,        // Low half of a long, shallow slope across two cells
+    SlopeArmorPlateHigh,       // High half of that slope
+    SlopeArmorPlateLowMirror,  // The same pair, mirrored for the other side
+    SlopeArmorPlateHighMirror,
+    HalfArmorPlate,            // Half a cell thick, flat
 }
 
 impl ModuleType {
@@ -850,6 +873,12 @@ impl ModuleType {
             self,
             ModuleType::AblativeArmor
                 | ModuleType::AngledArmorPlate
+                | ModuleType::BevelledArmorPlate
+                | ModuleType::SlopeArmorPlateLow
+                | ModuleType::SlopeArmorPlateHigh
+                | ModuleType::SlopeArmorPlateLowMirror
+                | ModuleType::SlopeArmorPlateHighMirror
+                | ModuleType::HalfArmorPlate
                 | ModuleType::AngledHullPlate
                 | ModuleType::ArmorPlate
                 | ModuleType::CornerArmorPlate
@@ -934,7 +963,9 @@ impl ModuleType {
             ModuleType::Magazine | ModuleType::BeltConveyor |
             ModuleType::TurretRingSmall | ModuleType::TurretRing |
             ModuleType::TurretRingLarge | ModuleType::TraverseMotor |
-            ModuleType::AmmoHoist | ModuleType::AntiFlashDoor => ModuleCategory::Guns,
+            ModuleType::AmmoHoist | ModuleType::AntiFlashDoor |
+            ModuleType::Rangefinder | ModuleType::RoofVent |
+            ModuleType::Periscope | ModuleType::ArmouredHatch => ModuleCategory::Guns,
 
             ModuleType::ReactorFuelRod |
             ModuleType::ReactorCooling => ModuleCategory::Power,
@@ -960,6 +991,10 @@ impl ModuleType {
             ModuleType::CornerArmorPlate |
             ModuleType::StaggeredArmorPlate |
             ModuleType::AngledArmorPlate |
+            ModuleType::BevelledArmorPlate |
+            ModuleType::SlopeArmorPlateLow | ModuleType::SlopeArmorPlateHigh |
+            ModuleType::SlopeArmorPlateLowMirror | ModuleType::SlopeArmorPlateHighMirror |
+            ModuleType::HalfArmorPlate |
             ModuleType::AngledHullPlate => ModuleCategory::Structural,
 
             ModuleType::RadarArray | ModuleType::AdvancedRadar |
@@ -1163,6 +1198,10 @@ impl ModuleType {
             ModuleType::TurretRingLarge => "Large Turret Ring",
             ModuleType::TraverseMotor => "Traverse Motor",
             ModuleType::AmmoHoist => "Ammo Hoist",
+            ModuleType::Rangefinder => "Rangefinder",
+            ModuleType::RoofVent => "Roof Vent",
+            ModuleType::Periscope => "Periscope",
+            ModuleType::ArmouredHatch => "Armoured Hatch",
             ModuleType::AntiFlashDoor => "Anti-Flash Door",
             ModuleType::OverchargeCapacitor => "Overcharge Capacitor",
             ModuleType::BoreEvacuator => "Bore Evacuator",
@@ -1206,6 +1245,12 @@ impl ModuleType {
             ModuleType::StaggeredArmorPlate => "Staggered Armor Plate",
             ModuleType::AngledHullPlate => "Angled Hull Plate",
             ModuleType::AngledArmorPlate => "Angled Armor Plate",
+            ModuleType::BevelledArmorPlate => "Bevelled Armor Plate",
+            ModuleType::SlopeArmorPlateLow => "Slope Plate (low)",
+            ModuleType::SlopeArmorPlateHigh => "Slope Plate (high)",
+            ModuleType::SlopeArmorPlateLowMirror => "Slope Plate (low, mirrored)",
+            ModuleType::SlopeArmorPlateHighMirror => "Slope Plate (high, mirrored)",
+            ModuleType::HalfArmorPlate => "Half Armor Plate",
         }
     }
 }

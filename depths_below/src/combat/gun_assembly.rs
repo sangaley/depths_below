@@ -568,7 +568,7 @@ pub const FIRING_PIECE_PLACEHOLDER_AMMO: u32 = 40;
 pub fn assemble_guns(
     mut commands: Commands,
     ships: Query<(Entity, &LayoutVersion, Option<&Children>), Without<super::turret_deck::TurretBody>>,
-    turrets: Query<(&LayoutVersion, &super::turret_deck::TurretBody, Option<&Children>)>,
+    turrets: Query<(&LayoutVersion, &super::turret_deck::TurretBody, Option<&Children>, Option<&super::gun_house::RoofFittings>)>,
     // A block on its way up to a turret (a design or save spawns it on the
     // ship for a frame first) isn't a hull part: assembled there, a turret
     // gun was sized as a feederless hull gun and kept that small magazine.
@@ -577,12 +577,14 @@ pub fn assemble_guns(
     // A shell redesigned re-works its gun out, layout change or not.
     shells: Query<(Entity, &crate::combat::shell::GunShell)>,
     redesigned: Query<&ChildOf, Changed<crate::combat::shell::GunShell>>,
+    // A roof fitting gained or lost re-works that turret's guns out too.
+    refitted: Query<Entity, Changed<super::gun_house::RoofFittings>>,
     epoch: Res<LayoutEpoch>,
     mut seen_epoch: Local<Option<LayoutEpoch>>,
     mut built: Local<BuiltFrom>,
 ) {
     // The ships (or turrets) whose shells changed since last frame.
-    let redo: HashSet<Entity> = redesigned.iter().map(|p| p.parent()).collect();
+    let redo: HashSet<Entity> = redesigned.iter().map(|p| p.parent()).chain(refitted.iter()).collect();
     if *seen_epoch == Some(*epoch) && redo.is_empty() {
         return;
     }
@@ -595,13 +597,15 @@ pub fn assemble_guns(
             .flatten()
             .filter_map(|c| modules.get(*c).ok().map(|m| (*c, m.clone())))
             .filter(|(_, m)| m.module_type.category() == crate::components::ModuleCategory::Guns)
+            // The roof over a turret's guns is no part of them.
+            .filter(|(_, m)| !super::gun_house::is_roof_block(m.module_type))
             .collect()
     };
     for (ship, version, children) in ships.iter() {
         let on_it: Vec<Entity> = children.into_iter().flatten().copied().filter(|c| turrets.contains(*c)).collect();
         let stale = built.is_stale(ship, version)
             || redo.contains(&ship)
-            || on_it.iter().any(|t| redo.contains(t) || turrets.get(*t).is_ok_and(|(v, _, _)| built.is_stale(*t, v)));
+            || on_it.iter().any(|t| redo.contains(t) || turrets.get(*t).is_ok_and(|(v, _, _, _)| built.is_stale(*t, v)));
         if !stale {
             continue;
         }
@@ -609,12 +613,21 @@ pub fn assemble_guns(
         let hull = guns_among(children);
         let mut guns = assemble_parts(&hull, &shell_designs);
         for t in &on_it {
-            let Ok((v, body, t_children)) = turrets.get(*t) else { continue };
+            let Ok((v, body, t_children, fittings)) = turrets.get(*t) else { continue };
             built.mark(*t, v);
             let mut up_top = assemble_parts(&guns_among(t_children), &shell_designs);
             let feed = hoist_reach(&hull, &body.ring_cells());
             let guns_up = up_top.len().max(1) as f32;
             for (_, g) in up_top.iter_mut() {
+                // The roof: vents cool every gun under it, rangefinders
+                // tighten their spread (combat::gun_house).
+                if let Some(f) = fittings {
+                    if f.coolers() > 0 || f.rangefinders > 0 {
+                        g.parts.coolers += f.coolers();
+                        g.stats = super::gun_math::stats(&g.parts);
+                        g.stats.spread_deg *= f.spread_mult();
+                    }
+                }
                 let share = hoist_rpm(g.stats.shell_m) / guns_up;
                 g.on_turret = true;
                 g.feeders = u32::from(feed.hoist.is_some());

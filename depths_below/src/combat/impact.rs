@@ -131,7 +131,8 @@ pub fn clip_to_shape(
     let n = Vec2::from_angle(angle);
     let centre = cell.as_vec2();
     let (a, b) = (entry - centre, exit - centre);
-    let (da, db) = (a.dot(n), b.dot(n));
+    // Measured from the cut, which needn't run through the centre.
+    let (da, db) = (a.dot(n) - block.cut, b.dot(n) - block.cut);
 
     if da > 0.0 && db > 0.0 {
         return None; // crossed the open corner without reaching the plate

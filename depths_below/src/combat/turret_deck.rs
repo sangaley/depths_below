@@ -241,6 +241,12 @@ pub fn part_mass_t(t: ModuleType) -> f32 {
         ModuleType::FiringPiece => 4.0,
         ModuleType::GaugeIncreaser => 1.5,
         ModuleType::GaugeReducer => 0.3,
+        // The roof: plates and fittings (combat::gun_house).
+        ModuleType::ArmorPlate | ModuleType::AngledArmorPlate | ModuleType::BevelledArmorPlate
+        | ModuleType::SlopeArmorPlateLow | ModuleType::SlopeArmorPlateHigh
+        | ModuleType::SlopeArmorPlateLowMirror | ModuleType::SlopeArmorPlateHighMirror => 0.5,
+        ModuleType::HalfArmorPlate => 0.3,
+        ModuleType::Rangefinder | ModuleType::RoofVent | ModuleType::Periscope | ModuleType::ArmouredHatch => 0.4,
         ModuleType::Loader => 1.2,
         ModuleType::ClipRack => 0.8,
         ModuleType::ShellFeeder => 0.5,
@@ -449,14 +455,16 @@ pub fn ensure_turret_bodies(
 }
 
 /// Move blocks waiting for a turret onto it, once it exists.
+#[allow(clippy::type_complexity)]
 pub fn mount_pending_turret_blocks(
     mut commands: Commands,
-    mut pending: Query<(Entity, &PendingTurretMount, &ChildOf, &mut Transform)>,
+    mut pending: Query<(Entity, &PendingTurretMount, &ChildOf, &mut Transform, Option<&mut Sprite>, Option<&Children>)>,
     modules: Query<&Module>,
     bodies: Query<(Entity, &TurretBody, &ChildOf)>,
     live_rings: Query<(), (With<Module>, Without<DestroyedModule>, Without<crate::meta::DespawnAtFrameEnd>)>,
+    asset_server: Res<AssetServer>,
 ) {
-    for (block, want, parent, mut transform) in pending.iter_mut() {
+    for (block, want, parent, mut transform, sprite, kids) in pending.iter_mut() {
         let ship = parent.parent();
         // Only a turret whose ring is alive: right after a load the old
         // ship's turret is still there for a frame, on a ring that's going,
@@ -472,8 +480,25 @@ pub fn mount_pending_turret_blocks(
         // offset: (0, 0) is the ring's centre.
         transform.translation.y += 33.0;
         // What comes out through the front of the gun house is drawn over it.
-        if modules.get(block).is_ok_and(|m| OUT_FRONT.contains(&m.module_type)) {
+        let kind = modules.get(block).map(|m| m.module_type).ok();
+        if kind.is_some_and(|t| OUT_FRONT.contains(&t)) {
             transform.translation.z = GUN_HOUSE_Z + 0.1;
+        }
+        // The roof over the guns: above them, in the deck's armour a shade
+        // lighter. An angle piece is drawn from its own art rather than the
+        // hull's flat-coloured triangle (combat::gun_house).
+        if let Some(t) = kind.filter(|t| super::gun_house::is_roof_block(*t)) {
+            transform.translation.z = super::gun_house::ROOF_Z;
+            if let (Some(art), Some(mut sprite)) = (super::gun_house::roof_sprite(t), sprite) {
+                sprite.image = asset_server.load(art);
+                sprite.color = Color::WHITE;
+                commands.entity(block).try_insert(crate::components::BaseSpriteColor(Color::WHITE));
+                if t == ModuleType::AngledArmorPlate {
+                    for k in kids.into_iter().flatten() {
+                        commands.entity(*k).try_despawn();
+                    }
+                }
+            }
         }
         commands
             .entity(block)
@@ -552,72 +577,12 @@ pub const OUT_FRONT: [ModuleType; 4] = [ModuleType::GunBarrel, ModuleType::Muzzl
 /// Above the parts it covers (they draw at 0.2-0.4 in the turret's frame).
 pub const GUN_HOUSE_Z: f32 = 0.45;
 
-/// The housing over a turret's guns: breeches, loaders and clips under one
-/// armoured roof, mantlets and barrels out through its front. Cosmetic: the
-/// parts under it are what rounds hit.
-#[derive(Component)]
-pub struct GunHouse;
-
-/// Fit each turret's gun house to the parts on it, whenever they change.
-pub fn fit_gun_houses(
-    mut commands: Commands,
-    bodies: Query<(Entity, &Children), (With<TurretBody>, Changed<crate::building::layout::LayoutVersion>)>,
-    parts: Query<&Module, Without<DestroyedModule>>,
-    houses: Query<(), With<GunHouse>>,
-    asset_server: Res<AssetServer>,
-) {
-    for (body, children) in bodies.iter() {
-        for c in children.iter() {
-            if houses.contains(c) {
-                commands.entity(c).try_despawn();
-            }
-        }
-        let housed: Vec<IVec2> = children
-            .iter()
-            .filter_map(|c| parts.get(c).ok())
-            .filter(|m| !OUT_FRONT.contains(&m.module_type))
-            .map(|m| m.grid_position)
-            .collect();
-        if housed.is_empty() {
-            continue;
-        }
-        let lo = housed.iter().fold(IVec2::MAX, |a, c| a.min(*c));
-        let hi = housed.iter().fold(IVec2::MIN, |a, c| a.max(*c));
-        let size = (hi - lo + IVec2::ONE).as_vec2() * 66.0 - Vec2::splat(6.0);
-        let centre = (lo + hi).as_vec2() * 33.0;
-        let house = commands
-            .spawn((
-                Sprite {
-                    image: asset_server.load("sprites/gun_parts/gun_house.png"),
-                    custom_size: Some(size),
-                    image_mode: bevy::sprite::SpriteImageMode::Sliced(bevy::sprite::TextureSlicer {
-                        border: bevy::sprite::BorderRect::all(24.0),
-                        center_scale_mode: bevy::sprite::SliceScaleMode::Stretch,
-                        sides_scale_mode: bevy::sprite::SliceScaleMode::Stretch,
-                        max_corner_scale: 1.0,
-                    }),
-                    ..default()
-                },
-                Transform::from_translation(centre.extend(GUN_HOUSE_Z)),
-                GunHouse,
-                ChildOf(body),
-            ))
-            .id();
-        // The commander's hatch, toward the back of the roof.
-        commands.spawn((
-            Sprite { image: asset_server.load("sprites/gun_parts/gun_house_hatch.png"), custom_size: Some(Vec2::splat(30.0)), ..default() },
-            Transform::from_xyz(-size.x * 0.22, 0.0, 0.01),
-            ChildOf(house),
-        ));
-    }
-}
-
 /// Weigh each turret, count its motors, and turn it toward what it should
 /// point at -- the player's aim for the player's ship -- no faster than it
 /// can.
 pub fn traverse_turrets(
     time: Res<Time>,
-    mut bodies: Query<(Entity, &mut TurretBody, &mut Transform, &ChildOf, Option<&Children>)>,
+    mut bodies: Query<(Entity, &mut TurretBody, &mut Transform, &ChildOf, Option<&Children>, Option<&super::gun_house::RoofFittings>)>,
     parts: Query<&Module, Without<DestroyedModule>>,
     plates: Query<(), (With<TurretPlate>, Without<crate::components::HullDestroyed>)>,
     ships: Query<
@@ -650,7 +615,7 @@ pub fn traverse_turrets(
     // While building, turrets stand squared to the hull, so a turret's cell
     // lies exactly over a hull cell (building::turret_build).
     let building = build.is_some_and(|s| *s.get() != crate::states::BuildState::Inactive);
-    for (entity, mut body, mut transform, parent, children) in bodies.iter_mut() {
+    for (entity, mut body, mut transform, parent, children, fittings) in bodies.iter_mut() {
         let mut mass = 0.0;
         // The biggest gun aboard sets how heavy its parts are.
         let gauge = children
@@ -684,7 +649,8 @@ pub fn traverse_turrets(
         body.traverse_deg_s = if body.motors == 0 || body.jammed {
             0.0
         } else {
-            super::gun_math::traverse_deg_per_s(body.motors, body.mass_t)
+            // Periscopes on the roof: the layer spots and calls the turn sooner.
+            super::gun_math::traverse_deg_per_s(body.motors, body.mass_t) * fittings.map_or(1.0, |f| f.traverse_mult())
         };
 
         if building {

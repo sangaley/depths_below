@@ -301,7 +301,7 @@ pub fn update_build_ghost(
     let rotation = build_state.rotation;
     // Over a turret deck the ghost has to stand above the turret (z 1.2 and
     // up), not down among the hull blocks under it.
-    let ghost_z = if build_state.deck == crate::resources::BuildDeck::Turret { 2.5 } else { 0.3 };
+    let ghost_z = if build_state.deck != crate::resources::BuildDeck::Hull { 2.5 } else { 0.3 };
 
     // Footprint cells beyond the first (index 0, covered by the main ghost sprite
     // above) — populated only for modules with a non-rectangular footprint override.
@@ -478,7 +478,7 @@ pub fn update_delete_highlight(
     let ghost_pos = build_state.ghost_position;
     transform.translation.x = ghost_pos.x as f32 * 66.0;
     transform.translation.y = ghost_pos.y as f32 * 66.0 - 33.0;
-    transform.translation.z = if build_state.deck == crate::resources::BuildDeck::Turret { 2.5 } else { 0.3 };
+    transform.translation.z = if build_state.deck != crate::resources::BuildDeck::Hull { 2.5 } else { 0.3 };
     sprite.custom_size = Some(Vec2::new(64.0, 64.0));
 
     if occupancy.cells.contains_key(&ghost_pos) {

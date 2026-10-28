@@ -92,7 +92,8 @@ pub fn attach_height_shadows(
     mut blocks: Query<(Entity, &Module, &Sprite, &mut Transform), (Without<CastsShadow>, Without<DestroyedModule>)>,
     barrels: Query<(Entity, &Sprite), (With<TurretBarrel>, Without<CastsShadow>)>,
     decks: Query<(Entity, &Sprite), (With<crate::combat::turret_deck::TurretPlate>, Without<CastsShadow>)>,
-    houses: Query<(Entity, &Sprite), (With<crate::combat::turret_deck::GunHouse>, Without<CastsShadow>)>,
+    // The gun house roof: blocks on a turret above its gun parts.
+    roofs: Query<(Entity, &Module, &Sprite), (With<crate::combat::turret_deck::OnTurret>, Without<CastsShadow>, Without<DestroyedModule>)>,
 ) {
     for (entity, module, sprite, mut tf) in &mut blocks {
         let Some(height) = block_height(module.module_type) else { continue };
@@ -112,9 +113,11 @@ pub fn attach_height_shadows(
     for (entity, sprite) in &decks {
         cast(&mut commands, entity, sprite, TURRET_DECK_HEIGHT);
     }
-    // The gun house stands on the deck, a little higher again.
-    for (entity, sprite) in &houses {
-        cast(&mut commands, entity, sprite, GUN_HOUSE_HEIGHT);
+    // The gun house roof stands on the deck, a little higher again.
+    for (entity, module, sprite) in &roofs {
+        if crate::combat::gun_house::is_roof_block(module.module_type) && sprite.color.alpha() > 0.0 {
+            cast(&mut commands, entity, sprite, GUN_HOUSE_HEIGHT);
+        }
     }
 }
 
