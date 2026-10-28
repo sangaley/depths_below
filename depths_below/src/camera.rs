@@ -166,6 +166,7 @@ impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
         app
             .init_resource::<CameraState>()
+            .init_resource::<TorchLight>()
             .init_resource::<CameraPin>()
             .add_systems(Startup, (spawn_camera, spawn_light_cone_visual))
             .add_systems(
@@ -646,6 +647,71 @@ const ENV_FLOOR: f32 = 0.02;
 /// looked at directly.
 const BG_PLANET_FLOOR: f32 = 0.16;
 
+/// The player's torch as it stands this frame, so things drawn apart from
+/// the blocks it lights (vfx::far_art's ship pictures) are lit by the same
+/// rule. Written by update_depth_vignette.
+#[derive(Resource, Clone, Copy, Debug)]
+pub struct TorchLight {
+    pub ship_pos: Vec2,
+    pub facing: f32,
+    pub omni_radius: f32,
+    pub cone_range: f32,
+    /// Off at the station and when filming: everything lit.
+    pub dark: bool,
+}
+
+impl Default for TorchLight {
+    fn default() -> Self {
+        Self { ship_pos: Vec2::ZERO, facing: 0.0, omni_radius: 900.0, cone_range: 3500.0, dark: false }
+    }
+}
+
+/// Past this everything is hidden outright, for performance, lit or not.
+pub const CULL_RANGE: f32 = 16_000.0;
+
+impl TorchLight {
+    /// How lit a point is: 1 in the bubble round the ship and down the cone,
+    /// fading to ENV_FLOOR past them, 0 past CULL_RANGE.
+    pub fn at(&self, world: Vec2) -> f32 {
+        let to_target = world - self.ship_pos;
+        let dist = to_target.length();
+        if dist > CULL_RANGE && !no_dark() {
+            return 0.0;
+        }
+        if !self.dark {
+            return 1.0;
+        }
+        // The reveal radius blends from the always-on bubble to the full
+        // cone reach by angle, so nothing pops from black to lit the instant
+        // the cursor crosses the cone's edge.
+        let angular_factor = if dist <= 1.0 {
+            1.0
+        } else {
+            let angle_to_target = to_target.y.atan2(to_target.x);
+            let mut diff = angle_to_target - self.facing;
+            while diff > std::f32::consts::PI { diff -= std::f32::consts::TAU; }
+            while diff < -std::f32::consts::PI { diff += std::f32::consts::TAU; }
+            let angle_abs = diff.abs();
+            if angle_abs < CONE_HALF_ANGLE {
+                1.0
+            } else if angle_abs < CONE_HALF_ANGLE * 1.8 {
+                1.0 - ((angle_abs - CONE_HALF_ANGLE) / (CONE_HALF_ANGLE * 0.8)).clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        };
+        let light_range = self.omni_radius + (self.cone_range - self.omni_radius) * angular_factor;
+        if dist <= light_range {
+            1.0
+        } else if dist > light_range * 1.5 {
+            ENV_FLOOR
+        } else {
+            let fade = 1.0 - ((dist - light_range) / (light_range * 0.5)).clamp(0.0, 1.0);
+            fade.max(ENV_FLOOR)
+        }
+    }
+}
+
 fn update_depth_vignette(
     depth_state: Res<DepthState>,
     camera_state: Res<CameraState>,
@@ -741,6 +807,8 @@ fn update_depth_vignette(
                 Without<crate::ai_ship::preview::Preview>,
                 // A capital's city lights are lit by the city, not the torch.
                 Without<crate::celestial::capital_worlds::CapitalLights>,
+                // Far-out ship pictures are lit by TorchLight themselves.
+                Without<crate::vfx::far_art::FarArtSprite>,
             ),
         ),
     >,
@@ -750,6 +818,7 @@ fn update_depth_vignette(
     >,
     mut cone_visual_query: Query<(&mut Transform, &mut Visibility), (With<LightConeVisual>, Without<Ship>)>,
     ship_entity: Query<Entity, With<Ship>>,
+    mut torch: ResMut<TorchLight>,
 ) {
     let depth = depth_state.current_depth;
     let Ok((ship_transform, ship_physics)) = ship_query.single() else { return };
@@ -784,7 +853,8 @@ fn update_depth_vignette(
 
     // Cull distance — entities beyond this are hidden purely for performance,
     // independent of the light cone (see doc comment above).
-    let cull_range = 16_000.0;
+    let cull_range = CULL_RANGE;
+    *torch = TorchLight { ship_pos, facing, omni_radius, cone_range, dark: !(depth < 20.0 || no_dark()) };
 
     for (mut sprite, global_transform, mut visibility, parent) in sprite_query.iter_mut() {
         // Never cull or dim anything on the player's own ship (hull, modules,
@@ -838,42 +908,8 @@ fn update_depth_vignette(
             continue;
         }
 
-        // Smoothly blend the reveal radius between the always-on bubble and
-        // the full cone reach based on angle, instead of hard-switching the
-        // instant the cursor crosses the cone edge (that switch used to
-        // cause asteroids/stations/ships to pop straight from near-black to
-        // full brightness). Same soft angular falloff the background
-        // planets already use below — applied here uniformly to everything:
-        // asteroids, stations, their individual hull/block sprites, and
-        // enemy ships (previously ships got a separate hard Visibility::
-        // Hidden pop instead of a fade — removed so they behave the same
-        // as everything else now).
-        let angular_factor = if dist <= 1.0 {
-            1.0
-        } else {
-            let angle_to_target = to_target.y.atan2(to_target.x);
-            let mut diff = angle_to_target - facing;
-            while diff > std::f32::consts::PI { diff -= std::f32::consts::TAU; }
-            while diff < -std::f32::consts::PI { diff += std::f32::consts::TAU; }
-            let angle_abs = diff.abs();
-            if angle_abs < CONE_HALF_ANGLE {
-                1.0
-            } else if angle_abs < CONE_HALF_ANGLE * 1.8 {
-                1.0 - ((angle_abs - CONE_HALF_ANGLE) / (CONE_HALF_ANGLE * 0.8)).clamp(0.0, 1.0)
-            } else {
-                0.0
-            }
-        };
-        let light_range = omni_radius + (cone_range - omni_radius) * angular_factor;
-
-        let alpha = if dist <= light_range {
-            1.0
-        } else if dist > light_range * 1.5 {
-            ENV_FLOOR
-        } else {
-            let fade = 1.0 - ((dist - light_range) / (light_range * 0.5)).clamp(0.0, 1.0);
-            fade.max(ENV_FLOOR)
-        };
+        // The torch's rule (TorchLight::at), shared with the far pictures.
+        let alpha = torch.at(world_pos);
         if sprite.color.alpha() != alpha {
             sprite.color.set_alpha(alpha);
         }
@@ -994,5 +1030,22 @@ mod framing_tests {
         }
         app.update();
         assert_eq!(app.world().resource::<CameraState>().zoom, 2.5);
+    }
+}
+
+#[cfg(test)]
+mod torch_tests {
+    use super::*;
+
+    #[test]
+    fn the_torch_lights_its_cone_and_bubble_and_nothing_else() {
+        let torch = TorchLight { dark: true, ..default() };
+        assert_eq!(torch.at(Vec2::new(500.0, 0.0)), 1.0, "inside the bubble");
+        assert_eq!(torch.at(Vec2::new(3000.0, 0.0)), 1.0, "down the cone");
+        assert_eq!(torch.at(Vec2::new(-3000.0, 0.0)), ENV_FLOOR, "behind, past the bubble");
+        assert_eq!(torch.at(Vec2::new(CULL_RANGE + 1.0, 0.0)), 0.0, "past the cull");
+        let edge = torch.at(Vec2::new(4500.0, 0.0));
+        assert!(edge > ENV_FLOOR && edge < 1.0, "fades past the cone's reach: {edge}");
+        assert_eq!(TorchLight { dark: false, ..default() }.at(Vec2::new(-3000.0, 0.0)), 1.0, "lit at the station");
     }
 }

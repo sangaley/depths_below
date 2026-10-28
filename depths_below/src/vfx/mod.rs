@@ -5,6 +5,7 @@ pub mod block_visuals;
 pub mod hull_seams;
 pub mod ship_roof;
 pub mod far_view;
+pub mod far_art;
 pub mod block_height;
 pub mod starfield;
 pub mod procedural_textures;
@@ -81,6 +82,15 @@ impl Plugin for VfxPlugin {
                     .run_if(in_state(GameState::Exploring)),
             )
             .add_systems(OnExit(GameState::Exploring), far_view::clear_far_labels)
+            // Further out still, each ship and turret is one baked picture
+            // of itself instead of hundreds of tiny blocks.
+            .add_systems(
+                Update,
+                (far_art::attach_far_art, far_art::bake_far_art, far_art::show_far_art)
+                    .chain()
+                    .run_if(in_state(GameState::Exploring)),
+            )
+            .add_systems(OnExit(GameState::Exploring), far_art::clear_far_art)
             // Tall blocks (towers, masts, guns) cast a shadow, so they read as
             // standing up off the hull. Wherever ships are drawn: the berth
             // and the builder show the ship too.
