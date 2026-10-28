@@ -72,22 +72,155 @@ fn save_unlocks(unlocks: Res<Unlocks>) {
 // SAVE SYSTEM
 // ============================================================================
 
-/// The player's own blocks, for saving. Not an AI ship's: enemy hull, modules
-/// and crew carry the same components as the player's, and hull cells are
-/// recorded from LOCAL transforms -- so an enemy plate at its own (2,3) was
-/// written into the save as the player's (2,3). Autosave runs every two
-/// minutes while exploring, which is exactly when enemies are around.
+/// The player's own ship, for saving: the `Ship` root and what hangs off it.
 ///
-/// And not a section shot off the hull: severance unparents it, so its
-/// transform is world-space, and it came back from a load bolted on at
-/// whatever grid cell its world position divided out to.
-type PlayerBlocks = (
-    Without<crate::ai_ship::components::OwnedByAiShip>,
-    Without<crate::combat::severance::DetachedSection>,
-    Without<crate::combat::severance::SeveredBlock>,
-    // A turret's plating is made from its ring, never saved.
-    Without<crate::combat::turret_deck::TurretPlate>,
-);
+/// Blocks are kept by WHO THEY BELONG TO, not by what they lack. Enemy hull,
+/// modules and crew carry the same components as the player's, and hull cells
+/// are recorded from LOCAL transforms -- so an enemy plate at its own (2,3)
+/// was written into the save as the player's (2,3), and came back bolted onto
+/// the player's ship (one save held five blocks on a cell). Excluding
+/// `OwnedByAiShip` fixed the enemies, then shot-off sections needed their own
+/// exclusion; a child-of-the-ship rule covers both and whatever comes next.
+///
+/// Crew are the one exception, because the player's crew are not always
+/// aboard: EVA salvagers are deliberately unparented, and a hand bought from
+/// the hiring menu has no parent until `reconcile_hired_crew` runs. So crew
+/// count if they are the ship's children, or nobody's and not an AI ship's.
+#[derive(bevy::ecs::system::SystemParam)]
+struct PlayerShipParts<'w, 's> {
+    ship: Query<'w, 's, (Entity, &'static Transform), With<Ship>>,
+    modules: Query<'w, 's, (
+        &'static Module,
+        Option<&'static CustomModule>,
+        Option<&'static crate::building::customization::tuning::WeaponTuning>,
+        Option<&'static crate::building::customization::tuning::SelectedAmmo>,
+        &'static ChildOf,
+        // Built guns, launchers and turrets: what they stand on and are set to.
+        (
+            Option<&'static crate::combat::turret_deck::OnTurret>,
+            Option<&'static crate::combat::shell::GunShell>,
+            Option<&'static crate::combat::missile_design::MissileLoadout>,
+            Has<crate::combat::targeting::fire_groups::InterceptMode>,
+        ),
+    )>,
+    hull: Query<'w, 's, (&'static HullSegment, &'static Transform, &'static ChildOf)>,
+    /// The ship's turrets: their gun parts and roofs are the turret's
+    /// children, one level down, and are the ship's as much as the hull is.
+    /// A turret whose ring was shot out is saved with that ring at 1 HP.
+    turrets: Query<'w, 's, (Entity, &'static crate::combat::turret_deck::TurretBody, &'static ChildOf)>,
+    live_modules: Query<'w, 's, (), (With<Module>, Without<crate::components::DestroyedModule>)>,
+    crew: Query<'w, 's, (
+        &'static CrewMember,
+        Option<&'static CrewDuty>,
+        Option<&'static ChildOf>,
+    ), Without<crate::ai_ship::components::OwnedByAiShip>>,
+}
+
+/// The player ship's blocks and crew, in save form.
+struct ShipParts {
+    position: Vec2,
+    modules: Vec<ModuleData>,
+    hull_segments: Vec<HullSaveData>,
+    crew: Vec<CrewSaveData>,
+}
+
+impl PlayerShipParts<'_, '_> {
+    /// `None` without exactly one player ship -- nothing to save, and writing
+    /// an empty ship over the slot would be worse than not saving.
+    fn collect(&self) -> Option<ShipParts> {
+        let (ship, transform) = self.ship.single().ok()?;
+
+        let on_ship: Vec<Entity> = self.turrets.iter().filter(|(_, _, p)| p.parent() == ship).map(|(e, _, _)| e).collect();
+        let mut modules: Vec<ModuleData> = self.modules
+            .iter()
+            .filter(|(.., parent, _)| parent.parent() == ship || on_ship.contains(&parent.parent()))
+            .map(|(module, custom, tuning, selected_ammo, _, (on_turret, shell, missile, point_defence))| {
+                let custom_data = custom.map(|c| CustomModuleData {
+                    custom_name: c.custom_name.clone(),
+                    subcomponents: Vec::new(),
+                });
+                ModuleData {
+                    module_type: module.module_type,
+                    grid_position: module.grid_position,
+                    health: module.health,
+                    rotation: module.rotation,
+                    is_active: module.is_active,
+                    custom_data,
+                    customization_params: None, // Tier 3 params saved in future version
+                    tuning: tuning.copied(),
+                    selected_ammo: selected_ammo.map(|s| s.0),
+                    turret: on_turret.map(|t| t.ring_cell),
+                    shell: shell.map(|s| s.0.clone()),
+                    missile: missile.map(|m| m.0.clone()),
+                    point_defence,
+                }
+            })
+            .collect();
+        // A turret whose ring is shot out still has its parts aboard, and
+        // they're saved standing on it. A destroyed ring is gone from the
+        // save like any destroyed block, so on load they'd wait for a ring
+        // that never comes. Save the ring patched together at 1 HP instead.
+        for (_, turret, parent) in self.turrets.iter() {
+            if turret.jammed && parent.parent() == ship && !self.live_modules.contains(turret.ring) {
+                modules.push(ModuleData {
+                    module_type: crate::combat::turret_deck::ring_type(turret.size),
+                    grid_position: turret.ring_cell,
+                    health: 1.0,
+                    rotation: turret.ring_rotation,
+                    is_active: true,
+                    custom_data: None,
+                    customization_params: None,
+                    tuning: None,
+                    selected_ammo: None,
+                    turret: None,
+                    shell: None,
+                    missile: None,
+                    point_defence: false,
+                });
+            }
+        }
+
+        // Hull segments with material info
+        let hull_segments = self.hull
+            .iter()
+            .filter(|(.., parent)| parent.parent() == ship)
+            .map(|(seg, transform, _)| {
+                let grid_x = (transform.translation.x / 66.0).round() as i32;
+                let grid_y = ((transform.translation.y + 33.0) / 66.0).round() as i32;
+                HullSaveData {
+                    grid_position: IVec2::new(grid_x, grid_y),
+                    health: seg.health,
+                    max_health: seg.max_health,
+                    radiation_shielding: seg.radiation_shielding,
+                    material: seg.material,
+                    hull_layer: seg.hull_layer,
+                }
+            })
+            .collect();
+
+        // Crew (auto-assign restores assignments on load)
+        let crew = self.crew
+            .iter()
+            .filter(|(.., parent)| parent.is_none_or(|p| p.parent() == ship))
+            .map(|(member, duty, _)| CrewSaveData {
+                name: member.name.clone(),
+                health: member.health,
+                max_health: member.max_health,
+                oxygen: member.oxygen,
+                morale: member.morale,
+                assigned_module_grid: None,
+                duty: duty.copied().unwrap_or_default(),
+            })
+            .collect();
+
+        Some(ShipParts {
+            position: transform.translation.truncate(),
+            modules,
+            hull_segments,
+            crew,
+        })
+    }
+}
 
 /// Get save file path for a given slot
 fn save_path(slot: u32) -> String {
@@ -117,6 +250,18 @@ pub fn get_save_slots() -> Vec<(u32, Option<SaveSlotInfo>)> {
     slots
 }
 
+/// The state a load should drop you back into. Paused is never it: the
+/// pause-menu save keys only work while paused, so a save made mid-flight
+/// recorded "not exploring" and loaded you docked at a station, wherever you
+/// had been. Paused saves record the state you paused from -- the same one
+/// Escape resumes into, with the same fallback.
+fn saved_flight_state(current: GameState, pre_pause: &PrePauseState) -> GameState {
+    match current {
+        GameState::Paused => pre_pause.0.unwrap_or(GameState::Exploring),
+        other => other,
+    }
+}
+
 /// Collect current game state into SaveData
 fn collect_save_data(
     slot: u32,
@@ -128,21 +273,8 @@ fn collect_save_data(
     unlocks: &Unlocks,
     discovered_locations: &DiscoveredLocations,
     world_state: &WorldState,
-    ship_query: &Query<&Transform, With<Ship>>,
-    // Every one of these MUST exclude AI ships -- see PlayerBlocks.
-    module_query: &Query<(
-        &Module,
-        Option<&CustomModule>,
-        Option<&crate::building::customization::tuning::WeaponTuning>,
-        Option<&crate::building::customization::tuning::SelectedAmmo>,
-        Option<&crate::combat::turret_deck::OnTurret>,
-        Option<&crate::combat::shell::GunShell>,
-        Option<&crate::combat::missile_design::MissileLoadout>,
-        Has<crate::combat::targeting::fire_groups::InterceptMode>,
-    ), PlayerBlocks>,
-    hull_query: &Query<(&HullSegment, &Transform), PlayerBlocks>,
-    crew_query: &Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
-    current_state: &State<GameState>,
+    ship_parts: ShipParts,
+    flight_state: GameState,
     galaxy_map: &GalaxyMap,
     streaming: &SystemStreamingManager,
     drifting_dead: &crate::crew::burial::DriftingDead,
@@ -158,69 +290,7 @@ fn collect_save_data(
     jobs: &crate::diplomacy::jobs::Jobs,
     galaxy_time: f64,
 ) -> SaveData {
-    let position = ship_query
-        .single()
-        .map(|t| t.translation.truncate())
-        .unwrap_or(Vec2::ZERO);
-
-    // Collect modules
-    let modules: Vec<ModuleData> = module_query
-        .iter()
-        .map(|(module, custom, tuning, selected_ammo, on_turret, shell, missile, point_defence)| {
-            let custom_data = custom.map(|c| CustomModuleData {
-                custom_name: c.custom_name.clone(),
-                subcomponents: Vec::new(),
-            });
-            ModuleData {
-                module_type: module.module_type,
-                grid_position: module.grid_position,
-                health: module.health,
-                rotation: module.rotation,
-                is_active: module.is_active,
-                custom_data,
-                customization_params: None, // Tier 3 params saved in future version
-                tuning: tuning.copied(),
-                selected_ammo: selected_ammo.map(|s| s.0),
-                turret: on_turret.map(|t| t.ring_cell),
-                shell: shell.map(|s| s.0.clone()),
-                missile: missile.map(|m| m.0.clone()),
-                point_defence,
-            }
-        })
-        .collect();
-
-    // Collect hull segments with material info
-    let hull_segments: Vec<HullSaveData> = hull_query
-        .iter()
-        .map(|(seg, transform)| {
-            let grid_x = (transform.translation.x / 66.0).round() as i32;
-            let grid_y = ((transform.translation.y + 33.0) / 66.0).round() as i32;
-            HullSaveData {
-                grid_position: IVec2::new(grid_x, grid_y),
-                health: seg.health,
-                max_health: seg.max_health,
-                radiation_shielding: seg.radiation_shielding,
-                material: seg.material,
-                hull_layer: seg.hull_layer,
-            }
-        })
-        .collect();
-
-    // Collect crew (auto-assign restores assignments on load)
-    let crew: Vec<CrewSaveData> = crew_query
-        .iter()
-        .map(|(_crew_entity, member, duty)| {
-            CrewSaveData {
-                name: member.name.clone(),
-                health: member.health,
-                max_health: member.max_health,
-                oxygen: member.oxygen,
-                morale: member.morale,
-                assigned_module_grid: None,
-                duty: duty.copied().unwrap_or_default(),
-            }
-        })
-        .collect();
+    let ShipParts { position, modules, hull_segments, crew } = ship_parts;
 
     // Timestamp
     let timestamp = format!("Save {}", slot);
@@ -248,7 +318,7 @@ fn collect_save_data(
         position,
         current_depth: depth_state.current_depth,
         world_seed: world_state.seed,
-        was_exploring: *current_state.get() == GameState::Exploring,
+        was_exploring: flight_state == GameState::Exploring,
         current_system_id: streaming.loaded_system.unwrap_or(0),
         galaxy_seed: galaxy_map.galaxy_seed,
         drifting_dead: drifting_dead.bodies.clone(),
@@ -312,8 +382,8 @@ fn handle_save_request(
     discovered_locations: Res<DiscoveredLocations>,
     // Bundled to stay under Bevy's 16-param cap: local world seed + galaxy state
     // + the drifting dead, and the run state that isn't the ship (fuel,
-    // contracts, standing, the orbital clock). This system is AT the cap;
-    // anything else new has to join a tuple too.
+    // contracts, standing). Bevy caps a system at 16 params; this one is at
+    // 14, so a big addition still belongs in a tuple.
     world_galaxy: (
         Res<WorldState>,
         Res<GalaxyMap>,
@@ -332,29 +402,22 @@ fn handle_save_request(
         Res<GalaxyState>,
     ),
     current_state: Res<State<GameState>>,
-    ship_query: Query<&Transform, With<Ship>>,
-    module_query: Query<(
-        &Module,
-        Option<&CustomModule>,
-        Option<&crate::building::customization::tuning::WeaponTuning>,
-        Option<&crate::building::customization::tuning::SelectedAmmo>,
-        Option<&crate::combat::turret_deck::OnTurret>,
-        Option<&crate::combat::shell::GunShell>,
-        Option<&crate::combat::missile_design::MissileLoadout>,
-        Has<crate::combat::targeting::fire_groups::InterceptMode>,
-    ), PlayerBlocks>,
-    // With the turrets standing on the ship: bundled, this system is at the cap.
-    hull_and_turrets: (
-        Query<(&HullSegment, &Transform), PlayerBlocks>,
-        Query<(&crate::combat::turret_deck::TurretBody, &ChildOf)>,
-        Query<(), With<Ship>>,
-    ),
-    crew_query: Query<(Entity, &CrewMember, Option<&CrewDuty>), Without<crate::ai_ship::components::OwnedByAiShip>>,
+    pre_pause: Res<PrePauseState>,
+    player_ship: PlayerShipParts,
 ) {
     let (world_state, galaxy_map, streaming, drifting_dead, looted, fuel, contracts, reputation, standing, sim, faction_stations, war, people, work, spawned) = &world_galaxy;
-    let (hull_query, turrets, player_ship) = &hull_and_turrets;
     for event in save_events.read() {
-        let mut save_data = collect_save_data(
+        let Some(ship_parts) = player_ship.collect() else {
+            error!("Save skipped: no single player ship to save");
+            saved_events.write(GameSaved { slot: event.slot, success: false });
+            notify_events.write(ShowNotification {
+                message: "Save failed!".to_string(),
+                notification_type: NotificationType::Danger,
+                duration: 3.0,
+            });
+            continue;
+        };
+        let save_data = collect_save_data(
             event.slot,
             &depth_state,
             &hull_state,
@@ -364,11 +427,8 @@ fn handle_save_request(
             &unlocks,
             &discovered_locations,
             world_state,
-            &ship_query,
-            &module_query,
-            hull_query,
-            &crew_query,
-            &current_state,
+            ship_parts,
+            saved_flight_state(*current_state.get(), &pre_pause),
             galaxy_map,
             streaming,
             drifting_dead,
@@ -384,30 +444,6 @@ fn handle_save_request(
             work,
             spawned.galaxy_time,
         );
-
-        // A turret whose ring is shot out still has its parts aboard, and
-        // they're saved standing on it. A destroyed ring is gone from the
-        // save like any destroyed block, so on load they'd wait for a ring
-        // that never comes. Save the ring patched together at 1 HP instead.
-        for (turret, parent) in turrets.iter() {
-            if turret.jammed && player_ship.contains(parent.parent()) && module_query.get(turret.ring).is_err() {
-                save_data.ship.modules.push(ModuleData {
-                    module_type: crate::combat::turret_deck::ring_type(turret.size),
-                    grid_position: turret.ring_cell,
-                    health: 1.0,
-                    rotation: turret.ring_rotation,
-                    is_active: true,
-                    custom_data: None,
-                    customization_params: None,
-                    tuning: None,
-                    selected_ammo: None,
-                    turret: None,
-                    shell: None,
-                    missile: None,
-                    point_defence: false,
-                });
-            }
-        }
 
         // Tier 3 customization is saved via customization_params field
         // (populated when ModuleCustomization query is added in a future refactor)
@@ -634,121 +670,15 @@ fn rebuild_entities_from_save(
         }
     }
 
-    // ---- Respawn hull segments ----
-    for hull_data in &save.hull_segments {
-        let hull_texture = asset_server.load(
-            crate::sprite_map::hull_layer_sprite_path(hull_data.material, hull_data.hull_layer)
-        );
-        // Same tint per layer as blueprint::spawn_ship_from_design and
-        // building::process_hull_placement, so a loaded hull matches a built one.
-        let color = match hull_data.hull_layer {
-            HullLayer::Outer | HullLayer::Hallway => Color::WHITE,
-            HullLayer::Inner => Color::srgb(0.9, 0.9, 0.9),
-            HullLayer::Void => Color::srgb(0.5, 0.5, 0.6),
-            HullLayer::BulkheadDoor => Color::srgb(0.9, 0.8, 0.7),
-        };
-        commands.spawn((
-            (Sprite {
-                    image: hull_texture,
-                    color,
-                    // Full cell, matching blueprint.rs -- a loaded save used to
-                    // come back with the old 2-unit gap between every plate.
-                    custom_size: Some(Vec2::new(66.0, 66.0)),
-                    ..default()
-                }, Transform::from_xyz(
-                    hull_data.grid_position.x as f32 * 66.0,
-                    hull_data.grid_position.y as f32 * 66.0 - 33.0,
-                    0.1,
-                )),
-            // Every other hull spawn carries these two. Without Block a plate
-            // resolved as armour thickness 0 for the rest of the session, and
-            // without the base colour damage tinting had nothing to darken from.
-            BaseSpriteColor(color),
-            crate::building::Block::hull(hull_data.grid_position, hull_data.material),
-            BaseHullStats {
-                max_health: hull_data.max_health,
-                radiation_shielding: hull_data.radiation_shielding,
-            },
-            HullSegment {
-                health: hull_data.health,
-                max_health: hull_data.max_health,
-                radiation_shielding: hull_data.radiation_shielding,
-                is_depressurized: false,
-                depressurization_level: 0.0,
-                hull_layer: hull_data.hull_layer,
-                material: hull_data.material,
-                grid_position: hull_data.grid_position,
-            },
-        )).insert(ChildOf(ship_entity));
-    }
-
-    // ---- Respawn modules ----
-    for module_data in &save.ship.modules {
-        let entity = crate::ship::spawn_module(
-            &mut commands,
-            &asset_server,
-            ship_entity,
-            module_data.module_type,
-            module_data.grid_position,
-            module_data.rotation,
-            &registry,
-        );
-        // Restore saved health and active state (spawn_module uses registry defaults)
-        commands.entity(entity).insert(ModuleHealthOverride {
-            health: module_data.health,
-            is_active: module_data.is_active,
-        });
-        // Restore stat tuning + loaded ammo — inserting counts as Changed, so
-        // apply_weapon_tuning recomputes the live stats on the next frame.
-        if let Some(tuning) = module_data.tuning {
-            commands.entity(entity).insert(tuning);
-        }
-        if let Some(ammo) = module_data.selected_ammo {
-            commands.entity(entity).insert(
-                crate::building::customization::tuning::SelectedAmmo(ammo)
-            );
-        }
-        if let Some(shell) = &module_data.shell {
-            commands.entity(entity).insert(crate::combat::shell::GunShell(shell.clone()));
-        }
-        if let Some(missile) = &module_data.missile {
-            commands.entity(entity).insert(crate::combat::missile_design::MissileLoadout(missile.clone()));
-        }
-        if module_data.point_defence {
-            commands.entity(entity).insert(crate::combat::targeting::fire_groups::InterceptMode);
-        }
-        if let Some(ring_cell) = module_data.turret {
-            commands.entity(entity).insert(crate::combat::turret_deck::PendingTurretMount(ring_cell));
-        }
-    }
-
-    // ---- Respawn crew ----
-    let mut roster_members = Vec::new();
-    for (i, crew_data) in save.crew.iter().enumerate() {
-        let crew_entity = commands.spawn((
-            (Sprite {
-                    color: Color::srgb(0.8, 0.6, 0.5),
-                    custom_size: Some(Vec2::new(16.0, 16.0)),
-                    ..default()
-                }, Transform::from_xyz(
-                    (i as f32 - 3.5) * 20.0,
-                    0.0,
-                    // Above the modules, like every other crew spawn — the
-                    // walk planner pulls them onto real deck from here.
-                    crate::crew::walking::CREW_Z,
-                )),
-            crew_data.duty,
-            CrewMember {
-                name: crew_data.name.clone(),
-                health: crew_data.health,
-                max_health: crew_data.max_health,
-                oxygen: crew_data.oxygen,
-                morale: crew_data.morale,
-                state: CrewState::Idle,
-            },
-        )).insert(ChildOf(ship_entity)).id();
-        roster_members.push(crew_entity);
-    }
+    let roster_members = respawn_ship_parts(
+        &mut commands,
+        &asset_server,
+        &registry,
+        ship_entity,
+        &save.hull_segments,
+        &save.ship.modules,
+        &save.crew,
+    );
     commands.insert_resource(CrewRoster { members: roster_members });
     // Auto-assign will re-staff stations on next tick
 
@@ -891,6 +821,136 @@ fn rebuild_entities_from_save(
     info!("Game loaded (depth: {:.0}m)", save.current_depth);
 }
 
+/// Puts saved hull, modules and crew back onto `ship_entity` as its children.
+/// Returns the crew, for the roster. Split out of `rebuild_entities_from_save`
+/// so a save -> load round trip can be tested without the rest of the world.
+fn respawn_ship_parts(
+    commands: &mut Commands,
+    asset_server: &AssetServer,
+    registry: &crate::building::registry::ModuleRegistry,
+    ship_entity: Entity,
+    hull_segments: &[HullSaveData],
+    modules: &[ModuleData],
+    crew: &[CrewSaveData],
+) -> Vec<Entity> {
+    // ---- Respawn hull segments ----
+    for hull_data in hull_segments {
+        let hull_texture = asset_server.load(
+            crate::sprite_map::hull_layer_sprite_path(hull_data.material, hull_data.hull_layer)
+        );
+        // Same tint per layer as blueprint::spawn_ship_from_design and
+        // building::process_hull_placement, so a loaded hull matches a built one.
+        let color = match hull_data.hull_layer {
+            HullLayer::Outer | HullLayer::Hallway => Color::WHITE,
+            HullLayer::Inner => Color::srgb(0.9, 0.9, 0.9),
+            HullLayer::Void => Color::srgb(0.5, 0.5, 0.6),
+            HullLayer::BulkheadDoor => Color::srgb(0.9, 0.8, 0.7),
+        };
+        commands.spawn((
+            (Sprite {
+                    image: hull_texture,
+                    color,
+                    // Full cell, matching blueprint.rs -- a loaded save used to
+                    // come back with the old 2-unit gap between every plate.
+                    custom_size: Some(Vec2::new(66.0, 66.0)),
+                    ..default()
+                }, Transform::from_xyz(
+                    hull_data.grid_position.x as f32 * 66.0,
+                    hull_data.grid_position.y as f32 * 66.0 - 33.0,
+                    0.1,
+                )),
+            // Every other hull spawn carries these two. Without Block a plate
+            // resolved as armour thickness 0 for the rest of the session, and
+            // without the base colour damage tinting had nothing to darken from.
+            BaseSpriteColor(color),
+            crate::building::Block::hull(hull_data.grid_position, hull_data.material),
+            BaseHullStats {
+                max_health: hull_data.max_health,
+                radiation_shielding: hull_data.radiation_shielding,
+            },
+            HullSegment {
+                health: hull_data.health,
+                max_health: hull_data.max_health,
+                radiation_shielding: hull_data.radiation_shielding,
+                is_depressurized: false,
+                depressurization_level: 0.0,
+                hull_layer: hull_data.hull_layer,
+                material: hull_data.material,
+                grid_position: hull_data.grid_position,
+            },
+        )).insert(ChildOf(ship_entity));
+    }
+
+    // ---- Respawn modules ----
+    for module_data in modules {
+        let entity = crate::ship::spawn_module(
+            commands,
+            asset_server,
+            ship_entity,
+            module_data.module_type,
+            module_data.grid_position,
+            module_data.rotation,
+            registry,
+        );
+        // Restore saved health and active state (spawn_module uses registry defaults)
+        commands.entity(entity).insert(ModuleHealthOverride {
+            health: module_data.health,
+            is_active: module_data.is_active,
+        });
+        // Restore stat tuning + loaded ammo — inserting counts as Changed, so
+        // apply_weapon_tuning recomputes the live stats on the next frame.
+        if let Some(tuning) = module_data.tuning {
+            commands.entity(entity).insert(tuning);
+        }
+        if let Some(ammo) = module_data.selected_ammo {
+            commands.entity(entity).insert(
+                crate::building::customization::tuning::SelectedAmmo(ammo)
+            );
+        }
+        if let Some(shell) = &module_data.shell {
+            commands.entity(entity).insert(crate::combat::shell::GunShell(shell.clone()));
+        }
+        if let Some(missile) = &module_data.missile {
+            commands.entity(entity).insert(crate::combat::missile_design::MissileLoadout(missile.clone()));
+        }
+        if module_data.point_defence {
+            commands.entity(entity).insert(crate::combat::targeting::fire_groups::InterceptMode);
+        }
+        if let Some(ring_cell) = module_data.turret {
+            commands.entity(entity).insert(crate::combat::turret_deck::PendingTurretMount(ring_cell));
+        }
+    }
+
+    // ---- Respawn crew ----
+    let mut roster_members = Vec::new();
+    for (i, crew_data) in crew.iter().enumerate() {
+        let crew_entity = commands.spawn((
+            (Sprite {
+                    color: Color::srgb(0.8, 0.6, 0.5),
+                    custom_size: Some(Vec2::new(16.0, 16.0)),
+                    ..default()
+                }, Transform::from_xyz(
+                    (i as f32 - 3.5) * 20.0,
+                    0.0,
+                    // Above the modules, like every other crew spawn — the
+                    // walk planner pulls them onto real deck from here.
+                    crate::crew::walking::CREW_Z,
+                )),
+            crew_data.duty,
+            CrewMember {
+                name: crew_data.name.clone(),
+                health: crew_data.health,
+                max_health: crew_data.max_health,
+                oxygen: crew_data.oxygen,
+                morale: crew_data.morale,
+                state: CrewState::Idle,
+            },
+        )).insert(ChildOf(ship_entity)).id();
+        roster_members.push(crew_entity);
+    }
+    roster_members
+}
+
 // ============================================================================
 // MODULE HEALTH OVERRIDE (applied once after load)
 // ============================================================================
@@ -1021,5 +1081,254 @@ pub struct DespawnAtFrameEnd;
 pub fn despawn_at_frame_end(mut commands: Commands, doomed: Query<Entity, With<DespawnAtFrameEnd>>) {
     for entity in doomed.iter() {
         commands.entity(entity).try_despawn();
+    }
+}
+
+#[cfg(test)]
+mod save_scope_tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use crate::ai_ship::components::{AiShip, AiShipType, AiShipWreck, OwnedByAiShip};
+    use crate::building::registry::{build_registry, ModuleRegistry};
+    use crate::combat::severance::DetachedSection;
+    use crate::crew::eva_salvage::{EvaPhase, EvaSalvaging};
+
+    fn app() -> App {
+        let mut app = App::new();
+        app.add_plugins((MinimalPlugins, AssetPlugin::default()));
+        app.init_asset::<Image>();
+        app.insert_resource(build_registry());
+        app
+    }
+
+    fn hull_at(cell: IVec2, health: f32) -> (HullSegment, Transform) {
+        (
+            HullSegment { grid_position: cell, health, ..default() },
+            Transform::from_xyz(cell.x as f32 * 66.0, cell.y as f32 * 66.0 - 33.0, 0.1),
+        )
+    }
+
+    fn hand(name: &str, health: f32) -> CrewMember {
+        CrewMember {
+            name: name.into(),
+            health,
+            max_health: 100.0,
+            oxygen: 90.0,
+            morale: 70.0,
+            state: CrewState::Idle,
+        }
+    }
+
+    struct World3 {
+        player: Entity,
+        ai: Entity,
+        wreck: Entity,
+    }
+
+    /// The player ship -- 3 hull, 2 modules, 2 crew aboard, one out on EVA and
+    /// one just bought at the hiring menu -- beside an AI ship and a wreck
+    /// whose blocks sit on the SAME local cells (grid cells are ship-local,
+    /// which is how a save ended up with five blocks on one cell), plus a
+    /// module the player just had shot off.
+    fn populate(app: &mut App) -> World3 {
+        let player = app.world_mut().spawn((Ship, Transform::from_xyz(120.0, -40.0, 0.0))).id();
+        let ai = app.world_mut().spawn((AiShip, Transform::from_xyz(5000.0, 0.0, 0.0))).id();
+        let wreck = app.world_mut().spawn((
+            AiShipWreck { ship_type: AiShipType::StellarPreserve, loot_remaining: 3, intact_frac: 0.5 },
+            Transform::from_xyz(-5000.0, 0.0, 0.0),
+        )).id();
+
+        app.world_mut().run_system_once(move |mut commands: Commands, assets: Res<AssetServer>,
+            registry: Res<ModuleRegistry>| {
+            for x in 0..3 {
+                commands.spawn(hull_at(IVec2::new(x, 0), 40.0 + x as f32)).insert(ChildOf(player));
+            }
+            crate::ship::spawn_module(&mut commands, &assets, player, ModuleType::SmallReactor,
+                IVec2::new(0, 1), Rotation::North, &registry);
+            let battery = crate::ship::spawn_module(&mut commands, &assets, player,
+                ModuleType::BatteryBank, IVec2::new(1, 1), Rotation::East, &registry);
+            // Damaged and switched off, so a round trip has something to keep.
+            commands.entity(battery).insert(ModuleHealthOverride { health: 37.0, is_active: false });
+            commands.spawn((hand("Ines", 80.0), CrewDuty::default(), ChildOf(player)));
+            commands.spawn((hand("Okafor", 55.0), ChildOf(player)));
+            commands.spawn((hand("Duarte", 100.0), EvaSalvaging {
+                wreck,
+                grab_target: wreck,
+                phase: EvaPhase::Outbound,
+                carrying: None,
+                recalled: false,
+                home_local: Vec3::ZERO,
+                base_color: Color::WHITE,
+            }));
+            commands.spawn(hand("Rask", 100.0));
+
+            // Shot off: unparented in place, so its transform is world-space.
+            let severed = crate::ship::spawn_module(&mut commands, &assets, player,
+                ModuleType::SmallReactor, IVec2::new(2, 1), Rotation::North, &registry);
+            commands.entity(severed).remove::<ChildOf>().insert(DetachedSection {
+                has_reactor: true,
+                has_ammo: false,
+                has_fuel: false,
+                meltdown_timer: Some(10.0),
+                mass: 50.0,
+            });
+
+            for root in [ai, wreck] {
+                for x in 0..4 {
+                    commands.spawn(hull_at(IVec2::new(x, 0), 118.75))
+                        .insert((OwnedByAiShip { root }, ChildOf(root)));
+                }
+                let m = crate::ship::spawn_module(&mut commands, &assets, root,
+                    ModuleType::SmallReactor, IVec2::new(0, 1), Rotation::North, &registry);
+                commands.entity(m).insert(OwnedByAiShip { root });
+                commands.spawn((hand("Orlo", 100.0), OwnedByAiShip { root }, ChildOf(root)));
+            }
+        }).unwrap();
+        app.world_mut().run_system_once(apply_module_health_overrides).unwrap();
+        World3 { player, ai, wreck }
+    }
+
+    fn capture(app: &mut App) -> Option<ShipParts> {
+        app.world_mut()
+            .run_system_once(|parts: PlayerShipParts| parts.collect())
+            .unwrap()
+    }
+
+    /// Order-free fingerprint of what a save would write for the ship.
+    fn fingerprint(parts: &ShipParts) -> (Vec<String>, Vec<String>, Vec<String>) {
+        fn rows<T: serde::Serialize>(items: &[T]) -> Vec<String> {
+            let mut out: Vec<String> =
+                items.iter().map(|i| serde_json::to_string(i).unwrap()).collect();
+            out.sort();
+            out
+        }
+        (rows(&parts.hull_segments), rows(&parts.modules), rows(&parts.crew))
+    }
+
+    fn children_of(app: &mut App, root: Entity) -> usize {
+        app.world_mut()
+            .query::<&ChildOf>()
+            .iter(app.world())
+            .filter(|p| p.parent() == root)
+            .count()
+    }
+
+    #[test]
+    fn save_keeps_only_the_player_ship() {
+        let mut app = app();
+        populate(&mut app);
+        let parts = capture(&mut app).expect("one player ship");
+
+        assert_eq!(parts.hull_segments.len(), 3, "foreign hull in the save");
+        assert_eq!(parts.modules.len(), 2, "foreign or shot-off modules in the save");
+        let mut names: Vec<&str> = parts.crew.iter().map(|c| c.name.as_str()).collect();
+        names.sort();
+        assert_eq!(names, ["Duarte", "Ines", "Okafor", "Rask"],
+            "the crew are the ones aboard, out on EVA and just hired -- no AI crew");
+
+        let mut cells: Vec<IVec2> = parts.hull_segments.iter().map(|h| h.grid_position).collect();
+        cells.sort_by_key(|c| (c.x, c.y));
+        cells.dedup();
+        assert_eq!(cells.len(), 3, "one hull block per cell");
+        assert_eq!(parts.position, Vec2::new(120.0, -40.0));
+    }
+
+    #[test]
+    fn no_player_ship_means_no_save() {
+        let mut app = app();
+        let world = populate(&mut app);
+        app.world_mut().entity_mut(world.player).despawn();
+        assert!(capture(&mut app).is_none(),
+            "without a ship the save must be skipped, not written empty");
+    }
+
+    #[test]
+    fn save_then_load_gives_back_the_same_ship() {
+        let mut app = app();
+        let world = populate(&mut app);
+        let before = capture(&mut app).unwrap();
+        let ai_blocks = children_of(&mut app, world.ai);
+        let wreck_blocks = children_of(&mut app, world.wreck);
+
+        // Through JSON, like the file on disk.
+        let hull: Vec<HullSaveData> =
+            serde_json::from_str(&serde_json::to_string(&before.hull_segments).unwrap()).unwrap();
+        let modules: Vec<ModuleData> =
+            serde_json::from_str(&serde_json::to_string(&before.modules).unwrap()).unwrap();
+        let crew: Vec<CrewSaveData> =
+            serde_json::from_str(&serde_json::to_string(&before.crew).unwrap()).unwrap();
+
+        // The load's despawn set: every block and hand that isn't an AI ship's.
+        let doomed: Vec<Entity> = app.world_mut()
+            .query_filtered::<Entity, (
+                Or<(With<Module>, With<HullSegment>, With<CrewMember>)>,
+                Without<OwnedByAiShip>,
+            )>()
+            .iter(app.world())
+            .collect();
+        for e in doomed {
+            app.world_mut().entity_mut(e).despawn();
+        }
+
+        let player = world.player;
+        let roster = app.world_mut().run_system_once(move |mut commands: Commands,
+            assets: Res<AssetServer>, registry: Res<ModuleRegistry>| {
+            respawn_ship_parts(&mut commands, &assets, &registry, player, &hull, &modules, &crew)
+        }).unwrap();
+        app.world_mut().run_system_once(apply_module_health_overrides).unwrap();
+
+        let after = capture(&mut app).unwrap();
+        assert_eq!(fingerprint(&after), fingerprint(&before), "the ship changed across save/load");
+        assert_eq!(roster.len(), 4);
+        assert_eq!(children_of(&mut app, world.ai), ai_blocks, "load touched the AI ship");
+        assert_eq!(children_of(&mut app, world.wreck), wreck_blocks, "load touched the wreck");
+    }
+}
+
+#[cfg(test)]
+mod save_state_tests {
+    use super::*;
+    use bevy::ecs::system::RunSystemOnce;
+    use bevy::state::app::StatesPlugin;
+
+    /// Pause from `from` the way Escape does, then ask what a save made now
+    /// would record.
+    fn saved_after_pausing_from(from: GameState) -> GameState {
+        let mut app = App::new();
+        app.add_plugins(StatesPlugin);
+        app.init_state::<GameState>();
+        app.init_resource::<PrePauseState>();
+
+        app.world_mut().resource_mut::<NextState<GameState>>().set(from);
+        app.update();
+        app.world_mut().resource_mut::<PrePauseState>().0 = Some(from);
+        app.world_mut().resource_mut::<NextState<GameState>>().set(GameState::Paused);
+        app.update();
+        assert_eq!(*app.world().resource::<State<GameState>>().get(), GameState::Paused);
+
+        app.world_mut()
+            .run_system_once(|state: Res<State<GameState>>, pre_pause: Res<PrePauseState>| {
+                saved_flight_state(*state.get(), &pre_pause)
+            })
+            .unwrap()
+    }
+
+    #[test]
+    fn paused_mid_flight_saves_as_flying() {
+        assert_eq!(saved_after_pausing_from(GameState::Exploring), GameState::Exploring);
+    }
+
+    #[test]
+    fn paused_at_a_station_saves_as_docked() {
+        assert_eq!(saved_after_pausing_from(GameState::StationDocked), GameState::StationDocked);
+    }
+
+    #[test]
+    fn unpaused_saves_record_the_state_they_are_in() {
+        let none = PrePauseState(None);
+        assert_eq!(saved_flight_state(GameState::Exploring, &none), GameState::Exploring);
+        assert_eq!(saved_flight_state(GameState::StationDocked, &none), GameState::StationDocked);
+        // Nothing remembered: same fallback as Escape's resume.
+        assert_eq!(saved_flight_state(GameState::Paused, &none), GameState::Exploring);
     }
 }
