@@ -419,6 +419,7 @@ pub fn starts_active(module_type: ModuleType) -> bool {
             | ModuleCategory::LifeSupport
             | ModuleCategory::Weapons
             | ModuleCategory::Guns
+            | ModuleCategory::Lasers
             | ModuleCategory::Detection
     ) || matches!(
         module_type,

@@ -33,6 +33,7 @@ pub mod missile_defence;
 pub mod gun_assembly;
 pub mod turret_deck;
 pub mod gun_house;
+pub mod lasers;
 
 /// Dev switch: no weapon consumes ammunition while true (player and AI).
 ///
@@ -490,6 +491,16 @@ impl Plugin for CombatPlugin {
             .init_resource::<turret_deck::TurretShapes>()
             .add_message::<turret_deck::RebuildTurretPlate>()
             .add_systems(Update, (turret_deck::rebuild_turret_plates, gun_house::lay_default_roofs, gun_house::count_roof_fittings))
+            // Lasers built from parts: worked out per ship, charged, fired
+            // once the turrets have turned, then resolved.
+            .add_message::<lasers::LaserShot>()
+            .add_systems(Update, (
+                lasers::assemble_lasers,
+                lasers::charge_lasers,
+                lasers::fire_lasers,
+                lasers::resolve_laser_shots,
+                lasers::fade_laser_beams,
+            ).chain().after(turret_deck::traverse_turrets).after(missile_defence::spot_missiles))
             .init_resource::<gun_design::GunDesigns>()
             .add_systems(Startup, gun_design::load_gun_designs)
             .add_systems(Update, (

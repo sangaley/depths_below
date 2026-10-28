@@ -202,35 +202,7 @@ pub fn spawn_shell_section(commands: &mut Commands, content: Entity, design: &Sh
         .id();
     commands.entity(content).add_child(readout);
 
-    let pd = commands
-        .spawn((
-            Node {
-                padding: UiRect::new(Val::Px(10.0), Val::Px(10.0), Val::Px(4.0), Val::Px(4.0)),
-                border: UiRect::all(Val::Px(1.0)),
-                margin: UiRect::top(Val::Px(6.0)),
-                align_self: AlignSelf::FlexStart,
-                ..default()
-            },
-            BackgroundColor(CHIP_BG),
-            BorderColor::all(WindowStyle::BORDER_COLOR),
-            Interaction::None,
-            Button,
-            PointDefenceButton,
-            Tooltip {
-                text: "On a turret, point defence swings it onto the incoming missile that will land first and fires by itself -- and never at ships.".into(),
-                detail: Some("Small, fast guns on light turrets do it best. A proximity fuse in the shell makes it flak.".into()),
-            },
-        ))
-        .id();
-    let pd_label = commands
-        .spawn((
-            Text::new(point_defence_label(false)),
-            TextFont { font_size: FontSize::Px(11.0), ..default() },
-            TextColor(WindowStyle::TEXT_COLOR),
-        ))
-        .id();
-    commands.entity(pd).add_child(pd_label);
-    commands.entity(content).add_child(pd);
+    spawn_point_defence_switch(commands, content);
 
     let save = commands
         .spawn((
@@ -261,6 +233,39 @@ pub fn spawn_shell_section(commands: &mut Commands, content: Entity, design: &Sh
         .id();
     commands.entity(save).add_child(save_label);
     commands.entity(content).add_child(save);
+}
+
+/// The POINT DEFENCE switch, for a built gun's window or a laser emitter's.
+pub fn spawn_point_defence_switch(commands: &mut Commands, content: Entity) {
+    let pd = commands
+        .spawn((
+            Node {
+                padding: UiRect::new(Val::Px(10.0), Val::Px(10.0), Val::Px(4.0), Val::Px(4.0)),
+                border: UiRect::all(Val::Px(1.0)),
+                margin: UiRect::top(Val::Px(6.0)),
+                align_self: AlignSelf::FlexStart,
+                ..default()
+            },
+            BackgroundColor(CHIP_BG),
+            BorderColor::all(WindowStyle::BORDER_COLOR),
+            Interaction::None,
+            Button,
+            PointDefenceButton,
+            Tooltip {
+                text: "On point defence it fires by itself at the incoming missile that will land first -- and never at ships. On a turret, it swings the turret onto it.".into(),
+                detail: Some("It only sees missiles the ship's Missile Warners have spotted.".into()),
+            },
+        ))
+        .id();
+    let pd_label = commands
+        .spawn((
+            Text::new(point_defence_label(false)),
+            TextFont { font_size: FontSize::Px(11.0), ..default() },
+            TextColor(WindowStyle::TEXT_COLOR),
+        ))
+        .id();
+    commands.entity(pd).add_child(pd_label);
+    commands.entity(content).add_child(pd);
 }
 
 /// The point defence switch: on or off for the gun under the window.

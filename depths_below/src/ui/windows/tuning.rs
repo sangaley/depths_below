@@ -197,7 +197,9 @@ fn spawn_tuning_window(
     module_type: ModuleType,
     position: Vec2,
 ) {
-    let title = if module_type == ModuleType::FiringPiece {
+    let title = if module_type == ModuleType::LaserEmitter {
+        "LASER EMITTER".to_string()
+    } else if module_type == ModuleType::FiringPiece {
         "BUILT GUN - SHELL & TUNING".to_string()
     } else if crate::combat::missile_design::is_built_launcher(module_type) {
         format!("{} - MISSILE & TUNING", module_type.name()).to_uppercase()
@@ -213,6 +215,22 @@ fn spawn_tuning_window(
     );
 
     commands.entity(content).insert(TuningWindow { module_entity, module_type });
+
+    // A laser's numbers are its bank's (combat::lasers); its emitter only
+    // chooses what it fires at.
+    if module_type == ModuleType::LaserEmitter {
+        spawn_window_section(commands, content, "LASER");
+        let note = commands
+            .spawn((
+                Text::new("Fires its bank's charge. Lenses in a line in front of it carry the beam further. On point defence it shoots only at missiles the warners have spotted."),
+                TextFont { font_size: FontSize::Px(10.0), ..default() },
+                TextColor(WindowStyle::TEXT_DIM),
+            ))
+            .id();
+        commands.entity(content).add_child(note);
+        super::shell_designer::spawn_point_defence_switch(commands, content);
+        return;
+    }
 
     // AMMO SELECTOR — kinetics only
     if is_kinetic_weapon(module_type) {

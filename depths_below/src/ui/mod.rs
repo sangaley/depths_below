@@ -1352,6 +1352,13 @@ fn update_weapon_rack(
     // A turret gun's barrel and where its turret is aiming.
     aiming: (Query<&crate::combat::gun_assembly::GunMuzzle>, Query<&crate::combat::turret_deck::TurretBody>),
     point_defence: Query<(), With<crate::combat::targeting::fire_groups::InterceptMode>>,
+    // Lasers built from parts (combat::lasers): emitters, their banks, and
+    // the turret an emitter may stand on.
+    lasers: (
+        Query<(Entity, &crate::combat::lasers::LaserEmitter, &Module, &ChildOf, Option<&crate::combat::targeting::fire_groups::FireGroup>)>,
+        Query<&crate::combat::lasers::LaserBank>,
+        Query<&ChildOf, With<crate::combat::turret_deck::TurretBody>>,
+    ),
     rows: Query<(Entity, &WeaponRackRow)>,
     mut texts: Query<(&mut Text, &mut TextColor), With<WeaponRackDynText>>,
     mut bars: Query<(&mut Node, &mut BackgroundColor), With<WeaponRackBarFill>>,
@@ -1403,6 +1410,27 @@ fn update_weapon_rack(
                 auto: module.module_type == ModuleType::FiringPiece && point_defence.contains(entity),
                 power: weapon.max_ammo >= 999 && assemblies.get(entity).is_err(),
                 blind: blind && module.module_type == ModuleType::FiringPiece && point_defence.contains(entity),
+            });
+    }
+    // Each laser emitter, reading its bank's charge: ready once a tenth of
+    // the bank is in.
+    for (emitter, link, module, parent, fg) in lasers.0.iter() {
+        let owner = lasers.2.get(parent.parent()).map(|p| p.parent()).unwrap_or(parent.parent());
+        if owner != player { continue; }
+        let Ok(bank) = lasers.1.get(link.bank) else { continue };
+        let fill = bank.fill();
+        let ready = fill >= 0.1;
+        let pumping = crate::combat::lasers::PUMP_RATE * bank.pumps.len() as f32;
+        let remaining = if ready || pumping <= 0.0 { 0.0 } else { (0.1 * bank.stats.storage - bank.charge) / pumping };
+        // On point defence it fires itself, at what the warners see.
+        let auto = point_defence.contains(emitter);
+        let name = if auto { "Laser (PD)" } else if bank.stats.shots == 0 { "Laser (beam)" } else { "Laser (pulse)" };
+        stacks
+            .entry((fg.map(|f| f.group).unwrap_or(0), name))
+            .or_default()
+            .push(RackWeapon {
+                frac: fill, ready, remaining, ammo: 0, max: 999, alive: module.health > 0.0, turning: false,
+                auto, power: true, blind: blind && auto,
             });
     }
     let lines: Vec<((u8, &'static str), RackLine)> =

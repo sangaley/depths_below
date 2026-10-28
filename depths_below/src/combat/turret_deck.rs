@@ -609,6 +609,9 @@ pub fn traverse_turrets(
         Query<&crate::combat::gun_assembly::GunAssembly, With<crate::combat::targeting::fire_groups::InterceptMode>>,
         // A point defence gun sees only the missiles its ship's warners do.
         Query<(Entity, &Transform, &crate::components::Velocity), (With<crate::combat::new_projectiles::MissileProjectile>, Without<TurretBody>)>,
+        // Laser emitters on point defence: the beam is instant, so they aim
+        // where the missile is, not where it will be.
+        Query<(), (With<crate::combat::lasers::LaserEmitter>, With<crate::combat::targeting::fire_groups::InterceptMode>)>,
     ),
 ) {
     let dt = time.delta_secs();
@@ -682,6 +685,24 @@ pub fn traverse_turrets(
                     .map(|(_, t, v)| (t.translation.truncate(), v.0)),
             )
         });
+        let laser_pd = children.into_iter().flatten().any(|c| pd.2.contains(*c));
+        let pd_aim = pd_aim.or_else(|| {
+            laser_pd.then(|| {
+                let from = ship_gt.affine().transform_point3(transform.translation.with_z(0.0)).truncate();
+                crate::combat::missile_defence::pd_solution(
+                    ship_gt.translation().truncate(),
+                    from,
+                    1.0e6,
+                    Vec2::ZERO,
+                    crate::combat::lasers::PD_REACH,
+                    warning
+                        .into_iter()
+                        .flat_map(|w| w.spotted.iter())
+                        .filter_map(|e| pd.1.get(*e).ok())
+                        .map(|(_, t, v)| (t.translation.truncate(), v.0)),
+                )
+            })?
+        });
         body.pd_engaged = pd_aim.is_some();
         if crate::combat::gun_assembly::trace() && (time.elapsed_secs() % 1.0) < dt
             && children.into_iter().flatten().any(|c| pd.0.contains(*c))
@@ -692,7 +713,7 @@ pub fn traverse_turrets(
         // A point defence turret is the ship's, not the gunner's: it turns
         // only onto missiles, and holds where it is between them -- never
         // after the cursor or the ship's chosen target.
-        let on_pd = children.into_iter().flatten().any(|c| pd.0.contains(*c));
+        let on_pd = laser_pd || children.into_iter().flatten().any(|c| pd.0.contains(*c));
         let target = if pd_aim.is_some() || on_pd { pd_aim } else { match ai_target {
             Some(t) => t.entity.map(|e| whereabouts.get(e).map(|g| g.translation().truncate()).unwrap_or(t.position)),
             None => {

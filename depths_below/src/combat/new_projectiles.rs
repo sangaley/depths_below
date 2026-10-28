@@ -947,9 +947,14 @@ pub struct PlayerHitEffects<'w, 's> {
 }
 
 impl PlayerHitEffects<'_, '_> {
+    /// Debug god mode: the player's ship takes nothing.
+    pub(crate) fn god_mode(&self) -> bool {
+        self.debug.god_mode
+    }
+
     /// A player plate knocked under 30% opens to space -- the same rule
     /// process_ship_damage applied to the blocks its walk damaged.
-    fn breach_if_holed(&mut self, segment: Entity, hull: &mut HullSegment) {
+    pub(crate) fn breach_if_holed(&mut self, segment: Entity, hull: &mut HullSegment) {
         let health_pct = if hull.max_health > 0.0 { hull.health / hull.max_health } else { 0.0 };
         if health_pct < 0.3 && !hull.is_depressurized {
             hull.is_depressurized = true;
@@ -962,7 +967,7 @@ impl PlayerHitEffects<'_, '_> {
 
     /// The hit, for the camera, audio, damage arrows and death screen.
     /// `applied`: the blocks have already taken it.
-    fn report(&mut self, amount: f32, at: Vec2, travel: Vec2, announce: bool) {
+    pub(crate) fn report(&mut self, amount: f32, at: Vec2, travel: Vec2, announce: bool) {
         self.ship_damage.write(crate::events::ShipDamaged {
             source: crate::events::DamageSource::Gunfire,
             amount,

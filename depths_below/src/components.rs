@@ -332,6 +332,9 @@ pub enum ModuleCategory {
     /// Guns built from parts (combat::gun_assembly): a firing piece and the
     /// loaders, barrels, coolers and the rest that make it a gun.
     Guns,
+    /// Lasers built from parts (combat::lasers): a core, the cavities and
+    /// pumps that charge it, and emitters that fire it.
+    Lasers,
     Detection,
     Storage,
     Crew,
@@ -347,6 +350,7 @@ impl ModuleCategory {
         ModuleCategory::Control,
         ModuleCategory::Weapons,
         ModuleCategory::Guns,
+        ModuleCategory::Lasers,
         ModuleCategory::Detection,
         ModuleCategory::Storage,
         ModuleCategory::Crew,
@@ -362,6 +366,7 @@ impl ModuleCategory {
             ModuleCategory::Control => "Control",
             ModuleCategory::Weapons => "Weapons",
             ModuleCategory::Guns => "Guns",
+            ModuleCategory::Lasers => "Lasers",
             ModuleCategory::Detection => "Detection",
             ModuleCategory::Storage => "Storage",
             ModuleCategory::Crew => "Crew",
@@ -474,6 +479,20 @@ impl ModuleCategory {
                 ModuleType::RoofVent,
                 ModuleType::Periscope,
                 ModuleType::ArmouredHatch,
+            ],
+            // In the order you build one: the core, what stores and charges
+            // it, what shapes the beam, and what fires it.
+            ModuleCategory::Lasers => &[
+                ModuleType::LaserCore,
+                ModuleType::LaserCoupler,
+                ModuleType::LaserCavity,
+                ModuleType::LaserPump,
+                ModuleType::QSwitch,
+                ModuleType::FrequencyDoubler,
+                ModuleType::LaserDestabiliser,
+                ModuleType::LaserEmitter,
+                ModuleType::LaserLens,
+                ModuleType::BeamRelay,
             ],
             ModuleCategory::Detection => &[
                 ModuleType::RadarArray,
@@ -790,6 +809,17 @@ pub enum ModuleType {
     TraverseMotor,        // Turns the turret on the ring it touches
     AmmoHoist,            // Beside a ring: lifts shells into the turret above
     AntiFlashDoor,        // A conveyor a turret cook-off can't flash past
+    // Lasers built from parts (combat::lasers).
+    LaserCore,            // The hub: one laser per core
+    LaserCoupler,         // Extends the core; carries charge to cavities, modifiers, emitters
+    LaserCavity,          // Stores 100 charge; chains
+    LaserPump,            // Beside a cavity: +12 charge/s for 6 MW
+    QSwitch,              // On the core: pulses instead of a steady beam
+    FrequencyDoubler,     // On the core: +15 intensity
+    LaserDestabiliser,    // On the core: lets the bank go faster
+    LaserEmitter,         // Fires the bank's charge; on the hull or a turret
+    LaserLens,            // In a line in front of an emitter: range and steadiness
+    BeamRelay,            // Beside a turret ring: carries a bank's charge up to its emitters
     // Gun house roof fittings (combat::gun_house): they stand on a turret's
     // roof, over its gun parts, and each does something for that turret.
     Rangefinder,          // Tighter spread for the turret's guns
@@ -966,6 +996,17 @@ impl ModuleType {
             ModuleType::AmmoHoist | ModuleType::AntiFlashDoor |
             ModuleType::Rangefinder | ModuleType::RoofVent |
             ModuleType::Periscope | ModuleType::ArmouredHatch => ModuleCategory::Guns,
+
+            ModuleType::LaserCore |
+            ModuleType::LaserCoupler |
+            ModuleType::LaserCavity |
+            ModuleType::LaserPump |
+            ModuleType::QSwitch |
+            ModuleType::FrequencyDoubler |
+            ModuleType::LaserDestabiliser |
+            ModuleType::LaserEmitter |
+            ModuleType::LaserLens |
+            ModuleType::BeamRelay => ModuleCategory::Lasers,
 
             ModuleType::ReactorFuelRod |
             ModuleType::ReactorCooling => ModuleCategory::Power,
@@ -1199,6 +1240,16 @@ impl ModuleType {
             ModuleType::TraverseMotor => "Traverse Motor",
             ModuleType::AmmoHoist => "Ammo Hoist",
             ModuleType::Rangefinder => "Rangefinder",
+            ModuleType::LaserCore => "Laser Core",
+            ModuleType::LaserCoupler => "Laser Coupler",
+            ModuleType::LaserCavity => "Laser Cavity",
+            ModuleType::LaserPump => "Laser Pump",
+            ModuleType::QSwitch => "Q-switch",
+            ModuleType::FrequencyDoubler => "Frequency Doubler",
+            ModuleType::LaserDestabiliser => "Laser Destabiliser",
+            ModuleType::LaserEmitter => "Laser Emitter",
+            ModuleType::LaserLens => "Laser Lens",
+            ModuleType::BeamRelay => "Beam Relay",
             ModuleType::RoofVent => "Roof Vent",
             ModuleType::Periscope => "Periscope",
             ModuleType::ArmouredHatch => "Armoured Hatch",

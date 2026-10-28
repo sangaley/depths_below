@@ -327,6 +327,7 @@ fn build_visual(commands: &mut Commands, e: Entity, mt: ModuleType) {
                 ModuleCategory::LifeSupport => Color::srgb(0.16, 0.38, 0.25),
                 ModuleCategory::Weapons => Color::srgb(0.40, 0.18, 0.14),
                 ModuleCategory::Guns => Color::srgb(0.40, 0.32, 0.18),
+                ModuleCategory::Lasers => Color::srgb(0.40, 0.18, 0.18),
                 ModuleCategory::Detection => Color::srgb(0.16, 0.35, 0.38),
                 ModuleCategory::Storage => Color::srgb(0.32, 0.26, 0.16),
                 ModuleCategory::Crew => Color::srgb(0.32, 0.22, 0.35),

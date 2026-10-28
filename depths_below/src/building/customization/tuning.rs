@@ -95,6 +95,8 @@ pub fn is_tunable_weapon(module_type: ModuleType) -> bool {
         | ModuleType::FiringPiece
         // A launcher: its window is where its missile is designed.
         | ModuleType::LaunchPad | ModuleType::RailLauncher | ModuleType::VlsSilo
+        // A laser emitter: its window holds its point defence switch.
+        | ModuleType::LaserEmitter
     )
 }
 

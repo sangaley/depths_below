@@ -1582,6 +1582,87 @@ pub fn build_registry() -> ModuleRegistry {
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
+    // Lasers built from parts (combat::lasers).
+    defs.insert(ModuleType::LaserCore, ModuleDef {
+        name: "Laser Core", description: "The heart of a laser: cavities, modifiers and emitters connect to it (or to couplers off it). One laser per core.",
+        category: ModuleCategory::Lasers, size: IVec2::new(1, 1), health: 220.0,
+        power_generation: 0.0, power_consumption: 4.0, color: Color::srgb(0.55, 0.30, 0.30),
+        companion: CompanionData::None, customizable: false, cost: 90,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::LaserCoupler, ModuleDef {
+        name: "Laser Coupler", description: "Extends a laser core: cavities, Q-switches, doublers, destabilisers, emitters and beam relays may touch it instead.",
+        category: ModuleCategory::Lasers, size: IVec2::new(1, 1), health: 120.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.55, 0.30, 0.30),
+        companion: CompanionData::None, customizable: false, cost: 25,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::LaserCavity, ModuleDef {
+        name: "Laser Cavity", description: "Stores 100 charge. Counts touching the core, a coupler or another counted cavity.",
+        category: ModuleCategory::Lasers, size: IVec2::new(1, 1), health: 110.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.55, 0.30, 0.30),
+        companion: CompanionData::None, customizable: false, cost: 40,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::LaserPump, ModuleDef {
+        name: "Laser Pump", description: "Beside a counted cavity: +12 charge a second for 6 MW of ship power.",
+        category: ModuleCategory::Lasers, size: IVec2::new(1, 1), health: 90.0,
+        power_generation: 0.0, power_consumption: 6.0, color: Color::srgb(0.55, 0.30, 0.30),
+        companion: CompanionData::None, customizable: false, cost: 45,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::QSwitch, ModuleDef {
+        name: "Q-switch", description: "On the core: the laser pulses instead of holding a steady beam. 1, 2, 3 or 4 switches give 1, 2, 4 or 8 pulses a second; pulses do more per charge but burn less deep into armour.",
+        category: ModuleCategory::Lasers, size: IVec2::new(1, 1), health: 100.0,
+        power_generation: 0.0, power_consumption: 1.0, color: Color::srgb(0.55, 0.30, 0.30),
+        companion: CompanionData::None, customizable: false, cost: 50,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::FrequencyDoubler, ModuleDef {
+        name: "Frequency Doubler", description: "On the core: +15 intensity, halving the wavelength. Intensity is what burns through armour (four count).",
+        category: ModuleCategory::Lasers, size: IVec2::new(1, 1), health: 100.0,
+        power_generation: 0.0, power_consumption: 1.0, color: Color::srgb(0.55, 0.30, 0.30),
+        companion: CompanionData::None, customizable: false, cost: 60,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::LaserDestabiliser, ModuleDef {
+        name: "Laser Destabiliser", description: "On the core: the bank lets its charge go faster (25% a second with none, 58% with two, 76% with four). Bigger bursts, drains sooner.",
+        category: ModuleCategory::Lasers, size: IVec2::new(1, 1), health: 100.0,
+        power_generation: 0.0, power_consumption: 1.0, color: Color::srgb(0.55, 0.30, 0.30),
+        companion: CompanionData::None, customizable: false, cost: 45,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::LaserEmitter, ModuleDef {
+        name: "Laser Emitter", description: "Fires the laser. On the hull touching the core or a coupler, or on a turret fed by a Beam Relay. Lenses in front of it carry the beam further.",
+        category: ModuleCategory::Lasers, size: IVec2::new(1, 1), health: 140.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.55, 0.30, 0.30),
+        companion: CompanionData::None, customizable: false, cost: 70,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::LaserLens, ModuleDef {
+        name: "Laser Lens", description: "In a straight line in front of an emitter: the beam keeps more of its strength over range and wanders less.",
+        category: ModuleCategory::Lasers, size: IVec2::new(1, 1), health: 80.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.55, 0.30, 0.30),
+        companion: CompanionData::None, customizable: false, cost: 30,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
+    defs.insert(ModuleType::BeamRelay, ModuleDef {
+        name: "Beam Relay", description: "Beside a turret ring and touching a laser's core or a coupler: carries the charge up to the emitters on that turret.",
+        category: ModuleCategory::Lasers, size: IVec2::new(1, 1), health: 120.0,
+        power_generation: 0.0, power_consumption: 1.0, color: Color::srgb(0.55, 0.30, 0.30),
+        companion: CompanionData::None, customizable: false, cost: 40,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
     // Gun house roof fittings: on a turret's roof (PgUp twice in build mode),
     // in place of an armour plate. Each counts for the turret it stands on.
     defs.insert(ModuleType::Rangefinder, ModuleDef {

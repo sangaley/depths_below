@@ -23,6 +23,10 @@ use crate::states::BuildState;
 /// Can this part stand on a turret deck? Gun parts can; what feeds a gun
 /// from the ship's magazines, and what a turret turns on, stays below.
 pub fn allowed_on_turret(t: ModuleType) -> bool {
+    // A laser's emitter and lenses turn with a turret; its bank stays below.
+    if matches!(t, ModuleType::LaserEmitter | ModuleType::LaserLens) {
+        return true;
+    }
     t.category() == ModuleCategory::Guns
         && !matches!(
             t,
