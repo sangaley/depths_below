@@ -69,7 +69,7 @@ pub fn expand_gun_placements(bp: &mut Blueprint, designs: &[crate::combat::gun_d
             let extras = ModuleExtras {
                 turret: fit.turret,
                 shell: gun.shell.clone().filter(|_| module_type == ModuleType::FiringPiece),
-                point_defence: gun.point_defence && module_type == ModuleType::FiringPiece,
+                point_defence: gun.point_defence_on(module_type),
                 ..default()
             };
             bp.modules.push(BlueprintModule {

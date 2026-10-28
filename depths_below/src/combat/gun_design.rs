@@ -44,7 +44,7 @@ pub struct GunDesign {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub faction: Option<String>,
     /// Fitted on point defence: shoots incoming missiles, never ships
-    /// (combat::missile_defence).
+    /// (combat::missile_defence). On a laser unit, its emitters do.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub point_defence: bool,
 }
@@ -129,6 +129,22 @@ impl GunDesign {
         super::gun_assembly::assemble_with_shells(&modules, &shells).into_iter().next().map(|(_, g)| g)
     }
 
+    /// A laser unit (a Laser Core among the parts): what its bank adds up to.
+    pub fn laser(&self) -> Option<(super::lasers::BankStats, super::lasers::BankLayout)> {
+        let placed = self.placed(IVec2::ZERO, Rotation::East);
+        let core = placed.iter().find(|(t, _, _)| *t == ModuleType::LaserCore)?.1;
+        let cells: bevy::platform::collections::HashMap<IVec2, ModuleType> = placed.iter().map(|(t, at, _)| (*at, *t)).collect();
+        let layout = super::lasers::lay_out_bank(&cells, core);
+        let stats = super::lasers::bank_stats(layout.cavities.len() as u32, layout.q_switches, layout.doublers, layout.destabilisers);
+        Some((stats, layout))
+    }
+
+    /// Whether this part carries the design's point defence switch: a gun's
+    /// firing piece, or a laser unit's emitters.
+    pub fn point_defence_on(&self, part: ModuleType) -> bool {
+        self.point_defence && matches!(part, ModuleType::FiringPiece | ModuleType::LaserEmitter)
+    }
+
     /// "280 mm, 6 m barrel, 3 loaders, 27.8 rpm".
     pub fn summary(&self) -> String {
         match self.assembled() {
@@ -136,7 +152,18 @@ impl GunDesign {
                 "{:.0} mm, {} m barrel, {} loader(s), {:.0} m/s, {:.1} rpm, {} parts",
                 g.stats.gauge_mm, g.parts.barrel_m, g.parts.loaders.len(), g.stats.velocity_mps, g.stats.rpm, self.parts.len()
             ),
-            None => format!("{} parts, no firing piece", self.parts.len()),
+            None => match self.laser() {
+                Some((stats, layout)) => format!(
+                    "laser, {} cavities, {} pumps, {}, intensity {:.0}, {} emitter(s), {} parts",
+                    layout.cavities.len(),
+                    layout.pumps.len(),
+                    if stats.shots == 0 { "steady beam".to_string() } else { format!("{} pulses/s", stats.shots) },
+                    stats.intensity,
+                    layout.emitters.len(),
+                    self.parts.len()
+                ),
+                None => format!("{} parts, no firing piece or laser core", self.parts.len()),
+            },
         }
     }
 
@@ -198,6 +225,37 @@ pub fn load_gun_designs(mut designs: ResMut<GunDesigns>) {
 mod gun_design_tests {
     use super::*;
     use ModuleType::*;
+
+    fn part(t: ModuleType, x: i32, y: i32) -> GunDesignPart {
+        GunDesignPart { module_type: t, offset: IVec2::new(x, y), rotation: Rotation::East }
+    }
+
+    #[test]
+    fn a_laser_unit_design_reads_as_a_laser() {
+        let d = GunDesign {
+            name: "PD laser".into(),
+            description: String::new(),
+            parts: vec![
+                part(LaserCore, 0, 0),
+                part(LaserCavity, 0, 1),
+                part(LaserPump, 0, 2),
+                part(QSwitch, -1, 0),
+                part(QSwitch, 0, -1),
+                part(LaserEmitter, 1, 0),
+                part(LaserLens, 2, 0),
+            ],
+            shell: None,
+            faction: None,
+            point_defence: true,
+        };
+        let (stats, layout) = d.laser().expect("a core makes it a laser");
+        assert_eq!((layout.cavities.len(), layout.pumps.len(), layout.emitters.len()), (1, 1, 1));
+        assert_eq!(stats.shots, 2, "two Q-switches pulse twice a second");
+        assert!(d.summary().starts_with("laser, 1 cavities, 1 pumps, 2 pulses/s"), "{}", d.summary());
+        assert!(d.point_defence_on(LaserEmitter) && !d.point_defence_on(LaserCore));
+        let gun = GunDesign { parts: vec![part(FiringPiece, 0, 0)], ..d.clone() };
+        assert!(gun.laser().is_none() && gun.point_defence_on(FiringPiece));
+    }
 
     fn m(t: ModuleType, x: i32, y: i32, r: Rotation) -> Module {
         Module {

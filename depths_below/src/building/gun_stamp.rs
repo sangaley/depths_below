@@ -154,6 +154,7 @@ pub fn stamp_gun_design(
         let extras = ModuleExtras {
             turret: plan.turret,
             shell: design.shell.clone().filter(|_| part.module_type == ModuleType::FiringPiece),
+            point_defence: design.point_defence_on(part.module_type),
             ..default()
         };
         place.write(PlaceModuleRequest {
