@@ -268,7 +268,10 @@ pub fn design_extent(ship_type: AiShipType, class: Option<&'static str>) -> f32 
 pub fn wounded_design(built: &Blueprint, wounds: &Wounds) -> Blueprint {
     let mut design = built.clone();
     design.hull_cells.retain(|c| !wounds.hull.contains(&c.grid_pos));
-    design.modules.retain(|m| !wounds.modules.contains(&m.grid_pos));
+    design.modules.retain(|m| match m.extras.as_ref().and_then(|e| e.turret) {
+        Some(ring) => !wounds.turret_parts.contains(&(ring, m.grid_pos)),
+        None => !wounds.modules.contains(&m.grid_pos),
+    });
     design
 }
 
@@ -642,12 +645,33 @@ mod wound_tests {
         let built = built_design(AiShipType::TerranHegemony, crate::ai_ship::roster::intern("bulwark"));
         let lost_cell = built.hull_cells[5].grid_pos;
         let lost_module = built.modules[3].grid_pos;
-        let wounds = Wounds { hull: vec![lost_cell], modules: vec![lost_module], integrity: 0.9 };
+        let wounds = Wounds { hull: vec![lost_cell], modules: vec![lost_module], turret_parts: vec![], integrity: 0.9 };
         let hurt = wounded_design(&built, &wounds);
         assert_eq!(hurt.hull_cells.len(), built.hull_cells.len() - 1);
         assert!(hurt.modules.len() < built.modules.len());
         assert!(hurt.hull_cells.iter().all(|c| c.grid_pos != lost_cell));
         assert!(hurt.modules.iter().all(|m| m.grid_pos != lost_module));
+    }
+
+    /// Turret gun parts stand on their turret's own cells, so they are lost
+    /// by ring and cell, and a hull block lost at the same numbers is not one
+    /// of them. (Every turret gun used to come back from a load missing.)
+    #[test]
+    fn turret_parts_are_wounded_by_ring_and_cell() {
+        let built = built_design(AiShipType::EternalHegemony, crate::ai_ship::roster::intern("vigil"));
+        let ring = |m: &blueprint::BlueprintModule| m.extras.as_ref().and_then(|e| e.turret);
+        let parts = built.modules.iter().filter(|m| ring(m).is_some()).count();
+        assert!(parts > 40, "the Vigil's turret guns are in its design ({parts} parts)");
+        let barrel = built.modules.iter().find(|m| m.module_type == ModuleType::GunBarrel && ring(m).is_some()).unwrap();
+        let wounds = Wounds {
+            hull: vec![],
+            modules: vec![barrel.grid_pos],
+            turret_parts: vec![(ring(barrel).unwrap(), barrel.grid_pos)],
+            integrity: 0.9,
+        };
+        let hurt = wounded_design(&built, &wounds);
+        assert_eq!(hurt.modules.iter().filter(|m| ring(m).is_some()).count(), parts - 1);
+        assert!(!hurt.modules.iter().any(|m| ring(m) == ring(barrel) && m.grid_pos == barrel.grid_pos));
     }
 
     #[test]

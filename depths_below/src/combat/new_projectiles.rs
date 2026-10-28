@@ -538,6 +538,11 @@ pub fn fire_weapons_system(
             }
             continue;
         }
+        // A built gun with its barrels shot away has no muzzle speed: it
+        // would only drop dead rounds at the breech.
+        if assembly.is_some_and(|a| a.stats.velocity_mps <= 0.0) {
+            continue;
+        }
         // A firing cut-out: a turret gun holds fire while its line of fire
         // crosses another of the ship's turrets. (Hull guns fire on the deck
         // below and keep the no-line-of-sight rule.)

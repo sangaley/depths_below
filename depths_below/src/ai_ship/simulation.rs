@@ -932,14 +932,7 @@ pub fn sync_simulation_entities(
         ),
         (With<AiShip>, Without<crate::diplomacy::FactionStation>, Without<LeftByLoad>),
     >,
-    blocks: Query<
-        (Option<&crate::components::HullSegment>, Option<&crate::components::Module>),
-        (
-            Or<(With<crate::components::HullSegment>, With<crate::components::Module>)>,
-            Without<crate::components::HullDestroyed>,
-            Without<crate::components::DestroyedModule>,
-        ),
-    >,
+    blocks: WoundBlocks,
 ) {
     let Ok(player_transform) = ship_query.single() else { return };
     let player_pos = player_transform.translation.truncate();
@@ -974,7 +967,7 @@ pub fn sync_simulation_entities(
         if s.spawned || s.behavior == SimBehavior::Dead {
             continue;
         }
-        let lost = s.wounds.as_ref().map_or(0, |w| w.hull.len() + w.modules.len());
+        let lost = s.wounds.as_ref().map_or(0, |w| w.hull.len() + w.modules.len() + w.turret_parts.len());
         let cost = super::spawner::design_blocks(s.faction, s.class).saturating_sub(lost);
         let fleet = if sim.fleet(s.fleet).is_some() { s.fleet } else { 0 };
         let g = if fleet != 0 {
@@ -1274,14 +1267,7 @@ pub fn track_live_ships(
         ),
         (With<AiShip>, Without<LeftByLoad>, Without<crate::diplomacy::FactionStation>),
     >,
-    blocks: Query<
-        (Option<&crate::components::HullSegment>, Option<&crate::components::Module>),
-        (
-            Or<(With<crate::components::HullSegment>, With<crate::components::Module>)>,
-            Without<crate::components::HullDestroyed>,
-            Without<crate::components::DestroyedModule>,
-        ),
-    >,
+    blocks: WoundBlocks,
 ) {
     *next -= time.delta_secs();
     if *next > 0.0 {
@@ -1315,36 +1301,74 @@ pub fn track_live_ships(
 
 /// What a live ship has lost against the design it was built from: the hull
 /// cells and module anchors no longer there. None for an unhurt ship.
+/// A ship's live blocks, for `wounds_of`: hull, modules, and the turrets
+/// standing on its rings with the gun parts on them.
+type WoundBlocks<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Option<&'static crate::components::HullSegment>,
+        Option<&'static crate::components::Module>,
+        Option<&'static crate::combat::turret_deck::OnTurret>,
+        Option<&'static Children>,
+    ),
+    (
+        Or<(
+            With<crate::components::HullSegment>,
+            With<crate::components::Module>,
+            With<crate::combat::turret_deck::TurretBody>,
+        )>,
+        Without<crate::components::HullDestroyed>,
+        Without<crate::components::DestroyedModule>,
+    ),
+>;
+
 fn wounds_of(
     faction: AiShipType,
     class: Option<&'static str>,
     integrity: f32,
     children: Option<&Children>,
-    blocks: &Query<
-        (Option<&crate::components::HullSegment>, Option<&crate::components::Module>),
-        (
-            Or<(With<crate::components::HullSegment>, With<crate::components::Module>)>,
-            Without<crate::components::HullDestroyed>,
-            Without<crate::components::DestroyedModule>,
-        ),
-    >,
+    blocks: &WoundBlocks,
 ) -> Option<Wounds> {
     let mut hull = std::collections::HashSet::new();
     let mut modules = std::collections::HashSet::new();
+    // A turret's gun parts are children of its body, not of the ship, and
+    // their cells are the turret's own: kept by ring as well as cell, or
+    // every turret gun read as shot away and came back missing from a load.
+    let mut parts = std::collections::HashSet::new();
     for child in children.into_iter().flat_map(|c| c.iter()) {
-        if let Ok((h, m)) = blocks.get(child) {
-            if let Some(h) = h {
-                hull.insert(h.grid_position);
-            }
-            if let Some(m) = m {
-                modules.insert(m.grid_position);
+        let Ok((h, m, _, deck)) = blocks.get(child) else { continue };
+        if let Some(h) = h {
+            hull.insert(h.grid_position);
+        }
+        if let Some(m) = m {
+            modules.insert(m.grid_position);
+        }
+        if h.is_none() && m.is_none() {
+            for part in deck.into_iter().flat_map(|d| d.iter()) {
+                if let Ok((_, Some(m), Some(on), _)) = blocks.get(part) {
+                    parts.insert((on.ring_cell, m.grid_position));
+                }
             }
         }
     }
     let built = super::spawner::built_design(faction, class);
+    let on_turret = |m: &crate::building::blueprint::BlueprintModule| m.extras.as_ref().and_then(|e| e.turret);
     let wounds = Wounds {
         hull: built.hull_cells.iter().map(|c| c.grid_pos).filter(|p| !hull.contains(p)).collect(),
-        modules: built.modules.iter().map(|m| m.grid_pos).filter(|p| !modules.contains(p)).collect(),
+        modules: built
+            .modules
+            .iter()
+            .filter(|m| on_turret(m).is_none())
+            .map(|m| m.grid_pos)
+            .filter(|p| !modules.contains(p))
+            .collect(),
+        turret_parts: built
+            .modules
+            .iter()
+            .filter_map(|m| on_turret(m).map(|ring| (ring, m.grid_pos)))
+            .filter(|p| !parts.contains(p))
+            .collect(),
         integrity,
     };
     (!wounds.is_empty() || integrity < 0.999).then_some(wounds)

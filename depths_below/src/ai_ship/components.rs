@@ -294,13 +294,18 @@ pub struct AiShipWreck {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Wounds {
     pub hull: Vec<IVec2>,
+    /// Hull-deck modules gone, by anchor cell.
     pub modules: Vec<IVec2>,
+    /// Gun parts gone from turrets: (the ring's cell, the part's cell on the
+    /// turret). A turret's cells are its own, so they can't share `modules`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub turret_parts: Vec<(IVec2, IVec2)>,
     pub integrity: f32,
 }
 
 impl Wounds {
     pub fn is_empty(&self) -> bool {
-        self.hull.is_empty() && self.modules.is_empty()
+        self.hull.is_empty() && self.modules.is_empty() && self.turret_parts.is_empty()
     }
 }
 
@@ -1008,7 +1013,7 @@ mod saved_world_tests {
     fn a_world_survives_a_save() {
         let mut sim = WorldSimulation::default();
         let mut a = ship(0, Some("bulwark"));
-        a.wounds = Some(Wounds { hull: vec![IVec2::new(1, 2)], modules: vec![], integrity: 0.4 });
+        a.wounds = Some(Wounds { hull: vec![IVec2::new(1, 2)], modules: vec![], turret_parts: vec![], integrity: 0.4 });
         a.spawned = true;
         a.behavior = SimBehavior::Fighting(7);
         sim.add(a);

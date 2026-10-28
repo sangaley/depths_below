@@ -250,6 +250,10 @@ pub fn ai_weapon_fire_system(
             if efficiency <= 0.0 {
                 continue;
             }
+            // A built gun with its barrels shot away has no muzzle speed.
+            if gun.is_some_and(|(g, _)| g.stats.velocity_mps <= 0.0) {
+                continue;
+            }
 
             // Each gun shoots from where it actually is -- a built gun from
             // the end of its barrel...

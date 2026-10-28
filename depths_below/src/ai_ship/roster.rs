@@ -75,6 +75,9 @@ const ETERNAL: &[ShipClass] = &[
     class("echo_escort", "Echo Escort", Line, 50),
     class("herald", "Herald", Line, 30),
     class("reliquary_of_echoes", "Reliquary of Echoes", Experimental, 15),
+    // The big-ships capital: turret guns, a spinal, missiles and flak
+    // (tools/faction-arming/build_eternal_vigil.py).
+    class("vigil", "Vigil", Capital, 6),
 ];
 
 const GILDED: &[ShipClass] = &[

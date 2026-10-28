@@ -1,0 +1,119 @@
+"""The Halyard Mk II: the Halyard refitted with everything the big-ships branch
+built, as the player's ship. Writes designs/halyard_mk2.json; the Halyard
+itself is left alone.
+
+- Shells: the 280 mm spinal fires AP (punches through several blocks), the
+  twin 225 mm turret fires HE (blasts an area), the 170 mm sponsons fire AP.
+- Point defence: the four old PD drones become small turret rings, each with
+  a 60 mm flak gun on point defence, a traverse motor, a hoist and a magazine.
+- Missiles: four Launch Pads (Hornets, heat-seeking), two Rail Launchers
+  (command-guided frag) and two VLS Silos (radar-guided heavies with a
+  shaped charge), in place of rec rooms, labs, cargo and lights.
+- A Decoy Launcher and a Chaff Dispenser, in place of the two brigs.
+
+Run from depths_below/: python3 tools/faction-arming/build_halyard_mk2.py
+"""
+import os
+import kit
+
+FLUFF = {
+    "RecRoom", "TrainingRoom", "Brig", "SpecimenVault", "CryoStorage", "ResearchLab", "WellnessHub", "Searchlight",
+    "Floodlight", "MessHall", "LargeCargo", "SmallCargo", "ReinforcedVault", "MaintenanceLocker", "SignalJammer",
+}
+
+PD_GUN = {
+    "name": "60 mm PD Flak",
+    "description": "60 mm flak on a light turret: point defence against missiles. Frag with a proximity fuse.",
+    "parts": [
+        {"module_type": "FiringPiece", "offset": [0, 0], "rotation": "East"},
+        {"module_type": "Mantlet", "offset": [1, 0], "rotation": "East"},
+        {"module_type": "GunBarrel", "offset": [2, 0], "rotation": "East"},
+        {"module_type": "GunBarrel", "offset": [3, 0], "rotation": "East"},
+        {"module_type": "Loader", "offset": [-1, 0], "rotation": "East"},
+        {"module_type": "ClipRack", "offset": [-2, 0], "rotation": "East"},
+        {"module_type": "BreechCooler", "offset": [0, 1], "rotation": "East"},
+        {"module_type": "BreechCooler", "offset": [0, -1], "rotation": "East"},
+    ],
+    "shell": {"base": "None", "casings": 2, "bodies": ["Frag", "ProximityFuse"], "head": "Frag"},
+    "point_defence": True,
+}
+
+AP = {"base": "Tracer", "casings": 3, "bodies": ["Solid", "Solid"], "head": "Ap"}
+AP_LIGHT = {"base": "None", "casings": 3, "bodies": ["Solid"], "head": "Ap"}
+HE = {"base": "None", "casings": 2, "bodies": ["He", "He"], "head": "He"}
+
+RAIL_MISSILE = {"motor": "Booster", "body": ["Fuel", "Frag", "Frag", "ProximityFuse"], "head": "CommandLink"}
+VLS_MISSILE = {"motor": "Sustainer", "body": ["Fuel", "Fuel", "Fins", "SignalProcessor", "ShapedCharge", "He", "ArmourSheath"], "head": "Radar"}
+
+
+def clear_and_place(s, t, cell, r="North", extras=None):
+    """Put `t` at `cell`, clearing any fluff that covers its cells first."""
+    for c in kit.cells_of(t, cell, r):
+        assert c in s.hull and s.hull[c] != "Hallway", f"{t} at {cell}: {c} isn't a deck cell"
+        m = s.at(c)
+        if m is not None:
+            assert m["module_type"] in FLUFF, f"{t} at {cell}: {c} holds {m['module_type']}"
+            s.remove(m)
+    s.place(t, cell, r, extras)
+
+
+def pd_turret(s, ring, motor, hoist, magazine):
+    drone = s.at(ring)
+    assert drone and drone["module_type"] == "PointDefenseDrone", f"no PD drone at {ring}"
+    s.remove(drone)
+    s.place("TurretRingSmall", ring)
+    for t, c in [("TraverseMotor", motor), ("AmmoHoist", hoist), ("Magazine", magazine)]:
+        clear_and_place(s, t, c)
+    s.fit_gun(PD_GUN["name"], turret=ring)
+
+
+def shell_on(s, turret, shell):
+    """Every firing piece on that turret (None: the hull-mounted spinal)."""
+    n = 0
+    for m in s.d["modules"]:
+        if m["module_type"] != "FiringPiece":
+            continue
+        on = (m.get("extras") or {}).get("turret")
+        if (on and tuple(on) == turret) or (turret is None and not on):
+            m["extras"] = {**(m.get("extras") or {}), "shell": shell}
+            n += 1
+    assert n, f"no firing piece on {turret}"
+
+
+def main():
+    s = kit.Ship(os.path.join(kit.ROOT, "designs/halyard.json"))
+    s.d["name"] = "Halyard Mk II"
+    s.d["created_at"] = "tools/faction-arming/build_halyard_mk2.py"
+    kit.write_gun("60_mm_pd_flak", PD_GUN)
+
+    shell_on(s, None, AP)
+    shell_on(s, (-4, -2), HE)
+    shell_on(s, (8, 4), AP_LIGHT)
+    shell_on(s, (8, -6), AP_LIGHT)
+
+    # Midships: on the dorsal/ventral edge, motor-hoist-magazine on the deck inboard.
+    pd_turret(s, (6, 8), motor=(5, 7), hoist=(6, 7), magazine=(7, 7))
+    pd_turret(s, (6, -8), motor=(5, -7), hoist=(6, -7), magazine=(7, -7))
+    # Bow: the jammer beside each becomes the hoist, the floodlight past it the magazine.
+    pd_turret(s, (25, 2), motor=(24, 2), hoist=(26, 2), magazine=(27, 2))
+    pd_turret(s, (25, -2), motor=(24, -2), hoist=(26, -2), magazine=(27, -2))
+
+    for cell in [(-8, 8), (-8, -8), (17, -4), (13, 5)]:
+        clear_and_place(s, "LaunchPad", cell, "East")
+    for cell in [(-2, 5), (-1, -7)]:
+        clear_and_place(s, "RailLauncher", cell, "East", {"missile": RAIL_MISSILE})
+    for cell in [(-5, 5), (-5, -7)]:
+        clear_and_place(s, "VlsSilo", cell, "North", {"missile": VLS_MISSILE})
+
+    clear_and_place(s, "DecoyLauncher", (-15, -1))
+    clear_and_place(s, "ChaffDispenser", (-9, -5))
+
+    out = os.path.join(kit.ROOT, "designs/halyard_mk2.json")
+    s.save(out)
+    print(out, len(s.d["hull_cells"]), "hull,", len(s.d["modules"]), "modules +", len(s.d["guns"]), "fitted guns")
+    for t in ["LaunchPad", "RailLauncher", "VlsSilo", "TurretRingSmall", "DecoyLauncher", "ChaffDispenser", "Magazine"]:
+        print(" ", t, s.count(t))
+
+
+if __name__ == "__main__":
+    main()
