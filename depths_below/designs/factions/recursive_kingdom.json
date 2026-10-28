@@ -1979,7 +1979,7 @@
     8,
     2
    ],
-   "rotation": "West",
+   "rotation": "North",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -1987,10 +1987,10 @@
   {
    "module_type": "TraverseMotor",
    "grid_pos": [
-    8,
-    3
+    9,
+    2
    ],
-   "rotation": "West",
+   "rotation": "North",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -1998,10 +1998,10 @@
   {
    "module_type": "AmmoHoist",
    "grid_pos": [
-    9,
-    2
+    8,
+    1
    ],
-   "rotation": "West",
+   "rotation": "North",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -2010,9 +2010,9 @@
    "module_type": "Magazine",
    "grid_pos": [
     9,
-    3
+    1
    ],
-   "rotation": "West",
+   "rotation": "North",
    "custom_name": null,
    "subcomponents": null,
    "extras": null

@@ -460,7 +460,10 @@ mod nav_tests {
             }
         }
         let mut posts = Vec::new();
-        for module in &design.modules {
+        // A turret's parts stand in its own grid, up on the turret, not on
+        // the deck crew walk -- as `rebuild_nav_grids` sees the ship's own
+        // children, never a turret's.
+        for module in design.modules.iter().filter(|m| m.extras.as_ref().is_none_or(|e| e.turret.is_none())) {
             let def = registry.get(module.module_type);
             let footprint = footprints::footprint_override(module.module_type);
             let occupied =

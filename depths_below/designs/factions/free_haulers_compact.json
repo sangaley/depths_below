@@ -6043,7 +6043,7 @@
     16,
     6
    ],
-   "rotation": "West",
+   "rotation": "North",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -6051,10 +6051,10 @@
   {
    "module_type": "TraverseMotor",
    "grid_pos": [
-    16,
-    7
+    17,
+    6
    ],
-   "rotation": "West",
+   "rotation": "North",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -6062,10 +6062,10 @@
   {
    "module_type": "AmmoHoist",
    "grid_pos": [
-    17,
-    6
+    16,
+    5
    ],
-   "rotation": "West",
+   "rotation": "North",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -6074,9 +6074,9 @@
    "module_type": "Magazine",
    "grid_pos": [
     17,
-    7
+    5
    ],
-   "rotation": "West",
+   "rotation": "North",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -6087,7 +6087,7 @@
     0,
     0
    ],
-   "rotation": "North",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -6100,10 +6100,10 @@
   {
    "module_type": "Loader",
    "grid_pos": [
-    0,
-    -1
+    -1,
+    0
    ],
-   "rotation": "North",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -6117,9 +6117,9 @@
    "module_type": "ClipRack",
    "grid_pos": [
     -1,
-    -1
+    1
    ],
-   "rotation": "North",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -6132,10 +6132,10 @@
   {
    "module_type": "BreechCooler",
    "grid_pos": [
-    1,
+    -1,
     -1
    ],
-   "rotation": "North",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -6148,10 +6148,10 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    0,
-    1
+    1,
+    0
    ],
-   "rotation": "North",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -6164,10 +6164,10 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    0,
-    2
+    2,
+    0
    ],
-   "rotation": "North",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {

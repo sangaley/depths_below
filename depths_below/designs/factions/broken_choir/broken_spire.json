@@ -107940,7 +107940,7 @@
     -33,
     30
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -107948,10 +107948,10 @@
   {
    "module_type": "TraverseMotor",
    "grid_pos": [
-    -33,
-    31
+    -34,
+    30
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -107959,10 +107959,10 @@
   {
    "module_type": "AmmoHoist",
    "grid_pos": [
-    -32,
-    30
+    -33,
+    31
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -107970,10 +107970,10 @@
   {
    "module_type": "Magazine",
    "grid_pos": [
-    -32,
+    -34,
     31
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -107984,7 +107984,7 @@
     -30,
     -33
    ],
-   "rotation": "West",
+   "rotation": "North",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -107992,10 +107992,10 @@
   {
    "module_type": "TraverseMotor",
    "grid_pos": [
-    -30,
-    -32
+    -29,
+    -33
    ],
-   "rotation": "West",
+   "rotation": "North",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -108003,10 +108003,10 @@
   {
    "module_type": "AmmoHoist",
    "grid_pos": [
-    -29,
-    -33
+    -30,
+    -34
    ],
-   "rotation": "West",
+   "rotation": "North",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -108015,9 +108015,9 @@
    "module_type": "Magazine",
    "grid_pos": [
     -29,
-    -32
+    -34
    ],
-   "rotation": "West",
+   "rotation": "North",
    "custom_name": null,
    "subcomponents": null,
    "extras": null

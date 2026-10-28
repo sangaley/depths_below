@@ -35980,6 +35980,17 @@
    "extras": null
   },
   {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    -11,
+    -25
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
    "module_type": "AmmoHoist",
    "grid_pos": [
     -9,
@@ -36184,6 +36195,17 @@
    "extras": null
   },
   {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    -11,
+    27
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
    "module_type": "AmmoHoist",
    "grid_pos": [
     -9,
@@ -36371,7 +36393,7 @@
     -6,
     -28
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -36379,10 +36401,10 @@
   {
    "module_type": "TraverseMotor",
    "grid_pos": [
-    -6,
-    -27
+    -7,
+    -28
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -36390,10 +36412,10 @@
   {
    "module_type": "AmmoHoist",
    "grid_pos": [
-    -5,
-    -28
+    -6,
+    -27
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -36401,10 +36423,10 @@
   {
    "module_type": "Magazine",
    "grid_pos": [
-    -5,
+    -7,
     -27
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -36415,7 +36437,7 @@
     0,
     0
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -36428,10 +36450,10 @@
   {
    "module_type": "Loader",
    "grid_pos": [
-    0,
-    -1
+    1,
+    0
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -36444,10 +36466,10 @@
   {
    "module_type": "ClipRack",
    "grid_pos": [
-    -1,
+    1,
     -1
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -36461,25 +36483,9 @@
    "module_type": "BreechCooler",
    "grid_pos": [
     1,
-    -1
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     -6,
-     -28
-    ]
-   }
-  },
-  {
-   "module_type": "GunBarrel",
-   "grid_pos": [
-    0,
     1
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -36492,10 +36498,26 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    0,
-    2
+    -1,
+    0
    ],
-   "rotation": "North",
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     -6,
+     -28
+    ]
+   }
+  },
+  {
+   "module_type": "GunBarrel",
+   "grid_pos": [
+    -2,
+    0
+   ],
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -36511,7 +36533,7 @@
     -6,
     28
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -36519,10 +36541,10 @@
   {
    "module_type": "TraverseMotor",
    "grid_pos": [
-    -6,
-    29
+    -7,
+    28
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -36530,10 +36552,10 @@
   {
    "module_type": "AmmoHoist",
    "grid_pos": [
-    -5,
-    28
+    -6,
+    29
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -36541,10 +36563,10 @@
   {
    "module_type": "Magazine",
    "grid_pos": [
-    -5,
+    -7,
     29
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -36555,7 +36577,7 @@
     0,
     0
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -36568,10 +36590,10 @@
   {
    "module_type": "Loader",
    "grid_pos": [
-    0,
-    -1
+    1,
+    0
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -36584,10 +36606,10 @@
   {
    "module_type": "ClipRack",
    "grid_pos": [
-    -1,
+    1,
     -1
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -36601,25 +36623,9 @@
    "module_type": "BreechCooler",
    "grid_pos": [
     1,
-    -1
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     -6,
-     28
-    ]
-   }
-  },
-  {
-   "module_type": "GunBarrel",
-   "grid_pos": [
-    0,
     1
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -36632,10 +36638,26 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    0,
-    2
+    -1,
+    0
    ],
-   "rotation": "North",
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     -6,
+     28
+    ]
+   }
+  },
+  {
+   "module_type": "GunBarrel",
+   "grid_pos": [
+    -2,
+    0
+   ],
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -36948,6 +36970,17 @@
    "extras": null
   },
   {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    -1,
+    -31
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
    "module_type": "AmmoHoist",
    "grid_pos": [
     1,
@@ -37152,6 +37185,17 @@
    "extras": null
   },
   {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    -1,
+    33
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
    "module_type": "AmmoHoist",
    "grid_pos": [
     1,
@@ -37356,6 +37400,17 @@
    "extras": null
   },
   {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    11,
+    -25
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
    "module_type": "AmmoHoist",
    "grid_pos": [
     13,
@@ -37560,6 +37615,17 @@
    "extras": null
   },
   {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    11,
+    27
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
    "module_type": "AmmoHoist",
    "grid_pos": [
     13,
@@ -37747,7 +37813,7 @@
     18,
     -24
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -37755,32 +37821,32 @@
   {
    "module_type": "TraverseMotor",
    "grid_pos": [
-    18,
-    -23
-   ],
-   "rotation": "West",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": null
-  },
-  {
-   "module_type": "AmmoHoist",
-   "grid_pos": [
-    19,
+    17,
     -24
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
   },
   {
-   "module_type": "Magazine",
+   "module_type": "AmmoHoist",
    "grid_pos": [
-    19,
+    18,
     -23
    ],
-   "rotation": "West",
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    17,
+    -23
+   ],
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -37791,7 +37857,7 @@
     0,
     0
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -37804,10 +37870,10 @@
   {
    "module_type": "Loader",
    "grid_pos": [
-    0,
-    -1
+    1,
+    0
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -37820,10 +37886,10 @@
   {
    "module_type": "ClipRack",
    "grid_pos": [
-    -1,
+    1,
     -1
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -37837,25 +37903,9 @@
    "module_type": "BreechCooler",
    "grid_pos": [
     1,
-    -1
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     18,
-     -24
-    ]
-   }
-  },
-  {
-   "module_type": "GunBarrel",
-   "grid_pos": [
-    0,
     1
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -37868,10 +37918,26 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    0,
-    2
+    -1,
+    0
    ],
-   "rotation": "North",
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     18,
+     -24
+    ]
+   }
+  },
+  {
+   "module_type": "GunBarrel",
+   "grid_pos": [
+    -2,
+    0
+   ],
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -37887,29 +37953,29 @@
     18,
     24
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
   },
   {
    "module_type": "TraverseMotor",
+   "grid_pos": [
+    17,
+    24
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
    "grid_pos": [
     18,
     25
    ],
-   "rotation": "West",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": null
-  },
-  {
-   "module_type": "AmmoHoist",
-   "grid_pos": [
-    19,
-    24
-   ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -37917,10 +37983,10 @@
   {
    "module_type": "Magazine",
    "grid_pos": [
-    19,
+    17,
     25
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -37931,7 +37997,7 @@
     0,
     0
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -37944,10 +38010,10 @@
   {
    "module_type": "Loader",
    "grid_pos": [
-    0,
-    -1
+    1,
+    0
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -37960,10 +38026,10 @@
   {
    "module_type": "ClipRack",
    "grid_pos": [
-    -1,
+    1,
     -1
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -37977,25 +38043,9 @@
    "module_type": "BreechCooler",
    "grid_pos": [
     1,
-    -1
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     18,
-     24
-    ]
-   }
-  },
-  {
-   "module_type": "GunBarrel",
-   "grid_pos": [
-    0,
     1
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -38008,10 +38058,26 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    0,
-    2
+    -1,
+    0
    ],
-   "rotation": "North",
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     18,
+     24
+    ]
+   }
+  },
+  {
+   "module_type": "GunBarrel",
+   "grid_pos": [
+    -2,
+    0
+   ],
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -38027,7 +38093,7 @@
     24,
     -22
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -38035,32 +38101,32 @@
   {
    "module_type": "TraverseMotor",
    "grid_pos": [
-    24,
-    -21
-   ],
-   "rotation": "West",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": null
-  },
-  {
-   "module_type": "AmmoHoist",
-   "grid_pos": [
-    25,
+    23,
     -22
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
   },
   {
-   "module_type": "Magazine",
+   "module_type": "AmmoHoist",
    "grid_pos": [
-    25,
+    24,
     -21
    ],
-   "rotation": "West",
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    23,
+    -21
+   ],
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -38071,7 +38137,7 @@
     0,
     0
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -38084,10 +38150,10 @@
   {
    "module_type": "Loader",
    "grid_pos": [
-    0,
-    -1
+    1,
+    0
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -38100,10 +38166,10 @@
   {
    "module_type": "ClipRack",
    "grid_pos": [
-    -1,
+    1,
     -1
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -38117,25 +38183,9 @@
    "module_type": "BreechCooler",
    "grid_pos": [
     1,
-    -1
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     24,
-     -22
-    ]
-   }
-  },
-  {
-   "module_type": "GunBarrel",
-   "grid_pos": [
-    0,
     1
    ],
-   "rotation": "North",
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -38148,10 +38198,26 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    0,
-    2
+    -1,
+    0
    ],
-   "rotation": "North",
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     24,
+     -22
+    ]
+   }
+  },
+  {
+   "module_type": "GunBarrel",
+   "grid_pos": [
+    -2,
+    0
+   ],
+   "rotation": "West",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -38167,29 +38233,29 @@
     24,
     22
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
   },
   {
    "module_type": "TraverseMotor",
+   "grid_pos": [
+    23,
+    22
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
    "grid_pos": [
     24,
     23
    ],
-   "rotation": "West",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": null
-  },
-  {
-   "module_type": "AmmoHoist",
-   "grid_pos": [
-    25,
-    22
-   ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -38197,10 +38263,10 @@
   {
    "module_type": "Magazine",
    "grid_pos": [
-    25,
+    23,
     23
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -38296,8 +38362,19 @@
   {
    "module_type": "TurretRingSmall",
    "grid_pos": [
-    50,
+    51,
     -4
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    51,
+    -3
    ],
    "rotation": "West",
    "custom_name": null,
@@ -38318,7 +38395,7 @@
   {
    "module_type": "AmmoHoist",
    "grid_pos": [
-    51,
+    52,
     -4
    ],
    "rotation": "West",
@@ -38329,7 +38406,7 @@
   {
    "module_type": "Magazine",
    "grid_pos": [
-    51,
+    52,
     -3
    ],
    "rotation": "West",
@@ -38348,7 +38425,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      -4
     ]
    }
@@ -38364,7 +38441,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      -4
     ]
    }
@@ -38380,7 +38457,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      -4
     ]
    }
@@ -38396,7 +38473,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      -4
     ]
    }
@@ -38412,7 +38489,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      -4
     ]
    }
@@ -38428,7 +38505,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      -4
     ]
    }
@@ -38444,7 +38521,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      -4
     ]
    }
@@ -38460,7 +38537,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      -4
     ]
    }
@@ -38476,7 +38553,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      -4
     ]
    }
@@ -38492,7 +38569,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      -4
     ]
    }
@@ -38500,8 +38577,19 @@
   {
    "module_type": "TurretRingSmall",
    "grid_pos": [
-    50,
+    51,
     4
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    51,
+    5
    ],
    "rotation": "West",
    "custom_name": null,
@@ -38522,7 +38610,7 @@
   {
    "module_type": "AmmoHoist",
    "grid_pos": [
-    51,
+    52,
     4
    ],
    "rotation": "West",
@@ -38533,7 +38621,7 @@
   {
    "module_type": "Magazine",
    "grid_pos": [
-    51,
+    52,
     5
    ],
    "rotation": "West",
@@ -38552,7 +38640,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      4
     ]
    }
@@ -38568,7 +38656,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      4
     ]
    }
@@ -38584,7 +38672,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      4
     ]
    }
@@ -38600,7 +38688,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      4
     ]
    }
@@ -38616,7 +38704,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      4
     ]
    }
@@ -38632,7 +38720,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      4
     ]
    }
@@ -38648,7 +38736,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      4
     ]
    }
@@ -38664,7 +38752,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      4
     ]
    }
@@ -38680,7 +38768,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      4
     ]
    }
@@ -38696,7 +38784,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     50,
+     51,
      4
     ]
    }
@@ -38716,6 +38804,17 @@
    "module_type": "TraverseMotor",
    "grid_pos": [
     56,
+    -1
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    55,
     -1
    ],
    "rotation": "West",
@@ -38920,6 +39019,17 @@
    "module_type": "TraverseMotor",
    "grid_pos": [
     56,
+    3
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    55,
     3
    ],
    "rotation": "West",
@@ -39200,8 +39310,19 @@
   {
    "module_type": "TurretRingSmall",
    "grid_pos": [
-    60,
+    61,
     -2
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    61,
+    -1
    ],
    "rotation": "West",
    "custom_name": null,
@@ -39222,7 +39343,7 @@
   {
    "module_type": "AmmoHoist",
    "grid_pos": [
-    61,
+    62,
     -2
    ],
    "rotation": "West",
@@ -39233,7 +39354,7 @@
   {
    "module_type": "Magazine",
    "grid_pos": [
-    61,
+    62,
     -1
    ],
    "rotation": "West",
@@ -39252,7 +39373,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      -2
     ]
    }
@@ -39268,7 +39389,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      -2
     ]
    }
@@ -39284,7 +39405,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      -2
     ]
    }
@@ -39300,7 +39421,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      -2
     ]
    }
@@ -39316,7 +39437,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      -2
     ]
    }
@@ -39332,7 +39453,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      -2
     ]
    }
@@ -39348,7 +39469,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      -2
     ]
    }
@@ -39364,7 +39485,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      -2
     ]
    }
@@ -39380,7 +39501,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      -2
     ]
    }
@@ -39396,7 +39517,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      -2
     ]
    }
@@ -39404,8 +39525,19 @@
   {
    "module_type": "TurretRingSmall",
    "grid_pos": [
-    60,
+    61,
     2
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    61,
+    3
    ],
    "rotation": "West",
    "custom_name": null,
@@ -39426,7 +39558,7 @@
   {
    "module_type": "AmmoHoist",
    "grid_pos": [
-    61,
+    62,
     2
    ],
    "rotation": "West",
@@ -39437,7 +39569,7 @@
   {
    "module_type": "Magazine",
    "grid_pos": [
-    61,
+    62,
     3
    ],
    "rotation": "West",
@@ -39456,7 +39588,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      2
     ]
    }
@@ -39472,7 +39604,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      2
     ]
    }
@@ -39488,7 +39620,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      2
     ]
    }
@@ -39504,7 +39636,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      2
     ]
    }
@@ -39520,7 +39652,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      2
     ]
    }
@@ -39536,7 +39668,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      2
     ]
    }
@@ -39552,7 +39684,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      2
     ]
    }
@@ -39568,7 +39700,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      2
     ]
    }
@@ -39584,7 +39716,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      2
     ]
    }
@@ -39600,7 +39732,7 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     60,
+     61,
      2
     ]
    }
@@ -40089,17 +40221,6 @@
    "module_type": "MissileWarner",
    "grid_pos": [
     63,
-    -2
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": null
-  },
-  {
-   "module_type": "DecoyLauncher",
-   "grid_pos": [
-    62,
     -2
    ],
    "rotation": "North",

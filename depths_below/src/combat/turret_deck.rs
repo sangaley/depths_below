@@ -21,8 +21,10 @@ use crate::components::{
 
 /// Where the player is aiming this frame, in world space, in the order the
 /// guns take it: a scripted run's DEPTHS_AIM_AT, a locked block, (each
-/// turret's own engaged block -- see `traverse_turrets`), the selected
-/// target, the cursor.
+/// turret's own engaged block -- see `traverse_turrets`), the cursor, and
+/// the selected target only with no cursor to follow. Turrets follow the
+/// mouse: a selected ship used to win over it, so the main battery stayed
+/// on whatever `\` had picked while the player aimed somewhere else.
 #[derive(Resource, Default, Debug, Clone, Copy)]
 pub struct PlayerAimPoint {
     pub first: Option<Vec2>,
@@ -55,7 +57,7 @@ pub fn update_player_aim_point(
     // A scripted run's aim comes first: the real mouse may be sitting over
     // the window and would otherwise steer the run.
     aim.first = scripted.or_else(|| lock.aim_point());
-    aim.then = selection.target.and_then(|t| targets.get(t).ok()).map(|g| g.translation().truncate()).or(cursor);
+    aim.then = cursor.or_else(|| selection.target.and_then(|t| targets.get(t).ok()).map(|g| g.translation().truncate()));
 }
 
 /// The rotating deck above a turret ring.
@@ -737,12 +739,13 @@ pub fn traverse_turrets(
         // A physical stop: it won't turn its guns into another turret. It
         // may always turn the way that fouls less, so two built overlapping
         // can still work themselves apart.
-        if let Some(shapes) = shapes.as_ref() {
-            if let Some(shape) = shapes.0.iter().find(|t| t.body == entity) {
-                if fouling(shape, next, &shapes.0) > fouling(shape, body.angle, &shapes.0) {
-                    continue;
-                }
-            }
+        let blocked = shapes.as_ref().and_then(|s| s.0.iter().find(|t| t.body == entity).map(|shape| (shape, s)))
+            .is_some_and(|(shape, s)| fouling(shape, next, &s.0) > fouling(shape, body.angle, &s.0));
+        if crate::combat::gun_assembly::trace() && (time.elapsed_secs() % 1.0) < dt && !on_pd {
+            info!("TURRET {:?}: {} motors, {:.0} t, {:.0} deg/s, at {:.0} deg, wants {:.0} deg, stopped by another turret {}", entity, body.motors, body.mass_t, body.traverse_deg_s, body.angle.to_degrees(), want.to_degrees(), blocked);
+        }
+        if blocked {
+            continue;
         }
         body.angle = next;
         transform.rotation = Quat::from_rotation_z(body.angle);

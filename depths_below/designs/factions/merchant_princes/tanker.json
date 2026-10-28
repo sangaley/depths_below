@@ -18801,7 +18801,7 @@
     42,
     -2
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -18809,10 +18809,10 @@
   {
    "module_type": "TraverseMotor",
    "grid_pos": [
-    42,
-    -1
+    41,
+    -2
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -18820,10 +18820,10 @@
   {
    "module_type": "AmmoHoist",
    "grid_pos": [
-    43,
-    -2
+    42,
+    -1
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -18831,10 +18831,10 @@
   {
    "module_type": "Magazine",
    "grid_pos": [
-    43,
+    41,
     -1
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -18845,7 +18845,7 @@
     42,
     2
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -18853,10 +18853,10 @@
   {
    "module_type": "TraverseMotor",
    "grid_pos": [
-    42,
-    3
+    41,
+    2
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -18864,10 +18864,10 @@
   {
    "module_type": "AmmoHoist",
    "grid_pos": [
-    43,
-    2
+    42,
+    3
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -18875,10 +18875,10 @@
   {
    "module_type": "Magazine",
    "grid_pos": [
-    43,
+    41,
     3
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -19174,6 +19174,17 @@
    "module_type": "DecoyLauncher",
    "grid_pos": [
     44,
+    -2
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "ChaffDispenser",
+   "grid_pos": [
+    43,
     -2
    ],
    "rotation": "North",

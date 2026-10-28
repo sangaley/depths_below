@@ -44,6 +44,13 @@ pub fn ship_input(
     input_state.brake = keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight);
 }
 
+/// Cells of the hull the mass, drag and thrust were tuned on (the starter as
+/// first drawn). A bigger hull is heavier and broader in proportion, so
+/// speed comes from engines per block -- the way an AI ship's does
+/// (ai_ship::movement) -- and doubling a ship with its engines doesn't
+/// make it four times as quick.
+const TUNED_CELLS: f32 = 210.0;
+
 /// Converts raw engine thrust into usable acceleration. Without this, the
 /// starter ship's 1200 thrust / 1200 mass gave 1 unit/s² — one grid cell
 /// per second per second, i.e. imperceptible. 180x puts cruising speed a
@@ -81,8 +88,9 @@ const VELOCITY_ALIGN_RATE: f32 = 1.2;
 /// turns slower than a compact one of the same size. The starter-sized ship
 /// keeps the full rate; nothing turns faster than that.
 pub fn turn_scale(cells: impl Iterator<Item = IVec2> + Clone) -> f32 {
-    /// The starter's hull (210 cells), which the turn constants were tuned on.
-    const STARTER_INERTIA: f32 = 13_700.0;
+    /// The starter's hull, drawn twice as big (840 cells; tools/ship-scale):
+    /// it turns like the 210-cell one the turn constants were tuned on.
+    const STARTER_INERTIA: f32 = 13_700.0 * 16.0;
     let n = cells.clone().count();
     if n == 0 {
         return 1.0;
@@ -90,7 +98,7 @@ pub fn turn_scale(cells: impl Iterator<Item = IVec2> + Clone) -> f32 {
     let mid = cells.clone().fold(Vec2::ZERO, |a, c| a + c.as_vec2()) / n as f32;
     let inertia: f32 = cells.map(|c| (c.as_vec2() - mid).length_squared()).sum();
     // Gentler than physics (1/I) would have it, so a big ship is heavy to
-    // swing round but never a chore: ~0.4 for an ~800-cell destroyer.
+    // swing round but never a chore: ~0.4 for a hull four times the starter's.
     (STARTER_INERTIA / inertia.max(1.0)).powf(0.35).clamp(0.2, 1.0)
 }
 
@@ -113,8 +121,9 @@ pub fn ship_movement(
     engine_query: Query<(&Engine, &Module, Option<&CalculatedStats>, Option<&ModuleEfficiency>, &ChildOf), Without<crate::ai_ship::components::OwnedByAiShip>>,
     mut ship_query: Query<(Entity, &mut Transform, &mut Velocity, &mut ShipPhysics, &crate::building::layout::LayoutVersion, Option<&Children>), With<Ship>>,
     hull_cells: Query<&HullSegment>,
-    // The hull's turn scale, and the layout it was worked out for.
-    mut turning: Local<Option<(crate::building::layout::LayoutVersion, f32)>>,
+    // The hull's turn scale and heft (its size against TUNED_CELLS), and the
+    // layout they were worked out for.
+    mut turning: Local<Option<(crate::building::layout::LayoutVersion, f32, f32)>>,
     windows_query: Query<&Window>,
     camera_query: Query<(&Camera, &GlobalTransform), With<crate::camera::MainCamera>>,
     debug_tuning: Res<crate::debug::DebugTuning>,
@@ -123,8 +132,8 @@ pub fn ship_movement(
     let Ok((player_ship, mut transform, mut velocity, mut physics, layout, children)) = ship_query.single_mut() else {
         return;
     };
-    let turn = match *turning {
-        Some((v, scale)) if v == *layout => scale,
+    let (turn, heft) = match *turning {
+        Some((v, scale, heft)) if v == *layout => (scale, heft),
         _ => {
             let cells: Vec<IVec2> = children
                 .into_iter()
@@ -133,10 +142,12 @@ pub fn ship_movement(
                 .map(|h| h.grid_position)
                 .collect();
             let scale = turn_scale(cells.iter().copied());
-            *turning = Some((*layout, scale));
-            scale
+            let heft = (cells.len() as f32 / TUNED_CELLS).max(0.25);
+            *turning = Some((*layout, scale, heft));
+            (scale, heft)
         }
     };
+    let mass = physics.mass * heft;
 
     let dt = time.delta_secs();
 
@@ -216,7 +227,7 @@ pub fn ship_movement(
 
     // --- SPACE DRAG (minimal — just light dampening for gameplay) ---
     let v_sq = velocity.0.length_squared();
-    let drag_magnitude = 0.5 * physics.drag_coefficient * v_sq * physics.frontal_area * 0.00002;
+    let drag_magnitude = 0.5 * physics.drag_coefficient * v_sq * physics.frontal_area * heft * 0.00002;
     let drag_force = if v_sq > 0.001 {
         -velocity.0.normalize() * drag_magnitude
     } else {
@@ -226,7 +237,7 @@ pub fn ship_movement(
     // --- NET FORCE ---
     // (No vertical-thruster term any more — see ship_input: Q/E is gone.)
     let net_force = thrust_force + drag_force;
-    let acceleration = net_force / physics.mass;
+    let acceleration = net_force / mass;
 
     // Update velocity
     velocity.0 += acceleration * dt;
@@ -236,7 +247,7 @@ pub fn ship_movement(
     if input_state.brake {
         let speed = velocity.0.length();
         if speed > 1.0 {
-            let decel = (total_thrust * THRUST_SCALE / physics.mass) * dt;
+            let decel = (total_thrust * THRUST_SCALE / mass) * dt;
             let new_speed = (speed - decel).max(0.0);
             velocity.0 = velocity.0 * (new_speed / speed);
         } else {
@@ -580,12 +591,13 @@ mod turn_scale_tests {
 
     #[test]
     fn a_starter_sized_hull_turns_at_the_full_rate() {
-        assert_eq!(turn_scale(block(14, 15, -7).into_iter()), 1.0);
+        assert_eq!(turn_scale(block(28, 30, -14).into_iter()), 1.0);
+        assert_eq!(turn_scale(block(14, 15, -7).into_iter()), 1.0, "nothing turns faster");
     }
 
     #[test]
     fn a_long_destroyer_turns_at_well_under_half() {
-        let s = turn_scale(block(57, 14, -28).into_iter());
+        let s = turn_scale(block(114, 28, -56).into_iter());
         assert!((0.3..0.5).contains(&s), "{s}");
     }
 

@@ -40,6 +40,10 @@ sys.path.insert(0, os.path.join(ROOT, "tools/faction-arming"))
 import kit  # noqa: E402  (module sizes from the registry)
 
 SOURCE_REV = "957d6bb"
+# Ships that came after it (the Eternal Vigil): as they stood before any
+# scaling. Never the working file -- that's already doubled, and running
+# this again would double it again.
+LATER_REV = "25d6467"
 # Faction stations are drawn at ship scale and built three times as big
 # (they should dwarf the ships round them); the files now hold them built.
 STATIONS = {("terran_hegemony", "bastion"), ("eternal_hegemony", "citadel"), ("gilded_throne", "exchange"),
@@ -63,6 +67,8 @@ NEW_SYSTEMS = {
 # The Vigil's installs, by what stood at their heart: one kit each.
 ANCHOR_KIT = {"TurretRingSmall": "ciws", "TurretRing": "turret", "TurretRingLarge": "twin",
               "LaunchPad": "vls", "RailLauncher": "vls", "VlsSilo": "vls", "FiringPiece": "spinal"}
+# What crew walk on: never built over.
+WALKED = {"Hallway", "BulkheadDoor"}
 EXOTIC = {"IonDisruptor", "PlasmaCaster", "EMPPulse", "TractorBeam", "MiningDrill"}
 # One stays where there was one; the rest of its 2x2 becomes supplies.
 ONCE = {"AmmoBay": "SupplyCrates"}
@@ -304,9 +310,11 @@ class Scaled:
             out.append((kinds.most_common(1)[0][0], facings.most_common(1)[0][0], set(cells)))
         return out
 
-    def try_kit(self, design, free, facings, label, extras_for=None, order=None):
+    def try_kit(self, design, free, facings, label, extras_for=None, order=None, room=None):
         """Place `design` at the first spot in `free` it fits (in `order` if
-        given), trying each facing; True if it went down."""
+        given), trying each facing; True if it went down. Its blocks may
+        also use `room` (free deck beside the slot)."""
+        room = free if room is None else room
         for c in (order if order is not None else sorted(free)):
             for facing in facings:
                 parts, ring = install(design, c, facing)
@@ -315,7 +323,7 @@ class Scaled:
                 for t, cell, _, r, rg, _ in parts:
                     if rg is None:
                         cs = kit.cells_of(t, cell, r)
-                        if not all(x in free and x not in self.taken for x in cs):
+                        if not all((x in free or x in room) and x not in self.taken for x in cs):
                             ok = False
                             break
                         hull_cells += cs
@@ -355,7 +363,16 @@ class Scaled:
         # pumps) where the faction flies one, else a 2x2 unit per old laser.
         full_laser = laser_kit(["PV1.", "PVCE", "PV2."], flavour) if flavour else None
         mini_laser = laser_kit(["VP", "CE"], None)
-        turrets = {"gun": [kits["autocannon"]], "cannon": [kits["twin"], kits["turret"], kits["compact"]],
+        # The Compact 170 as roomy as the slot allows: three motors, then
+        # two in a 2x3 block, then one in its 2x2 (slow, but it fits where a
+        # single old cannon stood on the hull's edge).
+        guns_on_top = [p for p in kits["compact"]["parts"] if p.get("turret")]
+        ring_at = {"module_type": "TurretRingSmall", "offset": [0, 0], "rotation": "North"}
+        def hull_kit(cells):
+            return [ring_at] + [{"module_type": t, "offset": list(c), "rotation": "North"} for t, c in cells]
+        compact2 = dict(kits["compact"], parts=hull_kit([("TraverseMotor", (1, 0)), ("TraverseMotor", (1, 1)), ("AmmoHoist", (0, -1)), ("Magazine", (1, -1))]) + guns_on_top)
+        compact1 = dict(kits["compact"], parts=hull_kit([("TraverseMotor", (1, 0)), ("AmmoHoist", (0, -1)), ("Magazine", (1, -1))]) + guns_on_top)
+        turrets = {"gun": [kits["autocannon"]], "cannon": [kits["twin"], kits["turret"], kits["compact"], compact2, compact1],
                    "pd": [kits["ciws"]]}
         all4 = ["East", "South", "West", "North"]
         # The Vigil's installs first: each where it stood, from its own cells.
@@ -373,22 +390,25 @@ class Scaled:
             mags = [{"module_type": "Magazine", "offset": [feeder[0] - 1, feeder[1] + dy], "rotation": "North"} for dy in (-1, 0, 1)] if feeder else []
             spinal = dict(g, parts=g["parts"] + mags)
             room = {c for c in ((at[0] + x, at[1] + y) for x in range(-14, 15) for y in range(-8, 9))
-                    if c not in self.taken and self.hull.get(c, ("",))[0] != "Hallway"}
+                    if c not in self.taken and self.hull.get(c, ("",))[0] not in WALKED}
             order = sorted(room, key=lambda c: (c[0] - at[0]) ** 2 + (c[1] - at[1]) ** 2)[:80]
             if not self.try_kit(spinal, room, [facing], name, order=order):
                 self.report["(no room: " + name + ")"] += 1
+        # Interior deck a turret's motors may spill onto (never a corridor).
+        deck = {c for c, (layer, _) in self.hull.items() if layer not in WALKED}
         for kind, facing, cells in self.regions():
             free = {c for c in cells if c not in self.taken}
             if kind in turrets:
+                room = free | deck
                 for design in turrets[kind]:
                     big = design is kits["twin"]
                     if big and len(cells) < 60:
                         continue
-                    while self.try_kit(design, free, all4, design["name"]):
+                    while self.try_kit(design, free, all4, design["name"], order=sorted(free), room=room):
                         pass
                 # Room left over takes the next size down.
                 if kind == "cannon":
-                    while self.try_kit(kits["autocannon"], free, all4, kits["autocannon"]["name"]):
+                    while self.try_kit(kits["autocannon"], free, all4, kits["autocannon"]["name"], order=sorted(free), room=room):
                         pass
             elif kind == "missile":
                 extras = (lambda t: {"missile": missile} if t == "VlsSilo" else {}) if missile else None
@@ -431,7 +451,7 @@ class Scaled:
         while have < want and tries < 8:
             dx, dy = dirs[tries % 4]
             tries += 1
-            deckfree = {c for c, (layer, _) in self.hull.items() if layer != "Hallway" and c not in self.taken}
+            deckfree = {c for c, (layer, _) in self.hull.items() if layer not in WALKED and c not in self.taken}
             order = sorted(deckfree, key=lambda c: -(c[0] * dx + c[1] * dy))[:300]
             if self.try_kit(ciws, deckfree, ["East", "South", "West", "North"], "CIWS Turret", order=order):
                 have += 1
@@ -447,7 +467,7 @@ class Scaled:
     def warners(self, count):
         """Missile Warners out toward bow, stern, port and starboard, on
         free deck (never a corridor); a decoy and chaff beside the first."""
-        spots = [c for c, (layer, _) in self.hull.items() if layer != "Hallway" and c not in self.taken]
+        spots = [c for c, (layer, _) in self.hull.items() if layer not in WALKED and c not in self.taken]
         if not spots:
             return
         dirs = [(1, 0), (-1, 0), (0, 1), (0, -1)]
@@ -461,7 +481,7 @@ class Scaled:
             self.report["Missile Warner"] += 1
             if i == 0:
                 for t, n in (("DecoyLauncher", (c[0] - dx, c[1] - dy)), ("ChaffDispenser", (c[0] - 2 * dx, c[1] - 2 * dy))):
-                    if n in self.hull and n not in self.taken and self.hull[n][0] != "Hallway":
+                    if n in self.hull and n not in self.taken and self.hull[n][0] not in WALKED:
                         self.put(t, n)
                         self.report[t] += 1
 
@@ -494,11 +514,11 @@ def main():
         else:
             rels = [(f"designs/factions/{entry}/{f}", entry) for f in sorted(os.listdir(os.path.join(fdir, entry)))]
         for rel, faction in rels:
-            src = git_json(rel, SOURCE_REV) or json.load(open(os.path.join(ROOT, rel)))
+            src = git_json(rel, SOURCE_REV) or git_json(rel, LATER_REV)
             jobs.append((rel, faction, src))
     for name in PLAYER:
         rel = f"designs/{name}.json"
-        jobs.append((rel, "player", git_json(rel, SOURCE_REV) or json.load(open(os.path.join(ROOT, rel)))))
+        jobs.append((rel, "player", git_json(rel, SOURCE_REV) or git_json(rel, LATER_REV)))
 
     for rel, faction, src in jobs:
         own = dict(kits)

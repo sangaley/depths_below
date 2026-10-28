@@ -45,7 +45,7 @@ const PX_PER_CELL: f32 = 6.0;
 /// Ship-local units per baked pixel.
 const UNITS_PER_PX: f32 = crate::building::GRID_SIZE / PX_PER_CELL;
 /// Samples per baked pixel, each way.
-const SUBSAMPLES: usize = 2;
+const SUBSAMPLES: usize = 1;
 /// Source art is shrunk to this many pixels on its long side before it's
 /// sampled, so a sample stands for an area of the art, not one stray texel.
 const MIP_SIDE: u32 = 32;
@@ -58,6 +58,13 @@ const TURRET_ART_Z: f32 = 0.9;
 const RIM: LinearRgba = LinearRgba { red: 0.004, green: 0.005, blue: 0.009, alpha: 0.8 };
 /// How often a ship in view is baked again with nothing changed.
 const REFRESH_S: f32 = 3.0;
+/// Soonest a changed ship is baked again. A ship under fire changes nearly
+/// every frame, and a capital's bake takes the best part of a frame: baked
+/// on every change, a fight seen from far out stuttered.
+const REBAKE_S: f32 = 1.5;
+/// Sprites a bake costs about a millisecond for; big pictures are refreshed
+/// (for paint and damage tint alone) that much less often.
+const SPRITES_PER_MS: f32 = 1500.0;
 /// Bakes per frame: a fleet coming into view spreads over a few frames.
 const BAKES_PER_FRAME: usize = 1;
 /// No camera draws this layer.
@@ -83,6 +90,8 @@ pub struct FarArt {
     image: Handle<Image>,
     baked: Option<LayoutVersion>,
     baked_at: f32,
+    /// Sprites the last bake painted, for how often it's worth repeating.
+    sprites: usize,
 }
 
 /// The picture itself, a child of what it pictures.
@@ -353,7 +362,7 @@ pub fn attach_far_art(
                 ChildOf(owner),
             ))
             .id();
-        commands.entity(owner).try_insert(FarArt { sprite, always_lit, half: Vec2::ZERO, image, baked: None, baked_at: f32::NEG_INFINITY });
+        commands.entity(owner).try_insert(FarArt { sprite, always_lit, half: Vec2::ZERO, image, baked: None, baked_at: f32::NEG_INFINITY, sprites: 0 });
     }
 }
 
@@ -393,10 +402,12 @@ pub fn bake_far_art(
     let mut due: Vec<(u8, f32, Entity)> = owners
         .iter()
         .filter_map(|(e, art, version, _)| {
+            let since = now - art.baked_at;
+            let cost_ms = art.sprites as f32 / SPRITES_PER_MS;
             let rank = match (art.baked, version) {
                 (None, _) => 0,
-                (Some(b), Some(v)) if b != *v => 1,
-                _ if now - art.baked_at >= REFRESH_S => 2,
+                (Some(b), Some(v)) if b != *v && since >= REBAKE_S * cost_ms.max(1.0) => 1,
+                _ if since >= REFRESH_S * cost_ms.max(1.0) => 2,
                 _ => return None,
             };
             Some((rank, art.baked_at, e))
@@ -454,6 +465,7 @@ pub fn bake_far_art(
         canvas.rim();
         let (centre, size) = canvas.placement();
         art.half = size * 0.5;
+        art.sprites = stamps.len();
         // DEPTHS_FAR_TRACE=1 logs each bake; DEPTHS_FAR_DUMP=<dir> writes
         // each picture there as raw RGBA.
         if std::env::var_os("DEPTHS_FAR_TRACE").is_some() {

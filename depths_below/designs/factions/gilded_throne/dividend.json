@@ -9954,10 +9954,10 @@
   {
    "module_type": "TurretRingSmall",
    "grid_pos": [
-    20,
+    21,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -9965,10 +9965,10 @@
   {
    "module_type": "TraverseMotor",
    "grid_pos": [
-    20,
-    1
+    21,
+    -1
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -9976,10 +9976,10 @@
   {
    "module_type": "AmmoHoist",
    "grid_pos": [
-    21,
+    20,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -9987,181 +9987,21 @@
   {
    "module_type": "Magazine",
    "grid_pos": [
-    21,
-    1
+    20,
+    -1
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
   },
   {
-   "module_type": "FiringPiece",
+   "module_type": "TraverseMotor",
    "grid_pos": [
-    0,
-    0
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     20,
-     0
-    ]
-   }
-  },
-  {
-   "module_type": "GaugeIncreaser",
-   "grid_pos": [
-    -1,
-    0
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     20,
-     0
-    ]
-   }
-  },
-  {
-   "module_type": "GaugeIncreaser",
-   "grid_pos": [
-    1,
-    0
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     20,
-     0
-    ]
-   }
-  },
-  {
-   "module_type": "Loader",
-   "grid_pos": [
-    0,
-    -1
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     20,
-     0
-    ]
-   }
-  },
-  {
-   "module_type": "ClipRack",
-   "grid_pos": [
-    -1,
-    -1
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     20,
-     0
-    ]
-   }
-  },
-  {
-   "module_type": "BreechCooler",
-   "grid_pos": [
-    1,
-    -1
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     20,
-     0
-    ]
-   }
-  },
-  {
-   "module_type": "Mantlet",
-   "grid_pos": [
-    0,
+    21,
     1
    ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     20,
-     0
-    ]
-   }
-  },
-  {
-   "module_type": "GunBarrel",
-   "grid_pos": [
-    0,
-    2
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     20,
-     0
-    ]
-   }
-  },
-  {
-   "module_type": "GunBarrel",
-   "grid_pos": [
-    0,
-    3
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     20,
-     0
-    ]
-   }
-  },
-  {
-   "module_type": "GunBarrel",
-   "grid_pos": [
-    0,
-    4
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     20,
-     0
-    ]
-   }
-  },
-  {
-   "module_type": "TurretRingSmall",
-   "grid_pos": [
-    23,
-    0
-   ],
-   "rotation": "South",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -10172,29 +10012,7 @@
     22,
     0
    ],
-   "rotation": "South",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": null
-  },
-  {
-   "module_type": "AmmoHoist",
-   "grid_pos": [
-    23,
-    1
-   ],
-   "rotation": "South",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": null
-  },
-  {
-   "module_type": "Magazine",
-   "grid_pos": [
-    22,
-    1
-   ],
-   "rotation": "South",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": null
@@ -10205,12 +10023,12 @@
     0,
     0
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
     "turret": [
-     23,
+     21,
      0
     ]
    }
@@ -10218,15 +10036,15 @@
   {
    "module_type": "GaugeIncreaser",
    "grid_pos": [
-    0,
-    -1
+    1,
+    0
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
     "turret": [
-     23,
+     21,
      0
     ]
    }
@@ -10234,15 +10052,15 @@
   {
    "module_type": "GaugeIncreaser",
    "grid_pos": [
-    0,
-    1
+    -1,
+    0
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
     "turret": [
-     23,
+     21,
      0
     ]
    }
@@ -10250,15 +10068,15 @@
   {
    "module_type": "Loader",
    "grid_pos": [
-    1,
-    0
+    0,
+    1
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
     "turret": [
-     23,
+     21,
      0
     ]
    }
@@ -10267,14 +10085,14 @@
    "module_type": "ClipRack",
    "grid_pos": [
     1,
-    -1
+    1
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
     "turret": [
-     23,
+     21,
      0
     ]
    }
@@ -10282,15 +10100,15 @@
   {
    "module_type": "BreechCooler",
    "grid_pos": [
-    1,
+    -1,
     1
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
     "turret": [
-     23,
+     21,
      0
     ]
    }
@@ -10298,15 +10116,15 @@
   {
    "module_type": "Mantlet",
    "grid_pos": [
-    -1,
-    0
+    0,
+    -1
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
     "turret": [
-     23,
+     21,
      0
     ]
    }
@@ -10314,15 +10132,15 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    -2,
-    0
+    0,
+    -2
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
     "turret": [
-     23,
+     21,
      0
     ]
    }
@@ -10330,15 +10148,15 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    -3,
-    0
+    0,
+    -3
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
     "turret": [
-     23,
+     21,
      0
     ]
    }
@@ -10346,15 +10164,15 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    -4,
-    0
+    0,
+    -4
    ],
-   "rotation": "West",
+   "rotation": "South",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
     "turret": [
-     23,
+     21,
      0
     ]
    }
@@ -10544,30 +10362,8 @@
   {
    "module_type": "MissileWarner",
    "grid_pos": [
-    21,
-    -2
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": null
-  },
-  {
-   "module_type": "DecoyLauncher",
-   "grid_pos": [
-    20,
-    -2
-   ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": null
-  },
-  {
-   "module_type": "ChaffDispenser",
-   "grid_pos": [
-    19,
-    -2
+    23,
+    0
    ],
    "rotation": "North",
    "custom_name": null,

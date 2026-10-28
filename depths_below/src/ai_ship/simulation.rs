@@ -25,6 +25,13 @@ pub const RENDER_DISTANCE: f32 = 10_000.0;
 /// old mid-size hulls cost, and holds a whole swarm or a few capitals.
 const MAX_LIVE_AI_BLOCKS: usize = 6_000;
 
+/// Most AI blocks brought into being in one frame. Spawning is a whole ship's
+/// worth of entities at once, about a millisecond per hundred blocks: since
+/// the ships were drawn twice as big a fleet arriving in one frame froze the
+/// game for a tenth of a second. Past this it arrives over a few frames, the
+/// rest of the fleet first in line (it's already partly on screen).
+const SPAWN_BLOCKS_PER_FRAME: usize = 2_500;
+
 /// RENDER_DISTANCE, or DEPTHS_AI_RANGE: a filming switch to make whole fleets
 /// real far from the player, for wide shots of a war.
 pub fn render_distance() -> f32 {
@@ -364,17 +371,21 @@ fn spawn_system_faction_population(sim: &mut WorldSimulation, system: &crate::ce
                 + 1_000.0;
             // Three bands rather than a uniform draw: uniform-in-a-disc actually
             // concentrates toward the rim, which is the opposite of varied.
-            // A few tries for a spot clear of every fleet already placed.
+            // A few tries for a spot clear of every fleet already placed;
+            // then the field widens a little each try. Ships drawn twice as
+            // big no longer always fit the old field, and the last try used
+            // to be taken clear or not -- fleets set down through each other.
             let mut angle = 0.0;
             let mut anchor = home;
-            for _ in 0..12 {
+            for attempt in 0u32..60 {
                 let band = match rng.gen_range(0..3) {
                     0 => rng.gen_range(0.10..0.30),
                     1 => rng.gen_range(0.35..0.60),
                     _ => rng.gen_range(0.65..0.95),
                 };
+                let widen = 1.0 + attempt.saturating_sub(12) as f32 * 0.05;
                 angle = rng.gen_range(0.0..std::f32::consts::TAU);
-                anchor = home + Vec2::new(angle.cos(), angle.sin()) * (template.radius * band);
+                anchor = home + Vec2::new(angle.cos(), angle.sin()) * (template.radius * band * widen);
                 if placed_fleets.iter().all(|&(c, r)| c.distance(anchor) > r + reach) {
                     break;
                 }
@@ -990,7 +1001,8 @@ pub fn sync_simulation_entities(
     groups.sort_by(|a, b| a.dist.total_cmp(&b.dist));
 
     let mut spawned_any = any_live;
-    for group in groups {
+    let mut this_frame = 0usize;
+    'groups: for group in groups {
         // Nearest first; one that doesn't fit waits rather than letting a
         // farther, smaller one jump the queue. The first always fits, or a
         // fleet bigger than the budget could never appear.
@@ -1002,7 +1014,14 @@ pub fn sync_simulation_entities(
         // unless one is already on screen leading it.
         let leader = (!live_fleets.contains(&group.fleet)).then(|| group.members[0]);
         for &index in &group.members {
+            if this_frame >= SPAWN_BLOCKS_PER_FRAME {
+                break 'groups;
+            }
             let sim_ship = &mut sim.ships[index];
+            let lost = sim_ship.wounds.as_ref().map_or(0, |w| w.hull.len() + w.modules.len() + w.turret_parts.len());
+            let cost = super::spawner::design_blocks(sim_ship.faction, sim_ship.class).saturating_sub(lost);
+            this_frame += cost;
+            live_blocks += cost;
             let root = spawner::spawn_ai_ship_wounded(
                 sim_ship.faction,
                 sim_ship.class,
@@ -1048,9 +1067,8 @@ pub fn sync_simulation_entities(
                 }
             }
             sim_ship.spawned = true;
+            spawned_any = true;
         }
-        live_blocks += group.cost;
-        spawned_any = true;
     }
 
     // A fleet stays on screen while any of it is within range.
@@ -1454,8 +1472,10 @@ mod population_tests {
             "fleet nearest-neighbour spread: {:.0} .. {:.0} (median {:.0}) over {} fleets",
             tightest, loneliest, nearest[nearest.len() / 2], centres.len()
         );
+        // 1.25: fleets of ships drawn twice as big need more room round
+        // them, which evens the spacing out (it was 1.5 at half the size).
         assert!(
-            loneliest > tightest * 1.5,
+            loneliest > tightest * 1.25,
             "spacing is uniform — tightest neighbour {tightest:.0}, loneliest {loneliest:.0}"
         );
         // Packs and smaller groups: fleet sizes vary, and some are three or

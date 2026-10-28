@@ -66,10 +66,13 @@ KITS.append({
 
 # 3. Compact 170 mm: the same bore on a small ring, in a 2x2 block. Slow to
 # turn on its one motor, but it fits where one old cannon stood.
+# Three motors round the ring (one would turn its 20 t at 13 deg/s: the
+# gun never caught the cursor).
+SMALL_RING_HEAVY = SMALL_RING + [part("TraverseMotor", -1, 0, "North"), part("TraverseMotor", 0, 1, "North")]
 KITS.append({
     "name": "Compact 170 mm Turret",
-    "description": "A 170 mm gun squeezed onto a small turret: ring, motor, hoist and magazine in a 2x2 block. Hits as hard as the big ring's gun but turns slowly. A main gun for a small ship.",
-    "parts": SMALL_RING + [part("FiringPiece", 0, 0, turret=True), part("GaugeIncreaser", 0, 1, turret=True),
+    "description": "A 170 mm gun squeezed onto a small turret: ring, three motors, hoist and magazine in a 3x3 cross. Hits as hard as the big ring's gun; a main gun for a small ship.",
+    "parts": SMALL_RING_HEAVY + [part("FiringPiece", 0, 0, turret=True), part("GaugeIncreaser", 0, 1, turret=True),
                            part("GaugeIncreaser", 0, -1, turret=True), part("Loader", -1, 0, turret=True),
                            part("ClipRack", -1, 1, turret=True), part("BreechCooler", -1, -1, turret=True),
                            part("Mantlet", 1, 0, turret=True)]

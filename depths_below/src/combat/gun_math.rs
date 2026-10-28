@@ -163,13 +163,18 @@ pub fn stats(parts: &GunParts) -> GunStats {
 /// on two motors gets here.
 pub const MAX_TRAVERSE_DEG_S: f32 = 180.0;
 
+/// Degrees a second one traverse motor turns a tonne of turret. Was 260: a
+/// player's 170 mm main battery turned at 13-26 deg/s and never caught up
+/// with the cursor while the ship swung.
+const TRAVERSE_PER_MOTOR: f32 = 400.0;
+
 /// Turn speed of a turret, degrees a second: its traverse motors against
 /// everything standing on it.
 pub fn traverse_deg_per_s(motors: u32, turret_mass_t: f32) -> f32 {
     if turret_mass_t <= 0.0 {
         return MAX_TRAVERSE_DEG_S;
     }
-    (260.0 * motors as f32 / turret_mass_t).clamp(2.0, MAX_TRAVERSE_DEG_S)
+    (TRAVERSE_PER_MOTOR * motors as f32 / turret_mass_t).clamp(2.0, MAX_TRAVERSE_DEG_S)
 }
 
 #[cfg(test)]
