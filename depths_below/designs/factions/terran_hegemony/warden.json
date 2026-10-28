@@ -1948,7 +1948,7 @@
    "rotation": "East"
   },
   {
-   "module_type": "Cannon",
+   "module_type": "LaunchPad",
    "grid_pos": [
     10,
     0

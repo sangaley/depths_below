@@ -296,9 +296,12 @@ pub fn ai_weapon_fire_system(
             let to_target = aim_base - muzzle;
             // A built gun bears where its barrel points: a spinal gun along
             // the hull, a turret gun wherever its turret has turned.
-            // A silo launches up out of the deck: it bears on anything.
+            // A silo launches up out of the deck: it bears on anything. A
+            // designed missile pops out of its tube and turns onto the target
+            // itself, so no launcher of one needs to face it (the player's
+            // don't either).
             let silo = module.module_type == ModuleType::VlsSilo;
-            let bears = silo || match gun.and_then(|(_, m)| m.copied()) {
+            let bears = crate::combat::missile_design::is_built_launcher(module.module_type) || match gun.and_then(|(_, m)| m.copied()) {
                 Some(m) => m.dir.dot(to_target.normalize_or_zero()) >= (mount.firing_arc / 2.0).to_radians().cos(),
                 None => crate::combat::is_in_firing_arc(
                     ai_transform.rotation.to_euler(EulerRot::ZYX).0,

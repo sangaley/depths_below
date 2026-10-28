@@ -485,7 +485,7 @@ pub fn launch_built(
     let vel = dir * s.launcher.eject + l.ship_velocity;
     let length = 16.0 + 16.0 * s.k.sqrt() + 3.0 * s.parts as f32;
     if super::gun_assembly::trace() {
-        info!("MISSILE launched from {:?}: {:?} seeker, target {:?}, {:.0} u/s top, aiming {:.0} u off", l.module_type, head, l.target, s.top_speed, l.muzzle.distance(launch_aim));
+        info!("MISSILE launched from {:?} ({}): {:?} seeker, target {:?}, {:.0} u/s top, aiming {:.0} u off", l.module_type, if player { "player" } else { "AI" }, head, l.target, s.top_speed, l.muzzle.distance(launch_aim));
     }
     commands.spawn((
         (Sprite {

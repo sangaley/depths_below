@@ -550,7 +550,9 @@ fn rebuild_entities_from_save(
     // Mirror of the save-side defect: unscoped, these despawned every live AI
     // ship's blocks and crew, gutting them into empty root entities on load.
     module_entities: Query<Entity, (With<Module>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
-    hull_entities: Query<Entity, (With<HullSegment>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
+    // A turret's plating goes with its turret body (despawned with it), and
+    // an enemy's must stay: enemy ships carry on through a load.
+    hull_entities: Query<Entity, (With<HullSegment>, Without<crate::ai_ship::components::OwnedByAiShip>, Without<crate::combat::turret_deck::TurretPlate>)>,
     crew_entities: Query<Entity, (With<CrewMember>, Without<crate::ai_ship::components::OwnedByAiShip>)>,
     mut galaxy_map: ResMut<GalaxyMap>,
     mut streaming: ResMut<SystemStreamingManager>,
@@ -579,11 +581,15 @@ fn rebuild_entities_from_save(
         ResMut<crate::ship::rebuild::RebuildQueue>,
         ResMut<crate::ship::towing::Towing>,
         ResMut<crate::ui::PendingWarpTarget>,
-        Query<Entity, With<crate::combat::turret_deck::TurretBody>>,
+        // The player's turret bodies only: an enemy's turrets, and the guns
+        // standing on them, carry on with their ship.
+        Query<(Entity, &ChildOf), With<crate::combat::turret_deck::TurretBody>>,
+        Query<(), With<crate::ai_ship::components::AiShip>>,
     ),
 ) {
     let (mut galaxy, mut looted, mut sim, textures, time, members, ai_ships, mut faction_stations, mut border_war, mut people, mut work) = world;
-    let (mut rebuild_queue, mut towing, mut dash_target, turret_bodies) = flight;
+    let (mut rebuild_queue, mut towing, mut dash_target, turret_bodies, ai_roots) = flight;
+    let player_turrets: Vec<Entity> = turret_bodies.iter().filter(|(_, p)| !ai_roots.contains(p.parent())).map(|(e, _)| e).collect();
     let Some(save) = pending.save_data.take() else { return };
     let slot = pending.slot;
 
@@ -596,7 +602,7 @@ fn rebuild_entities_from_save(
     // ring to be rebuilt -- it would outlive the load, stripped of its plating
     // (a HullSegment, so it goes above), and the loaded ring would take it on
     // instead of building the turret fresh.
-    for entity in module_entities.iter().chain(hull_entities.iter()).chain(crew_entities.iter()).chain(turret_bodies.iter()) {
+    for entity in module_entities.iter().chain(hull_entities.iter()).chain(crew_entities.iter()).chain(player_turrets.iter().copied()) {
         commands.entity(entity).try_insert((DespawnAtFrameEnd, Visibility::Hidden));
     }
 

@@ -8524,7 +8524,7 @@
    "rotation": "East"
   },
   {
-   "module_type": "Cannon",
+   "module_type": "LaunchPad",
    "grid_pos": [
     -5,
     16
@@ -8556,7 +8556,7 @@
    "rotation": "South"
   },
   {
-   "module_type": "Cannon",
+   "module_type": "LaunchPad",
    "grid_pos": [
     -3,
     16
@@ -8564,7 +8564,7 @@
    "rotation": "North"
   },
   {
-   "module_type": "Cannon",
+   "module_type": "LaunchPad",
    "grid_pos": [
     -5,
     -16
@@ -8572,7 +8572,7 @@
    "rotation": "South"
   },
   {
-   "module_type": "Cannon",
+   "module_type": "LaunchPad",
    "grid_pos": [
     -3,
     -16
@@ -9068,7 +9068,7 @@
    "rotation": "North"
   },
   {
-   "module_type": "BasicQuarters",
+   "module_type": "DecoyLauncher",
    "grid_pos": [
     -9,
     -1
@@ -9084,7 +9084,7 @@
    "rotation": "North"
   },
   {
-   "module_type": "BasicQuarters",
+   "module_type": "ChaffDispenser",
    "grid_pos": [
     -9,
     1
@@ -9946,38 +9946,6 @@
     10
    ],
    "rotation": "North"
-  },
-  {
-   "module_type": "PointDefenseDrone",
-   "grid_pos": [
-    8,
-    7
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "PointDefenseDrone",
-   "grid_pos": [
-    -12,
-    -7
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "PointDefenseDrone",
-   "grid_pos": [
-    8,
-    -7
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "PointDefenseDrone",
-   "grid_pos": [
-    -12,
-    7
-   ],
-   "rotation": "East"
   },
   {
    "module_type": "StandardEngine",
@@ -10173,8 +10141,234 @@
    "custom_name": null,
    "subcomponents": null,
    "extras": null
+  },
+  {
+   "module_type": "TurretRingSmall",
+   "grid_pos": [
+    8,
+    7
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    8,
+    8
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
+   "grid_pos": [
+    8,
+    6
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    7,
+    6
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TurretRingSmall",
+   "grid_pos": [
+    -12,
+    7
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    -12,
+    8
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
+   "grid_pos": [
+    -12,
+    6
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    -13,
+    6
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TurretRingSmall",
+   "grid_pos": [
+    8,
+    -7
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    8,
+    -8
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
+   "grid_pos": [
+    8,
+    -6
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    7,
+    -6
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TurretRingSmall",
+   "grid_pos": [
+    -12,
+    -7
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    -12,
+    -8
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
+   "grid_pos": [
+    -12,
+    -6
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    -13,
+    -6
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",
- "version": 2
+ "version": 2,
+ "guns": [
+  {
+   "design": "Terran PD Flak",
+   "at": [
+    0,
+    0
+   ],
+   "facing": "East",
+   "turret": [
+    8,
+    7
+   ]
+  },
+  {
+   "design": "Terran PD Flak",
+   "at": [
+    0,
+    0
+   ],
+   "facing": "East",
+   "turret": [
+    -12,
+    7
+   ]
+  },
+  {
+   "design": "Terran PD Flak",
+   "at": [
+    0,
+    0
+   ],
+   "facing": "East",
+   "turret": [
+    8,
+    -7
+   ]
+  },
+  {
+   "design": "Terran PD Flak",
+   "at": [
+    0,
+    0
+   ],
+   "facing": "East",
+   "turret": [
+    -12,
+    -7
+   ]
+  }
+ ]
 }
