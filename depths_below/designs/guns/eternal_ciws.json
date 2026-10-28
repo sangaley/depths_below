@@ -1,6 +1,6 @@
 {
-  "name": "Terran PD Flak",
-  "description": "60 mm flak on a light turret: point defence against missiles. Frag with a proximity fuse.",
+  "name": "Eternal CIWS",
+  "description": "Close-in point defence, compact and agile: the whole 20 mm gun fits on a 3x3 deck, fires about 26 tiny flak rounds a second and snaps round fast.",
   "parts": [
     {
       "module_type": "FiringPiece",
@@ -11,25 +11,25 @@
       "rotation": "East"
     },
     {
-      "module_type": "Mantlet",
+      "module_type": "GaugeReducer",
+      "offset": [
+        0,
+        1
+      ],
+      "rotation": "East"
+    },
+    {
+      "module_type": "GaugeReducer",
+      "offset": [
+        0,
+        -1
+      ],
+      "rotation": "East"
+    },
+    {
+      "module_type": "GunBarrel",
       "offset": [
         1,
-        0
-      ],
-      "rotation": "East"
-    },
-    {
-      "module_type": "GunBarrel",
-      "offset": [
-        2,
-        0
-      ],
-      "rotation": "East"
-    },
-    {
-      "module_type": "GunBarrel",
-      "offset": [
-        3,
         0
       ],
       "rotation": "East"
@@ -45,15 +45,7 @@
     {
       "module_type": "ClipRack",
       "offset": [
-        -2,
-        0
-      ],
-      "rotation": "East"
-    },
-    {
-      "module_type": "BreechCooler",
-      "offset": [
-        0,
+        -1,
         1
       ],
       "rotation": "East"
@@ -61,8 +53,16 @@
     {
       "module_type": "BreechCooler",
       "offset": [
-        0,
+        -1,
         -1
+      ],
+      "rotation": "East"
+    },
+    {
+      "module_type": "BreechCooler",
+      "offset": [
+        1,
+        1
       ],
       "rotation": "East"
     }
@@ -76,6 +76,6 @@
     ],
     "head": "Frag"
   },
-  "faction": "TerranHegemony",
-  "point_defence": true
+  "point_defence": true,
+  "faction": "EternalHegemony"
 }

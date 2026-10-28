@@ -4,14 +4,14 @@ designs it fits (designs/guns/eternal_*.json).
 
 Laid out block by block, in the Eternal grammar (tools/fleet-concepts/eternal.py):
 - a stepped CROWN BOW: the central spire carries a 280 mm spinal (the Throne
-  Lance), the crown points carry flak and launch pads, every forward step plated;
+  Lance), the crown points carry CIWS and launch pads, every forward step plated;
 - two DOUBLE-TIER SPONSONS a side: a broad gallery with a narrower turret tier
   outboard, each tier a 3x3 ring with a 170 mm AP-HE turret gun (the Lance);
 - ENGINE PODS at the stern corners round a recessed centre engine bank;
 - a PROCESSIONAL NAVE down the centreline, lined with shield pillars, to the
   throne (the bridge) amidships; command is spread out -- a helm aft, the
   bridge and a helm amidships, combat cores forward -- so one hit can't take it;
-- six 60 mm flak turrets on point defence (crown points, waist, stern pods),
+- six 20 mm CIWS turrets on point defence (crown points, waist, stern pods),
   four Launch Pads, two Rail Launchers, four VLS Silos, a Decoy Launcher and
   a Chaff Dispenser. Titanium, symmetrical.
 
@@ -40,7 +40,7 @@ H(12, 23, 7, 8)      # aft sponson: gallery...
 H(15, 20, 9, 10)     # ...and its turret tier
 H(28, 37, 7, 8)      # fore sponson gallery
 H(31, 35, 9, 10)     # and tier
-H(24, 27, 7, 7)      # waist ledge (flak)
+H(24, 27, 7, 7)      # waist ledge (CIWS)
 H(47, 56, 0, 1)      # crown bow: the spire
 H(47, 50, 2, 2)
 H(47, 53, 3, 4)      # crown points
@@ -111,7 +111,7 @@ both("OxygenScrubber", 8, 5)
 row(6, 1, "fffccp+i")
 row(7, 1, "fffbb")
 both("Magazine", 6, 7); both("AmmoHoist", 7, 7)
-both("TurretRingSmall", 7, 8); both("TraverseMotor", 8, 8)   # stern flak
+both("TurretRingSmall", 7, 8); both("TraverseMotor", 8, 8); both("TraverseMotor", 8, 7)   # stern CIWS
 row(8, 1, "  T")
 
 # Aft block, x 10..23: the nave's pillars, then crew.
@@ -155,11 +155,11 @@ row(2, 30, "++Oo")
 both("Barracks", 34, 2)
 row(2, 36, "ybR")
 row(3, 28, "QQQqkiQQFpR")
-# Waist flak.
+# Waist CIWS.
 both("TurretRingSmall", 25, 7); both("TraverseMotor", 24, 7); both("AmmoHoist", 26, 7); both("Magazine", 26, 6)
 row(7, 27, "a")
 row(5, 25, "bcs")
-row(6, 25, "Q Q")
+row(6, 25, "M Q")
 both("VlsSilo", 28, 5)
 row(5, 30, "Qb")
 row(6, 30, "QF")
@@ -192,7 +192,7 @@ row(6, 40, "l")
 row(1, 49, "aaaaaaaa")
 put("ArmorPlate", 56, 0)
 row(2, 48, "sla")
-row(3, 47, "tbZhaaa")
+row(3, 47, "tbZhMaa")
 row(4, 47, "AsM")
 both("TurretRingSmall", 50, 4)
 both("LaunchPad", 52, 4, "East"); both("LaunchPad", 53, 4, "East")
@@ -230,8 +230,8 @@ THRONE_LANCE = {
     "shell": {"base": "Tracer", "casings": 3, "bodies": ["Solid", "Solid"], "head": "Ap"},
     "faction": "EternalHegemony",
 }
-PD = dict(json.load(open(os.path.join(kit.ROOT, "designs/guns/60_mm_pd_flak.json"))))
-PD.update({"name": "Eternal PD Flak", "faction": "EternalHegemony"})
+PD = dict(json.load(open(os.path.join(kit.ROOT, "designs/guns/20_mm_ciws.json"))))
+PD.update({"name": "Eternal CIWS", "faction": "EternalHegemony"})
 
 guns = []
 def fit(design, at, turret=None):
@@ -293,7 +293,7 @@ for g in design["guns"]:
     else:
         g["at"][0] += shift
 
-for name, gun in [("eternal_170_mm_lance", LANCE), ("eternal_280_mm_throne_lance", THRONE_LANCE), ("eternal_pd_flak", PD)]:
+for name, gun in [("eternal_170_mm_lance", LANCE), ("eternal_280_mm_throne_lance", THRONE_LANCE), ("eternal_ciws", PD)]:
     kit.write_gun(name, gun)
 with open(OUT, "w") as f:
     json.dump(design, f, indent=1)

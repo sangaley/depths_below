@@ -212,7 +212,9 @@ impl ShellDesign {
     pub fn flak_damage(&self, gauge_mm: f32) -> f32 {
         let g = gauge_mm / 100.0;
         let p = self.payload();
-        (FLAK_PER_FRAG * p.frag + HE_DAMAGE_PER_UNIT * 2.0 * p.he) * g * g
+        // Payload goes with the shell's volume, but a missile's thin skin
+        // doesn't need much: a 20 mm burst still does a share.
+        ((FLAK_PER_FRAG * p.frag + HE_DAMAGE_PER_UNIT * 2.0 * p.he) * g * g).max(FLAK_MIN_PER_100MM * g)
     }
 
     pub fn solid_bodies(&self) -> usize {
@@ -359,6 +361,8 @@ pub const MAX_PROPELLANT_VELOCITY: f32 = 1800.0;
 pub const HE_DAMAGE_PER_UNIT: f32 = 6.0;
 /// Flak damage per unit of frag at 100 mm, against a missile.
 pub const FLAK_PER_FRAG: f32 = 40.0;
+/// The least a flak burst does to a missile, times gauge / 100 mm.
+pub const FLAK_MIN_PER_100MM: f32 = 40.0;
 /// Crew harm per frag unit, times gauge / 100 mm.
 pub const FRAG_DOSE_PER_UNIT: f32 = 12.0;
 /// Extra damage a HEAT jet does, times (gauge / 100 mm) squared, whatever

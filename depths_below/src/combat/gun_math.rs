@@ -11,6 +11,8 @@
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct GunParts {
     pub gauge_increasers: u32,
+    /// Each takes 20 mm off the bore, down to `MIN_GAUGE_MM`.
+    pub gauge_reducers: u32,
     /// One entry per autoloader: its length in cells (= metres of shell it
     /// takes) and how many clips' worth of rack sit beside it.
     pub loaders: Vec<Loader>,
@@ -69,6 +71,9 @@ pub const BASE_GAUGE_MM: f32 = 60.0;
 pub const GAUGE_PER_INCREASER_MM: f32 = 55.0;
 pub const MAX_GAUGE_INCREASERS: u32 = 8;
 pub const MAX_GAUGE_MM: f32 = 500.0;
+pub const GAUGE_PER_REDUCER_MM: f32 = 20.0;
+/// The smallest bore: a 20 mm point defence gun.
+pub const MIN_GAUGE_MM: f32 = 20.0;
 /// A shell shorter than this many gauges tumbles: less accurate.
 pub const STUBBY_SHELL_GAUGES: f32 = 3.0;
 pub const FULL_BURN_VELOCITY: f32 = 850.0;
@@ -76,14 +81,15 @@ pub const RAIL_VELOCITY_PER_MAGNET: f32 = 90.0;
 pub const RAIL_POWER_PER_MAGNET_MW: f32 = 1.5;
 pub const SHELLS_PER_CLIP: u32 = 3;
 
-pub fn gauge_mm(increasers: u32) -> f32 {
-    (BASE_GAUGE_MM + GAUGE_PER_INCREASER_MM * increasers.min(MAX_GAUGE_INCREASERS) as f32).min(MAX_GAUGE_MM)
+pub fn gauge_mm(increasers: u32, reducers: u32) -> f32 {
+    (BASE_GAUGE_MM + GAUGE_PER_INCREASER_MM * increasers.min(MAX_GAUGE_INCREASERS) as f32 - GAUGE_PER_REDUCER_MM * reducers as f32)
+        .clamp(MIN_GAUGE_MM, MAX_GAUGE_MM)
 }
 
 pub fn stats(parts: &GunParts) -> GunStats {
     use super::shell::{ShellBase, ShellHead, HEAT_JET_DAMAGE, HEAT_PEN_PER_MM};
     let shell = &parts.shell;
-    let gauge = gauge_mm(parts.gauge_increasers);
+    let gauge = gauge_mm(parts.gauge_increasers, parts.gauge_reducers);
     let g = gauge / 100.0;
     let shell_m = gauge * shell.length_gauges() / 1000.0;
     // Each casing needs 0.5 m of barrel per 100 mm of gauge to burn.
@@ -153,13 +159,17 @@ pub fn stats(parts: &GunParts) -> GunStats {
     }
 }
 
+/// Fastest a turret turns, degrees a second: a light point defence mount
+/// on two motors gets here.
+pub const MAX_TRAVERSE_DEG_S: f32 = 180.0;
+
 /// Turn speed of a turret, degrees a second: its traverse motors against
 /// everything standing on it.
 pub fn traverse_deg_per_s(motors: u32, turret_mass_t: f32) -> f32 {
     if turret_mass_t <= 0.0 {
-        return 80.0;
+        return MAX_TRAVERSE_DEG_S;
     }
-    (260.0 * motors as f32 / turret_mass_t).clamp(2.0, 80.0)
+    (260.0 * motors as f32 / turret_mass_t).clamp(2.0, MAX_TRAVERSE_DEG_S)
 }
 
 #[cfg(test)]
@@ -170,6 +180,7 @@ mod gun_math_tests {
         // The Gun Deck preview's spinal gun.
         GunParts {
             gauge_increasers: 8,
+            gauge_reducers: 0,
             loaders: vec![Loader { length_m: 2, clips: 2.0 }; 4],
             barrel_m: 10,
             coolers: 6,
@@ -195,10 +206,13 @@ mod gun_math_tests {
 
     #[test]
     fn gauge_caps_at_eight_increasers_and_500_mm() {
-        assert_eq!(gauge_mm(0), 60.0);
-        assert_eq!(gauge_mm(2), 170.0);
-        assert_eq!(gauge_mm(8), 500.0);
-        assert_eq!(gauge_mm(20), 500.0);
+        assert_eq!(gauge_mm(0, 0), 60.0);
+        assert_eq!(gauge_mm(2, 0), 170.0);
+        assert_eq!(gauge_mm(8, 0), 500.0);
+        assert_eq!(gauge_mm(20, 0), 500.0);
+        assert_eq!(gauge_mm(0, 1), 40.0);
+        assert_eq!(gauge_mm(0, 2), 20.0);
+        assert_eq!(gauge_mm(0, 5), 20.0);
     }
 
     #[test]
@@ -282,6 +296,28 @@ mod gun_math_tests {
         assert!(traverse_deg_per_s(2, 80.0) < traverse_deg_per_s(2, 40.0));
         assert!(traverse_deg_per_s(4, 80.0) > traverse_deg_per_s(2, 80.0));
         assert_eq!(traverse_deg_per_s(1, 10_000.0), 2.0);
-        assert_eq!(traverse_deg_per_s(10, 1.0), 80.0);
+        assert_eq!(traverse_deg_per_s(10, 1.0), MAX_TRAVERSE_DEG_S);
+    }
+
+    /// Two reducers make a 20 mm point defence gun: a tiny shell, a dozen
+    /// and more shots a second, against 4-5 for the old 60 mm flak.
+    #[test]
+    fn reducers_make_a_small_fast_gun() {
+        use crate::combat::shell::{ShellBase, ShellBody, ShellDesign, ShellHead};
+        let flak = ShellDesign { base: ShellBase::None, casings: 2, bodies: vec![ShellBody::Frag, ShellBody::ProximityFuse], head: ShellHead::Frag };
+        let gun = |reducers| GunParts {
+            gauge_reducers: reducers,
+            loaders: vec![Loader { length_m: 1, clips: 1.0 }],
+            barrel_m: 2,
+            coolers: 1,
+            shell: flak.clone(),
+            ..Default::default()
+        };
+        let small = stats(&gun(2));
+        let old = stats(&gun(0));
+        assert_eq!(small.gauge_mm, 20.0);
+        assert!(small.shell_m < old.shell_m / 2.0);
+        assert!(small.rpm > 12.0 * 60.0, "{} rpm", small.rpm);
+        assert!(small.rpm > old.rpm * 2.0);
     }
 }

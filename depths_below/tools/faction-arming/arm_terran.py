@@ -19,6 +19,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SHIPS = os.path.join(ROOT, "designs/factions/terran_hegemony")
 NEW = {"LaunchPad", "RailLauncher", "VlsSilo", "TurretRingSmall", "AmmoHoist", "DecoyLauncher", "ChaffDispenser"}
 
+# Since 2026-10-28 the Sovereign fits "Terran CIWS" (designs/guns/terran_ciws.json,
+# made from build_halyard_mk2.py's 20 mm CIWS); this 60 mm flak was the first.
 PD_GUN = {
     "name": "Terran PD Flak",
     "description": "60 mm flak on a light turret: point defence against missiles. Frag with a proximity fuse.",
@@ -78,7 +80,7 @@ def main():
 
     gun_path = os.path.join(ROOT, "designs/guns/terran_pd_flak.json")
     with open(gun_path, "w") as f:
-        json.dump(PD_GUN, f, indent=2)
+        json.dump(PD_GUN, f, indent=2)  # superseded by terran_ciws.json
 
     for name, cell in [("lancer", (6, 0)), ("warden", (10, 0))]:
         path, text, d = load(name)
@@ -103,7 +105,7 @@ def main():
             module("AmmoHoist", x, y - out, "North"),
             module("Magazine", x - 1, y - out, "North"),
         ]
-        d.setdefault("guns", []).append({"design": "Terran PD Flak", "at": [0, 0], "facing": "East", "turret": [x, y]})
+        d.setdefault("guns", []).append({"design": "Terran CIWS", "at": [0, 0], "facing": "East", "turret": [x, y]})
     quarters = sorted((tuple(m["grid_pos"]) for m in d["modules"] if m["module_type"] == "BasicQuarters"), key=lambda c: (abs(c[1]), abs(c[0])))
     for (cell, into) in zip(quarters[:2], ["DecoyLauncher", "ChaffDispenser"]):
         swap(d, "BasicQuarters", {cell}, into)

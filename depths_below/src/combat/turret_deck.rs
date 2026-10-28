@@ -240,6 +240,7 @@ pub fn part_mass_t(t: ModuleType) -> f32 {
     match t {
         ModuleType::FiringPiece => 4.0,
         ModuleType::GaugeIncreaser => 1.5,
+        ModuleType::GaugeReducer => 0.3,
         ModuleType::Loader => 1.2,
         ModuleType::ClipRack => 0.8,
         ModuleType::ShellFeeder => 0.5,
@@ -253,6 +254,18 @@ pub fn part_mass_t(t: ModuleType) -> f32 {
     }
 }
 pub const PLATE_MASS_T: f32 = 0.5;
+
+/// What a gun of this bore weighs against a 100 mm one: a firing piece,
+/// loader or barrel for a 20 mm round is a fraction of one for 170 mm.
+/// Bigger guns weigh what they always have.
+pub fn gun_weight_scale(gauge_mm: f32) -> f32 {
+    (gauge_mm / 100.0).clamp(0.2, 1.0)
+}
+
+/// A deck plate's weight: a small ring's deck is a light platform.
+pub fn plate_mass_t(ring_size: i32) -> f32 {
+    if ring_size <= 1 { 0.1 } else { PLATE_MASS_T }
+}
 
 /// The tint on a turret deck's floor tiles.
 pub const TURRET_PLATE_TINT: Color = Color::srgb(0.86, 0.92, 1.0);
@@ -619,6 +632,7 @@ pub fn traverse_turrets(
     build: Option<Res<State<crate::states::BuildState>>>,
     shapes: Option<Res<TurretShapes>>,
     engaged: Query<&crate::combat::targeting::auto_engage::AutoAimPoint>,
+    guns: Query<&crate::combat::gun_assembly::GunAssembly>,
     // Point defence guns, and the missiles they might shoot at.
     pd: (
         Query<&crate::combat::gun_assembly::GunAssembly, With<crate::combat::targeting::fire_groups::InterceptMode>>,
@@ -631,11 +645,19 @@ pub fn traverse_turrets(
     let building = build.is_some_and(|s| *s.get() != crate::states::BuildState::Inactive);
     for (entity, mut body, mut transform, parent, children) in bodies.iter_mut() {
         let mut mass = 0.0;
+        // The biggest gun aboard sets how heavy its parts are.
+        let gauge = children
+            .into_iter()
+            .flatten()
+            .filter_map(|c| guns.get(*c).ok())
+            .map(|g| g.stats.gauge_mm)
+            .fold(0.0f32, f32::max);
+        let scale = if gauge > 0.0 { gun_weight_scale(gauge) } else { 1.0 };
         for c in children.into_iter().flatten() {
             if let Ok(m) = parts.get(*c) {
-                mass += part_mass_t(m.module_type);
+                mass += part_mass_t(m.module_type) * scale;
             } else if plates.contains(*c) {
-                mass += PLATE_MASS_T;
+                mass += plate_mass_t(body.size);
             }
         }
         body.mass_t = mass;
@@ -688,9 +710,13 @@ pub fn traverse_turrets(
             && children.into_iter().flatten().any(|c| pd.0.contains(*c))
         {
             let near = pd.1.iter().filter(|(t, _, m)| m.owner_ship != Some(ship) && t.translation.truncate().distance(ship_gt.translation().truncate()) < 6000.0).count();
-            info!("PD turret {:?}: {} enemy missiles within 6,000 u, engaged {}", entity, near, body.pd_engaged);
+            info!("PD turret {:?}: {} enemy missiles within 6,000 u, engaged {}, {:.0} t, {:.0} deg/s", entity, near, body.pd_engaged, body.mass_t, body.traverse_deg_s);
         }
-        let target = if pd_aim.is_some() { pd_aim } else { match ai_target {
+        // A point defence turret is the ship's, not the gunner's: it turns
+        // only onto missiles, and holds where it is between them -- never
+        // after the cursor or the ship's chosen target.
+        let on_pd = children.into_iter().flatten().any(|c| pd.0.contains(*c));
+        let target = if pd_aim.is_some() || on_pd { pd_aim } else { match ai_target {
             Some(t) => t.entity.map(|e| whereabouts.get(e).map(|g| g.translation().truncate()).unwrap_or(t.position)),
             None => {
                 let first_gun = children.into_iter().flatten().find(|c| engaged.contains(**c));

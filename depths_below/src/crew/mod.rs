@@ -1320,7 +1320,7 @@ fn handle_crew_death(
         }
 
         notifications.write(ShowNotification {
-            message: format!("{} is dead — {}.", event.name, event.cause.describe()),
+            message: format!("{} is dead: {}.", event.name, event.cause.describe()),
             notification_type: NotificationType::Danger,
             duration: 6.0,
         });

@@ -7580,6 +7580,22 @@
    "rotation": "North"
   },
   {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    -17,
+    7
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    -17,
+    -7
+   ],
+   "rotation": "North"
+  },
+  {
    "module_type": "ManeuveringThruster",
    "grid_pos": [
     -22,
@@ -9684,7 +9700,7 @@
    "rotation": "North"
   },
   {
-   "module_type": "BasicQuarters",
+   "module_type": "TraverseMotor",
    "grid_pos": [
     0,
     6
@@ -9692,7 +9708,7 @@
    "rotation": "North"
   },
   {
-   "module_type": "BasicQuarters",
+   "module_type": "TraverseMotor",
    "grid_pos": [
     0,
     -6
@@ -11084,7 +11100,7 @@
    "rotation": "North"
   },
   {
-   "module_type": "ArmorPlate",
+   "module_type": "TraverseMotor",
    "grid_pos": [
     26,
     3
@@ -11092,7 +11108,7 @@
    "rotation": "North"
   },
   {
-   "module_type": "ArmorPlate",
+   "module_type": "TraverseMotor",
    "grid_pos": [
     26,
     -3
@@ -11257,7 +11273,7 @@
    "turret": null
   },
   {
-   "design": "Eternal PD Flak",
+   "design": "Eternal CIWS",
    "at": [
     0,
     0
@@ -11269,7 +11285,7 @@
    ]
   },
   {
-   "design": "Eternal PD Flak",
+   "design": "Eternal CIWS",
    "at": [
     0,
     0
@@ -11305,7 +11321,7 @@
    ]
   },
   {
-   "design": "Eternal PD Flak",
+   "design": "Eternal CIWS",
    "at": [
     0,
     0
@@ -11317,7 +11333,7 @@
    ]
   },
   {
-   "design": "Eternal PD Flak",
+   "design": "Eternal CIWS",
    "at": [
     0,
     0
@@ -11353,7 +11369,7 @@
    ]
   },
   {
-   "design": "Eternal PD Flak",
+   "design": "Eternal CIWS",
    "at": [
     0,
     0
@@ -11365,7 +11381,7 @@
    ]
   },
   {
-   "design": "Eternal PD Flak",
+   "design": "Eternal CIWS",
    "at": [
     0,
     0

@@ -161,6 +161,7 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::RecoilAbsorber => "sprites/gun_parts/recoil_absorber.png",
         ModuleType::FiringPiece => "sprites/gun_parts/firing_piece.png",
         ModuleType::GaugeIncreaser => "sprites/gun_parts/gauge_increaser.png",
+        ModuleType::GaugeReducer => "sprites/gun_parts/gauge_reducer.png",
         ModuleType::Loader => "sprites/gun_parts/autoloader.png",
         ModuleType::ClipRack => "sprites/gun_parts/ammo_clip.png",
         ModuleType::ShellFeeder => "sprites/gun_parts/ammo_feeder.png",

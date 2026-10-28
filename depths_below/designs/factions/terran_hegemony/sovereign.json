@@ -10323,7 +10323,7 @@
  "version": 2,
  "guns": [
   {
-   "design": "Terran PD Flak",
+   "design": "Terran CIWS",
    "at": [
     0,
     0
@@ -10335,7 +10335,7 @@
    ]
   },
   {
-   "design": "Terran PD Flak",
+   "design": "Terran CIWS",
    "at": [
     0,
     0
@@ -10347,7 +10347,7 @@
    ]
   },
   {
-   "design": "Terran PD Flak",
+   "design": "Terran CIWS",
    "at": [
     0,
     0
@@ -10359,7 +10359,7 @@
    ]
   },
   {
-   "design": "Terran PD Flak",
+   "design": "Terran CIWS",
    "at": [
     0,
     0

@@ -1438,6 +1438,14 @@ pub fn build_registry() -> ModuleRegistry {
         base_stats: CalculatedStats::default(), crew_station: false,
     });
 
+    defs.insert(ModuleType::GaugeReducer, ModuleDef {
+        name: "Gauge Reducer", description: "-20 mm of bore, down to 20 mm. A small gun fires tiny shells fast and weighs little on its turret: point defence.",
+        category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 80.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.42, 0.45, 0.38),
+        companion: CompanionData::None, customizable: false, cost: 20,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
     defs.insert(ModuleType::Loader, ModuleDef {
         name: "Loader", description: "Autoloader. A straight run of these is one loader, taking 1 m of shell per block. Loaders work in parallel.",
         category: ModuleCategory::Guns, size: IVec2::new(1, 1), health: 80.0,

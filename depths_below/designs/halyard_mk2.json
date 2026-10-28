@@ -11118,6 +11118,17 @@
    "extras": null
   },
   {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    7,
+    8
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
    "module_type": "TurretRingSmall",
    "grid_pos": [
     6,
@@ -11155,6 +11166,17 @@
    "grid_pos": [
     7,
     -7
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    7,
+    -8
    ],
    "rotation": "North",
    "custom_name": null,
@@ -11414,7 +11436,7 @@
  "version": 2,
  "guns": [
   {
-   "design": "60 mm PD Flak",
+   "design": "20 mm CIWS",
    "at": [
     0,
     0
@@ -11426,7 +11448,7 @@
    ]
   },
   {
-   "design": "60 mm PD Flak",
+   "design": "20 mm CIWS",
    "at": [
     0,
     0
@@ -11438,7 +11460,7 @@
    ]
   },
   {
-   "design": "60 mm PD Flak",
+   "design": "20 mm CIWS",
    "at": [
     0,
     0
@@ -11450,7 +11472,7 @@
    ]
   },
   {
-   "design": "60 mm PD Flak",
+   "design": "20 mm CIWS",
    "at": [
     0,
     0

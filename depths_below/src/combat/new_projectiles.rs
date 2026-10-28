@@ -666,7 +666,7 @@ pub fn fire_weapons_system(
                 // Brass, sized by the shell: 170 mm is cannon-sized, 500 mm huge.
                 ModuleType::FiringPiece => {
                     let g = assembly.map(|a| a.stats.gauge_mm).unwrap_or(150.0);
-                    (Vec2::new(18.0 + g * 0.12, 6.0 + g * 0.04), Color::srgb(1.0, 0.78, 0.4))
+                    (crate::combat::gun_assembly::round_size(g), Color::srgb(1.0, 0.78, 0.4))
                 }
                 _ => (Vec2::new(17.0, 7.0), Color::srgb(0.8, 0.8, 0.4)),
             };
@@ -890,7 +890,7 @@ pub fn spawn_ai_round(
                 pen,
                 Some(g.parts.shell.hit_behavior(gauge, pen)),
                 crate::combat::gun_assembly::caliber_for(&g.stats),
-                Vec2::new(18.0 + gauge * 0.12, 6.0 + gauge * 0.04),
+                crate::combat::gun_assembly::round_size(gauge),
             )
         }
         None => (damage_mult, penetration, None, caliber_scale(module_type), ammo_type.projectile_size()),

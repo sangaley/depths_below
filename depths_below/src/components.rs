@@ -452,6 +452,7 @@ impl ModuleCategory {
             ModuleCategory::Guns => &[
                 ModuleType::FiringPiece,
                 ModuleType::GaugeIncreaser,
+                ModuleType::GaugeReducer,
                 ModuleType::Loader,
                 ModuleType::ClipRack,
                 ModuleType::ShellFeeder,
@@ -761,6 +762,7 @@ pub enum ModuleType {
     RecoilAbsorber,       // Soaks a unit of recoil per shot
     FiringPiece,          // The breech: one per gun
     GaugeIncreaser,       // +55 mm of bore
+    GaugeReducer,         // -20 mm of bore, down to 20 mm: point defence guns
     Loader,               // Autoloader: a straight run is one loader, 1 m per cell
     ClipRack,             // Ready rack beside a loader
     ShellFeeder,          // Pulls shells from the magazine into the clips
@@ -922,7 +924,7 @@ impl ModuleType {
             ModuleType::FocusingArray |
             ModuleType::WarheadBay => ModuleCategory::Weapons,
 
-            ModuleType::FiringPiece | ModuleType::GaugeIncreaser |
+            ModuleType::FiringPiece | ModuleType::GaugeIncreaser | ModuleType::GaugeReducer |
             ModuleType::Loader | ModuleType::ClipRack | ModuleType::ShellFeeder |
             ModuleType::BreechCooler | ModuleType::RecoilAbsorber |
             ModuleType::GunBarrel | ModuleType::MuzzleBrake |
@@ -1143,6 +1145,7 @@ impl ModuleType {
             ModuleType::RecoilAbsorber => "Recoil Absorber",
             ModuleType::FiringPiece => "Firing Piece",
             ModuleType::GaugeIncreaser => "Gauge Increaser",
+            ModuleType::GaugeReducer => "Gauge Reducer",
             ModuleType::Loader => "Loader",
             ModuleType::ClipRack => "Clip Rack",
             ModuleType::ShellFeeder => "Shell Feeder",

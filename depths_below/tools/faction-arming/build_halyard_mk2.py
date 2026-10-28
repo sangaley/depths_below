@@ -5,7 +5,7 @@ itself is left alone.
 - Shells: the 280 mm spinal fires AP (punches through several blocks), the
   twin 225 mm turret fires HE (blasts an area), the 170 mm sponsons fire AP.
 - Point defence: the four old PD drones become small turret rings, each with
-  a 60 mm flak gun on point defence, a traverse motor, a hoist and a magazine.
+  a 20 mm CIWS on point defence, traverse motors, a hoist and a magazine.
 - Missiles: four Launch Pads (Hornets, heat-seeking), two Rail Launchers
   (command-guided frag) and two VLS Silos (radar-guided heavies with a
   shaped charge), in place of rec rooms, labs, cargo and lights.
@@ -22,17 +22,19 @@ FLUFF = {
 }
 
 PD_GUN = {
-    "name": "60 mm PD Flak",
-    "description": "60 mm flak on a light turret: point defence against missiles. Frag with a proximity fuse.",
+    "name": "20 mm CIWS",
+    # Phalanx in spirit, not in build: the whole gun sits on its 3x3 deck,
+    # nothing overhangs, and it is light enough to snap from missile to missile.
+    "description": "Close-in point defence, compact and agile: the whole 20 mm gun fits on a 3x3 deck, fires about 26 tiny flak rounds a second and snaps round fast.",
     "parts": [
         {"module_type": "FiringPiece", "offset": [0, 0], "rotation": "East"},
-        {"module_type": "Mantlet", "offset": [1, 0], "rotation": "East"},
-        {"module_type": "GunBarrel", "offset": [2, 0], "rotation": "East"},
-        {"module_type": "GunBarrel", "offset": [3, 0], "rotation": "East"},
+        {"module_type": "GaugeReducer", "offset": [0, 1], "rotation": "East"},
+        {"module_type": "GaugeReducer", "offset": [0, -1], "rotation": "East"},
+        {"module_type": "GunBarrel", "offset": [1, 0], "rotation": "East"},
         {"module_type": "Loader", "offset": [-1, 0], "rotation": "East"},
-        {"module_type": "ClipRack", "offset": [-2, 0], "rotation": "East"},
-        {"module_type": "BreechCooler", "offset": [0, 1], "rotation": "East"},
-        {"module_type": "BreechCooler", "offset": [0, -1], "rotation": "East"},
+        {"module_type": "ClipRack", "offset": [-1, 1], "rotation": "East"},
+        {"module_type": "BreechCooler", "offset": [-1, -1], "rotation": "East"},
+        {"module_type": "BreechCooler", "offset": [1, 1], "rotation": "East"},
     ],
     "shell": {"base": "None", "casings": 2, "bodies": ["Frag", "ProximityFuse"], "head": "Frag"},
     "point_defence": True,
@@ -57,12 +59,15 @@ def clear_and_place(s, t, cell, r="North", extras=None):
     s.place(t, cell, r, extras)
 
 
-def pd_turret(s, ring, motor, hoist, magazine):
+def pd_turret(s, ring, motor, hoist, magazine, motor2=None):
     drone = s.at(ring)
     assert drone and drone["module_type"] == "PointDefenseDrone", f"no PD drone at {ring}"
     s.remove(drone)
     s.place("TurretRingSmall", ring)
-    for t, c in [("TraverseMotor", motor), ("AmmoHoist", hoist), ("Magazine", magazine)]:
+    parts = [("TraverseMotor", motor), ("AmmoHoist", hoist), ("Magazine", magazine)]
+    if motor2:
+        parts.append(("TraverseMotor", motor2))   # two motors: it snaps round
+    for t, c in parts:
         clear_and_place(s, t, c)
     s.fit_gun(PD_GUN["name"], turret=ring)
 
@@ -84,7 +89,7 @@ def main():
     s = kit.Ship(os.path.join(kit.ROOT, "designs/halyard.json"))
     s.d["name"] = "Halyard Mk II"
     s.d["created_at"] = "tools/faction-arming/build_halyard_mk2.py"
-    kit.write_gun("60_mm_pd_flak", PD_GUN)
+    kit.write_gun("20_mm_ciws", PD_GUN)
 
     shell_on(s, None, AP)
     shell_on(s, (-4, -2), HE)
@@ -92,8 +97,8 @@ def main():
     shell_on(s, (8, -6), AP_LIGHT)
 
     # Midships: on the dorsal/ventral edge, motor-hoist-magazine on the deck inboard.
-    pd_turret(s, (6, 8), motor=(5, 7), hoist=(6, 7), magazine=(7, 7))
-    pd_turret(s, (6, -8), motor=(5, -7), hoist=(6, -7), magazine=(7, -7))
+    pd_turret(s, (6, 8), motor=(5, 7), hoist=(6, 7), magazine=(7, 7), motor2=(7, 8))
+    pd_turret(s, (6, -8), motor=(5, -7), hoist=(6, -7), magazine=(7, -7), motor2=(7, -8))
     # Bow: the jammer beside each becomes the hoist, the floodlight past it the magazine.
     pd_turret(s, (25, 2), motor=(24, 2), hoist=(26, 2), magazine=(27, 2))
     pd_turret(s, (25, -2), motor=(24, -2), hoist=(26, -2), magazine=(27, -2))

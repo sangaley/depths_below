@@ -114,6 +114,24 @@ pub const HOIST_RPM: f32 = 40.0;
 /// Shells a minute one Shell Feeder brings up from a magazine.
 pub const FEEDER_RPM: f32 = 40.0;
 
+/// Metres of shell a minute an Ammo Hoist lifts. Small shells go up many
+/// at a time, so a point defence gun isn't held to a big gun's 40 a minute:
+/// a 20 mm round (0.08 m) comes up 900 a minute. A big gun fires slower than
+/// its hoist either way.
+pub const HOIST_SHELL_M_PER_MIN: f32 = 72.0;
+
+/// Shells a minute a hoist lifts of this length: never fewer than 40.
+pub fn hoist_rpm(shell_m: f32) -> f32 {
+    HOIST_RPM.max(HOIST_SHELL_M_PER_MIN / shell_m.max(0.01))
+}
+
+/// A built gun's round as drawn: brass, sized by the shell -- 170 mm is
+/// cannon-sized, 500 mm huge, a 20 mm round a fleck.
+pub fn round_size(gauge_mm: f32) -> Vec2 {
+    let small = (gauge_mm / 100.0).clamp(0.3, 1.0);
+    Vec2::new((18.0 + gauge_mm * 0.12) * small, (6.0 + gauge_mm * 0.04) * small.max(0.4))
+}
+
 pub fn range_for(stats: &GunStats) -> f32 {
     (4000.0 + stats.velocity_mps * 4.0) * stats.range_mult.max(1.0)
 }
@@ -133,6 +151,7 @@ fn is_body(t: ModuleType) -> bool {
     matches!(
         t,
         ModuleType::GaugeIncreaser
+            | ModuleType::GaugeReducer
             | ModuleType::Loader
             | ModuleType::ClipRack
             | ModuleType::ShellFeeder
@@ -311,6 +330,7 @@ fn assemble_parts(modules: &[(Entity, Module)], shells: &HashMap<Entity, crate::
 
         let count = |t: ModuleType| mine.iter().filter(|c| kind(c) == Some(t)).count() as u32;
         let gauge = count(ModuleType::GaugeIncreaser);
+        let reducers = count(ModuleType::GaugeReducer);
         let coolers = count(ModuleType::BreechCooler);
         let absorbers = count(ModuleType::RecoilAbsorber);
         let feeders = count(ModuleType::ShellFeeder);
@@ -373,6 +393,7 @@ fn assemble_parts(modules: &[(Entity, Module)], shells: &HashMap<Entity, crate::
 
         let parts = GunParts {
             gauge_increasers: gauge,
+            gauge_reducers: reducers,
             loaders,
             barrel_m: barrel.len() as u32,
             coolers,
@@ -592,8 +613,9 @@ pub fn assemble_guns(
             built.mark(*t, v);
             let mut up_top = assemble_parts(&guns_among(t_children), &shell_designs);
             let feed = hoist_reach(&hull, &body.ring_cells());
-            let share = HOIST_RPM / up_top.len().max(1) as f32;
+            let guns_up = up_top.len().max(1) as f32;
             for (_, g) in up_top.iter_mut() {
+                let share = hoist_rpm(g.stats.shell_m) / guns_up;
                 g.on_turret = true;
                 g.feeders = u32::from(feed.hoist.is_some());
                 g.magazines = feed.magazines.clone();
