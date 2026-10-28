@@ -14542,14 +14542,6 @@
   {
    "module_type": "Laser",
    "grid_pos": [
-    14,
-    36
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Laser",
-   "grid_pos": [
     -12,
     6
    ],
@@ -14566,14 +14558,6 @@
   {
    "module_type": "Laser",
    "grid_pos": [
-    40,
-    25
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "Laser",
-   "grid_pos": [
     -8,
     -5
    ],
@@ -14586,22 +14570,6 @@
     -5
    ],
    "rotation": "West"
-  },
-  {
-   "module_type": "Laser",
-   "grid_pos": [
-    17,
-    -5
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "Laser",
-   "grid_pos": [
-    14,
-    5
-   ],
-   "rotation": "North"
   },
   {
    "module_type": "PlasmaCaster",
@@ -17294,22 +17262,6 @@
   {
    "module_type": "AmmoBay",
    "grid_pos": [
-    38,
-    24
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    39,
-    24
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
     1,
     12
    ],
@@ -17462,22 +17414,6 @@
   {
    "module_type": "AmmoBay",
    "grid_pos": [
-    37,
-    26
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    38,
-    26
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
     38,
     27
    ],
@@ -17488,14 +17424,6 @@
    "grid_pos": [
     13,
     1
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    13,
-    2
    ],
    "rotation": "North"
   },
@@ -17896,14 +17824,6 @@
    "grid_pos": [
     33,
     11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "AmmoBay",
-   "grid_pos": [
-    15,
-    2
    ],
    "rotation": "North"
   },
@@ -18627,6 +18547,358 @@
    "grid_pos": [
     -44,
     -1
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserEmitter",
+   "grid_pos": [
+    14,
+    36
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCore",
+   "grid_pos": [
+    14,
+    35
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "QSwitch",
+   "grid_pos": [
+    13,
+    35
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    14,
+    34
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    14,
+    33
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    13,
+    34
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserEmitter",
+   "grid_pos": [
+    40,
+    25
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCore",
+   "grid_pos": [
+    39,
+    25
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "QSwitch",
+   "grid_pos": [
+    39,
+    26
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserDestabiliser",
+   "grid_pos": [
+    39,
+    24
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    38,
+    25
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    38,
+    26
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    38,
+    24
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    37,
+    25
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    37,
+    26
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    37,
+    24
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserEmitter",
+   "grid_pos": [
+    17,
+    -5
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCore",
+   "grid_pos": [
+    17,
+    -4
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "QSwitch",
+   "grid_pos": [
+    16,
+    -4
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    17,
+    -3
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    17,
+    -2
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    16,
+    -3
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserEmitter",
+   "grid_pos": [
+    14,
+    5
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCore",
+   "grid_pos": [
+    14,
+    4
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "QSwitch",
+   "grid_pos": [
+    13,
+    4
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserDestabiliser",
+   "grid_pos": [
+    15,
+    4
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    14,
+    3
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    13,
+    3
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    15,
+    3
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    14,
+    2
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    13,
+    2
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    15,
+    2
    ],
    "rotation": "North",
    "custom_name": null,

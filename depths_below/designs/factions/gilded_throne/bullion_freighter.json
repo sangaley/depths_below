@@ -4703,14 +4703,6 @@
    "module_type": "ReinforcedVault",
    "grid_pos": [
     13,
-    -2
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "ReinforcedVault",
-   "grid_pos": [
-    13,
     -1
    ],
    "rotation": "North"
@@ -5182,14 +5174,6 @@
   {
    "module_type": "ReinforcedVault",
    "grid_pos": [
-    13,
-    -4
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "ReinforcedVault",
-   "grid_pos": [
     -11,
     6
    ],
@@ -5214,26 +5198,10 @@
   {
    "module_type": "Laser",
    "grid_pos": [
-    14,
-    -5
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "Laser",
-   "grid_pos": [
     19,
     -1
    ],
    "rotation": "South"
-  },
-  {
-   "module_type": "Laser",
-   "grid_pos": [
-    15,
-    -2
-   ],
-   "rotation": "East"
   },
   {
    "module_type": "Laser",
@@ -5474,6 +5442,116 @@
     1
    ],
    "rotation": "North"
+  },
+  {
+   "module_type": "LaserEmitter",
+   "grid_pos": [
+    14,
+    -5
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCore",
+   "grid_pos": [
+    14,
+    -4
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "QSwitch",
+   "grid_pos": [
+    15,
+    -4
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "FrequencyDoubler",
+   "grid_pos": [
+    13,
+    -4
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    14,
+    -3
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    15,
+    -3
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    13,
+    -3
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    14,
+    -2
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    15,
+    -2
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    13,
+    -2
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",

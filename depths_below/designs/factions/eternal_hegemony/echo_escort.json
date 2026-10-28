@@ -3406,24 +3406,8 @@
   {
    "module_type": "Cannon",
    "grid_pos": [
-    -6,
-    9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Cannon",
-   "grid_pos": [
     12,
     -1
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "Cannon",
-   "grid_pos": [
-    -6,
-    -9
    ],
    "rotation": "South"
   },
@@ -4290,6 +4274,28 @@
     -1
    ],
    "rotation": "South"
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    -6,
+    -9
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    -6,
+    9
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",

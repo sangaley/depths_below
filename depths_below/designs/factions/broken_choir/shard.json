@@ -2076,14 +2076,6 @@
    "rotation": "East"
   },
   {
-   "module_type": "HeavyMissile",
-   "grid_pos": [
-    26,
-    0
-   ],
-   "rotation": "East"
-  },
-  {
    "module_type": "AmmoBay",
    "grid_pos": [
     11,
@@ -2092,12 +2084,44 @@
    "rotation": "North"
   },
   {
-   "module_type": "ClusterRocket",
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    26,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Frag",
+      "Frag"
+     ],
+     "head": "Heat"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
    "grid_pos": [
     18,
     -4
    ],
-   "rotation": "East"
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Fins",
+      "He"
+     ],
+     "head": "DumbNose"
+    }
+   }
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",

@@ -4526,14 +4526,6 @@
   {
    "module_type": "Gatling",
    "grid_pos": [
-    31,
-    -18
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
     23,
     16
    ],
@@ -4622,14 +4614,6 @@
   {
    "module_type": "Gatling",
    "grid_pos": [
-    37,
-    -19
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
     22,
     -8
    ],
@@ -4648,14 +4632,6 @@
    "grid_pos": [
     18,
     7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    35,
-    20
    ],
    "rotation": "North"
   },
@@ -5036,70 +5012,6 @@
    "rotation": "North"
   },
   {
-   "module_type": "HeavyMissile",
-   "grid_pos": [
-    25,
-    0
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "HeavyMissile",
-   "grid_pos": [
-    25,
-    9
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "HeavyMissile",
-   "grid_pos": [
-    38,
-    16
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "HeavyMissile",
-   "grid_pos": [
-    38,
-    17
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "HeavyMissile",
-   "grid_pos": [
-    24,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "HeavyMissile",
-   "grid_pos": [
-    12,
-    2
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "HeavyMissile",
-   "grid_pos": [
-    12,
-    -2
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "HeavyMissile",
-   "grid_pos": [
-    39,
-    -16
-   ],
-   "rotation": "East"
-  },
-  {
    "module_type": "BatteryBank",
    "grid_pos": [
     30,
@@ -5428,30 +5340,6 @@
    "rotation": "North"
   },
   {
-   "module_type": "ClusterRocket",
-   "grid_pos": [
-    12,
-    -3
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "ClusterRocket",
-   "grid_pos": [
-    27,
-    10
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "ClusterRocket",
-   "grid_pos": [
-    12,
-    3
-   ],
-   "rotation": "East"
-  },
-  {
    "module_type": "StandardReactor",
    "grid_pos": [
     2,
@@ -5634,8 +5522,420 @@
     -2
    ],
    "rotation": "North"
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    38,
+    17
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Frag",
+      "Frag"
+     ],
+     "head": "Heat"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    39,
+    -16
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Frag",
+      "Frag"
+     ],
+     "head": "Heat"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    38,
+    16
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Frag",
+      "Frag"
+     ],
+     "head": "Heat"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    25,
+    9
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Frag",
+      "Frag"
+     ],
+     "head": "Heat"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    24,
+    -9
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Frag",
+      "Frag"
+     ],
+     "head": "Heat"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    12,
+    -2
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Frag",
+      "Frag"
+     ],
+     "head": "Heat"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    12,
+    2
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Frag",
+      "Frag"
+     ],
+     "head": "Heat"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    25,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Frag",
+      "Frag"
+     ],
+     "head": "Heat"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    27,
+    10
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Fins",
+      "He"
+     ],
+     "head": "DumbNose"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    12,
+    -3
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Fins",
+      "He"
+     ],
+     "head": "DumbNose"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    12,
+    3
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Fins",
+      "He"
+     ],
+     "head": "DumbNose"
+    }
+   }
+  },
+  {
+   "module_type": "TurretRingSmall",
+   "grid_pos": [
+    35,
+    20
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
+   "grid_pos": [
+    34,
+    20
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    34,
+    19
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    35,
+    19
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TurretRingSmall",
+   "grid_pos": [
+    37,
+    -19
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
+   "grid_pos": [
+    37,
+    -18
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    36,
+    -18
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    38,
+    -19
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TurretRingSmall",
+   "grid_pos": [
+    31,
+    -18
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
+   "grid_pos": [
+    31,
+    -17
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    30,
+    -17
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    32,
+    -18
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    39,
+    -15
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    0,
+    -2
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",
- "version": 2
+ "version": 2,
+ "guns": [
+  {
+   "design": "20 mm CIWS",
+   "at": [
+    0,
+    0
+   ],
+   "facing": "East",
+   "turret": [
+    35,
+    20
+   ]
+  },
+  {
+   "design": "20 mm CIWS",
+   "at": [
+    0,
+    0
+   ],
+   "facing": "East",
+   "turret": [
+    37,
+    -19
+   ]
+  },
+  {
+   "design": "20 mm CIWS",
+   "at": [
+    0,
+    0
+   ],
+   "facing": "East",
+   "turret": [
+    31,
+    -18
+   ]
+  }
+ ]
 }

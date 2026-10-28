@@ -3519,14 +3519,6 @@
    "module_type": "PointDefenseDrone",
    "grid_pos": [
     4,
-    -7
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "PointDefenseDrone",
-   "grid_pos": [
-    4,
     7
    ],
    "rotation": "North"
@@ -3826,8 +3818,88 @@
     5
    ],
    "rotation": "North"
+  },
+  {
+   "module_type": "TurretRingSmall",
+   "grid_pos": [
+    4,
+    -7
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
+   "grid_pos": [
+    3,
+    -7
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    3,
+    -6
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    4,
+    -6
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    19,
+    -1
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    -16,
+    0
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",
- "version": 2
+ "version": 2,
+ "guns": [
+  {
+   "design": "20 mm CIWS",
+   "at": [
+    0,
+    0
+   ],
+   "facing": "East",
+   "turret": [
+    4,
+    -7
+   ]
+  }
+ ]
 }

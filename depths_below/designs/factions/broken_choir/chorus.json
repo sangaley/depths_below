@@ -3740,22 +3740,6 @@
    "rotation": "South"
   },
   {
-   "module_type": "ClusterRocket",
-   "grid_pos": [
-    20,
-    8
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "ClusterRocket",
-   "grid_pos": [
-    37,
-    -4
-   ],
-   "rotation": "East"
-  },
-  {
    "module_type": "BasicQuarters",
    "grid_pos": [
     16,
@@ -4396,20 +4380,84 @@
    "rotation": "East"
   },
   {
-   "module_type": "HeavyMissile",
-   "grid_pos": [
-    44,
-    0
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "HeavyMissile",
+   "module_type": "LaunchPad",
    "grid_pos": [
     17,
     -7
    ],
-   "rotation": "South"
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Frag",
+      "Frag"
+     ],
+     "head": "Heat"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    44,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Frag",
+      "Frag"
+     ],
+     "head": "Heat"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    20,
+    8
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Fins",
+      "He"
+     ],
+     "head": "DumbNose"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    37,
+    -4
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Fins",
+      "He"
+     ],
+     "head": "DumbNose"
+    }
+   }
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",

@@ -6334,26 +6334,10 @@
   {
    "module_type": "Cannon",
    "grid_pos": [
-    0,
-    16
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Cannon",
-   "grid_pos": [
     30,
     1
    ],
    "rotation": "North"
-  },
-  {
-   "module_type": "Cannon",
-   "grid_pos": [
-    0,
-    -16
-   ],
-   "rotation": "South"
   },
   {
    "module_type": "Cannon",
@@ -6382,26 +6366,10 @@
   {
    "module_type": "Cannon",
    "grid_pos": [
-    6,
-    13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Cannon",
-   "grid_pos": [
     32,
     0
    ],
    "rotation": "East"
-  },
-  {
-   "module_type": "Cannon",
-   "grid_pos": [
-    6,
-    -13
-   ],
-   "rotation": "South"
   },
   {
    "module_type": "Cannon",
@@ -6426,14 +6394,6 @@
     14
    ],
    "rotation": "North"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    -2,
-    -15
-   ],
-   "rotation": "South"
   },
   {
    "module_type": "Gatling",
@@ -6496,14 +6456,6 @@
    "grid_pos": [
     -12,
     11
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    -2,
-    15
    ],
    "rotation": "North"
   },
@@ -6848,14 +6800,6 @@
    "grid_pos": [
     3,
     -13
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "BasicQuarters",
-   "grid_pos": [
-    -17,
-    -5
    ],
    "rotation": "North"
   },
@@ -8402,8 +8346,210 @@
     1
    ],
    "rotation": "North"
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    0,
+    -16
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    0,
+    16
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    6,
+    -13
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    6,
+    13
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TurretRingSmall",
+   "grid_pos": [
+    -2,
+    -15
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
+   "grid_pos": [
+    -2,
+    -14
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    -2,
+    -13
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    -1,
+    -16
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TurretRingSmall",
+   "grid_pos": [
+    -2,
+    15
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
+   "grid_pos": [
+    -2,
+    14
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    -2,
+    13
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    -1,
+    15
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    31,
+    -1
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    -17,
+    -5
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    -1,
+    16
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    1,
+    -16
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",
- "version": 2
+ "version": 2,
+ "guns": [
+  {
+   "design": "Eternal CIWS",
+   "at": [
+    0,
+    0
+   ],
+   "facing": "East",
+   "turret": [
+    -2,
+    -15
+   ]
+  },
+  {
+   "design": "Eternal CIWS",
+   "at": [
+    0,
+    0
+   ],
+   "facing": "East",
+   "turret": [
+    -2,
+    15
+   ]
+  }
+ ]
 }

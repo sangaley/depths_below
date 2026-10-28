@@ -4084,22 +4084,6 @@
    "rotation": "North"
   },
   {
-   "module_type": "Gatling",
-   "grid_pos": [
-    -4,
-    8
-   ],
-   "rotation": "East"
-  },
-  {
-   "module_type": "Gatling",
-   "grid_pos": [
-    -4,
-    -8
-   ],
-   "rotation": "East"
-  },
-  {
    "module_type": "StandardEngine",
    "grid_pos": [
     -14,
@@ -4298,8 +4282,144 @@
     0
    ],
    "rotation": "North"
+  },
+  {
+   "module_type": "TurretRingSmall",
+   "grid_pos": [
+    -4,
+    -8
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
+   "grid_pos": [
+    -5,
+    -8
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    -6,
+    -8
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    -5,
+    -9
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TurretRingSmall",
+   "grid_pos": [
+    -4,
+    8
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
+   "grid_pos": [
+    -5,
+    8
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    -6,
+    8
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    -5,
+    7
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    13,
+    -14
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "MissileWarner",
+   "grid_pos": [
+    -11,
+    -7
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",
- "version": 2
+ "version": 2,
+ "guns": [
+  {
+   "design": "20 mm CIWS",
+   "at": [
+    0,
+    0
+   ],
+   "facing": "East",
+   "turret": [
+    -4,
+    -8
+   ]
+  },
+  {
+   "design": "20 mm CIWS",
+   "at": [
+    0,
+    0
+   ],
+   "facing": "East",
+   "turret": [
+    -4,
+    8
+   ]
+  }
+ ]
 }

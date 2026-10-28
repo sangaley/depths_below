@@ -3622,14 +3622,6 @@
   {
    "module_type": "RepairBay",
    "grid_pos": [
-    19,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
     9,
     -4
    ],
@@ -3640,30 +3632,6 @@
    "grid_pos": [
     8,
     -6
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    13,
-    -10
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    13,
-    -9
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    13,
-    -8
    ],
    "rotation": "North"
   },
@@ -3688,14 +3656,6 @@
    "grid_pos": [
     15,
     -7
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "RepairBay",
-   "grid_pos": [
-    18,
-    -11
    ],
    "rotation": "North"
   },
@@ -4126,14 +4086,6 @@
   {
    "module_type": "PlasmaCaster",
    "grid_pos": [
-    18,
-    -12
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "PlasmaCaster",
-   "grid_pos": [
     12,
     -3
    ],
@@ -4186,14 +4138,6 @@
     11
    ],
    "rotation": "North"
-  },
-  {
-   "module_type": "PlasmaCaster",
-   "grid_pos": [
-    14,
-    -11
-   ],
-   "rotation": "South"
   },
   {
    "module_type": "CryoStorage",
@@ -4578,6 +4522,160 @@
     -10
    ],
    "rotation": "North"
+  },
+  {
+   "module_type": "LaserEmitter",
+   "grid_pos": [
+    18,
+    -12
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCore",
+   "grid_pos": [
+    18,
+    -11
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "FrequencyDoubler",
+   "grid_pos": [
+    19,
+    -11
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    18,
+    -10
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    19,
+    -10
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    18,
+    -9
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    19,
+    -9
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserEmitter",
+   "grid_pos": [
+    14,
+    -11
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCore",
+   "grid_pos": [
+    14,
+    -10
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "FrequencyDoubler",
+   "grid_pos": [
+    13,
+    -10
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    14,
+    -9
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    13,
+    -9
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    14,
+    -8
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    13,
+    -8
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",

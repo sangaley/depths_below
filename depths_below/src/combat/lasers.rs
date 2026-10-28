@@ -78,9 +78,10 @@ pub fn max_range(lenses: u32) -> f32 {
     3.0 * 3000.0 * (1.0 + lenses as f32).sqrt()
 }
 
-/// A hull-mounted emitter's arc, degrees either side of where it faces.
+/// A hull-mounted emitter's arc, degrees either side of where it faces: a
+/// bare emitter swings its beam wide, lenses narrow it.
 pub fn hull_half_arc_deg(lenses: u32) -> f32 {
-    150.0 / (4.0 + lenses as f32)
+    75.0 / (1.0 + 0.25 * lenses as f32)
 }
 
 /// Share of a beam that burns into a block with this armour.
@@ -358,7 +359,15 @@ pub fn fire_lasers(
     mut banks: Query<(&mut LaserBank, &ChildOf)>,
     emitters: Query<(&LaserEmitter, &Module, &GlobalTransform, &ChildOf, Option<&super::targeting::fire_groups::FireGroup>, Has<super::targeting::fire_groups::InterceptMode>)>,
     turret_bodies: Query<&super::turret_deck::TurretBody>,
-    ships: Query<(Has<Ship>, Option<&crate::ai_ship::components::AiShipTarget>, Option<&super::missile_defence::MissileWarning>)>,
+    ships: Query<(
+        Has<Ship>,
+        Option<&crate::ai_ship::components::AiShipTarget>,
+        Option<&super::missile_defence::MissileWarning>,
+        Option<(&crate::ai_ship::components::AiShipBehavior, &crate::ai_ship::components::AiShipState, &crate::ai_ship::components::AiShipType)>,
+    )>,
+    // An enemy's lasers keep the same rules as its guns: a faction that isn't
+    // hostile holds fire on you unless you shot first.
+    standing: (Res<crate::diplomacy::FactionStanding>, Query<Entity, With<Ship>>),
     whereabouts: Query<&GlobalTransform>,
     missiles: Query<&Transform, With<super::new_projectiles::MissileProjectile>>,
     mut shots: MessageWriter<LaserShot>,
@@ -366,7 +375,22 @@ pub fn fire_lasers(
     let dt = time.delta_secs();
     for (mut bank, core_parent) in banks.iter_mut() {
         let ship = core_parent.parent();
-        let Ok((is_player, ai_target, warning)) = ships.get(ship) else { continue };
+        let Ok((is_player, ai_target, warning, ai)) = ships.get(ship) else { continue };
+        // May this enemy fire its lasers at a ship (point defence always may)?
+        let player = standing.1.single().ok();
+        let may_fire_at = |target: Option<Entity>| -> bool {
+            let Some((behavior, state, faction)) = ai else { return true };
+            if crate::demo::skip_ai_ship_spawn() && std::env::var("DEPTHS_MOVETEST_ENEMY_SHOOTS").ok().as_deref() != Some("1") {
+                return false;
+            }
+            if state.is_destroyed || *behavior != crate::ai_ship::components::AiShipBehavior::Engaging {
+                return false;
+            }
+            target.is_none() || target != player
+                || standing.0.attacks_player(*faction)
+                || state.last_attacker == player
+                || (state.alert_timer > 0.0 && state.alert_target == player)
+        };
         // Who fires this frame, and along what line.
         let mut firing: Vec<(Vec2, Vec2, u32, Option<Entity>)> = Vec::new();
         let tell = super::gun_assembly::trace() && (time.elapsed_secs() % 2.0) < dt;
@@ -417,6 +441,9 @@ pub fn fire_lasers(
                     None => aim.first.or(aim.then),
                 }
             } else {
+                if !may_fire_at(ai_target.and_then(|t| t.entity)) {
+                    continue;
+                }
                 match on_turret {
                     Some(body) => body.aim,
                     None => ai_target.and_then(|t| t.entity.and_then(|x| whereabouts.get(x).ok()).map(|g| g.translation().truncate()).or(Some(t.position))),
@@ -624,7 +651,16 @@ pub fn resolve_laser_shots(
         }
         let Some(hit) = best else {
             if super::gun_assembly::trace() && rand::random::<f32>() < 0.02 {
-                info!("LASER miss: nothing on the line from {:?} toward {:?}", shot.from, shot.dir);
+                let near: Vec<String> = ships
+                    .iter()
+                    .filter(|s| s.0 != shot.ship)
+                    .map(|(_, tf, _, _, sh, _)| {
+                        let c = sh.world_center(tf);
+                        let along = (c - shot.from).dot(shot.dir);
+                        format!("ship at {:.0},{:.0} r{:.0}: along {:.0}, off {:.0}", c.x, c.y, sh.radius, along, (shot.from + shot.dir * along).distance(c))
+                    })
+                    .collect();
+                info!("LASER miss: from {:?} toward {:?}; {}", shot.from, shot.dir, near.join("; "));
             }
             draw_beam(&mut commands, shot.from, end, colour, shot.pulse);
             continue;

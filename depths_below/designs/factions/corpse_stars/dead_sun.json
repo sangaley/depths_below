@@ -10380,38 +10380,6 @@
    "rotation": "North"
   },
   {
-   "module_type": "HeavyMissile",
-   "grid_pos": [
-    0,
-    -22
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "HeavyMissile",
-   "grid_pos": [
-    -27,
-    -4
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "HeavyMissile",
-   "grid_pos": [
-    -27,
-    4
-   ],
-   "rotation": "North"
-  },
-  {
-   "module_type": "HeavyMissile",
-   "grid_pos": [
-    0,
-    22
-   ],
-   "rotation": "North"
-  },
-  {
    "module_type": "MemoryCore",
    "grid_pos": [
     27,
@@ -10933,6 +10901,86 @@
    "custom_name": null,
    "subcomponents": null,
    "extras": null
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    0,
+    -22
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Emp",
+      "Fuel"
+     ],
+     "head": "Radar"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    0,
+    22
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Emp",
+      "Fuel"
+     ],
+     "head": "Radar"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    -27,
+    -4
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Emp",
+      "Fuel"
+     ],
+     "head": "Radar"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    -27,
+    4
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Emp",
+      "Fuel"
+     ],
+     "head": "Radar"
+    }
+   }
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",

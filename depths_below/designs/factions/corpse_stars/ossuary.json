@@ -3980,22 +3980,6 @@
    "rotation": "East"
   },
   {
-   "module_type": "HeavyMissile",
-   "grid_pos": [
-    21,
-    -8
-   ],
-   "rotation": "South"
-  },
-  {
-   "module_type": "HeavyMissile",
-   "grid_pos": [
-    16,
-    10
-   ],
-   "rotation": "North"
-  },
-  {
    "module_type": "IonDisruptor",
    "grid_pos": [
     41,
@@ -4442,6 +4426,46 @@
     -4
    ],
    "rotation": "North"
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    16,
+    10
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Emp",
+      "Fuel"
+     ],
+     "head": "Radar"
+    }
+   }
+  },
+  {
+   "module_type": "LaunchPad",
+   "grid_pos": [
+    21,
+    -8
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "missile": {
+     "motor": "Booster",
+     "body": [
+      "Emp",
+      "Fuel"
+     ],
+     "head": "Radar"
+    }
+   }
   }
  ],
  "created_at": "fleet-concepts (hand-drawn)",
