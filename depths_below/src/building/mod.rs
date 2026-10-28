@@ -298,6 +298,7 @@ fn module_thickness(module_type: ModuleType) -> f32 {
         ModuleType::HalfArmorPlate => 22.0,      // half the steel of a plate
         ModuleType::HullReinforcePlate => 30.0,
         ModuleType::AngledHullPlate => 15.0,     // ...and this one is only framing
+        ModuleType::BallastBlock => 25.0,        // dense fill, no armour face
         _ => 0.0,
     }
 }

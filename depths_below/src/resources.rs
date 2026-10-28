@@ -1042,6 +1042,11 @@ const STRUCTURAL_PALETTE: &[ModuleType] = &[
     ModuleType::CornerArmorPlate,
     ModuleType::StaggeredArmorPlate,
     ModuleType::HullBeam,
+    // Filler for bare deck, each with one small use.
+    ModuleType::LightFrame,
+    ModuleType::SupplyCrates,
+    ModuleType::CoolantRun,
+    ModuleType::BallastBlock,
     ModuleType::HullCorner,
     ModuleType::Bulkhead,
     ModuleType::PressureFrame,

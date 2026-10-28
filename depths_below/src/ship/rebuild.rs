@@ -202,6 +202,28 @@ pub fn record_rebuild_ghosts(
     }
 }
 
+/// Supply Crates speed up work this many blocks round them...
+pub const CRATES_REACH: i32 = 5;
+/// ...by this much (one stack or several, the same).
+const CRATES_SPEED: f32 = 1.3;
+
+/// How fast crew put a block back, against 1 for the ordinary case: twice
+/// under an Armoured Hatch (combat::gun_house), twice for a Light Frame
+/// (girders go up quick), and 30% quicker with Supply Crates to hand.
+pub fn rebuild_rate(kind: &GhostKind, hatch: bool, crates_near: bool) -> f32 {
+    let mut rate = 1.0;
+    if hatch {
+        rate *= 2.0;
+    }
+    if matches!(kind, GhostKind::Module { module_type: ModuleType::LightFrame, .. }) {
+        rate *= 2.0;
+    }
+    if crates_near {
+        rate *= CRATES_SPEED;
+    }
+    rate
+}
+
 /// Idle crew reconstruct ghosts one at a time (FIFO), paying scrap up front.
 /// Runs while exploring — this is field construction, dock rebuilding stays
 /// manual in build mode.
@@ -222,9 +244,10 @@ pub fn crew_rebuild_system(
         Query<Entity, With<Ship>>,
         Query<(&crate::combat::turret_deck::TurretBody, &ChildOf, Option<&crate::combat::gun_house::RoofFittings>)>,
         MessageWriter<crate::combat::turret_deck::RebuildTurretPlate>,
+        Query<(&Module, &ChildOf), Without<DestroyedModule>>,
     ),
 ) {
-    let (ship_query, turrets, mut plate_events) = turret_work;
+    let (ship_query, turrets, mut plate_events, modules) = turret_work;
     // A turret ghost whose whole turret is gone has nowhere to go: laid
     // down anyway it would land on the hull at turret-grid cells.
     if let Ok(ship) = ship_query.single() {
@@ -287,7 +310,17 @@ pub fn crew_rebuild_system(
                 turrets.iter().any(|(t, p, f)| p.parent() == ship && t.ring_cell == rc && f.is_some_and(|f| f.hatches > 0))
             })
         });
-    ghost.progress += idle_crew as f32 * time.delta_secs() * if hatch { 2.0 } else { 1.0 };
+    // Supply Crates on the hull within reach (a turret part counts from its
+    // ring).
+    let at = ghost.turret.unwrap_or(ghost.grid_position);
+    let crates_near = ship_query.single().is_ok_and(|ship| {
+        modules.iter().any(|(m, p)| {
+            p.parent() == ship
+                && m.module_type == ModuleType::SupplyCrates
+                && (m.grid_position - at).abs().max_element() <= CRATES_REACH
+        })
+    });
+    ghost.progress += idle_crew as f32 * time.delta_secs() * rebuild_rate(&ghost.kind, hatch, crates_near);
     if ghost.progress < ghost.work_needed {
         return;
     }
@@ -480,6 +513,16 @@ mod turret_rebuild_tests {
         let extras = placed[0].extras.as_ref().expect("the gun's settings come back");
         assert_eq!(extras.turret, Some(IVec2::new(16, 1)));
         assert_eq!(extras.shell, Some(shell));
+    }
+
+    #[test]
+    fn frames_go_up_quick_and_crates_help() {
+        let plate = GhostKind::Module { module_type: ModuleType::ArmorPlate, rotation: Rotation::North };
+        let frame = GhostKind::Module { module_type: ModuleType::LightFrame, rotation: Rotation::North };
+        assert_eq!(rebuild_rate(&plate, false, false), 1.0);
+        assert_eq!(rebuild_rate(&frame, false, false), 2.0);
+        assert!((rebuild_rate(&plate, false, true) - 1.3).abs() < 1e-6);
+        assert!((rebuild_rate(&frame, true, true) - 5.2).abs() < 1e-6, "everything stacks");
     }
 
     #[test]

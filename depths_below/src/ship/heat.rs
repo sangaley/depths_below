@@ -132,12 +132,17 @@ pub fn diffuse_heat(
 }
 
 /// Apply cooling: CoolingPumps, HeatVents, and ambient environmental cooling.
+/// Heat a Coolant Run draws out each second, shared over its own tile and
+/// the four beside it (a Cooling Pump's is 80).
+pub const COOLANT_RUN_RATE: f32 = 20.0;
+
 pub fn apply_cooling(
     time: Res<Time>,
     depth_state: Res<DepthState>,
     mut heat_state: ResMut<HeatNetworkState>,
     cooling_query: Query<(&CoolingPumpComp, &Module, &ChildOf), Without<DestroyedModule>>,
     vent_query: Query<(&HeatVentComp, &Module, &ChildOf), Without<DestroyedModule>>,
+    pipe_query: Query<(&Module, &ChildOf), (Without<DestroyedModule>, Without<CoolingPumpComp>, Without<HeatVentComp>)>,
 ) {
     let dt = time.delta_secs();
     let offsets = [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y];
@@ -161,6 +166,18 @@ pub fn apply_cooling(
         let dissipation = vent.dissipation_rate * depth_bonus * dt;
         if let Some(temp) = heat_state.temperatures.get_mut(&(parent.parent(), module.grid_position)) {
             *temp = (*temp - dissipation).max(0.0);
+        }
+    }
+
+    // Coolant Runs: unpowered pipework drawing heat out of their own tile
+    // and the four beside it, a quarter of a pump.
+    for (module, parent) in pipe_query.iter() {
+        if module.module_type != ModuleType::CoolantRun { continue; }
+        let share = COOLANT_RUN_RATE * dt / 5.0;
+        for offset in [IVec2::ZERO, IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y] {
+            if let Some(temp) = heat_state.temperatures.get_mut(&(parent.parent(), module.grid_position + offset)) {
+                *temp = (*temp - share).max(0.0);
+            }
         }
     }
 
@@ -285,6 +302,33 @@ mod heat_tests {
     ///
     /// Keying by (ship, cell) is what makes running it for everyone safe — and
     /// running it for everyone is what finally makes enemy guns overheat.
+    #[test]
+    fn a_coolant_run_draws_heat_from_itself_and_its_neighbours() {
+        use bevy::ecs::system::RunSystemOnce;
+        let mut world = World::new();
+        let mut time = Time::<()>::default();
+        time.advance_by(std::time::Duration::from_secs(1));
+        world.insert_resource(time);
+        world.insert_resource(DepthState::default());
+        world.init_resource::<HeatNetworkState>();
+        let ship = world.spawn(Ship).id();
+        let pipe = Module { module_type: ModuleType::CoolantRun, power_generation: 0.0, ..reactor_module(IVec2::ZERO) };
+        world.spawn((pipe, ChildOf(ship)));
+        {
+            let mut heat = world.resource_mut::<HeatNetworkState>();
+            for c in [IVec2::ZERO, IVec2::X, IVec2::new(2, 0)] {
+                heat.temperatures.insert((ship, c), 100.0);
+            }
+        }
+        world.run_system_once(apply_cooling).unwrap();
+        let heat = world.resource::<HeatNetworkState>();
+        let ambient = 5.0;
+        let share = COOLANT_RUN_RATE / 5.0;
+        assert_eq!(heat.temperatures[&(ship, IVec2::ZERO)], 100.0 - share - ambient);
+        assert_eq!(heat.temperatures[&(ship, IVec2::X)], 100.0 - share - ambient, "the block beside it");
+        assert_eq!(heat.temperatures[&(ship, IVec2::new(2, 0))], 100.0 - ambient, "out of its reach");
+    }
+
     #[test]
     fn heat_does_not_leak_between_ships_sharing_a_cell() {
         let mut app = App::new();

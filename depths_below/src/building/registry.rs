@@ -2363,6 +2363,42 @@ pub fn build_registry() -> ModuleRegistry {
         crew_station: false,
     });
 
+    // Filler for the bare deck of a big hull. Each is light and cheap with
+    // one small use, so a big ship can be built out without being made a
+    // slab of armour that takes all night to kill.
+    defs.insert(ModuleType::LightFrame, ModuleDef {
+        name: "Light Frame",
+        description: "Open girder framing to fill bare deck. Light and cheap: it takes a hit for whatever stands behind it, and the crew put it back up in half the time of anything else.",
+        category: ModuleCategory::Structural, size: IVec2::new(1, 1), health: 45.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.50, 0.52, 0.55),
+        companion: CompanionData::None, customizable: false, cost: 8,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+    defs.insert(ModuleType::SupplyCrates, ModuleDef {
+        name: "Supply Crates",
+        description: "Spares stacked where the work is. Crew rebuilding anything within 5 blocks of a stack work 30% faster.",
+        category: ModuleCategory::Structural, size: IVec2::new(1, 1), health: 60.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.55, 0.47, 0.32),
+        companion: CompanionData::None, customizable: false, cost: 20,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+    defs.insert(ModuleType::CoolantRun, ModuleDef {
+        name: "Coolant Run",
+        description: "Pipework run through the deck. Draws heat out of its own block and the four beside it with no power of its own -- a quarter of what a Cooling Pump does, but it never switches off.",
+        category: ModuleCategory::Structural, size: IVec2::new(1, 1), health: 50.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.35, 0.50, 0.58),
+        companion: CompanionData::None, customizable: false, cost: 25,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+    defs.insert(ModuleType::BallastBlock, ModuleDef {
+        name: "Ballast Block",
+        description: "Dense fill. Tough, and thick enough to spend a round's punch before it reaches what's behind -- it does nothing else.",
+        category: ModuleCategory::Structural, size: IVec2::new(1, 1), health: 240.0,
+        power_generation: 0.0, power_consumption: 0.0, color: Color::srgb(0.33, 0.33, 0.35),
+        companion: CompanionData::None, customizable: false, cost: 30,
+        base_stats: CalculatedStats::default(), crew_station: false,
+    });
+
     defs.insert(ModuleType::HullCorner, ModuleDef {
         name: "Hull Corner",
         description: "Angled brace for hull corners. Prevents stress fractures where plates meet at sharp angles.",

@@ -585,6 +585,10 @@ impl ModuleCategory {
                 ModuleType::CornerArmorPlate,
                 ModuleType::StaggeredArmorPlate,
                 ModuleType::HullBeam,
+                ModuleType::LightFrame,
+                ModuleType::SupplyCrates,
+                ModuleType::CoolantRun,
+                ModuleType::BallastBlock,
                 ModuleType::HullCorner,
                 ModuleType::Bulkhead,
                 ModuleType::PressureFrame,
@@ -719,6 +723,11 @@ pub enum ModuleType {
 
     // Structural (8)
     HullBeam,
+    // Filler for the bare deck of a big hull: light, cheap, one small use each.
+    LightFrame,
+    SupplyCrates,
+    CoolantRun,
+    BallastBlock,
     HullCorner,
     Bulkhead,
     PressureFrame,
@@ -1082,6 +1091,8 @@ impl ModuleType {
             ModuleType::ResearchLab => ModuleCategory::Utility,
 
             ModuleType::HullBeam | ModuleType::HullCorner |
+            ModuleType::LightFrame | ModuleType::SupplyCrates |
+            ModuleType::CoolantRun | ModuleType::BallastBlock |
             ModuleType::Bulkhead | ModuleType::PressureFrame |
             ModuleType::AirlockValve | ModuleType::AccessHatch |
             ModuleType::ViewPort |
@@ -1174,6 +1185,10 @@ impl ModuleType {
             ModuleType::HullPatch => "Hull Patch",
             ModuleType::SignalBuoy => "Signal Buoy",
             ModuleType::HullBeam => "Hull Beam",
+            ModuleType::LightFrame => "Light Frame",
+            ModuleType::SupplyCrates => "Supply Crates",
+            ModuleType::CoolantRun => "Coolant Run",
+            ModuleType::BallastBlock => "Ballast Block",
             ModuleType::HullCorner => "Hull Corner",
             ModuleType::Bulkhead => "Bulkhead",
             ModuleType::PressureFrame => "Radiation Shield",

@@ -105,6 +105,10 @@ pub fn module_sprite_path(module_type: ModuleType) -> Option<&'static str> {
         ModuleType::SignalBuoy => "sprites/modules/floodlight.png",
         // Structural
         ModuleType::HullBeam => "sprites/modules/hull_beam.png",
+        ModuleType::LightFrame => "sprites/modules/light_frame.png",
+        ModuleType::SupplyCrates => "sprites/modules/supply_crates.png",
+        ModuleType::CoolantRun => "sprites/modules/coolant_run.png",
+        ModuleType::BallastBlock => "sprites/modules/ballast_block.png",
         ModuleType::HullCorner => "sprites/modules/hull_beam.png",
         ModuleType::Bulkhead => "sprites/modules/hull_beam.png",
         ModuleType::PressureFrame => "sprites/modules/hull_beam.png",
