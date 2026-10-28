@@ -10,6 +10,8 @@ itself is left alone.
   (command-guided frag) and two VLS Silos (radar-guided heavies with a
   shaped charge), in place of rec rooms, labs, cargo and lights.
 - A Decoy Launcher and a Chaff Dispenser, in place of the two brigs.
+- Two flank sponsons amidships, each with a point defence laser: a small
+  bank (4 pulses/s) feeding a laser turret through a Beam Relay.
 
 Run from depths_below/: python3 tools/faction-arming/build_halyard_mk2.py
 """
@@ -85,6 +87,41 @@ def shell_on(s, turret, shell):
     assert n, f"no firing piece on {turret}"
 
 
+# A point defence laser unit, in its own sponson: (dx, dy, part), dy outboard.
+# A small bank -- core, three Q-switches (4 pulses/s), a destabiliser, four
+# cavities and four pumps -- feeding a small ring through a Beam Relay.
+PD_LASER_UNIT = [
+    (2, 3, "TurretRingSmall"), (1, 2, "TraverseMotor"), (3, 2, "TraverseMotor"), (2, 2, "BeamRelay"),
+    (0, 1, "QSwitch"), (1, 1, "LaserCoupler"), (2, 1, "LaserCoupler"), (3, 1, "QSwitch"),
+    (0, 0, "QSwitch"), (1, 0, "LaserCore"), (2, 0, "LaserDestabiliser"),
+    (0, -1, "LaserPump"), (1, -1, "LaserCavity"), (2, -1, "LaserCavity"), (3, -1, "LaserPump"),
+    (0, -2, "LaserPump"), (1, -2, "LaserCavity"), (2, -2, "LaserCavity"), (3, -2, "LaserPump"),
+]
+
+
+def add_laser_sponsons(s):
+    """A sponson on each flank amidships, over plain plating at x -7..-2,
+    with a point defence laser unit in it (alongside the CIWS)."""
+    for sgn in (1, -1):
+        for x in range(-7, -1):
+            for y in range(9, 14):
+                s.d["hull_cells"].append({"grid_pos": [x, sgn * y], "layer": "Inner", "material": "Steel"})
+    cells = {tuple(c["grid_pos"]): c for c in s.d["hull_cells"]}
+    for (x, y), c in cells.items():
+        if c["layer"] == "Hallway":
+            continue
+        edge = any((x + dx, y + dy) not in cells for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+        c["layer"] = "Outer" if edge else "Inner"
+    s.hull = {k: c["layer"] for k, c in cells.items()}
+    x0, y0 = -6, 10
+    for sgn in (1, -1):
+        for dx, dy, t in PD_LASER_UNIT:
+            clear_and_place(s, t, (x0 + dx, sgn * (y0 + dy) if sgn > 0 else -(y0 + dy)))
+        ring = [x0 + 2, sgn * (y0 + 3)]
+        s.d["modules"].append(kit.module("LaserEmitter", 0, 0, "East", {"turret": ring, "point_defence": True}))
+        s.d["modules"].append(kit.module("LaserLens", 1, 0, "East", {"turret": ring}))
+
+
 def main():
     s = kit.Ship(os.path.join(kit.ROOT, "designs/halyard.json"))
     s.d["name"] = "Halyard Mk II"
@@ -115,13 +152,16 @@ def main():
     for cell in [(-17, 3), (-17, -3), (22, 3), (22, -3)]:
         clear_and_place(s, "MissileWarner", cell)
 
+    # Defensive lasers alongside the CIWS, in two flank sponsons.
+    add_laser_sponsons(s)
+
     clear_and_place(s, "DecoyLauncher", (-15, -1))
     clear_and_place(s, "ChaffDispenser", (-9, -5))
 
     out = os.path.join(kit.ROOT, "designs/halyard_mk2.json")
     s.save(out)
     print(out, len(s.d["hull_cells"]), "hull,", len(s.d["modules"]), "modules +", len(s.d["guns"]), "fitted guns")
-    for t in ["LaunchPad", "RailLauncher", "VlsSilo", "TurretRingSmall", "DecoyLauncher", "ChaffDispenser", "MissileWarner", "Magazine"]:
+    for t in ["LaunchPad", "RailLauncher", "VlsSilo", "TurretRingSmall", "DecoyLauncher", "ChaffDispenser", "MissileWarner", "Magazine", "LaserCore", "LaserEmitter"]:
         print(" ", t, s.count(t))
 
 
