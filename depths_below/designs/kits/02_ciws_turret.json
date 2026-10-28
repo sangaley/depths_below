@@ -1,0 +1,120 @@
+{
+ "name": "CIWS Turret",
+ "description": "Point defence: a 20 mm close-in gun on a small turret that shoots down incoming missiles on its own, firing flak. Put one on each side. Pair it with a Missile Defence Pack so its warner can spot what's coming.",
+ "parts": [
+  {
+   "module_type": "TurretRingSmall",
+   "offset": [
+    0,
+    0
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TraverseMotor",
+   "offset": [
+    1,
+    0
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoHoist",
+   "offset": [
+    0,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Magazine",
+   "offset": [
+    1,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "FiringPiece",
+   "offset": [
+    0,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GaugeReducer",
+   "offset": [
+    0,
+    1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GaugeReducer",
+   "offset": [
+    0,
+    -1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    1,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "Loader",
+   "offset": [
+    -1,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "ClipRack",
+   "offset": [
+    -1,
+    1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "BreechCooler",
+   "offset": [
+    -1,
+    -1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "BreechCooler",
+   "offset": [
+    1,
+    1
+   ],
+   "rotation": "East",
+   "turret": true
+  }
+ ],
+ "shell": {
+  "base": "None",
+  "casings": 2,
+  "bodies": [
+   "Frag",
+   "ProximityFuse"
+  ],
+  "head": "Frag"
+ },
+ "point_defence": true
+}

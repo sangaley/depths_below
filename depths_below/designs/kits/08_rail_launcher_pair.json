@@ -1,0 +1,22 @@
+{
+ "name": "Rail Launcher Pair",
+ "description": "Two rail launchers, three cells long, firing out the way they face. Faster missiles than pads, further reach. They need a clear lane out of the ship.",
+ "parts": [
+  {
+   "module_type": "RailLauncher",
+   "offset": [
+    0,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "RailLauncher",
+   "offset": [
+    0,
+    1
+   ],
+   "rotation": "East"
+  }
+ ]
+}

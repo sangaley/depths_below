@@ -1,0 +1,38 @@
+{
+ "name": "Launch Pad Battery",
+ "description": "Four launch pads in a row, firing out the way they face. Quick reloads, short reach. Their missiles need a clear lane out of the ship: put them on an edge facing out.",
+ "parts": [
+  {
+   "module_type": "LaunchPad",
+   "offset": [
+    0,
+    -1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaunchPad",
+   "offset": [
+    0,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaunchPad",
+   "offset": [
+    0,
+    1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaunchPad",
+   "offset": [
+    0,
+    2
+   ],
+   "rotation": "East"
+  }
+ ]
+}

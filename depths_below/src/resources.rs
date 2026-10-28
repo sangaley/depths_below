@@ -868,7 +868,8 @@ pub enum BuildCategory {
     Crew,
     Utility,
     Structural,
-    Custom,
+    /// Pre-made weapons (combat::gun_design::WeaponKits).
+    Premade,
 }
 
 impl BuildCategory {
@@ -886,7 +887,7 @@ impl BuildCategory {
         BuildCategory::Crew,
         BuildCategory::Utility,
         BuildCategory::Structural,
-        BuildCategory::Custom,
+        BuildCategory::Premade,
     ];
 
     pub fn name(&self) -> &'static str {
@@ -904,14 +905,14 @@ impl BuildCategory {
             BuildCategory::Crew => "Crew",
             BuildCategory::Utility => "Utility",
             BuildCategory::Structural => "Structural",
-            BuildCategory::Custom => "Custom",
+            BuildCategory::Premade => "Pre-made",
         }
     }
 
-    /// Convert to ModuleCategory. Returns None for Hull and Custom.
+    /// Convert to ModuleCategory. Returns None for Hull and Pre-made.
     pub fn to_module_category(&self) -> Option<ModuleCategory> {
         match self {
-            BuildCategory::Hull | BuildCategory::Custom => None,
+            BuildCategory::Hull | BuildCategory::Premade => None,
             BuildCategory::Power => Some(ModuleCategory::Power),
             BuildCategory::Propulsion => Some(ModuleCategory::Propulsion),
             BuildCategory::LifeSupport => Some(ModuleCategory::LifeSupport),
@@ -934,12 +935,12 @@ impl BuildCategory {
     /// after the hull layers so you can wall a ship in without changing tabs.
     /// Listing them in both places would put the same item under two labels.
     ///
-    /// Hull and Custom own no modules, so they answer with nothing -- the Hull
+    /// Hull and Pre-made own no modules, so they answer with nothing -- the Hull
     /// tab's own items are HULL_LAYERS plus HULL_PLATING, resolved in
     /// `current_selection`.
     pub fn items(&self) -> &'static [ModuleType] {
         match self {
-            BuildCategory::Hull | BuildCategory::Custom => &[],
+            BuildCategory::Hull | BuildCategory::Premade => &[],
             BuildCategory::Structural => STRUCTURAL_PALETTE,
             other => other
                 .to_module_category()
@@ -952,7 +953,8 @@ impl BuildCategory {
         match self {
             // Outer, Inner, Hallway, Void, BulkheadDoor, then the angled plating.
             BuildCategory::Hull => HULL_LAYERS.len() + HULL_PLATING.len(),
-            BuildCategory::Custom => 0, // No saved blueprints yet (will be expanded later)
+            // Read from disk: `BuildingState::kit_count`.
+            BuildCategory::Premade => 0,
             other => other.items().len(),
         }
     }
@@ -992,6 +994,9 @@ pub struct BuildingState {
     /// Which deck build mode is working on: the hull, or the turret decks
     /// above it (building::turret_build).
     pub deck: BuildDeck,
+    /// How many pre-made weapons the Pre-made tab offers (the kits read
+    /// from disk), for cycling through them.
+    pub kit_count: usize,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -1074,6 +1079,7 @@ impl Default for BuildingState {
             auto_rotated: true,
             hull_rect_anchor: None,
             deck: BuildDeck::Hull,
+            kit_count: 0,
         }
     }
 }
@@ -1093,11 +1099,9 @@ impl BuildingState {
                     None => BuildSelection::Module(HULL_PLATING[idx - HULL_LAYERS.len()]),
                 }
             }
-            BuildCategory::Custom => {
-                // For now, return first customizable module (Torpedo)
-                // Later this will be saved custom blueprints
-                BuildSelection::Module(ModuleType::HeavyMissile)
-            }
+            // A whole pre-made weapon is picked (`premade_index`), placed by
+            // building::gun_stamp; this stands in for code that wants a block.
+            BuildCategory::Premade => BuildSelection::Module(ModuleType::TurretRingSmall),
             _ => {
                 let types = cat.items();
                 if types.is_empty() {
@@ -1128,15 +1132,28 @@ impl BuildingState {
         self.selected_index = 0;
     }
 
+    /// Items the current tab offers.
+    fn items_here(&self) -> usize {
+        match self.current_category() {
+            BuildCategory::Premade => self.kit_count,
+            cat => cat.item_count(),
+        }
+    }
+
+    /// The pre-made weapon picked, when the Pre-made tab is open.
+    pub fn premade_index(&self) -> Option<usize> {
+        (self.current_category() == BuildCategory::Premade && self.kit_count > 0).then(|| self.selected_index % self.kit_count)
+    }
+
     pub fn next_item(&mut self) {
-        let count = self.current_category().item_count();
+        let count = self.items_here();
         if count > 0 {
             self.selected_index = (self.selected_index + 1) % count;
         }
     }
 
     pub fn prev_item(&mut self) {
-        let count = self.current_category().item_count();
+        let count = self.items_here();
         if count > 0 {
             if self.selected_index == 0 {
                 self.selected_index = count - 1;
@@ -1956,8 +1973,8 @@ mod tests {
     #[test]
     fn every_build_tab_has_items() {
         for cat in BuildCategory::ALL {
-            if matches!(cat, BuildCategory::Custom) {
-                continue; // no saved blueprints yet, by design
+            if matches!(cat, BuildCategory::Premade) {
+                continue; // its items are read from disk (designs/kits)
             }
             assert!(
                 cat.item_count() > 0,
@@ -1972,7 +1989,7 @@ mod tests {
     #[test]
     fn selection_walks_every_slot_of_every_tab() {
         for (ci, cat) in BuildCategory::ALL.iter().enumerate() {
-            if matches!(cat, BuildCategory::Custom) {
+            if matches!(cat, BuildCategory::Premade) {
                 continue;
             }
             let mut seen = Vec::new();

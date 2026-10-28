@@ -27,6 +27,29 @@ pub struct GunDesignPart {
     /// From the firing piece, with the gun facing +x.
     pub offset: IVec2,
     pub rotation: Rotation,
+    /// A pre-made weapon's part that stands on the turret of the design's
+    /// own ring (`WeaponKits`): `offset` is still from the design's origin,
+    /// the hull cell it stands over.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub turret: bool,
+}
+
+/// One part of a design laid down (`GunDesign::install`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Installed {
+    pub module_type: ModuleType,
+    /// In the hull's grid, or for a turret part in its turret's own grid.
+    pub cell: IVec2,
+    /// The hull cell it stands over (`cell` itself for a hull part).
+    pub hull_cell: IVec2,
+    pub rotation: Rotation,
+    /// For a turret part, the cell of the ring it stands on.
+    pub ring: Option<IVec2>,
+}
+
+/// Whether a part is a turret ring.
+pub fn is_ring(t: ModuleType) -> bool {
+    matches!(t, ModuleType::TurretRingSmall | ModuleType::TurretRing | ModuleType::TurretRingLarge)
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -77,6 +100,7 @@ impl GunDesign {
         let mut parts: Vec<GunDesignPart> = blocks
             .iter()
             .map(|m| GunDesignPart {
+                turret: false,
                 module_type: m.module_type,
                 offset: turn(m.grid_position - fp.grid_position, undo),
                 rotation: turn_rot(m.rotation, undo),
@@ -100,6 +124,36 @@ impl GunDesign {
             .iter()
             .map(|p| (p.module_type, origin + turn(p.offset, k), turn_rot(p.rotation, k)))
             .collect()
+    }
+
+    /// Every part laid down with the design's origin at `origin`, facing
+    /// `facing`: hull parts in the hull's grid, a pre-made weapon's turret
+    /// parts in the grid of its own ring's turret (centred on the ring, as
+    /// a turret's grid is). None if it has turret parts but no ring.
+    pub fn install(&self, origin: IVec2, facing: Rotation) -> Option<Vec<Installed>> {
+        let placed = self.placed(origin, facing);
+        let ring = self.parts.iter().zip(&placed).find(|(p, (t, _, _))| !p.turret && is_ring(*t)).map(|(_, &(t, at, r))| {
+            let size = IVec2::splat(super::turret_deck::ring_size(t));
+            let cells = crate::building::ShipGrid::cells_for(at, size, r, None);
+            let centre = cells.iter().fold(IVec2::ZERO, |a, c| a + *c) / cells.len().max(1) as i32;
+            (at, centre)
+        });
+        self.parts
+            .iter()
+            .zip(placed)
+            .map(|(p, (module_type, hull_cell, rotation))| {
+                if !p.turret {
+                    return Some(Installed { module_type, cell: hull_cell, hull_cell, rotation, ring: None });
+                }
+                let (ring_at, centre) = ring?;
+                Some(Installed { module_type, cell: hull_cell - centre, hull_cell, rotation, ring: Some(ring_at) })
+            })
+            .collect()
+    }
+
+    /// Whether it's a pre-made weapon with parts on a turret of its own.
+    pub fn has_turret_parts(&self) -> bool {
+        self.parts.iter().any(|p| p.turret)
     }
 
     pub fn cost(&self, registry: &crate::building::ModuleRegistry) -> u32 {
@@ -216,6 +270,36 @@ pub fn write_gun_design(design: &GunDesign) -> std::io::Result<std::path::PathBu
     Ok(path)
 }
 
+/// Pre-made weapons for the builder's Pre-made tab: whole installations --
+/// a turret's ring, motors, hoist and magazine with its gun on top, a
+/// battery of launchers, a laser unit -- that a beginner can put down in
+/// one go. Same file format as gun designs; read from `designs/kits`, in
+/// file-name order.
+#[derive(Resource, Default, Debug)]
+pub struct WeaponKits(pub Vec<GunDesign>);
+
+pub const KIT_DIR: &str = "designs/kits";
+
+pub fn read_kits(dir: &std::path::Path) -> Vec<GunDesign> {
+    let mut out = Vec::new();
+    let Ok(entries) = std::fs::read_dir(dir) else { return out };
+    let mut paths: Vec<_> = entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).collect();
+    paths.sort();
+    for path in paths {
+        match std::fs::read_to_string(&path).map(|s| serde_json::from_str::<GunDesign>(&s)) {
+            Ok(Ok(d)) => out.push(d),
+            Ok(Err(e)) => warn!("weapon kit {:?} doesn't read: {}", path, e),
+            Err(e) => warn!("weapon kit {:?}: {}", path, e),
+        }
+    }
+    out
+}
+
+pub fn load_weapon_kits(mut kits: ResMut<WeaponKits>) {
+    kits.0 = read_kits(std::path::Path::new(KIT_DIR));
+    info!("{} pre-made weapons in {KIT_DIR}", kits.0.len());
+}
+
 pub fn load_gun_designs(mut designs: ResMut<GunDesigns>) {
     designs.0 = read_gun_designs();
     info!("{} gun designs in {:?}", designs.0.len(), gun_design_dir());
@@ -227,7 +311,83 @@ mod gun_design_tests {
     use ModuleType::*;
 
     fn part(t: ModuleType, x: i32, y: i32) -> GunDesignPart {
-        GunDesignPart { module_type: t, offset: IVec2::new(x, y), rotation: Rotation::East }
+        GunDesignPart { module_type: t, offset: IVec2::new(x, y), rotation: Rotation::East, turret: false }
+    }
+
+    /// Every pre-made weapon in designs/kits works as laid down, whichever
+    /// way it's turned: parts don't overlap, a turret has motors and a hoist
+    /// reaching magazines, its gun assembles and loads, a laser unit has
+    /// cavities, pumps and an emitter.
+    #[test]
+    fn every_pre_made_weapon_works() {
+        use crate::building::turret_build::{allowed_on_turret, may_overhang};
+        use crate::combat::turret_deck::{deck_cells, ring_size};
+        let kits = read_kits(std::path::Path::new(KIT_DIR));
+        assert!(kits.len() >= 10, "the builder's Pre-made tab needs its kits");
+        let registry = crate::building::registry::build_registry();
+        for kit in &kits {
+            for facing in [Rotation::East, Rotation::South, Rotation::West, Rotation::North] {
+                let what = format!("{} facing {facing:?}", kit.name);
+                let parts = kit.install(IVec2::new(10, 10), facing).unwrap_or_else(|| panic!("{what}: no ring"));
+                let module = |i: &Installed| Module {
+                    module_type: i.module_type, health: 1.0, max_health: 1.0, power_consumption: 0.0, power_generation: 0.0,
+                    is_active: true, grid_position: i.cell, size: registry.get(i.module_type).size, rotation: i.rotation,
+                };
+                let mut taken = std::collections::HashSet::new();
+                for i in parts.iter().filter(|i| i.ring.is_none()) {
+                    for c in crate::building::ShipGrid::cells_for(i.cell, registry.get(i.module_type).size, i.rotation, None) {
+                        assert!(taken.insert(c), "{what}: two parts on {c}");
+                    }
+                }
+                if let Some(ring) = parts.iter().find(|i| is_ring(i.module_type)) {
+                    let hull: Vec<(Entity, Module)> = parts
+                        .iter()
+                        .filter(|i| i.ring.is_none())
+                        .enumerate()
+                        .map(|(n, i)| (Entity::from_raw_u32(n as u32 + 1).unwrap(), module(i)))
+                        .collect();
+                    let ring_cells = crate::combat::turret_deck::ring_cells(&module(ring));
+                    let motors = hull
+                        .iter()
+                        .filter(|(_, m)| m.module_type == ModuleType::TraverseMotor)
+                        .filter(|(_, m)| ring_cells.iter().any(|r| (m.grid_position - *r).abs().max_element() <= 1))
+                        .count();
+                    assert!(motors > 0, "{what}: no motor turns it");
+                    let feed = super::super::gun_assembly::hoist_reach(&hull, &ring_cells);
+                    assert!(!feed.magazines.is_empty(), "{what}: the hoist reaches no magazine");
+                    let deck: Vec<IVec2> = deck_cells(ring_size(ring.module_type));
+                    let mut on_turret = std::collections::HashSet::new();
+                    for i in parts.iter().filter(|i| i.ring.is_some()) {
+                        assert!(allowed_on_turret(i.module_type), "{what}: {:?} can't go on a turret", i.module_type);
+                        assert!(may_overhang(i.module_type) || deck.contains(&i.cell), "{what}: {:?} at {} is off the deck", i.module_type, i.cell);
+                        assert!(on_turret.insert(i.cell), "{what}: two turret parts on {}", i.cell);
+                    }
+                }
+                // Its gun, wherever it stands, assembles and loads.
+                let gun = GunDesign {
+                    parts: parts
+                        .iter()
+                        .filter(|i| !is_ring(i.module_type))
+                        .map(|i| GunDesignPart { module_type: i.module_type, offset: i.cell, rotation: i.rotation, turret: false })
+                        .collect(),
+                    ..kit.clone()
+                };
+                let guns_on = |on_turret: bool| -> Vec<GunDesignPart> {
+                    gun.parts.iter().zip(parts.iter().filter(|i| !is_ring(i.module_type))).filter(|(_, i)| i.ring.is_some() == on_turret).map(|(p, _)| *p).collect()
+                };
+                for on_turret in [true, false] {
+                    let set = guns_on(on_turret);
+                    if set.iter().any(|p| p.module_type == ModuleType::FiringPiece) {
+                        let g = GunDesign { parts: set, ..kit.clone() }.assembled().unwrap_or_else(|| panic!("{what}: the gun doesn't assemble"));
+                        assert!(g.stats.working_loaders > 0, "{what}: no loader takes its shell");
+                        assert!(g.parts.barrel_m > 0, "{what}: no barrel");
+                    }
+                }
+                if let Some((stats, layout)) = kit.laser() {
+                    assert!(stats.storage > 0.0 && !layout.pumps.is_empty() && !layout.emitters.is_empty(), "{what}: laser {layout:?}");
+                }
+            }
+        }
     }
 
     #[test]
@@ -280,8 +440,8 @@ mod gun_design_tests {
         let d = GunDesign::capture("test", &north_gun(), None).unwrap();
         let fp = d.parts.iter().find(|p| p.module_type == FiringPiece).unwrap();
         assert_eq!((fp.offset, fp.rotation), (IVec2::ZERO, Rotation::East));
-        assert!(d.parts.contains(&GunDesignPart { module_type: GunBarrel, offset: IVec2::new(2, 0), rotation: Rotation::East }));
-        assert!(d.parts.contains(&GunDesignPart { module_type: Loader, offset: IVec2::new(-1, 0), rotation: Rotation::East }));
+        assert!(d.parts.contains(&GunDesignPart { module_type: GunBarrel, offset: IVec2::new(2, 0), rotation: Rotation::East, turret: false }));
+        assert!(d.parts.contains(&GunDesignPart { module_type: Loader, offset: IVec2::new(-1, 0), rotation: Rotation::East, turret: false }));
         // Left of a north-facing gun is port; facing the bow, port is +y.
         assert!(d.parts.iter().any(|p| p.module_type == GaugeIncreaser && p.offset == IVec2::new(0, 1)));
     }

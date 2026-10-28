@@ -1,0 +1,92 @@
+{
+ "name": "Light Autocannon",
+ "description": "A 60 mm autocannon on a small turret: ring, motor, hoist and magazine in a 2x2 block, the gun up on the turret. Quick to turn and fast-firing; good against small craft. Place it on empty cells touching your hull.",
+ "parts": [
+  {
+   "module_type": "TurretRingSmall",
+   "offset": [
+    0,
+    0
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TraverseMotor",
+   "offset": [
+    1,
+    0
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoHoist",
+   "offset": [
+    0,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Magazine",
+   "offset": [
+    1,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "FiringPiece",
+   "offset": [
+    0,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "Loader",
+   "offset": [
+    -1,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "ClipRack",
+   "offset": [
+    -1,
+    1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "BreechCooler",
+   "offset": [
+    -1,
+    -1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    1,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    2,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  }
+ ]
+}

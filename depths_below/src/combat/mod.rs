@@ -503,6 +503,8 @@ impl Plugin for CombatPlugin {
             ).chain().after(turret_deck::traverse_turrets).after(missile_defence::spot_missiles))
             .init_resource::<gun_design::GunDesigns>()
             .add_systems(Startup, gun_design::load_gun_designs)
+            .init_resource::<gun_design::WeaponKits>()
+            .add_systems(Startup, gun_design::load_weapon_kits)
             .add_systems(Update, (
                 turret_deck::ensure_turret_bodies,
                 turret_deck::mount_pending_turret_blocks,

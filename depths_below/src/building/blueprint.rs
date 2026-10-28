@@ -65,9 +65,20 @@ pub fn expand_gun_placements(bp: &mut Blueprint, designs: &[crate::combat::gun_d
             warn!("Design '{}' fits gun '{}', which isn't in designs/guns", bp.name, fit.design);
             continue;
         };
-        for (module_type, grid_pos, rotation) in gun.placed(fit.at, fit.facing) {
+        // A pre-made weapon brings its own ring: its turret parts go on that
+        // ring's turret, in the turret's grid.
+        let parts: Vec<(ModuleType, IVec2, Rotation, Option<IVec2>)> = if gun.has_turret_parts() {
+            let Some(installed) = gun.install(fit.at, fit.facing) else {
+                warn!("Design '{}' fits '{}', which has turret parts but no ring", bp.name, fit.design);
+                continue;
+            };
+            installed.into_iter().map(|i| (i.module_type, i.cell, i.rotation, i.ring)).collect()
+        } else {
+            gun.placed(fit.at, fit.facing).into_iter().map(|(t, at, r)| (t, at, r, fit.turret)).collect()
+        };
+        for (module_type, grid_pos, rotation, turret) in parts {
             let extras = ModuleExtras {
-                turret: fit.turret,
+                turret,
                 shell: gun.shell.clone().filter(|_| module_type == ModuleType::FiringPiece),
                 point_defence: gun.point_defence_on(module_type),
                 ..default()
@@ -856,8 +867,8 @@ mod gun_placement_tests {
             name: "Little Gun".into(),
             description: String::new(),
             parts: vec![
-                GunDesignPart { module_type: ModuleType::FiringPiece, offset: IVec2::ZERO, rotation: Rotation::East },
-                GunDesignPart { module_type: ModuleType::GunBarrel, offset: IVec2::X, rotation: Rotation::East },
+                GunDesignPart { module_type: ModuleType::FiringPiece, offset: IVec2::ZERO, rotation: Rotation::East, turret: false },
+                GunDesignPart { module_type: ModuleType::GunBarrel, offset: IVec2::X, rotation: Rotation::East, turret: false },
             ],
             shell: Some(crate::combat::shell::ShellDesign { head: crate::combat::shell::ShellHead::He, ..default() }),
             faction: None,

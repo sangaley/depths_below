@@ -1,0 +1,278 @@
+{
+ "name": "Cutter Laser",
+ "description": "A steady beam that slices through armour: a doubler for burn, destabilisers to let it go, two lenses for reach. Hungry: 540 MW while it recharges.",
+ "parts": [
+  {
+   "module_type": "LaserPump",
+   "offset": [
+    -3,
+    2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    -2,
+    2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    -1,
+    2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    0,
+    2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    1,
+    2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    2,
+    2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserPump",
+   "offset": [
+    3,
+    2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserPump",
+   "offset": [
+    -3,
+    1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    -2,
+    1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    0,
+    1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserDestabiliser",
+   "offset": [
+    1,
+    1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    2,
+    1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserPump",
+   "offset": [
+    3,
+    1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserPump",
+   "offset": [
+    -3,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    -2,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "FrequencyDoubler",
+   "offset": [
+    -1,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCore",
+   "offset": [
+    0,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCoupler",
+   "offset": [
+    1,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserEmitter",
+   "offset": [
+    2,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserLens",
+   "offset": [
+    3,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserLens",
+   "offset": [
+    4,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserPump",
+   "offset": [
+    -3,
+    -1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    -2,
+    -1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    0,
+    -1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserDestabiliser",
+   "offset": [
+    1,
+    -1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    2,
+    -1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserPump",
+   "offset": [
+    3,
+    -1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserPump",
+   "offset": [
+    -3,
+    -2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    -2,
+    -2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    -1,
+    -2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    0,
+    -2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    1,
+    -2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    2,
+    -2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "LaserPump",
+   "offset": [
+    3,
+    -2
+   ],
+   "rotation": "East"
+  }
+ ]
+}

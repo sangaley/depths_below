@@ -1,0 +1,14 @@
+{
+ "name": "VLS Missile Silo",
+ "description": "A 2x2 vertical launch silo: missiles leave straight up out of the deck, so it can sit anywhere on the hull. Long reach, slow reload.",
+ "parts": [
+  {
+   "module_type": "VlsSilo",
+   "offset": [
+    0,
+    0
+   ],
+   "rotation": "North"
+  }
+ ]
+}

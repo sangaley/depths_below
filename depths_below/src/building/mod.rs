@@ -173,6 +173,7 @@ impl Plugin for BuildingPlugin {
                     clipboard::paste_ghost_preview,
                     templates::template_input,
                     template_ghost::update_template_ghost,
+                    gun_stamp::sync_kit_count,
                     gun_stamp::stamp_gun_design,
                     gun_stamp::gun_stamp_ghost,
                     template_ghost::chain_delete_system,
@@ -1005,7 +1006,7 @@ fn update_ghost_preview(
         // Auto-rotate modules when ghost moves (unless user manually rotated)
         // On a turret deck there's no hull around the ghost to face away
         // from: parts keep the way they're turned.
-        if ghost_moved && build_state.auto_rotated && build_state.deck == BuildDeck::Hull {
+        if ghost_moved && build_state.auto_rotated && build_state.deck == BuildDeck::Hull && build_state.premade_index().is_none() {
             if let BuildSelection::Module(mt) = build_state.current_selection() {
                 // A launcher wants a clear LANE, not merely an empty
                 // neighbour: auto_rotate would happily point a tube into a
@@ -1289,7 +1290,8 @@ fn handle_module_placement(
     player_children: Query<&Children, With<Ship>>,
     hull_blocks: Query<(), With<HullSegment>>,
 ) {
-    if *current_state.get() != BuildState::Placing || build_state.deck != BuildDeck::Hull {
+    // A pre-made weapon goes down whole (gun_stamp), not block by block.
+    if *current_state.get() != BuildState::Placing || build_state.deck != BuildDeck::Hull || build_state.premade_index().is_some() {
         build_state.hull_rect_anchor = None;
         return;
     }

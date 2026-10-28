@@ -1,0 +1,30 @@
+{
+ "name": "Missile Defence Pack",
+ "description": "A Missile Warner to spot incoming missiles for your point defence, with a decoy launcher and a chaff dispenser beside it to pull them off course.",
+ "parts": [
+  {
+   "module_type": "MissileWarner",
+   "offset": [
+    0,
+    0
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "DecoyLauncher",
+   "offset": [
+    1,
+    0
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ChaffDispenser",
+   "offset": [
+    -1,
+    0
+   ],
+   "rotation": "North"
+  }
+ ]
+}

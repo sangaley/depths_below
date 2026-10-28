@@ -1,0 +1,206 @@
+{
+ "name": "280 mm Spinal Gun",
+ "description": "A heavy fixed gun along the hull: three loaders, six metres of barrel, magazines behind the feeder. It fires where the ship points, so lay it along your bow.",
+ "parts": [
+  {
+   "module_type": "ShellFeeder",
+   "offset": [
+    -4,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "ClipRack",
+   "offset": [
+    -3,
+    -1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "ClipRack",
+   "offset": [
+    -3,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "ClipRack",
+   "offset": [
+    -3,
+    1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Loader",
+   "offset": [
+    -2,
+    -1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Loader",
+   "offset": [
+    -2,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Loader",
+   "offset": [
+    -2,
+    1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "BreechCooler",
+   "offset": [
+    -1,
+    -2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "GaugeIncreaser",
+   "offset": [
+    -1,
+    -1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "RecoilAbsorber",
+   "offset": [
+    -1,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "GaugeIncreaser",
+   "offset": [
+    -1,
+    1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "BreechCooler",
+   "offset": [
+    -1,
+    2
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "GaugeIncreaser",
+   "offset": [
+    0,
+    -1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "FiringPiece",
+   "offset": [
+    0,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "GaugeIncreaser",
+   "offset": [
+    0,
+    1
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Mantlet",
+   "offset": [
+    1,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    2,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    3,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    4,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    5,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    6,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    7,
+    0
+   ],
+   "rotation": "East"
+  },
+  {
+   "module_type": "Magazine",
+   "offset": [
+    -5,
+    0
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Magazine",
+   "offset": [
+    -5,
+    1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Magazine",
+   "offset": [
+    -5,
+    -1
+   ],
+   "rotation": "North"
+  }
+ ]
+}

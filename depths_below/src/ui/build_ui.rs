@@ -284,7 +284,8 @@ pub fn update_build_ghost(
     // parked at the ship's origin -- the exact centre of the screen, because
     // the camera follows the ship -- and pulsed there for the whole session,
     // whether or not the player was pointing at anything.
-    if !build_state.cursor_on_grid {
+    // A pre-made weapon shows its own ghost, every part (building::gun_stamp).
+    if !build_state.cursor_on_grid || build_state.premade_index().is_some() {
         *visibility = Visibility::Hidden;
         for (_, _, _, mut c_vis) in cell_query.iter_mut() {
             *c_vis = Visibility::Hidden;
@@ -804,7 +805,7 @@ fn category_color(cat: BuildCategory) -> Color {
         BuildCategory::Crew => Color::srgb(0.7, 0.5, 0.7),
         BuildCategory::Utility => Color::srgb(0.5, 0.6, 0.5),
         BuildCategory::Structural => Color::srgb(0.62, 0.62, 0.64),
-        BuildCategory::Custom => Color::srgb(0.9, 0.6, 0.9),
+        BuildCategory::Premade => Color::srgb(0.9, 0.6, 0.9),
     }
 }
 
@@ -828,7 +829,7 @@ fn category_icon(cat: BuildCategory) -> &'static str {
         BuildCategory::Crew => "ui/icons/cat_crew.png",
         BuildCategory::Utility => "ui/icons/cat_utility.png",
         BuildCategory::Structural => "ui/icons/cat_structural.png",
-        BuildCategory::Custom => "ui/icons/cat_custom.png",
+        BuildCategory::Premade => "ui/icons/cat_custom.png",
     }
 }
 
@@ -847,7 +848,7 @@ fn category_short_name(cat: BuildCategory) -> &'static str {
         BuildCategory::Crew => "CREW",
         BuildCategory::Utility => "UTIL",
         BuildCategory::Structural => "STRU",
-        BuildCategory::Custom => "CUST",
+        BuildCategory::Premade => "KITS",
     }
 }
 
@@ -1001,7 +1002,7 @@ pub fn spawn_build_panel(
                 ))
                 .with_children(|items_area| {
                     // Spawn initial item slots (will be rebuilt when category changes)
-                    spawn_item_slots(items_area, &BuildCategory::Hull, &registry);
+                    spawn_item_slots(items_area, &BuildCategory::Hull, &registry, &crate::combat::gun_design::WeaponKits::default());
                 });
 
                 // Vertical separator
@@ -1062,11 +1063,28 @@ pub fn spawn_build_panel(
         });
 }
 
+/// A pre-made weapon's slot: a short label from its name, coloured by what
+/// it is (gun, point defence, missiles, laser).
+fn kit_slot(kit: &crate::combat::gun_design::GunDesign) -> (String, Color) {
+    let has = |t: ModuleType| kit.parts.iter().any(|p| p.module_type == t);
+    let color = if has(ModuleType::LaserCore) {
+        Color::srgb(0.70, 0.45, 0.95)
+    } else if has(ModuleType::LaunchPad) || has(ModuleType::RailLauncher) || has(ModuleType::VlsSilo) {
+        Color::srgb(0.85, 0.35, 0.30)
+    } else if kit.point_defence || has(ModuleType::MissileWarner) {
+        Color::srgb(0.35, 0.75, 0.85)
+    } else {
+        Color::srgb(0.85, 0.55, 0.25)
+    };
+    (kit.name.chars().filter(|c| !c.is_whitespace()).take(4).collect(), color)
+}
+
 /// Spawns colored item slots for a given category
 fn spawn_item_slots(
     parent: &mut ChildSpawnerCommands,
     category: &BuildCategory,
     registry: &ModuleRegistry,
+    kits: &crate::combat::gun_design::WeaponKits,
 ) {
     match category {
         BuildCategory::Hull => {
@@ -1091,8 +1109,11 @@ fn spawn_item_slots(
                 spawn_single_slot(parent, i, label, *color, 0);
             }
         }
-        BuildCategory::Custom => {
-            // No custom blueprints yet - show empty
+        BuildCategory::Premade => {
+            for (i, kit) in kits.0.iter().enumerate() {
+                let (label, color) = kit_slot(kit);
+                spawn_single_slot(parent, i, &label, color, kit.cost(registry));
+            }
         }
         _ => {
             {
@@ -1248,7 +1269,7 @@ pub fn update_build_panel(
                           (With<ItemSlotBg>, Without<CategoryTabBg>)>,
     // Item slots container (for rebuilding)
     container_query: Query<(Entity, &Children), With<ItemSlotsContainer>>,
-    mut last_category: Local<Option<usize>>,
+    (mut last_category, kits): (Local<Option<usize>>, Res<crate::combat::gun_design::WeaponKits>),
 ) {
     let category = build_state.current_category();
     let cat_index = build_state.category_index % BuildCategory::ALL.len();
@@ -1292,7 +1313,7 @@ pub fn update_build_panel(
     }
 
     // Rebuild item slots if category changed
-    if *last_category != Some(cat_index) {
+    if *last_category != Some(cat_index) || (category == BuildCategory::Premade && kits.is_changed()) {
         *last_category = Some(cat_index);
         if let Ok((container_entity, children)) = container_query.single() {
             // Despawn old slots
@@ -1301,7 +1322,7 @@ pub fn update_build_panel(
             }
             // Spawn new slots
             commands.entity(container_entity).with_children(|parent| {
-                spawn_item_slots(parent, &category, &registry);
+                spawn_item_slots(parent, &category, &registry, &kits);
             });
         }
     }
@@ -1318,7 +1339,11 @@ pub fn update_build_panel(
     // Item name
     if let Ok(entity) = item_name_q.single() {
         if let Ok((mut text, mut text_color)) = text_query.get_mut(entity) {
-            text.0 = build_state.selection_name().to_string();
+            text.0 = match build_state.premade_index().and_then(|i| kits.0.get(i)) {
+                Some(kit) => kit.name.clone(),
+                None if category == BuildCategory::Premade => "No pre-made weapons in designs/kits".to_string(),
+                None => build_state.selection_name().to_string(),
+            };
             // Color the name with the category color
             text_color.0 = category_color(category);
         }
@@ -1330,8 +1355,13 @@ pub fn update_build_panel(
     // validation message near the ghost, building/mod.rs).
     if let Ok(entity) = stats_q.single() {
         if let Ok((mut text, mut text_color)) = text_query.get_mut(entity) {
-            let (line, cost) = match build_state.current_selection() {
-                BuildSelection::Hull(_) => {
+            let kit = build_state.premade_index().and_then(|i| kits.0.get(i));
+            let (line, cost) = match (kit, build_state.current_selection()) {
+                (Some(kit), _) => {
+                    let cost = kit.cost(&registry);
+                    (format!("{} parts | Cost: {}c | Click or Enter to place, R to turn", kit.parts.len(), cost), cost)
+                }
+                (None, BuildSelection::Hull(_)) => {
                     let mat = build_state.hull_material;
                     (format!(
                         "HP: {:.0} | Size: 1x1 | Rad Shield: {:.0} | Cost: {}c",
@@ -1340,7 +1370,7 @@ pub fn update_build_panel(
                         mat.cost()
                     ), mat.cost())
                 }
-                BuildSelection::Module(mt) => {
+                (None, BuildSelection::Module(mt)) => {
                     let def = registry.get(mt);
                     let mut s = format!(
                         "HP: {:.0} | Size: {}x{} | Cost: {}c",
@@ -1396,12 +1426,15 @@ pub fn update_build_info(
     module_query: Query<&Module>,
     hull_query: Query<&HullSegment>,
     currency: Res<Currency>,
+    kits: Res<crate::combat::gun_design::WeaponKits>,
 ) {
     // Description
     if let Ok(entity) = desc_q.single() {
         if let Ok((mut text, _)) = text_query.get_mut(entity) {
-            text.0 = match build_state.current_selection() {
-                BuildSelection::Hull(layer) => {
+            let kit = build_state.premade_index().and_then(|i| kits.0.get(i));
+            text.0 = match (kit, build_state.current_selection()) {
+                (Some(kit), _) => kit.description.clone(),
+                (None, BuildSelection::Hull(layer)) => {
                     match layer {
                         HullLayer::Outer => "Primary hull plating. First line of defense against radiation and debris.",
                         HullLayer::Inner => "Secondary hull layer. Adds redundancy.",
@@ -1410,7 +1443,7 @@ pub fn update_build_info(
                         HullLayer::BulkheadDoor => "Airtight door. Isolates depressurized sections.",
                     }.to_string()
                 }
-                BuildSelection::Module(mt) => {
+                (None, BuildSelection::Module(mt)) => {
                     registry.get(mt).description.to_string()
                 }
             };

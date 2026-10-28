@@ -1,0 +1,176 @@
+{
+ "name": "170 mm Turret",
+ "description": "A 170 mm gun on a 3x3 turret ring with three motors, a hoist and five magazines. The all-round main gun for a mid-size ship.",
+ "parts": [
+  {
+   "module_type": "TurretRing",
+   "offset": [
+    -1,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TraverseMotor",
+   "offset": [
+    -2,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TraverseMotor",
+   "offset": [
+    -2,
+    0
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TraverseMotor",
+   "offset": [
+    2,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoHoist",
+   "offset": [
+    0,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Magazine",
+   "offset": [
+    -1,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Magazine",
+   "offset": [
+    1,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Magazine",
+   "offset": [
+    -1,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Magazine",
+   "offset": [
+    0,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Magazine",
+   "offset": [
+    1,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "ClipRack",
+   "offset": [
+    -2,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "Loader",
+   "offset": [
+    -1,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "BreechCooler",
+   "offset": [
+    -1,
+    1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GaugeIncreaser",
+   "offset": [
+    0,
+    -1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "FiringPiece",
+   "offset": [
+    0,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GaugeIncreaser",
+   "offset": [
+    0,
+    1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "Mantlet",
+   "offset": [
+    1,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    2,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    3,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    4,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  }
+ ]
+}

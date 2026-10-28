@@ -1,0 +1,326 @@
+{
+ "name": "Twin 225 mm Turret",
+ "description": "Two 225 mm guns on a large 5x5 turret ring, fed by two hoists through anti-flash doors. Heavy firepower for a big ship.",
+ "parts": [
+  {
+   "module_type": "TurretRingLarge",
+   "offset": [
+    -2,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TraverseMotor",
+   "offset": [
+    -1,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TraverseMotor",
+   "offset": [
+    -1,
+    -3
+   ],
+   "rotation": "South"
+  },
+  {
+   "module_type": "TraverseMotor",
+   "offset": [
+    3,
+    0
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoHoist",
+   "offset": [
+    1,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AntiFlashDoor",
+   "offset": [
+    2,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Magazine",
+   "offset": [
+    3,
+    3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Magazine",
+   "offset": [
+    3,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BeltConveyor",
+   "offset": [
+    2,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoHoist",
+   "offset": [
+    1,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AntiFlashDoor",
+   "offset": [
+    0,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Magazine",
+   "offset": [
+    3,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Magazine",
+   "offset": [
+    3,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "FiringPiece",
+   "offset": [
+    0,
+    1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "Mantlet",
+   "offset": [
+    1,
+    1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    2,
+    1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    3,
+    1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    4,
+    1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    5,
+    1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GaugeIncreaser",
+   "offset": [
+    -1,
+    2
+   ],
+   "rotation": "North",
+   "turret": true
+  },
+  {
+   "module_type": "GaugeIncreaser",
+   "offset": [
+    0,
+    2
+   ],
+   "rotation": "North",
+   "turret": true
+  },
+  {
+   "module_type": "GaugeIncreaser",
+   "offset": [
+    1,
+    2
+   ],
+   "rotation": "North",
+   "turret": true
+  },
+  {
+   "module_type": "Loader",
+   "offset": [
+    -1,
+    1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "ClipRack",
+   "offset": [
+    -2,
+    1
+   ],
+   "rotation": "North",
+   "turret": true
+  },
+  {
+   "module_type": "BreechCooler",
+   "offset": [
+    -3,
+    1
+   ],
+   "rotation": "North",
+   "turret": true
+  },
+  {
+   "module_type": "FiringPiece",
+   "offset": [
+    0,
+    -1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "Mantlet",
+   "offset": [
+    1,
+    -1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    2,
+    -1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    3,
+    -1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    4,
+    -1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    5,
+    -1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GaugeIncreaser",
+   "offset": [
+    -1,
+    -2
+   ],
+   "rotation": "North",
+   "turret": true
+  },
+  {
+   "module_type": "GaugeIncreaser",
+   "offset": [
+    0,
+    -2
+   ],
+   "rotation": "North",
+   "turret": true
+  },
+  {
+   "module_type": "GaugeIncreaser",
+   "offset": [
+    1,
+    -2
+   ],
+   "rotation": "North",
+   "turret": true
+  },
+  {
+   "module_type": "Loader",
+   "offset": [
+    -1,
+    -1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "ClipRack",
+   "offset": [
+    -2,
+    -1
+   ],
+   "rotation": "North",
+   "turret": true
+  },
+  {
+   "module_type": "BreechCooler",
+   "offset": [
+    -3,
+    -1
+   ],
+   "rotation": "North",
+   "turret": true
+  }
+ ]
+}
