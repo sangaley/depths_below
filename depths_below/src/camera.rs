@@ -119,6 +119,42 @@ fn keep_world_labels_readable(
     }
 }
 
+/// Rounds are sized in world units too, so pulled back they shrank to a pixel
+/// or two -- a wide fight showed ships breaking up with nothing flying between
+/// them. Like the labels, a round grows as the camera pulls back: never drawn
+/// shorter than this on screen, and never smaller than its own size. (The
+/// round sprites are about three-quarters glow-free core, so 14 shows ~10.)
+const MIN_ROUND_PX: f32 = 14.0;
+
+fn keep_rounds_readable(
+    camera: Query<&Projection, With<MainCamera>>,
+    mut rounds: Query<
+        (&mut Transform, &Sprite),
+        (
+            Or<(
+                With<crate::components::Projectile>,
+                With<crate::combat::new_projectiles::Projectile>,
+                With<crate::combat::new_projectiles::MissileProjectile>,
+            )>,
+            Without<MainCamera>,
+        ),
+    >,
+) {
+    let Ok(Projection::Orthographic(projection)) = camera.single() else { return };
+    for (mut transform, sprite) in &mut rounds {
+        let length = sprite.custom_size.map_or(1.0, |s| s.x.max(1.0));
+        let want = Vec3::splat(round_scale(projection.scale, length));
+        if transform.scale != want {
+            transform.scale = want;
+        }
+    }
+}
+
+/// Scale a round `length` world units long carries at this camera zoom.
+fn round_scale(camera_zoom: f32, length: f32) -> f32 {
+    (MIN_ROUND_PX * camera_zoom / length).max(1.0)
+}
+
 /// Camera can pan up to this far from the ship while free-looking.
 const FREE_LOOK_MAX_PAN: f32 = 4500.0;
 /// Lerp rate (per second) for easing the pan offset toward/away from target.
@@ -143,6 +179,7 @@ impl Plugin for CameraPlugin {
                     free_look_input,
                     camera_follow_ship,
                     keep_world_labels_readable,
+                    keep_rounds_readable,
                     update_background_color,
                     update_depth_vignette,
                 )
@@ -926,6 +963,17 @@ mod framing_tests {
         assert_eq!(label_scale(DEFAULT_ZOOM), 1.0);
         assert!((label_scale(DEFAULT_ZOOM * 3.0) - 3.0).abs() < 1e-5);
         assert_eq!(label_scale(0.8), 1.0);
+    }
+
+    /// A round is never drawn shorter than MIN_ROUND_PX on screen, and never
+    /// smaller than its own size when the camera is close.
+    #[test]
+    fn rounds_stay_readable_when_zoomed_out() {
+        assert_eq!(round_scale(1.0, 20.0), 1.0);
+        let s = round_scale(12.0, 20.0);
+        assert!((20.0 * s / 12.0 - MIN_ROUND_PX).abs() < 1e-4, "{s}");
+        // a big shell already long enough on screen is left alone
+        assert_eq!(round_scale(2.0, 38.0), 1.0);
     }
 
     #[test]

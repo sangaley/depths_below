@@ -76,6 +76,13 @@ impl ShipShield {
     }
 }
 
+/// DEPTHS_NO_SHIELD_FX=1 (filming): no shield outline glow and no facing
+/// arcs. The shields still block; only their drawing is off.
+fn shield_fx_hidden() -> bool {
+    static V: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *V.get_or_init(|| std::env::var("DEPTHS_NO_SHIELD_FX").ok().as_deref() == Some("1"))
+}
+
 /// Marker for the bubble visual (child sprite of the shielded ship)
 #[derive(Component)]
 pub struct ShieldBubble;
@@ -720,7 +727,7 @@ pub fn update_ai_shield_arcs(
         }
 
         // Faint arc showing the protected facing, brighter just after a block.
-        if shield.is_up() {
+        if shield.is_up() && !shield_fx_hidden() {
             let alpha = (0.12 + shield.flash * 0.5).min(0.8);
             let color = Color::srgba(0.5, 0.8, 1.0, alpha);
             let r = shield.radius;
@@ -755,7 +762,7 @@ pub fn update_shield_segment(
             continue;
         }
         // Off unless a shot's about to hit.
-        if !shield.is_up() || !shield.arc_active {
+        if !shield.is_up() || !shield.arc_active || shield_fx_hidden() {
             sprite.color = Color::srgba(0.5, 0.8, 1.0, 0.0);
             seg.masked_for = None;
             continue;
@@ -863,7 +870,7 @@ pub fn update_shields(
         // in absorb, decays above). Player and AI alike.
         for child in children.iter() {
             if let Ok(mut sprite) = bubble_query.get_mut(child) {
-                let alpha = if shield.is_up() {
+                let alpha = if shield.is_up() && !shield_fx_hidden() {
                     let charge = if shield.max > 0.0 { shield.current / shield.max } else { 0.0 };
                     (0.12 + 0.18 * charge + shield.flash * SHIELD_FLASH_ALPHA).min(0.9)
                 } else {
