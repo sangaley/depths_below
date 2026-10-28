@@ -56,13 +56,14 @@ fn class_design(ship_type: AiShipType, class: Option<&'static str>) -> Blueprint
     design
 }
 
-/// How many times larger than its drawn design a faction station is built.
-/// A station should dwarf the ships round it: drawn at ship scale, a capital
-/// starport was barely twice a starter hull. DEPTHS_STATION_SCALE overrides
-/// it (1 = as drawn).
+/// How many times larger than its design file a faction station is built.
+/// A station should dwarf the ships round it; the files now hold stations
+/// at three times the size they were drawn (tools/ship-scale, armed with the
+/// new weapons), so they're built as they stand. DEPTHS_STATION_SCALE grows
+/// them further.
 pub fn station_scale() -> i32 {
     static V: OnceLock<i32> = OnceLock::new();
-    *V.get_or_init(|| std::env::var("DEPTHS_STATION_SCALE").ok().and_then(|v| v.parse().ok()).unwrap_or(3).clamp(1, 6))
+    *V.get_or_init(|| std::env::var("DEPTHS_STATION_SCALE").ok().and_then(|v| v.parse().ok()).unwrap_or(1).clamp(1, 6))
 }
 
 /// A station's design at station scale, built once per run.

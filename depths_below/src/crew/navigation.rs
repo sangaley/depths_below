@@ -706,8 +706,9 @@ mod nav_tests {
                 .unwrap_or(0);
             assert!(spread >= 3, "{name}: cores clustered, {spread} apart at most");
 
+            // On the hull deck: a turret's parts are in its own grid.
             let mut seen = HashSet::new();
-            for m in &design.modules {
+            for m in design.modules.iter().filter(|m| m.extras.as_ref().is_none_or(|e| e.turret.is_none())) {
                 assert!(seen.insert(m.grid_pos), "{name}: two modules at {:?}", m.grid_pos);
             }
         }

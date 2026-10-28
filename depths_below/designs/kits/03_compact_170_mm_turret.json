@@ -1,0 +1,128 @@
+{
+ "name": "Compact 170 mm Turret",
+ "description": "A 170 mm gun squeezed onto a small turret: ring, motor, hoist and magazine in a 2x2 block. Hits as hard as the big ring's gun but turns slowly. A main gun for a small ship.",
+ "parts": [
+  {
+   "module_type": "TurretRingSmall",
+   "offset": [
+    0,
+    0
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TraverseMotor",
+   "offset": [
+    1,
+    0
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "AmmoHoist",
+   "offset": [
+    0,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "Magazine",
+   "offset": [
+    1,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "FiringPiece",
+   "offset": [
+    0,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GaugeIncreaser",
+   "offset": [
+    0,
+    1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GaugeIncreaser",
+   "offset": [
+    0,
+    -1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "Loader",
+   "offset": [
+    -1,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "ClipRack",
+   "offset": [
+    -1,
+    1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "BreechCooler",
+   "offset": [
+    -1,
+    -1
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "Mantlet",
+   "offset": [
+    1,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    2,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    3,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "GunBarrel",
+   "offset": [
+    4,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  }
+ ]
+}

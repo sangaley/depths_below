@@ -334,24 +334,30 @@ mod gun_stamp_tests {
     }
 
     /// A beginner's pre-made weapon goes down beside the starter, turned
-    /// any way.
+    /// any way, and not on top of anything.
     #[test]
     fn a_pre_made_turret_fits_beside_the_starter() {
         let design = crate::building::blueprint::load_design_file("designs/starter.json").unwrap();
         let registry = crate::building::registry::build_registry();
-        // What build mode counts as taken: hull and every block, armour
-        // plates outboard of it included.
-        let mut hull: std::collections::HashSet<IVec2> = design.hull_cells.iter().map(|h| h.grid_pos).collect();
-        for m in &design.modules {
-            hull.extend(crate::building::ShipGrid::cells_for(m.grid_pos, registry.get(m.module_type).size, m.rotation, None));
+        // What build mode counts as taken: hull and every block on the hull
+        // deck, armour plates outboard of it included.
+        let mut taken: std::collections::HashSet<IVec2> = design.hull_cells.iter().map(|h| h.grid_pos).collect();
+        for m in design.modules.iter().filter(|m| m.extras.as_ref().is_none_or(|e| e.turret.is_none())) {
+            taken.extend(crate::building::ShipGrid::cells_for(m.grid_pos, registry.get(m.module_type).size, m.rotation, None));
         }
         let kits = crate::combat::gun_design::read_kits(std::path::Path::new(crate::combat::gun_design::KIT_DIR));
         let ciws = kits.iter().find(|k| k.name == "CIWS Turret").unwrap();
-        assert!(kit_plan(ciws, IVec2::new(16, 2), Rotation::East, &|t| registry.get(t).size, &|c| hull.contains(&c)).problem.is_some(), "an armour plate is there");
+        let plan_at = |at: IVec2, facing| kit_plan(ciws, at, facing, &|t| registry.get(t).size, &|c| taken.contains(&c));
+        let inside = *taken.iter().next().unwrap();
+        assert!(plan_at(inside, Rotation::East).problem.is_some(), "not on top of the ship");
+        // Off the stern, beside the first row that reaches furthest back.
+        let back = taken.iter().map(|c| c.x).min().unwrap();
+        let row = taken.iter().find(|c| c.x == back).unwrap().y;
         for facing in [Rotation::North, Rotation::East] {
-            let plan = kit_plan(ciws, IVec2::new(17, 2), facing, &|t| registry.get(t).size, &|c| hull.contains(&c));
+            let at = IVec2::new(back - 2, row);
+            let plan = plan_at(at, facing);
             assert_eq!(plan.problem, None, "{facing:?}: {:?}", plan.parts.iter().filter(|p| !p.ok).collect::<Vec<_>>());
-            assert!(plan.parts.iter().any(|p| p.module_type == ModuleType::FiringPiece && p.ring == Some(IVec2::new(17, 2))));
+            assert!(plan.parts.iter().any(|p| p.module_type == ModuleType::FiringPiece && p.ring == Some(at)));
         }
     }
 

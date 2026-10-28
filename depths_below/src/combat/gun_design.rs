@@ -390,6 +390,67 @@ mod gun_design_tests {
         }
     }
 
+    /// Every ship in the game (each faction's classes and fallback ship, the
+    /// player's starters) carries working weapons: every turret part stands
+    /// on a ring of its own ship, every ring has a motor and a hoist that
+    /// reaches a magazine, and every turret's gun assembles and loads.
+    #[test]
+    fn every_ships_turrets_work() {
+        use crate::building::blueprint::load_design_file;
+        let registry = crate::building::registry::build_registry();
+        let mut files: Vec<String> = ["starter", "pincer", "crab", "trident"].iter().map(|n| format!("designs/{n}.json")).collect();
+        for entry in std::fs::read_dir("designs/factions").unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                files.extend(std::fs::read_dir(&path).unwrap().flatten().map(|e| e.path().display().to_string()));
+            } else {
+                files.push(path.display().to_string());
+            }
+        }
+        let mut turrets_seen = 0;
+        for file in files.iter().filter(|f| f.ends_with(".json")) {
+            let design = load_design_file(file).unwrap_or_else(|| panic!("{file} doesn't load"));
+            let hull: Vec<(Entity, Module)> = design
+                .modules
+                .iter()
+                .filter(|m| m.extras.as_ref().is_none_or(|e| e.turret.is_none()))
+                .enumerate()
+                .map(|(n, m)| {
+                    let module = Module {
+                        module_type: m.module_type, health: 1.0, max_health: 1.0, power_consumption: 0.0, power_generation: 0.0,
+                        is_active: true, grid_position: m.grid_pos, size: registry.get(m.module_type).size, rotation: m.rotation,
+                    };
+                    (Entity::from_raw_u32(n as u32 + 1).unwrap(), module)
+                })
+                .collect();
+            for (_, ring) in hull.iter().filter(|(_, m)| is_ring(m.module_type)) {
+                turrets_seen += 1;
+                let what = format!("{file}: ring at {}", ring.grid_position);
+                let cells = crate::combat::turret_deck::ring_cells(ring);
+                let motors = hull
+                    .iter()
+                    .filter(|(_, m)| m.module_type == ModuleType::TraverseMotor)
+                    .any(|(_, m)| cells.iter().any(|r| (m.grid_position - *r).abs().max_element() <= 1));
+                assert!(motors, "{what}: no motor");
+                assert!(!super::super::gun_assembly::hoist_reach(&hull, &cells).magazines.is_empty(), "{what}: no magazine fed");
+                let parts: Vec<GunDesignPart> = design
+                    .modules
+                    .iter()
+                    .filter(|m| m.extras.as_ref().and_then(|e| e.turret) == Some(ring.grid_position))
+                    .map(|m| GunDesignPart { module_type: m.module_type, offset: m.grid_pos, rotation: m.rotation, turret: false })
+                    .collect();
+                let gun = GunDesign { name: what.clone(), description: String::new(), parts, shell: None, faction: None, point_defence: false };
+                let g = gun.assembled().unwrap_or_else(|| panic!("{what}: no gun on it"));
+                assert!(g.stats.working_loaders > 0 && g.parts.barrel_m > 0, "{what}: the gun doesn't load or has no barrel");
+            }
+            let rings: Vec<IVec2> = hull.iter().filter(|(_, m)| is_ring(m.module_type)).map(|(_, m)| m.grid_position).collect();
+            for m in design.modules.iter().filter_map(|m| m.extras.as_ref().and_then(|e| e.turret).map(|r| (m, r))) {
+                assert!(rings.contains(&m.1), "{file}: {:?} on a turret at {} with no ring", m.0.module_type, m.1);
+            }
+        }
+        assert!(turrets_seen > 500, "the fleet carries its new turrets ({turrets_seen})");
+    }
+
     #[test]
     fn a_laser_unit_design_reads_as_a_laser() {
         let d = GunDesign {

@@ -64,7 +64,20 @@ KITS.append({
     "point_defence": True,
 })
 
-# 3. 170 mm turret: the Vigil's light gun.
+# 3. Compact 170 mm: the same bore on a small ring, in a 2x2 block. Slow to
+# turn on its one motor, but it fits where one old cannon stood.
+KITS.append({
+    "name": "Compact 170 mm Turret",
+    "description": "A 170 mm gun squeezed onto a small turret: ring, motor, hoist and magazine in a 2x2 block. Hits as hard as the big ring's gun but turns slowly. A main gun for a small ship.",
+    "parts": SMALL_RING + [part("FiringPiece", 0, 0, turret=True), part("GaugeIncreaser", 0, 1, turret=True),
+                           part("GaugeIncreaser", 0, -1, turret=True), part("Loader", -1, 0, turret=True),
+                           part("ClipRack", -1, 1, turret=True), part("BreechCooler", -1, -1, turret=True),
+                           part("Mantlet", 1, 0, turret=True)]
+             + [part("GunBarrel", x, 0, turret=True) for x in (2, 3, 4)],
+    "shell": None,
+})
+
+# 4. 170 mm turret: the Vigil's light gun.
 g170, g170_parts = gun_parts("170_mm_turret_gun.json")
 KITS.append({
     "name": "170 mm Turret",
@@ -73,7 +86,7 @@ KITS.append({
     "shell": g170.get("shell"),
 })
 
-# 4. Twin 225 mm: the Halyard Mk II's big turret, read from its design.
+# 5. Twin 225 mm: the Halyard Mk II's big turret, read from its design.
 hal = json.load(open(os.path.join(ROOT, "designs/halyard_mk2.json")))
 ring = next(m for m in hal["modules"] if m["module_type"] == "TurretRingLarge")
 cx, cy = ring["grid_pos"][0] + 2, ring["grid_pos"][1] + 2
@@ -93,7 +106,7 @@ KITS.append({
     "shell": None,
 })
 
-# 5. 280 mm spinal: fixed, aim it by turning the ship. Magazines behind.
+# 6. 280 mm spinal: fixed, aim it by turning the ship. Magazines behind.
 g280, g280_parts = gun_parts("280_mm_spinal.json")
 spinal = [dict(p, turret=False) for p in g280_parts]
 for p in spinal:
@@ -106,7 +119,7 @@ KITS.append({
     "shell": g280.get("shell"),
 })
 
-# 6. VLS silo: launches straight up, so it needs no clear lane.
+# 7. VLS silo: launches straight up, so it needs no clear lane.
 KITS.append({
     "name": "VLS Missile Silo",
     "description": "A 2x2 vertical launch silo: missiles leave straight up out of the deck, so it can sit anywhere on the hull. Long reach, slow reload.",
@@ -114,7 +127,7 @@ KITS.append({
     "shell": None,
 })
 
-# 7. Launch pads: a row of four, firing out over the bow.
+# 8. Launch pads: a row of four, firing out over the bow.
 KITS.append({
     "name": "Launch Pad Battery",
     "description": "Four launch pads in a row, firing out the way they face. Quick reloads, short reach. Their missiles need a clear lane out of the ship: put them on an edge facing out.",
@@ -122,7 +135,7 @@ KITS.append({
     "shell": None,
 })
 
-# 8. Rail launchers: two, side by side.
+# 9. Rail launchers: two, side by side.
 KITS.append({
     "name": "Rail Launcher Pair",
     "description": "Two rail launchers, three cells long, firing out the way they face. Faster missiles than pads, further reach. They need a clear lane out of the ship.",
@@ -141,7 +154,7 @@ def laser(rows, emitter_dir="East"):
             for y, r in enumerate(rows) for x, ch in enumerate(r) if ch in T]
 
 
-# 9. PD laser: the Gun Foundry's PD Laser.
+# 10. PD laser: the Gun Foundry's PD Laser.
 KITS.append({
     "name": "PD Laser",
     "description": "A point defence laser unit: four pulses a second at whatever its ship's warners spot. Burns missiles down from 3,500 out, but draws 300 MW while it recharges.",
@@ -150,7 +163,7 @@ KITS.append({
     "point_defence": True,
 })
 
-# 10. Cutter: a steady burning beam.
+# 11. Cutter: a steady burning beam.
 KITS.append({
     "name": "Cutter Laser",
     "description": "A steady beam that slices through armour: a doubler for burn, destabilisers to let it go, two lenses for reach. Hungry: 540 MW while it recharges.",
@@ -158,7 +171,7 @@ KITS.append({
     "shell": None,
 })
 
-# 11. Missile defence: see them coming, and confuse them.
+# 12. Missile defence: see them coming, and confuse them.
 KITS.append({
     "name": "Missile Defence Pack",
     "description": "A Missile Warner to spot incoming missiles for your point defence, with a decoy launcher and a chaff dispenser beside it to pull them off course.",

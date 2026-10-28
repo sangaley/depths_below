@@ -902,7 +902,8 @@ mod tests {
                 drawn.modules.iter().filter(|m| !drawn_hull.contains(&m.grid_pos)).map(|m| m.module_type).collect();
             let hull: std::collections::HashSet<IVec2> = built.hull_cells.iter().map(|c| c.grid_pos).collect();
             let mut used = std::collections::HashSet::new();
-            for m in &built.modules {
+            // A turret's parts stand in its own grid, above the hull deck.
+            for m in built.modules.iter().filter(|m| m.extras.as_ref().is_none_or(|e| e.turret.is_none())) {
                 let size = sizes.get(&m.module_type).copied().unwrap_or(IVec2::ONE);
                 for c in crate::building::ShipGrid::cells_for(m.grid_pos, size, m.rotation, crate::building::footprints::footprint_override(m.module_type)) {
                     assert!(hull.contains(&c) || outboard.contains(&m.module_type), "{}: {:?} at {c} is off the hull", plan.name, m.module_type);
