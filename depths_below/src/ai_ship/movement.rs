@@ -245,6 +245,27 @@ pub fn ai_ship_movement_system(
         })
         .collect();
 
+    // Each ship's reach: its longest gun or beam, wherever it stands --
+    // built guns are on turrets, a level below the ship, and a ship that
+    // only read its own children held its range for a reach of 0. Missiles
+    // only count for a ship with nothing else: a silo reaches 12 km and
+    // would hold a sniper past every gun it has.
+    let reach: bevy::platform::collections::HashMap<Entity, f32> = {
+        let mut guns: bevy::platform::collections::HashMap<Entity, f32> = Default::default();
+        let mut missiles: bevy::platform::collections::HashMap<Entity, f32> = Default::default();
+        for (weapon, module, owner) in weapon_query.iter() {
+            if !module.is_active || module.health <= 0.0 {
+                continue;
+            }
+            let missile = crate::building::is_launcher(module.module_type) || module.module_type == ModuleType::VlsSilo;
+            let r = (if missile { &mut missiles } else { &mut guns }).entry(owner.root).or_insert(0.0);
+            *r = r.max(weapon.range);
+        }
+        for (ship, r) in missiles {
+            guns.entry(ship).or_insert(r);
+        }
+        guns
+    };
     for (_entity, mut transform, mut velocity, behavior, mut nav, state, ship_type, children, collider, member, escort, target) in ai_ships.iter_mut() {
         if *behavior == AiShipBehavior::Dead || state.is_destroyed {
             velocity.0 = Vec2::ZERO;
@@ -389,11 +410,7 @@ pub fn ai_ship_movement_system(
             // ship in a faction using the same fixed distance regardless of
             // loadout. Falls back to the old faction defaults only if a ship
             // somehow has no active weapons (e.g. mid-repair).
-            let max_weapon_range = children.iter()
-                .filter_map(|c| weapon_query.get(c).ok())
-                .filter(|(_, module, _)| module.is_active && module.health > 0.0)
-                .map(|(weapon, _, _)| weapon.range)
-                .fold(0.0_f32, f32::max);
+            let max_weapon_range = reach.get(&_entity).copied().unwrap_or(0.0);
 
             // Fights at range, FtD-style: a ship holds where its weapons
             // still connect -- 80% of its longest reach -- inside its

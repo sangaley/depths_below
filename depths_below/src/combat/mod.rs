@@ -34,6 +34,7 @@ pub mod gun_assembly;
 pub mod turret_deck;
 pub mod gun_house;
 pub mod lasers;
+pub mod report;
 
 /// Dev switch: no weapon consumes ammunition while true (player and AI).
 ///
@@ -438,6 +439,7 @@ pub struct CombatPlugin;
 impl Plugin for CombatPlugin {
     fn build(&self, app: &mut App) {
         app
+            .add_systems(Update, report::combat_report.run_if(in_state(crate::states::GameState::Exploring)))
             .init_resource::<targeting::TargetSelection>()
             .init_resource::<targeting::AimLock>()
             .init_resource::<targeting::FireGroupState>()
