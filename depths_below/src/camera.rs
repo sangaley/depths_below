@@ -45,6 +45,13 @@ pub struct CameraState {
     /// camera frames the ship itself (`frame_ship_until_player_zooms`);
     /// after, the zoom is theirs and stays where they put it.
     pub user_zoomed: bool,
+    /// While an enemy is fighting you in sensor range: the zoom that keeps
+    /// it on screen, which the camera never sits closer than
+    /// (`frame_the_fight`).
+    pub fight_zoom: Option<f32>,
+    /// Zoomed by hand during the current fight: the framing leaves the
+    /// camera to you until the fight is over.
+    pub fight_framing_off: bool,
 }
 
 impl Default for CameraState {
@@ -65,6 +72,8 @@ impl Default for CameraState {
             free_look_offset: Vec2::ZERO,
             free_look_active: false,
             user_zoomed: false,
+            fight_zoom: None,
+            fight_framing_off: false,
         }
     }
 }
@@ -175,6 +184,7 @@ impl Plugin for CameraPlugin {
                 (
                     camera_zoom_input,
                     frame_ship_until_player_zooms,
+                    frame_the_fight,
                     camera_shake_on_damage,
                     camera_shake_on_kill,
                     camera_shake_update,
@@ -375,6 +385,9 @@ fn camera_zoom_input(
     for event in scroll_events.read() {
         if over_build_panel { continue; }
         camera_state.user_zoomed = true;
+        if camera_state.fight_zoom.is_some() {
+            camera_state.fight_framing_off = true;
+        }
         // A wheel notch is one Line; a Mac trackpad or Magic Mouse sends
         // Pixels, 1-50 per event, and at 0.1 per unit one swipe slammed the
         // camera from one zoom limit to the other.
@@ -390,13 +403,66 @@ fn camera_zoom_input(
     let kb_speed = 1.5 * time.delta_secs();
     if keyboard.pressed(KeyCode::Equal) || keyboard.pressed(KeyCode::NumpadAdd) {
         camera_state.user_zoomed = true;
+        camera_state.fight_framing_off |= camera_state.fight_zoom.is_some();
         camera_state.zoom = (camera_state.zoom - kb_speed)
             .clamp(camera_state.min_zoom, camera_state.max_zoom);
     }
     if keyboard.pressed(KeyCode::Minus) || keyboard.pressed(KeyCode::NumpadSubtract) {
         camera_state.user_zoomed = true;
+        camera_state.fight_framing_off |= camera_state.fight_zoom.is_some();
         camera_state.zoom = (camera_state.zoom + kb_speed)
             .clamp(camera_state.min_zoom, camera_state.max_zoom);
+    }
+}
+
+/// Zoom that keeps a point `reach` world units from the ship on screen, top
+/// to bottom with a margin (the camera is centred on the ship).
+pub fn fight_framing_zoom(reach: f32, view_height: f32) -> f32 {
+    if view_height <= 0.0 {
+        return DEFAULT_ZOOM;
+    }
+    (2.3 * reach / view_height).max(DEFAULT_ZOOM)
+}
+
+/// Fights happen at 5-8 km now. While an enemy is fighting you inside sensor
+/// range, the camera stays out far enough to keep the nearest such ship, all
+/// of it, on screen -- easing out and back in on its own. Zoom by hand
+/// during the fight and the camera is yours until it's over.
+fn frame_the_fight(
+    mut camera_state: ResMut<CameraState>,
+    ship: Query<(Entity, &Transform), With<Ship>>,
+    enemies: Query<
+        (&Transform, &crate::ai_ship::components::AiShipBehavior, &crate::ai_ship::components::AiShipTarget, &crate::ai_ship::components::AiShipState, Option<&crate::ship::collision::Collider>),
+        (With<crate::ai_ship::components::AiShip>, Without<Ship>),
+    >,
+    windows: Query<&Window>,
+) {
+    let Ok((player, player_tf)) = ship.single() else { return };
+    let at = player_tf.translation.truncate();
+    let nearest = enemies
+        .iter()
+        .filter(|(_, behavior, target, state, _)| {
+            **behavior == crate::ai_ship::components::AiShipBehavior::Engaging && target.entity == Some(player) && !state.is_destroyed
+        })
+        .map(|(tf, _, _, _, collider)| tf.translation.truncate().distance(at) + collider.map_or(0.0, |c| c.bound_radius))
+        .filter(|reach| *reach <= SENSOR_RANGE)
+        .fold(None, |a: Option<f32>, r| Some(a.map_or(r, |a| a.min(r))));
+    let Some(reach) = nearest else {
+        // The fight's over: the next one frames itself again.
+        if camera_state.fight_zoom.is_some() || camera_state.fight_framing_off {
+            camera_state.fight_zoom = None;
+            camera_state.fight_framing_off = false;
+        }
+        return;
+    };
+    if camera_state.fight_framing_off {
+        camera_state.fight_zoom = None;
+        return;
+    }
+    let height = windows.iter().next().map_or(720.0, |w| w.height());
+    let want = fight_framing_zoom(reach, height).min(camera_state.max_zoom);
+    if camera_state.fight_zoom != Some(want) {
+        camera_state.fight_zoom = Some(want);
     }
 }
 
@@ -556,8 +622,8 @@ pub(crate) fn camera_follow_ship(
     // Snap camera to ship position (instant follow, no lag)
     cam_transform.translation = target;
 
-    // Smooth zoom
-    let target_scale = camera_state.zoom;
+    // Smooth zoom: never closer than a fight in progress needs.
+    let target_scale = camera_state.fight_zoom.map_or(camera_state.zoom, |z| camera_state.zoom.max(z));
     projection.scale = projection.scale + (target_scale - projection.scale) * 5.0 * time.delta_secs();
 }
 
@@ -668,9 +734,30 @@ impl Default for TorchLight {
 }
 
 /// Past this everything is hidden outright, for performance, lit or not.
-pub const CULL_RANGE: f32 = 16_000.0;
+/// Past where ships appear (ai_ship::simulation::RENDER_DISTANCE).
+pub const CULL_RANGE: f32 = 20_000.0;
+
+/// How far the ship's sensors hold a ship as a contact, torch or no torch:
+/// fights happen at 5-8 km, well past the torch's reach, and a ship you're
+/// trading fire with can't be a black hole. Exploring stays dark: rocks,
+/// wrecks and stations still wait for the torch.
+pub const SENSOR_RANGE: f32 = 14_000.0;
+/// How bright a sensor contact is drawn: a shade under lit, so you can tell
+/// what the torch is on.
+pub const CONTACT_LIGHT: f32 = 0.8;
 
 impl TorchLight {
+    /// How lit a ship's block is: the torch's light, and never less than a
+    /// sensor contact's inside SENSOR_RANGE.
+    pub fn ship_at(&self, world: Vec2) -> f32 {
+        let lit = self.at(world);
+        if lit > 0.0 && world.distance(self.ship_pos) <= SENSOR_RANGE {
+            lit.max(CONTACT_LIGHT)
+        } else {
+            lit
+        }
+    }
+
     /// How lit a point is: 1 in the bubble round the ship and down the cone,
     /// fading to ENV_FLOOR past them, 0 past CULL_RANGE.
     pub fn at(&self, world: Vec2) -> f32 {
@@ -726,7 +813,7 @@ fn update_depth_vignette(
     windows_query: Query<&Window>,
     cam_query: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     mut sprite_query: Query<
-        (&mut Sprite, &GlobalTransform, &mut Visibility, Option<&ChildOf>),
+        (&mut Sprite, &GlobalTransform, &mut Visibility, Option<&ChildOf>, Has<crate::ai_ship::components::OwnedByAiShip>),
         // Grouped into nested tuples because Bevy's filter tuple tops out at
         // sixteen and this is past it. The grouping is also the honest
         // structure: three different reasons not to touch a sprite's alpha.
@@ -857,7 +944,7 @@ fn update_depth_vignette(
     let cull_range = CULL_RANGE;
     *torch = TorchLight { ship_pos, facing, omni_radius, cone_range, dark: !(depth < 20.0 || no_dark()) };
 
-    for (mut sprite, global_transform, mut visibility, parent) in sprite_query.iter_mut() {
+    for (mut sprite, global_transform, mut visibility, parent, ai_block) in sprite_query.iter_mut() {
         // Never cull or dim anything on the player's own ship (hull, modules,
         // crew, and what hangs off a module). Only the direct parent used to
         // be checked, so barrels, wedge plates and damage-overlay tiles were
@@ -909,8 +996,9 @@ fn update_depth_vignette(
             continue;
         }
 
-        // The torch's rule (TorchLight::at), shared with the far pictures.
-        let alpha = torch.at(world_pos);
+        // The torch's rule (TorchLight::at), shared with the far pictures;
+        // an enemy ship's blocks are sensor contacts too.
+        let alpha = if ai_block { torch.ship_at(world_pos) } else { torch.at(world_pos) };
         if sprite.color.alpha() != alpha {
             sprite.color.set_alpha(alpha);
         }
@@ -1048,5 +1136,22 @@ mod torch_tests {
         let edge = torch.at(Vec2::new(4500.0, 0.0));
         assert!(edge > ENV_FLOOR && edge < 1.0, "fades past the cone's reach: {edge}");
         assert_eq!(TorchLight { dark: false, ..default() }.at(Vec2::new(-3000.0, 0.0)), 1.0, "lit at the station");
+    }
+
+    #[test]
+    fn an_enemy_ship_is_a_sensor_contact_out_past_the_torch() {
+        let torch = TorchLight { dark: true, ..default() };
+        let behind = Vec2::new(-7000.0, 0.0);
+        assert_eq!(torch.at(behind), ENV_FLOOR, "a rock out there stays dark");
+        assert_eq!(torch.ship_at(behind), CONTACT_LIGHT, "a ship is held on sensors");
+        assert_eq!(torch.ship_at(Vec2::new(3000.0, 0.0)), 1.0, "the torch still lights it fully");
+        assert_eq!(torch.ship_at(Vec2::new(-(SENSOR_RANGE + 100.0), 0.0)), ENV_FLOOR, "past sensor range it's dark");
+    }
+
+    #[test]
+    fn a_fight_7_km_off_fits_on_screen() {
+        let zoom = fight_framing_zoom(7000.0, 720.0);
+        assert!(zoom * 720.0 / 2.0 > 7000.0, "half the view covers the enemy: {zoom}");
+        assert!(zoom < 25.0);
     }
 }

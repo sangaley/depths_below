@@ -6,12 +6,12 @@ use super::components::*;
 use super::spawner;
 
 /// Render distance - ships within this range get spawned as real entities.
-/// Was 1800 — weapon ranges now reach up to 9,600 (see
-/// combat::PROJECTILE_SPEED / spawn_projectile) and AI ships hold standoff
-/// distances up to ~8,160 (85% of their longest weapon's range, see
-/// ai_ship::movement). 10,000 means a ship materializes as a real entity
-/// before the player is even in its weapon range, instead of after.
-pub const RENDER_DISTANCE: f32 = 10_000.0;
+/// Fights happen at 5-8 km from the hull (ai_ship::movement::fighting_band)
+/// between ships kilometres long, and a missile reaches 12 km: at 10,000 a
+/// sniper holding its range sat right on the edge of being real. 16,000
+/// puts a ship on screen, as a sensor contact (camera::SENSOR_RANGE), well
+/// before it's in reach.
+pub const RENDER_DISTANCE: f32 = 16_000.0;
 
 /// How many AI blocks (hull cells + modules) may exist as real entities at once.
 ///
@@ -56,7 +56,7 @@ fn max_live_ai_blocks() -> usize {
 /// actually use its weapon's range. 14,000 clears the max standoff with
 /// real margin and stays under camera::cull_range (16,000) so a ship
 /// doesn't visually vanish before it's converted back to simulation either.
-const DESPAWN_DISTANCE: f32 = 14_000.0;
+const DESPAWN_DISTANCE: f32 = 20_000.0;
 
 /// Initialize the world simulation with all factions in their territories
 pub fn init_world_simulation(

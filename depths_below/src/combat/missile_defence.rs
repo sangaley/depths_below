@@ -31,8 +31,10 @@ pub const DECOY_INTERVAL: f32 = 4.0;
 /// Seconds a decoy lasts.
 pub const DECOY_LIFE: f32 = 4.0;
 
-/// How far a Missile Warner sees an incoming missile.
-pub const WARNER_RANGE: f32 = 4500.0;
+/// How far a Missile Warner sees an incoming missile: far enough to call one
+/// fired from a sniper's range (5-8 km), so point defence turns onto it
+/// and decoys go out in time. Was 4,500, inside the range ships now fight at.
+pub const WARNER_RANGE: f32 = 8000.0;
 
 /// On every ship: the enemy missiles its warners can see this frame, and
 /// how many warners it has left to see them with.

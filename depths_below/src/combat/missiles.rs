@@ -324,7 +324,9 @@ pub fn fire_missiles_system(
             weapon: entity,
             ship: player_ship,
             launch_cell: module.grid_position,
-            launch_axis: module.rotation.facing_offset(),
+            // A silo fires up out of the deck: nothing of its own ship is
+            // ever in front of it (a zero axis obstructs nothing).
+            launch_axis: if module.module_type == ModuleType::VlsSilo { IVec2::ZERO } else { module.rotation.facing_offset() },
             muzzle: weapon_pos,
             launch_dir,
             ship_velocity: ship_velocity.0,

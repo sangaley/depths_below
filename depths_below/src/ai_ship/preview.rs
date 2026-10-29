@@ -1,6 +1,6 @@
 //! Distant previews: a far-off ship drawn as one picture of its design.
 //!
-//! A ship becomes real blocks only inside RENDER_DISTANCE (10 km), and the
+//! A ship becomes real blocks only inside RENDER_DISTANCE (16 km), and the
 //! biggest hulls are kilometres long, so a capital used to pop into being
 //! half on screen. Now every ship of the system you're in, out to
 //! PREVIEW_RANGE, is drawn as a flat silhouette of its own design -- one

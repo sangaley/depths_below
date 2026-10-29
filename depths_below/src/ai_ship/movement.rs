@@ -63,6 +63,21 @@ fn turn_toward(rotation: Quat, target_angle: f32, blend: f32, max_rate: f32, dt:
 /// DEPTHS_STANDOFF=<u> (filming): the distance a fighting ship holds, before
 /// hull sizes, in place of the one its guns choose (at most 3,000 in play).
 /// For a wide shot of two lines fighting across open space.
+/// The distances a faction likes to fight at (from its target's hull), or
+/// None for one that rams.
+pub fn fighting_band(faction: AiShipType) -> Option<(f32, f32)> {
+    use AiShipType::*;
+    match faction {
+        RecursiveKingdom => None,
+        // Snipers: big guns and the discipline to stay out of reach.
+        EternalHegemony | TerranHegemony | GildedThrone => Some((5_000.0, 8_000.0)),
+        // Brawlers: frag swarms, EMP and tractor beams want it close.
+        BrokenChoir | CorpseStars | Shepherd => Some((1_800.0, 3_000.0)),
+        // Everyone else holds the line between.
+        _ => Some((3_500.0, 6_000.0)),
+    }
+}
+
 fn filming_standoff() -> Option<f32> {
     static V: std::sync::OnceLock<Option<f32>> = std::sync::OnceLock::new();
     *V.get_or_init(|| std::env::var("DEPTHS_STANDOFF").ok().and_then(|v| v.parse().ok()))
@@ -76,13 +91,9 @@ fn hold_lines() -> bool {
     *V.get_or_init(|| std::env::var("DEPTHS_HOLD_LINES").ok().as_deref() == Some("1"))
 }
 
-/// DEPTHS_STANDOFF_HULLS=1 (filming, for now): hold the firing distance hull
-/// to hull, adding the target's own size -- otherwise a big target is hugged.
+/// How far the target's hull reaches from its middle: a fighting distance is
+/// held to its near side, or a big target is hugged.
 fn target_reach(target: Option<&AiShipTarget>, hulls: &Query<&crate::ship::collision::Collider>) -> f32 {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if !*ON.get_or_init(|| std::env::var("DEPTHS_STANDOFF_HULLS").ok().as_deref() == Some("1")) {
-        return 0.0;
-    }
     target.and_then(|t| t.entity).and_then(|e| hulls.get(e).ok()).map_or(0.0, |c| c.bound_radius)
 }
 
@@ -384,34 +395,38 @@ pub fn ai_ship_movement_system(
                 .map(|(weapon, _, _)| weapon.range)
                 .fold(0.0_f32, f32::max);
 
-            // A CLOSE standoff. The old 0.85×(weapon range) parked long-range
-            // factions 6000-7000u out, where their slow shells never landed
-            // and any approach just made them kite backwards forever — the
-            // "they look at me, then run away, and never hit me" report.
-            // Fights now happen at ~half weapon range, hard-capped at 3000 so
-            // even a railgun ship closes to a distance where its rounds
-            // actually connect and you can plainly see you're being shot at.
-            // Recursive Kingdom still rams point-blank (that IS their identity).
+            // Fights at range, FtD-style: a ship holds where its weapons
+            // still connect -- 80% of its longest reach -- inside its
+            // faction's band, and never past 90% of what it can hit. Snipers
+            // hang back 5-8 km, line ships 3.5-6, brawlers close to 2-3 km,
+            // and the Recursive Kingdom still rams (that IS their identity).
+            // It used to be half its reach capped at 3 km, from when slow
+            // shells on small ships never landed at range; ships are twice
+            // the size now and the guns are built to reach.
             let standoff = if *behavior == AiShipBehavior::Engaging {
-                match ship_type {
-                    AiShipType::RecursiveKingdom => 0.0,
-                    _ if max_weapon_range > 0.0 => (max_weapon_range * 0.55).clamp(900.0, 3000.0),
-                    AiShipType::Shepherd | AiShipType::EternalHegemony => 3000.0,
-                    AiShipType::TerranHegemony | AiShipType::CorpseStars => 2600.0,
-                    AiShipType::GildedThrone => 2200.0,
-                    _ => 1800.0,
+                match fighting_band(*ship_type) {
+                    None => 0.0,
+                    Some((lo, hi)) if max_weapon_range > 0.0 => {
+                        (max_weapon_range * 0.8).clamp(lo, hi).min(max_weapon_range * 0.9)
+                    }
+                    Some((lo, _)) => lo,
                 }
             } else {
                 0.0
             };
             let standoff = filming_standoff().filter(|_| standoff > 0.0).unwrap_or(standoff);
-            // Measured from the ship's centre, so a hull kilometres across
-            // held its "distance" with its own bow in your hull, shoving you
-            // across the system. The standoff starts where its hull ends.
-            let standoff = if standoff > 0.0 {
-                standoff + collider.map_or(0.0, |c| c.bound_radius) + target_reach(target, &hulls)
+            // The gap is the guns' business: from this ship's middle (where its
+            // guns are, on the whole) to the target's near side, and never
+            // past what they reach. The hulls only set a floor, so two big
+            // ships never shove each other. Adding its own size on top parked
+            // a big sniper 11-12 km off with guns that reach 7.
+            let (standoff, floor, ceiling) = if standoff > 0.0 {
+                let target_r = target_reach(target, &hulls);
+                let floor = own_radius + target_r + 600.0;
+                let ceiling = if max_weapon_range > 0.0 { max_weapon_range * 0.95 + target_r } else { f32::MAX };
+                ((standoff + target_r).max(floor), floor, ceiling.max(floor))
             } else {
-                0.0
+                (0.0, 0.0, 0.0)
             };
 
             if standoff > 0.0 && (dist < standoff * 1.3 || hold_lines()) && dist > 1.0 {
@@ -423,7 +438,10 @@ pub fn ai_ship_movement_system(
                 // fires. No perpetual circling.
                 let bits = _entity.to_bits();
                 let jitter = 0.8 + ((bits % 13) as f32 / 13.0) * 0.35; // 0.8..1.15
-                let hold = standoff * jitter;
+                let hold = (standoff * jitter).clamp(floor, ceiling);
+                if crate::combat::gun_assembly::trace() && (time.elapsed_secs() % 2.0) < dt {
+                    info!("STANDOFF {:?} {:?}: {:.0} u off, holding {:.0} (reach {:.0})", _entity, ship_type, dist, hold, max_weapon_range);
+                }
                 let radial = if hold_lines() {
                     Vec2::ZERO
                 } else if dist > hold * 1.1 {
@@ -725,5 +743,19 @@ mod ai_speed_tests {
         }
         let angle = rot.to_euler(EulerRot::ZYX).0;
         assert!((angle - 0.5).abs() < 0.02, "half a second at 1 rad/s turns 0.5 rad, got {angle}");
+    }
+}
+
+#[cfg(test)]
+mod fighting_band_tests {
+    use super::*;
+
+    #[test]
+    fn snipers_hold_far_out_brawlers_close_and_the_kingdom_rams() {
+        let (lo, hi) = fighting_band(AiShipType::EternalHegemony).unwrap();
+        assert!(lo >= 5_000.0 && hi <= 8_000.0);
+        let (_, brawl) = fighting_band(AiShipType::BrokenChoir).unwrap();
+        assert!(brawl <= 3_000.0);
+        assert!(fighting_band(AiShipType::RecursiveKingdom).is_none());
     }
 }

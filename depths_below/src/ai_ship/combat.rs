@@ -392,7 +392,8 @@ pub fn ai_weapon_fire_system(
                     weapon: child,
                     ship: ai_entity,
                     launch_cell: module.grid_position,
-                    launch_axis: module.rotation.facing_offset(),
+                    // A silo fires up out of the deck: never obstructed.
+                    launch_axis: if silo { IVec2::ZERO } else { module.rotation.facing_offset() },
                     muzzle,
                     launch_dir,
                     ship_velocity: Vec2::ZERO,

@@ -556,7 +556,7 @@ fn lit_by(torch: &crate::camera::TorchLight, picture: &GlobalTransform, half: Ve
     let across = (rotation * Vec3::Y).truncate() * half.y;
     [Vec2::ZERO, along, -along, across, -across]
         .into_iter()
-        .map(|d| torch.at(centre + d))
+        .map(|d| torch.ship_at(centre + d))
         .fold(0.0, f32::max)
 }
 
