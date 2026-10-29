@@ -300,6 +300,23 @@ pub struct AimInput<'w, 's> {
     pub aim_lock: Res<'w, crate::combat::targeting::AimLock>,
 }
 
+/// A gun round in flight (tools/missile-art): a shell with a tracer, light
+/// and neutral so its tint (brass, EMP blue, enemy red) colours it.
+pub const ROUND_ART: &str = "sprites/effects/round.png";
+
+/// On a round fired without the asset server to hand: `skin_rounds` gives
+/// it the round art the frame after.
+#[derive(Component)]
+pub struct RoundSkin;
+
+/// The player's rounds wear the round art. They were flat rectangles.
+pub fn skin_rounds(mut commands: Commands, assets: Res<AssetServer>, mut new: Query<(Entity, &mut Sprite), Added<RoundSkin>>) {
+    for (round, mut sprite) in new.iter_mut() {
+        sprite.image = assets.load(ROUND_ART);
+        commands.entity(round).try_remove::<RoundSkin>();
+    }
+}
+
 /// DEPTHS_AIM_AT=<x>,<y> (ship-local units): where unattended runs aim.
 pub(crate) fn aim_at_override() -> Option<Vec2> {
     static AT: std::sync::OnceLock<Option<Vec2>> = std::sync::OnceLock::new();
@@ -660,17 +677,19 @@ pub fn fire_weapons_system(
             // Visual size/color based on weapon — sized and colored to read
             // clearly at gameplay zoom instead of every shot looking like
             // the same small yellow sliver.
+            // Lengths for the round art (effects/round.png): about 60% of the
+            // old flat dashes, four times as long as wide.
             let (size, base_color) = match module.module_type {
-                ModuleType::Railgun => (Vec2::new(90.0, 9.0), Color::srgb(0.2, 0.5, 1.0)),   // long blue streak
-                ModuleType::Cannon => (Vec2::new(38.0, 22.0), Color::srgb(1.0, 0.45, 0.05)), // big orange shell
-                ModuleType::Coilgun => (Vec2::new(24.0, 10.0), Color::srgb(0.6, 0.8, 1.0)),
-                ModuleType::Gatling => (Vec2::new(17.0, 7.0), Color::srgb(1.0, 0.85, 0.2)),
+                ModuleType::Railgun => (Vec2::new(54.0, 7.0), Color::srgb(0.2, 0.5, 1.0)),   // long blue streak
+                ModuleType::Cannon => (Vec2::new(24.0, 6.0), Color::srgb(1.0, 0.45, 0.05)), // orange shell
+                ModuleType::Coilgun => (Vec2::new(15.0, 4.0), Color::srgb(0.6, 0.8, 1.0)),
+                ModuleType::Gatling => (Vec2::new(11.0, 3.0), Color::srgb(1.0, 0.85, 0.2)),
                 // Brass, sized by the shell: 170 mm is cannon-sized, 500 mm huge.
                 ModuleType::FiringPiece => {
                     let g = assembly.map(|a| a.stats.gauge_mm).unwrap_or(150.0);
                     (crate::combat::gun_assembly::round_size(g), Color::srgb(1.0, 0.78, 0.4))
                 }
-                _ => (Vec2::new(17.0, 7.0), Color::srgb(0.8, 0.8, 0.4)),
+                _ => (Vec2::new(11.0, 3.0), Color::srgb(0.8, 0.8, 0.4)),
             };
             // Loaded ammo recolors the round (AP brass, EMP blue, ...) so a
             // mixed loadout reads at a glance; size stays per-weapon.
@@ -689,7 +708,7 @@ pub fn fire_weapons_system(
                         translation: Vec3::new(weapon_pos.x, weapon_pos.y, 0.5),
                         rotation: Quat::from_rotation_z(angle),
                         ..default()
-                    }),
+                    }, RoundSkin),
                 Projectile {
                     damage: weapon.damage * ammo_damage_mult * debug_tuning.damage_mult,
                     speed: proj_speed,
@@ -895,11 +914,15 @@ pub fn spawn_ai_round(
                 crate::combat::gun_assembly::round_size(gauge),
             )
         }
-        None => (damage_mult, penetration, None, caliber_scale(module_type), ammo_type.projectile_size()),
+        None => {
+            // Shaped for the round art, about 60% of the old size.
+            let l = ammo_type.projectile_size().x * 0.6;
+            (damage_mult, penetration, None, caliber_scale(module_type), Vec2::new(l, l * 0.25))
+        }
     };
     commands.spawn((
         Sprite {
-            image: asset_server.load(crate::sprite_map::effect_sprite_path("enemy_projectile")),
+            image: asset_server.load(ROUND_ART),
             // Enemy fire reads red whatever it's loaded with.
             color: Color::srgb(1.0, 0.2, 0.2),
             custom_size: Some(size * fx_scale()),

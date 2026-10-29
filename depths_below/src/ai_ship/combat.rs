@@ -386,7 +386,8 @@ pub fn ai_weapon_fire_system(
                 let tgo = muzzle.distance(aim_base) / (s.top_speed * 0.8).max(600.0);
                 let launch_aim = aim_base + target_vel * tgo;
                 let facing = Vec2::from_angle(ai_transform.rotation.to_euler(EulerRot::ZYX).0 + module.rotation.facing_angle());
-                let launch_dir = if silo { (launch_aim - muzzle).normalize_or(facing) } else { facing };
+                // A silo fires straight out from the ship, then turns.
+                let launch_dir = if silo { crate::combat::missiles::silo_out(muzzle, ai_transform.translation.truncate(), facing) } else { facing };
                 crate::combat::missiles::launch_built(&mut commands, &crate::combat::missiles::MissileLaunch {
                     weapon: child,
                     ship: ai_entity,

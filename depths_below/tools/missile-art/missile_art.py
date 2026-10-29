@@ -93,3 +93,47 @@ sheet = Image.new("RGBA", (W * 2 + 20, (H + 10) * len(looks) * 2), (24, 26, 34, 
 for i, im in enumerate(looks.values()):
     sheet.alpha_composite(im.resize((W * 2, H * 2), Image.NEAREST), (10, i * (H + 10) * 2 + 10))
 sheet.save(os.path.join(os.environ.get("SHEET_DIR", "/tmp"), "missile_sheet.png"))
+
+
+def round_sprite():
+    """A shell in flight, nose to the right: tracer glow at the base, a
+    steel body with a copper driving band, an ogive nose. Light and neutral
+    so the game's tint (brass, EMP blue, enemy red) colours it."""
+    w, h = 64, 16
+    im = Image.new("RGBA", (w * S, h * S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    s = lambda v: int(v * S)
+    cy = h / 2
+    # Tracer: a soft glow trailing off behind the base.
+    for i in range(s(20)):
+        t = i / s(20)
+        a = int(200 * t ** 1.5)
+        r = 2.2 + 1.3 * t
+        d.line([(s(2) + i, s(cy - r)), (s(2) + i, s(cy + r))], fill=(255, 240, 210, a))
+    top, bot = cy - 3.6, cy + 3.6
+    d.rectangle([s(20), s(top - 0.8), s(48), s(bot + 0.8)], fill=OUTLINE)
+    cylinder(d, s(21), s(47), s(top), s(bot), (215, 218, 226))
+    cylinder(d, s(25), s(29), s(top), s(bot), (236, 186, 140))
+    pts = [(48 + 14 * (i / 12), 3.6 * (1 - (i / 12) ** 1.7)) for i in range(13)]
+    up = [(s(x), s(cy - r - 0.8)) for x, r in pts] + [(s(63), s(cy))]
+    dn = [(s(x), s(cy + r + 0.8)) for x, r in reversed(pts)]
+    d.polygon(up + dn, fill=OUTLINE)
+    for i in range(int(7.2 * S)):
+        y = s(top) + i
+        rel = (y - s(cy)) / s(3.6)
+        xs = [x for x, r in pts if abs(rel) * 3.6 <= r]
+        if xs:
+            d.line([(s(48), y), (s(max(xs)), y)], fill=shade((245, 245, 240), 1.15 - 0.5 * (rel + 1) / 2))
+    return im.resize((w, h), Image.LANCZOS)
+
+
+rnd = round_sprite()
+rnd.save(os.path.join(ROOT, "assets/sprites/effects/round.png"))
+print("wrote round")
+# How it reads tinted, as the game draws it: brass, enemy red, EMP blue.
+from PIL import ImageChops
+prev = Image.new("RGBA", (64 * 4 * 3 + 40, 16 * 4 + 20), (24, 26, 34, 255))
+for i, tint in enumerate([(255, 200, 102), (255, 51, 51), (153, 204, 255)]):
+    tinted = ImageChops.multiply(rnd, Image.new("RGBA", rnd.size, tint + (255,)))
+    prev.alpha_composite(tinted.resize((256, 64), Image.NEAREST), (10 + i * 266, 10))
+prev.save(os.path.join(os.environ.get("SHEET_DIR", "/tmp"), "round_sheet.png"))

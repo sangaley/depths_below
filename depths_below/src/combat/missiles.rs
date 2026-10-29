@@ -284,11 +284,12 @@ pub fn fire_missiles_system(
             (Some(_), None) => cursor_world.or(Some(weapon_pos + launch_dir * 3000.0)),
             _ => None,
         };
-        // A silo launches up out of the deck: the missile can go any way.
+        // A silo launches straight up out of the deck: drawn top-down, out
+        // from the ship on the side it stands, and the missile turns onto
+        // its target once its motor lights. Aimed at the target from the
+        // tube, one behind the ship flew back across its own hull.
         if module.module_type == ModuleType::VlsSilo {
-            if let Some(aim) = launch_aim {
-                launch_dir = (aim - weapon_pos).normalize_or(launch_dir);
-            }
+            launch_dir = silo_out(weapon_pos, ship_transform.translation.truncate(), launch_dir);
         }
 
         // Bay chain length is missile size — see MachineStats.
@@ -701,6 +702,30 @@ pub fn spawn_missile_trails(
     }
 }
 
+/// Which way a VLS silo's missile leaves: straight out from its ship's
+/// middle through the silo, or `fallback` for a silo dead on the middle.
+pub fn silo_out(silo: Vec2, ship_middle: Vec2, fallback: Vec2) -> Vec2 {
+    (silo - ship_middle).normalize_or(fallback)
+}
+
+/// A missile near its own ship never flies back through it. `from` and
+/// `dir` are in the ship's own cells (its grid turns with it); `look` is how
+/// many cells ahead to check, a second and a half of flight or as far as
+/// its target, whichever is nearer. A heading whose line runs into the
+/// ship's blocks turns, by as little as clears them, toward the side it
+/// was already leaning; None when it's clear as it is.
+pub fn clear_of_home(grid: &crate::building::ShipGrid, from: Vec2, dir: Vec2, look: f32) -> Option<Vec2> {
+    let blocked = |d: Vec2| !grid.walk(from + d * 0.75, from + d * look.max(1.0)).is_empty();
+    if dir.length_squared() < 1e-6 || !blocked(dir) {
+        return None;
+    }
+    let base = dir.to_angle();
+    (1..=18)
+        .flat_map(|i| [i as f32 * 0.17, -(i as f32) * 0.17])
+        .map(|a| Vec2::from_angle(base + a))
+        .find(|d| !blocked(*d))
+}
+
 /// Move and guide missiles: cold-gas eject, then motor burn, then guidance.
 ///
 /// The eject phase is the whole trick. A missile that lights its motor in the
@@ -842,6 +867,21 @@ pub fn move_missiles(
         // already integrates GravityForce into Velocity for everything
         // GravityAffected. Adding it again pulled missiles down at twice the
         // field.
+
+        // Clear of its tube, it never turns back through its own ship.
+        if !ejecting && !in_channel {
+            if let Some((ship_gt, grid)) = missile.owner_ship.and_then(|s| hulls.get(s).ok()) {
+                let speed = velocity.0.length();
+                let to_target = missile.target.and_then(|t| target_query.get(t).ok()).map(|(tf, _)| tf.translation.truncate().distance(pos));
+                let look = (speed * 1.5).min(to_target.unwrap_or(f32::MAX)) / crate::building::GRID_SIZE;
+                let from = crate::building::world_to_cell(ship_gt, pos);
+                let ship_turn = ship_gt.to_scale_rotation_translation().1;
+                let local_dir = (ship_turn.inverse() * velocity.0.normalize_or_zero().extend(0.0)).truncate();
+                if let Some(d) = clear_of_home(grid, from, local_dir, look) {
+                    velocity.0 = (ship_turn * d.extend(0.0)).truncate() * speed;
+                }
+            }
+        }
 
         transform.translation.x += velocity.0.x * dt;
         transform.translation.y += velocity.0.y * dt;
@@ -1948,5 +1988,41 @@ mod missile_hits_blocks_tests {
         let hp = health(&app, ids[0]);
         assert!(hp > 0.0, "abyssal plate (300 HP) was destroyed outright by one missile");
         assert!(hp < 300.0, "abyssal plate took no damage at all");
+    }
+}
+
+#[cfg(test)]
+mod own_ship_tests {
+    use super::*;
+
+    /// A hull 5 cells long, x 5..9, y -2..2.
+    fn hull() -> crate::building::ShipGrid {
+        let mut cells = bevy::platform::collections::HashMap::new();
+        for x in 5..10 {
+            for y in -2..3 {
+                cells.insert(IVec2::new(x, y), Entity::from_raw_u32(1).unwrap());
+            }
+        }
+        crate::building::ShipGrid { cells }
+    }
+
+    #[test]
+    fn a_silo_fires_out_from_the_ship_on_its_own_side() {
+        assert_eq!(silo_out(Vec2::new(0.0, 300.0), Vec2::ZERO, Vec2::X), Vec2::Y);
+        assert_eq!(silo_out(Vec2::new(-200.0, 0.0), Vec2::ZERO, Vec2::X), Vec2::NEG_X);
+        assert_eq!(silo_out(Vec2::ZERO, Vec2::ZERO, Vec2::X), Vec2::X, "dead on the middle: the fallback");
+    }
+
+    #[test]
+    fn it_never_flies_back_through_its_own_ship() {
+        let grid = hull();
+        // Heading straight at the hull from outside: it turns just enough to
+        // pass by, and that way is clear.
+        let d = clear_of_home(&grid, Vec2::ZERO, Vec2::X, 20.0).expect("it turns");
+        assert!(grid.walk(d * 0.75, d * 20.0).is_empty(), "{d}");
+        assert!(d.x > 0.0, "it still goes the way it was going: {d}");
+        // Heading away, or with its target nearer than the ship: as it is.
+        assert_eq!(clear_of_home(&grid, Vec2::ZERO, Vec2::NEG_X, 20.0), None);
+        assert_eq!(clear_of_home(&grid, Vec2::ZERO, Vec2::X, 3.0), None, "its target is short of the hull");
     }
 }

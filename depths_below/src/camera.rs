@@ -123,8 +123,9 @@ fn keep_world_labels_readable(
 /// or two -- a wide fight showed ships breaking up with nothing flying between
 /// them. Like the labels, a round grows as the camera pulls back: never drawn
 /// shorter than this on screen, and never smaller than its own size. (The
-/// round sprites are about three-quarters glow-free core, so 14 shows ~10.)
-const MIN_ROUND_PX: f32 = 14.0;
+/// round sprites are about three-quarters body, tracer the rest.) Was 14:
+/// zoomed out, every round was a fat dash.
+const MIN_ROUND_PX: f32 = 8.0;
 
 fn keep_rounds_readable(
     camera: Query<&Projection, With<MainCamera>>,

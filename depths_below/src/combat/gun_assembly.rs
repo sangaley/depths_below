@@ -125,11 +125,14 @@ pub fn hoist_rpm(shell_m: f32) -> f32 {
     HOIST_RPM.max(HOIST_SHELL_M_PER_MIN / shell_m.max(0.01))
 }
 
-/// A built gun's round as drawn: brass, sized by the shell -- 170 mm is
-/// cannon-sized, 500 mm huge, a 20 mm round a fleck.
+/// A built gun's round as drawn (effects/round.png, four times as long as
+/// it's wide), sized by the shell: a 170 mm round about a third of a block,
+/// 500 mm bigger, a 20 mm round a fleck. Was nearly twice this, and read as
+/// fat orange dashes.
 pub fn round_size(gauge_mm: f32) -> Vec2 {
     let small = (gauge_mm / 100.0).clamp(0.3, 1.0);
-    Vec2::new((18.0 + gauge_mm * 0.12) * small, (6.0 + gauge_mm * 0.04) * small.max(0.4))
+    let length = (10.0 + gauge_mm * 0.07) * small;
+    Vec2::new(length, length * 0.25)
 }
 
 pub fn range_for(stats: &GunStats) -> f32 {

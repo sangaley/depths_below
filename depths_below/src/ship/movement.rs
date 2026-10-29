@@ -62,14 +62,15 @@ const THRUST_SCALE: f32 = 180.0;
 /// you can always crawl home. See `ship_movement` / `update_power_allocation`.
 const ENGINE_POWER_FLOOR: f32 = 0.25;
 
-/// Max yaw rate at full deflection (rad/s). ~49°/s — a heavy warship, not a
+/// Max yaw rate at full deflection (rad/s). ~26°/s — a heavy warship, not a
 /// fighter. Deliberately slow: the turrets aim independently now, so the hull
-/// turns for positioning/thrust, not to point the guns.
-const MAX_TURN_RATE: f32 = 0.68;
+/// turns for positioning/thrust, not to point the guns. (Was 0.68, ~39°/s:
+/// the doubled starter swung round too readily.)
+const MAX_TURN_RATE: f32 = 0.45;
 /// How quickly angular velocity reaches the target rate (per second). Lower =
 /// more rotational inertia — the ship takes a moment to build and shed its spin
 /// instead of snapping to the target rate.
-const TURN_RESPONSE: f32 = 4.5;
+const TURN_RESPONSE: f32 = 3.2;
 /// Turn rate per radian of aim error. Lower so the ship eases onto heading
 /// rather than darting after every small cursor movement.
 const TURN_GAIN: f32 = 4.5;
