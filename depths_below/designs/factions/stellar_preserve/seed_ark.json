@@ -47589,7 +47589,7 @@
     0,
     0
    ],
-   "rotation": "South",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -47612,10 +47612,10 @@
   {
    "module_type": "GaugeReducer",
    "grid_pos": [
-    1,
-    0
+    0,
+    1
    ],
-   "rotation": "South",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -47628,10 +47628,10 @@
   {
    "module_type": "GaugeReducer",
    "grid_pos": [
-    -1,
-    0
+    0,
+    -1
    ],
-   "rotation": "South",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -47644,10 +47644,10 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    0,
-    -1
+    1,
+    0
    ],
-   "rotation": "South",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -47660,10 +47660,10 @@
   {
    "module_type": "Loader",
    "grid_pos": [
-    0,
-    1
+    -1,
+    0
    ],
-   "rotation": "South",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -47676,10 +47676,10 @@
   {
    "module_type": "ClipRack",
    "grid_pos": [
-    1,
+    -1,
     1
    ],
-   "rotation": "South",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -47693,9 +47693,9 @@
    "module_type": "BreechCooler",
    "grid_pos": [
     -1,
-    1
+    -1
    ],
-   "rotation": "South",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -47709,9 +47709,9 @@
    "module_type": "BreechCooler",
    "grid_pos": [
     1,
-    -1
+    1
    ],
-   "rotation": "South",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {

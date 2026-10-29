@@ -373,6 +373,37 @@ pub struct MissileLaunch {
     pub thrust_mult: f32,
 }
 
+/// Which art a missile wears (assets/sprites/missiles, tools/missile-art):
+/// one per seeker head so a salvo reads at a glance, and the old one-block
+/// launchers' rocket. Put on by `skin_missiles` the frame after launch.
+#[derive(Component, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MissileSkin(pub &'static str);
+
+impl MissileSkin {
+    pub fn of(head: super::missile_design::MissileHead) -> Self {
+        use super::missile_design::MissileHead;
+        Self(match head {
+            MissileHead::Heat => "missile_heat",
+            MissileHead::Radar => "missile_radar",
+            MissileHead::CommandLink => "missile_command",
+            MissileHead::DumbNose => "missile_dumb",
+        })
+    }
+}
+
+/// Dress newly launched missiles in their art. They were flat rectangles.
+pub fn skin_missiles(
+    mut commands: Commands,
+    assets: Res<AssetServer>,
+    mut new: Query<(Entity, &MissileSkin, &mut Sprite), Added<MissileSkin>>,
+) {
+    for (missile, skin, mut sprite) in new.iter_mut() {
+        sprite.image = assets.load(format!("sprites/missiles/{}.png", skin.0));
+        sprite.color = Color::WHITE.with_alpha(sprite.color.alpha());
+        commands.entity(missile).try_remove::<MissileSkin>();
+    }
+}
+
 /// Spawn a launcher's salvo. Returns how many bodies left the tube.
 pub fn launch_missiles(commands: &mut Commands, l: &MissileLaunch) -> u32 {
     let size_mult = l.bays.max(1) as f32;
@@ -389,7 +420,8 @@ pub fn launch_missiles(commands: &mut Commands, l: &MissileLaunch) -> u32 {
         _ => 1,
     };
     let visual_w = 24.0 + size_mult * 8.0;
-    let visual_h = 10.0 + size_mult * 4.0;
+    // The rocket art is four times as long as it's wide, fins and all.
+    let visual_h = visual_w * 0.25;
 
     for i in 0..volley {
         // Fan the volley by ROTATING the launch heading, not by adding a
@@ -419,7 +451,7 @@ pub fn launch_missiles(commands: &mut Commands, l: &MissileLaunch) -> u32 {
                     translation: Vec3::new(l.muzzle.x, l.muzzle.y, 0.5),
                     rotation: Quat::from_rotation_z(dir.y.atan2(dir.x)),
                     ..default()
-                }),
+                }, MissileSkin("rocket")),
             MissileProjectile {
                 age: 0.0,
                 damage: per_missile,
@@ -490,13 +522,14 @@ pub fn launch_built(
     commands.spawn((
         (Sprite {
                 color: Color::srgb(0.78, 0.8, 0.84),
-                custom_size: Some(Vec2::new(length, 6.0 + 6.0 * s.k.sqrt())),
+                // The art is four times as long as it's wide, fins and all.
+                custom_size: Some(Vec2::new(length, (length * 0.25).max(6.0 + 6.0 * s.k.sqrt()))),
                 ..default()
             }, Transform {
                 translation: Vec3::new(l.muzzle.x, l.muzzle.y, 0.5),
                 rotation: Quat::from_rotation_z(dir.y.atan2(dir.x)),
                 ..default()
-            }),
+            }, MissileSkin::of(head)),
         MissileProjectile {
             damage: s.he_damage,
             target: if head == MissileHead::DumbNose { None } else { l.target },

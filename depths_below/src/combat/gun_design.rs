@@ -130,13 +130,22 @@ impl GunDesign {
     /// `facing`: hull parts in the hull's grid, a pre-made weapon's turret
     /// parts in the grid of its own ring's turret (centred on the ring, as
     /// a turret's grid is). None if it has turret parts but no ring.
+    ///
+    /// Turning the design turns its hull parts only. What stands on the
+    /// turret keeps the way it was drawn: a turret swings its own +x onto
+    /// the target, so its guns must face +x on the turret whichever way the
+    /// ring was set down -- turned with the rest, a gun fired 90 or 180
+    /// degrees off its turret's aim and never came on target.
     pub fn install(&self, origin: IVec2, facing: Rotation) -> Option<Vec<Installed>> {
         let placed = self.placed(origin, facing);
-        let ring = self.parts.iter().zip(&placed).find(|(p, (t, _, _))| !p.turret && is_ring(*t)).map(|(_, &(t, at, r))| {
+        let ring_centre = |at: IVec2, t: ModuleType, r: Rotation| {
             let size = IVec2::splat(super::turret_deck::ring_size(t));
             let cells = crate::building::ShipGrid::cells_for(at, size, r, None);
-            let centre = cells.iter().fold(IVec2::ZERO, |a, c| a + *c) / cells.len().max(1) as i32;
-            (at, centre)
+            cells.iter().fold(IVec2::ZERO, |a, c| a + *c) / cells.len().max(1) as i32
+        };
+        let ring = self.parts.iter().zip(&placed).find(|(p, (t, _, _))| !p.turret && is_ring(*t)).map(|(p, &(t, at, r))| {
+            // The ring's centre as drawn, which the turret parts are drawn round.
+            (at, ring_centre(at, t, r), ring_centre(p.offset, t, p.rotation))
         });
         self.parts
             .iter()
@@ -145,8 +154,9 @@ impl GunDesign {
                 if !p.turret {
                     return Some(Installed { module_type, cell: hull_cell, hull_cell, rotation, ring: None });
                 }
-                let (ring_at, centre) = ring?;
-                Some(Installed { module_type, cell: hull_cell - centre, hull_cell, rotation, ring: Some(ring_at) })
+                let (ring_at, centre, drawn_centre) = ring?;
+                let cell = p.offset - drawn_centre;
+                Some(Installed { module_type, cell, hull_cell: centre + cell, rotation: p.rotation, ring: Some(ring_at) })
             })
             .collect()
     }
@@ -358,6 +368,9 @@ mod gun_design_tests {
                     let deck: Vec<IVec2> = deck_cells(ring_size(ring.module_type));
                     let mut on_turret = std::collections::HashSet::new();
                     for i in parts.iter().filter(|i| i.ring.is_some()) {
+                        if i.module_type == ModuleType::FiringPiece {
+                            assert_eq!(i.rotation, Rotation::East, "{what}: its gun faces off the turret's aim");
+                        }
                         assert!(allowed_on_turret(i.module_type), "{what}: {:?} can't go on a turret", i.module_type);
                         assert!(may_overhang(i.module_type) || deck.contains(&i.cell), "{what}: {:?} at {} is off the deck", i.module_type, i.cell);
                         assert!(on_turret.insert(i.cell), "{what}: two turret parts on {}", i.cell);
@@ -439,6 +452,10 @@ mod gun_design_tests {
                     .filter(|m| m.extras.as_ref().and_then(|e| e.turret) == Some(ring.grid_position))
                     .map(|m| GunDesignPart { module_type: m.module_type, offset: m.grid_pos, rotation: m.rotation, turret: false })
                     .collect();
+                // A turret swings its +x onto the target: its gun has to face +x.
+                for p in parts.iter().filter(|p| p.module_type == ModuleType::FiringPiece) {
+                    assert_eq!(p.rotation, Rotation::East, "{what}: its gun faces off the turret's aim");
+                }
                 let gun = GunDesign { name: what.clone(), description: String::new(), parts, shell: None, faction: None, point_defence: false };
                 let g = gun.assembled().unwrap_or_else(|| panic!("{what}: no gun on it"));
                 assert!(g.stats.working_loaders > 0 && g.parts.barrel_m > 0, "{what}: the gun doesn't load or has no barrel");

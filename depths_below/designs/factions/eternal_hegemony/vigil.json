@@ -47891,7 +47891,7 @@
     0,
     0
    ],
-   "rotation": "North",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -47914,10 +47914,10 @@
   {
    "module_type": "GaugeReducer",
    "grid_pos": [
-    -1,
-    0
+    0,
+    1
    ],
-   "rotation": "North",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -47930,10 +47930,10 @@
   {
    "module_type": "GaugeReducer",
    "grid_pos": [
-    1,
-    0
+    0,
+    -1
    ],
-   "rotation": "North",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -47946,10 +47946,10 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    0,
-    1
+    1,
+    0
    ],
-   "rotation": "North",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -47962,10 +47962,10 @@
   {
    "module_type": "Loader",
    "grid_pos": [
-    0,
-    -1
+    -1,
+    0
    ],
-   "rotation": "North",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -47979,25 +47979,9 @@
    "module_type": "ClipRack",
    "grid_pos": [
     -1,
-    -1
+    1
    ],
-   "rotation": "North",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     -36,
-     -16
-    ]
-   }
-  },
-  {
-   "module_type": "BreechCooler",
-   "grid_pos": [
-    1,
-    -1
-   ],
-   "rotation": "North",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48011,9 +47995,25 @@
    "module_type": "BreechCooler",
    "grid_pos": [
     -1,
+    -1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     -36,
+     -16
+    ]
+   }
+  },
+  {
+   "module_type": "BreechCooler",
+   "grid_pos": [
+    1,
     1
    ],
-   "rotation": "North",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48468,10 +48468,10 @@
   {
    "module_type": "ClipRack",
    "grid_pos": [
-    2,
+    -2,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48484,10 +48484,10 @@
   {
    "module_type": "Loader",
    "grid_pos": [
-    1,
+    -1,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48500,26 +48500,26 @@
   {
    "module_type": "BreechCooler",
    "grid_pos": [
-    1,
-    -1
-   ],
-   "rotation": "West",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     -15,
-     -17
-    ]
-   }
-  },
-  {
-   "module_type": "BreechCooler",
-   "grid_pos": [
-    1,
+    -1,
     1
    ],
-   "rotation": "West",
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     -15,
+     -17
+    ]
+   }
+  },
+  {
+   "module_type": "BreechCooler",
+   "grid_pos": [
+    -1,
+    -1
+   ],
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48533,9 +48533,9 @@
    "module_type": "GaugeIncreaser",
    "grid_pos": [
     0,
-    -1
+    1
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48551,7 +48551,7 @@
     0,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48573,9 +48573,9 @@
    "module_type": "GaugeIncreaser",
    "grid_pos": [
     0,
-    1
+    -1
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48588,10 +48588,10 @@
   {
    "module_type": "Mantlet",
    "grid_pos": [
-    -1,
+    1,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48604,10 +48604,10 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    -2,
+    2,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48620,10 +48620,10 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    -3,
+    3,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48636,10 +48636,10 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    -4,
+    4,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48652,10 +48652,10 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    -5,
+    5,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48919,7 +48919,7 @@
     0,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48943,9 +48943,9 @@
    "module_type": "GaugeReducer",
    "grid_pos": [
     0,
-    -1
+    1
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48959,9 +48959,9 @@
    "module_type": "GaugeReducer",
    "grid_pos": [
     0,
-    1
+    -1
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48974,10 +48974,10 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    -1,
+    1,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -48990,10 +48990,10 @@
   {
    "module_type": "Loader",
    "grid_pos": [
-    1,
+    -1,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -49006,10 +49006,26 @@
   {
    "module_type": "ClipRack",
    "grid_pos": [
-    1,
+    -1,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     0,
+     -14
+    ]
+   }
+  },
+  {
+   "module_type": "BreechCooler",
+   "grid_pos": [
+    -1,
     -1
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -49025,23 +49041,7 @@
     1,
     1
    ],
-   "rotation": "West",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     0,
-     -14
-    ]
-   }
-  },
-  {
-   "module_type": "BreechCooler",
-   "grid_pos": [
-    -1,
-    -1
-   ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -49496,10 +49496,10 @@
   {
    "module_type": "ClipRack",
    "grid_pos": [
-    2,
+    -2,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -49512,10 +49512,10 @@
   {
    "module_type": "Loader",
    "grid_pos": [
-    1,
+    -1,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -49528,26 +49528,26 @@
   {
    "module_type": "BreechCooler",
    "grid_pos": [
-    1,
-    -1
-   ],
-   "rotation": "West",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     17,
-     -17
-    ]
-   }
-  },
-  {
-   "module_type": "BreechCooler",
-   "grid_pos": [
-    1,
+    -1,
     1
    ],
-   "rotation": "West",
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     17,
+     -17
+    ]
+   }
+  },
+  {
+   "module_type": "BreechCooler",
+   "grid_pos": [
+    -1,
+    -1
+   ],
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -49561,9 +49561,9 @@
    "module_type": "GaugeIncreaser",
    "grid_pos": [
     0,
-    -1
+    1
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -49579,7 +49579,7 @@
     0,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -49601,9 +49601,9 @@
    "module_type": "GaugeIncreaser",
    "grid_pos": [
     0,
-    1
+    -1
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -49616,10 +49616,10 @@
   {
    "module_type": "Mantlet",
    "grid_pos": [
-    -1,
+    1,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -49632,10 +49632,10 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    -2,
+    2,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -49648,10 +49648,10 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    -3,
+    3,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -49664,10 +49664,10 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    -4,
+    4,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -49680,10 +49680,10 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    -5,
+    5,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -49947,7 +49947,7 @@
     0,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -49971,9 +49971,9 @@
    "module_type": "GaugeReducer",
    "grid_pos": [
     0,
-    -1
+    1
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -49987,9 +49987,9 @@
    "module_type": "GaugeReducer",
    "grid_pos": [
     0,
-    1
+    -1
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -50002,10 +50002,10 @@
   {
    "module_type": "GunBarrel",
    "grid_pos": [
-    -1,
+    1,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -50018,10 +50018,10 @@
   {
    "module_type": "Loader",
    "grid_pos": [
-    1,
+    -1,
     0
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -50034,10 +50034,26 @@
   {
    "module_type": "ClipRack",
    "grid_pos": [
-    1,
+    -1,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     50,
+     -8
+    ]
+   }
+  },
+  {
+   "module_type": "BreechCooler",
+   "grid_pos": [
+    -1,
     -1
    ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {
@@ -50053,23 +50069,7 @@
     1,
     1
    ],
-   "rotation": "West",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     50,
-     -8
-    ]
-   }
-  },
-  {
-   "module_type": "BreechCooler",
-   "grid_pos": [
-    -1,
-    -1
-   ],
-   "rotation": "West",
+   "rotation": "East",
    "custom_name": null,
    "subcomponents": null,
    "extras": {

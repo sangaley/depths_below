@@ -530,6 +530,7 @@ impl Plugin for CombatPlugin {
                 new_projectiles::check_projectile_hits,
                 missiles::fire_missiles_system,
                 missiles::move_missiles,
+                missiles::skin_missiles,
                 // After the move, so a puff is laid at the position the
                 // missile actually reached this frame rather than the last.
                 missiles::spawn_missile_trails.after(missiles::move_missiles),

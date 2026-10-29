@@ -166,15 +166,22 @@ def install(design, origin, facing):
     for p in design["parts"]:
         dx, dy = turn(p["offset"], k)
         placed.append((p, (origin[0] + dx, origin[1] + dy), turn_rot(p["rotation"], k)))
+    def centre(t, at, r):
+        cells = kit.cells_of(t, at, r)
+        return (sum(c[0] for c in cells) // len(cells), sum(c[1] for c in cells) // len(cells))
     ring = None
     for p, at, r in placed:
         if not p.get("turret") and p["module_type"] in RING_SIZE:
-            cells = kit.cells_of(p["module_type"], at, r)
-            ring = (at, (sum(c[0] for c in cells) // len(cells), sum(c[1] for c in cells) // len(cells)), RING_SIZE[p["module_type"]])
+            drawn = centre(p["module_type"], tuple(p["offset"]), p["rotation"])
+            ring = (at, centre(p["module_type"], at, r), RING_SIZE[p["module_type"]], drawn)
     out = []
     for p, at, r in placed:
         if p.get("turret"):
-            out.append((p["module_type"], (at[0] - ring[1][0], at[1] - ring[1][1]), at, r, ring, p))
+            # Turning the kit turns its hull parts only: what stands on the
+            # turret keeps the way it was drawn, its gun along the turret's
+            # +x, which the turret swings onto the target.
+            cell = (p["offset"][0] - ring[3][0], p["offset"][1] - ring[3][1])
+            out.append((p["module_type"], cell, (ring[1][0] + cell[0], ring[1][1] + cell[1]), p["rotation"], ring, p))
         else:
             out.append((p["module_type"], at, at, r, None, p))
     return out, ring
