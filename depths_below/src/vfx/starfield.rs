@@ -9,6 +9,10 @@ use crate::camera::MainCamera;
 // stars track the camera closely (appear far away, drift slowly), near
 // stars lag behind (rush past) — giving a strong sense of motion in what
 // is otherwise a featureless void.
+//
+// The box grows with the zoom and the stars with it, so the sky looks the same
+// however far out you are: they are a very long way off, and pulling the
+// camera back doesn't bring them any closer together.
 // ============================================================================
 
 /// One star in the wrapping starfield. `parallax` is how much of the camera's
@@ -16,6 +20,8 @@ use crate::camera::MainCamera;
 #[derive(Component)]
 pub struct StarfieldStar {
     pub parallax: f32,
+    /// Where it sits in the box, from the camera, at the box's own size.
+    pub offset: Vec2,
 }
 
 /// Marks the sparse decorative background planets (as opposed to star
@@ -24,18 +30,31 @@ pub struct StarfieldStar {
 #[derive(Component)]
 pub struct BackgroundPlanet;
 
-/// Wrap box around the camera — must exceed the max visible area at the
-/// widest zoom so stars never visibly pop in or out at the edges. Was
-/// 6000x4000, sized for the old max_zoom of 8.0. Tried bumping this all the
-/// way to 30,000x17,000 to match the current max_zoom of 20.0, but that grew
-/// the box's *area* ~21x while only 4x'ing star count below — density at
-/// normal zoom (the common case, not the rarely-used max tactical zoom-out)
-/// dropped from ~35 visible stars to ~6, i.e. it made the typical view look
-/// *emptier*, not fuller. 16,000x9,000 comfortably covers everything up to
-/// zoom ~10 (most real play) at healthy density; only the rarely-used
-/// zoom 10-20 tactical range stays sparser rather than fully dense.
+/// Wrap box around the camera at normal zoom (`field_scale` grows it from
+/// there). Sized so stars never pop at the edges, at a density that gives
+/// about 35 visible stars.
 const FIELD_W: f32 = 16_000.0;
 const FIELD_H: f32 = 9_000.0;
+
+/// The zoom the box's size and the stars' sizes are drawn for.
+const FIELD_ZOOM: f32 = 1.8;
+
+/// How much bigger the box and its stars are at this zoom. Never smaller:
+/// zoomed right in, the stars just stay put and look larger.
+pub fn field_scale(zoom: f32) -> f32 {
+    (zoom / FIELD_ZOOM).max(1.0)
+}
+
+/// `offset` after the camera moved `delta` world units, wrapped into the box.
+/// The camera carries a star `parallax` of the way along with it, and the rest
+/// shows as drift, less of it the further out the camera is.
+pub fn drift(offset: Vec2, delta: Vec2, parallax: f32, scale: f32) -> Vec2 {
+    let moved = offset - delta * (1.0 - parallax) / scale;
+    Vec2::new(
+        (moved.x + FIELD_W / 2.0).rem_euclid(FIELD_W) - FIELD_W / 2.0,
+        (moved.y + FIELD_H / 2.0).rem_euclid(FIELD_H) - FIELD_H / 2.0,
+    )
+}
 
 /// Real 4-point sparkle sprites (Kenney "Space Shooter Redux", CC0 — see
 /// assets/sprites/celestial/CREDITS.txt) instead of plain colored square
@@ -98,10 +117,11 @@ pub fn spawn_starfield(
 
     for (count, parallax, size, alpha, tint) in layers {
         for _ in 0..count {
-            let pos = center + Vec2::new(
+            let offset = Vec2::new(
                 rng.gen_range(-FIELD_W / 2.0..FIELD_W / 2.0),
                 rng.gen_range(-FIELD_H / 2.0..FIELD_H / 2.0),
             );
+            let pos = center + offset;
             let s = rng.gen_range(size.0..size.1);
             let a = rng.gen_range(alpha.0..alpha.1);
             let c = tint.to_srgba();
@@ -114,7 +134,7 @@ pub fn spawn_starfield(
                     ..default()
                 },
                 Transform::from_xyz(pos.x, pos.y, -500.0),
-                StarfieldStar { parallax },
+                StarfieldStar { parallax, offset },
             ));
         }
     }
@@ -124,10 +144,11 @@ pub fn spawn_starfield(
     // than an orbiting CelestialBody.
     let bg_planet_count = 5;
     for _ in 0..bg_planet_count {
-        let pos = center + Vec2::new(
+        let offset = Vec2::new(
             rng.gen_range(-FIELD_W / 2.0..FIELD_W / 2.0),
             rng.gen_range(-FIELD_H / 2.0..FIELD_H / 2.0),
         );
+        let pos = center + offset;
         let s = rng.gen_range(150.0..380.0);
         let image = bg_planet_handles[rng.gen_range(0..bg_planet_handles.len())].clone();
         commands.spawn((
@@ -137,46 +158,75 @@ pub fn spawn_starfield(
                 ..default()
             },
             Transform::from_xyz(pos.x, pos.y, -600.0),
-            StarfieldStar { parallax: 0.97 },
+            StarfieldStar { parallax: 0.97, offset },
             BackgroundPlanet,
         ));
     }
 }
 
-/// Apply per-layer parallax and wrap stars that drift out of the field box.
+/// Apply per-layer parallax, wrap stars that drift out of the field box, and
+/// keep the box and the stars in scale with the zoom.
 pub fn update_starfield(
-    camera_query: Query<&Transform, (With<MainCamera>, Without<StarfieldStar>)>,
-    mut star_query: Query<(&StarfieldStar, &mut Transform), Without<MainCamera>>,
-    mut last_cam: Local<Option<Vec2>>,
+    camera_query: Query<(&Transform, &Projection), (With<MainCamera>, Without<StarfieldStar>)>,
+    mut star_query: Query<(&mut StarfieldStar, &mut Transform), Without<MainCamera>>,
+    mut last: Local<Option<(Vec2, f32)>>,
 ) {
-    let Ok(cam) = camera_query.single() else { return };
+    let Ok((cam, projection)) = camera_query.single() else { return };
+    let Projection::Orthographic(ortho) = projection else { return };
     let cam_pos = cam.translation.truncate();
+    let scale = field_scale(ortho.scale);
 
-    let delta = match *last_cam {
-        Some(prev) => cam_pos - prev,
-        None => Vec2::ZERO,
-    };
-    *last_cam = Some(cam_pos);
-
-    if delta == Vec2::ZERO {
+    let (prev_pos, prev_scale) = last.unwrap_or((cam_pos, scale));
+    *last = Some((cam_pos, scale));
+    let delta = cam_pos - prev_pos;
+    if delta == Vec2::ZERO && scale == prev_scale && !star_query.iter().any(|(_, t)| t.scale.x != scale) {
         return;
     }
 
-    for (star, mut transform) in star_query.iter_mut() {
-        transform.translation.x += delta.x * star.parallax;
-        transform.translation.y += delta.y * star.parallax;
+    for (mut star, mut transform) in star_query.iter_mut() {
+        // A modulo wrap, because the camera can jump hundreds of thousands of
+        // units in a frame (warp) and a single correction wouldn't catch up.
+        star.offset = drift(star.offset, delta, star.parallax, scale);
+        let at = cam_pos + star.offset * scale;
+        transform.translation.x = at.x;
+        transform.translation.y = at.y;
+        transform.scale = Vec3::new(scale, scale, 1.0);
+    }
+}
 
-        // Wrap into the box around the camera. Was a single +/-FIELD_W
-        // correction — correct for normal per-frame drift, but the camera
-        // can also jump tens or hundreds of thousands of units in a single
-        // frame (warp dash, system-to-system warp), and one correction can't
-        // catch up from a jump that's many multiples of the field size. Every
-        // star was left stranded outside the field box after any real warp,
-        // making deep space look permanently empty — a modulo wrap is
-        // correct regardless of how large the jump was.
-        let dx = transform.translation.x - cam_pos.x;
-        let dy = transform.translation.y - cam_pos.y;
-        transform.translation.x = cam_pos.x + (dx + FIELD_W / 2.0).rem_euclid(FIELD_W) - FIELD_W / 2.0;
-        transform.translation.y = cam_pos.y + (dy + FIELD_H / 2.0).rem_euclid(FIELD_H) - FIELD_H / 2.0;
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_box_covers_the_screen_at_every_zoom() {
+        // A 1440p window at the widest zoom has to fall inside the box.
+        for zoom in [0.5, 1.8, 8.0, 20.0, 70.0] {
+            let (seen_w, seen_h) = (2560.0 * zoom, 1440.0 * zoom);
+            let s = field_scale(zoom);
+            assert!(FIELD_W * s >= seen_w, "too narrow at zoom {zoom}");
+            assert!(FIELD_H * s >= seen_h, "too short at zoom {zoom}");
+        }
+    }
+
+    #[test]
+    fn zoomed_right_in_the_box_stays_its_size() {
+        assert_eq!(field_scale(0.5), 1.0);
+        assert_eq!(field_scale(FIELD_ZOOM), 1.0);
+        assert!((field_scale(FIELD_ZOOM * 10.0) - 10.0).abs() < 1e-3);
+    }
+
+    #[test]
+    fn near_stars_drift_past_faster_than_far_ones() {
+        let delta = Vec2::new(100.0, 0.0);
+        let near = drift(Vec2::ZERO, delta, 0.4, 1.0);
+        let far = drift(Vec2::ZERO, delta, 0.92, 1.0);
+        assert!(near.x < far.x && far.x < 0.0, "{near} {far}");
+    }
+
+    #[test]
+    fn a_warp_leaves_every_star_in_the_box() {
+        let wrapped = drift(Vec2::new(10.0, -20.0), Vec2::new(4_000_000.0, -900_000.0), 0.4, 1.0);
+        assert!(wrapped.x.abs() <= FIELD_W / 2.0 && wrapped.y.abs() <= FIELD_H / 2.0, "{wrapped}");
     }
 }
