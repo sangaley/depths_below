@@ -632,7 +632,7 @@
     -14,
     -6
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -736,7 +736,7 @@
     -14,
     7
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -1920,7 +1920,7 @@
     -6,
     9
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -3296,7 +3296,7 @@
     1,
     -9
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -3352,7 +3352,7 @@
     1,
     -2
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -3392,7 +3392,7 @@
     1,
     3
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -3448,7 +3448,7 @@
     1,
     10
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -3744,7 +3744,7 @@
     3,
     -1
    ],
-   "layer": "Outer",
+   "layer": "Inner",
    "material": "Steel"
   },
   {
@@ -3910,6 +3910,30 @@
   {
    "grid_pos": [
     4,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    4,
+    -1
+   ],
+   "layer": "Inner",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    4,
+    0
+   ],
+   "layer": "Outer",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    4,
     10
    ],
    "layer": "Outer",
@@ -4016,7 +4040,7 @@
     5,
     -11
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -4031,6 +4055,38 @@
    "grid_pos": [
     5,
     -9
+   ],
+   "layer": "Outer",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    5,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    5,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    5,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    5,
+    0
    ],
    "layer": "Outer",
    "material": "Steel"
@@ -4056,7 +4112,7 @@
     5,
     12
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -4120,7 +4176,7 @@
     6,
     -16
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -4159,6 +4215,30 @@
    "grid_pos": [
     6,
     -11
+   ],
+   "layer": "Outer",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    6,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    6,
+    -2
+   ],
+   "layer": "Inner",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    6,
+    -1
    ],
    "layer": "Outer",
    "material": "Steel"
@@ -4208,7 +4288,7 @@
     6,
     17
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -4248,7 +4328,7 @@
     7,
     -16
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -4287,6 +4367,38 @@
    "grid_pos": [
     7,
     -11
+   ],
+   "layer": "Outer",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    7,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    7,
+    -2
+   ],
+   "layer": "Inner",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    7,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    7,
+    0
    ],
    "layer": "Outer",
    "material": "Steel"
@@ -4336,7 +4448,7 @@
     7,
     17
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -4406,6 +4518,38 @@
   {
    "grid_pos": [
     8,
+    -3
+   ],
+   "layer": "Outer",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    8,
+    -2
+   ],
+   "layer": "Outer",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    8,
+    -1
+   ],
+   "layer": "Outer",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    8,
+    0
+   ],
+   "layer": "Outer",
+   "material": "Steel"
+  },
+  {
+   "grid_pos": [
+    8,
     12
    ],
    "layer": "Outer",
@@ -6264,7 +6408,7 @@
     25,
     -8
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -6320,7 +6464,7 @@
     25,
     9
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -6368,7 +6512,7 @@
     26,
     -5
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -6408,7 +6552,7 @@
     26,
     6
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -6456,7 +6600,7 @@
     27,
     -6
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -6512,7 +6656,7 @@
     27,
     7
    ],
-   "layer": "Inner",
+   "layer": "Outer",
    "material": "Steel"
   },
   {
@@ -11648,6 +11792,248 @@
    "custom_name": null,
    "subcomponents": null,
    "extras": null
+  },
+  {
+   "module_type": "TurretRingSmall",
+   "grid_pos": [
+    3,
+    -1
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    4,
+    -2
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    4,
+    0
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "BeamRelay",
+   "grid_pos": [
+    4,
+    -1
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "QSwitch",
+   "grid_pos": [
+    5,
+    -3
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCoupler",
+   "grid_pos": [
+    5,
+    -2
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCoupler",
+   "grid_pos": [
+    5,
+    -1
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "QSwitch",
+   "grid_pos": [
+    5,
+    0
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "QSwitch",
+   "grid_pos": [
+    6,
+    -3
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCore",
+   "grid_pos": [
+    6,
+    -2
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserDestabiliser",
+   "grid_pos": [
+    6,
+    -1
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    7,
+    -3
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    7,
+    -2
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    7,
+    -1
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    7,
+    0
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    8,
+    -3
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    8,
+    -2
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserCavity",
+   "grid_pos": [
+    8,
+    -1
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserPump",
+   "grid_pos": [
+    8,
+    0
+   ],
+   "rotation": "West",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "LaserEmitter",
+   "grid_pos": [
+    0,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     3,
+     -1
+    ],
+    "point_defence": true
+   }
+  },
+  {
+   "module_type": "LaserLens",
+   "grid_pos": [
+    1,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     3,
+     -1
+    ]
+   }
   },
   {
    "module_type": "FiringPiece",

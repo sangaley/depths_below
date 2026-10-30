@@ -363,8 +363,18 @@ mod gun_design_tests {
                         .filter(|(_, m)| ring_cells.iter().any(|r| (m.grid_position - *r).abs().max_element() <= 1))
                         .count();
                     assert!(motors > 0, "{what}: no motor turns it");
-                    let feed = super::super::gun_assembly::hoist_reach(&hull, &ring_cells);
-                    assert!(!feed.magazines.is_empty(), "{what}: the hoist reaches no magazine");
+                    // A laser turret is fed light through a Beam Relay, a gun
+                    // turret shells through a hoist.
+                    if parts.iter().any(|i| i.ring.is_some() && i.module_type == ModuleType::LaserEmitter) {
+                        let relay = hull.iter().any(|(_, m)| {
+                            m.module_type == ModuleType::BeamRelay
+                                && ring_cells.iter().any(|r| (m.grid_position - *r).abs().element_sum() == 1)
+                        });
+                        assert!(relay, "{what}: no Beam Relay beside the ring");
+                    } else {
+                        let feed = super::super::gun_assembly::hoist_reach(&hull, &ring_cells);
+                        assert!(!feed.magazines.is_empty(), "{what}: the hoist reaches no magazine");
+                    }
                     let deck: Vec<IVec2> = deck_cells(ring_size(ring.module_type));
                     let mut on_turret = std::collections::HashSet::new();
                     for i in parts.iter().filter(|i| i.ring.is_some()) {
@@ -397,7 +407,8 @@ mod gun_design_tests {
                     }
                 }
                 if let Some((stats, layout)) = kit.laser() {
-                    assert!(stats.storage > 0.0 && !layout.pumps.is_empty() && !layout.emitters.is_empty(), "{what}: laser {layout:?}");
+                    // Its emitter on the hull, or up on its turret through a relay.
+                    assert!(stats.storage > 0.0 && !layout.pumps.is_empty() && !(layout.emitters.is_empty() && layout.relays.is_empty()), "{what}: laser {layout:?}");
                 }
             }
         }
@@ -445,6 +456,20 @@ mod gun_design_tests {
                     .filter(|(_, m)| m.module_type == ModuleType::TraverseMotor)
                     .any(|(_, m)| cells.iter().any(|r| (m.grid_position - *r).abs().max_element() <= 1));
                 assert!(motors, "{what}: no motor");
+                let on_top: Vec<ModuleType> = design
+                    .modules
+                    .iter()
+                    .filter(|m| m.extras.as_ref().and_then(|e| e.turret) == Some(ring.grid_position))
+                    .map(|m| m.module_type)
+                    .collect();
+                if on_top.contains(&ModuleType::LaserEmitter) {
+                    // A laser turret: fed through a Beam Relay beside its ring.
+                    let relay = hull.iter().any(|(_, m)| {
+                        m.module_type == ModuleType::BeamRelay && cells.iter().any(|r| (m.grid_position - *r).abs().element_sum() == 1)
+                    });
+                    assert!(relay, "{what}: a laser turret with no Beam Relay");
+                    continue;
+                }
                 assert!(!super::super::gun_assembly::hoist_reach(&hull, &cells).magazines.is_empty(), "{what}: no magazine fed");
                 let parts: Vec<GunDesignPart> = design
                     .modules

@@ -1,0 +1,177 @@
+{
+ "name": "PD Laser Turret",
+ "description": "Point defence that sees all round: a laser bank on the hull feeding an emitter on a small turret through a Beam Relay. Burns down missiles from 3,500 out, eight pulses a second, but draws 240 MW while it recharges.",
+ "parts": [
+  {
+   "module_type": "TurretRingSmall",
+   "offset": [
+    0,
+    0
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TraverseMotor",
+   "offset": [
+    -1,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "TraverseMotor",
+   "offset": [
+    1,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "BeamRelay",
+   "offset": [
+    0,
+    -1
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "QSwitch",
+   "offset": [
+    -2,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LaserCoupler",
+   "offset": [
+    -1,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LaserCoupler",
+   "offset": [
+    0,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "QSwitch",
+   "offset": [
+    1,
+    -2
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "QSwitch",
+   "offset": [
+    -2,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LaserCore",
+   "offset": [
+    -1,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LaserDestabiliser",
+   "offset": [
+    0,
+    -3
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LaserPump",
+   "offset": [
+    -2,
+    -4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    -1,
+    -4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    0,
+    -4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LaserPump",
+   "offset": [
+    1,
+    -4
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LaserPump",
+   "offset": [
+    -2,
+    -5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    -1,
+    -5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LaserCavity",
+   "offset": [
+    0,
+    -5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LaserPump",
+   "offset": [
+    1,
+    -5
+   ],
+   "rotation": "North"
+  },
+  {
+   "module_type": "LaserEmitter",
+   "offset": [
+    0,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  },
+  {
+   "module_type": "LaserLens",
+   "offset": [
+    1,
+    0
+   ],
+   "rotation": "East",
+   "turret": true
+  }
+ ],
+ "point_defence": true
+}

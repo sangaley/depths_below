@@ -471,6 +471,32 @@ class Scaled:
                 for c in kit.cells_of(m["module_type"], tuple(m["grid_pos"]), m["rotation"]):
                     self.taken[c] = i
 
+    def pd_laser_sponson(self, design):
+        """A PD laser turret as near the middle as it fits: on free deck, or
+        hanging off the flank as a sponson -- the Halyard Mk II's way -- with
+        hull laid under whatever stands past the old edge. Never over a
+        corridor or a door."""
+        deck = {c for c, (layer, _) in self.hull.items() if layer not in WALKED and c not in self.taken}
+        near = {(x + dx, y + dy) for (x, y) in self.hull for dx in range(-6, 7) for dy in range(-6, 7)}
+        off = {c for c in near if c not in self.hull and c not in self.taken}
+        room = deck | off
+        mid = (sum(c[0] for c in self.hull) / len(self.hull), sum(c[1] for c in self.hull) / len(self.hull))
+        # Inside the hull first, then the flank nearest the middle.
+        order = sorted(room, key=lambda c: (c in off, (c[0] - mid[0]) ** 2 + (c[1] - mid[1]) ** 2))
+        before = set(self.taken)
+        if not self.try_kit(design, room, ["North", "South", "East", "West"], "PD Laser Turret", order=order):
+            self.report["(no room: PD Laser Turret)"] += 1
+            return
+        for c in set(self.taken) - before:
+            if c not in self.hull:
+                self.hull[c] = ("Inner", "Steel")
+        # The skin is wherever the hull now meets space.
+        for c, (layer, mat) in list(self.hull.items()):
+            if layer in WALKED:
+                continue
+            edge = any((c[0] + dx, c[1] + dy) not in self.hull for dx in (-1, 0, 1) for dy in (-1, 0, 1))
+            self.hull[c] = ("Outer" if edge else ("Inner" if layer == "Outer" else layer), mat)
+
     def warners(self, count):
         """Missile Warners out toward bow, stern, port and starboard, on
         free deck (never a corridor); a decoy and chaff beside the first."""
@@ -540,6 +566,11 @@ def main():
         armed = bool(s.slots) or s.exotic
         s.arm(own)
         cells = len(src["hull_cells"])
+        # The player's ships also carry a PD laser turret (the Halyard Mk
+        # II's unit): a CIWS or two downed 1 of a Choir swarm's 28 missiles,
+        # the Halyard's lasers 63 of 72 (combat lab).
+        if faction == "player":
+            s.pd_laser_sponson(load_kit("PD Laser Turret"))
         if armed and faction != "the_silence":
             # About one CIWS per 400 cells of the doubled hull, 1 to 8: one
             # turret downed 2 of a Choir swarm's 35 missiles (combat lab).

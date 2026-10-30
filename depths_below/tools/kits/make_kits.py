@@ -166,6 +166,25 @@ KITS.append({
     "point_defence": True,
 })
 
+# 10b. PD laser turret: the Halyard Mk II's sponson unit. The bank on the
+# hull; a Beam Relay beside a small ring feeds the emitter up on the
+# turret, which swings all the way round (a hull emitter covers 60 degrees).
+PD_LASER_UNIT = [
+    (2, 3, "TurretRingSmall"), (1, 2, "TraverseMotor"), (3, 2, "TraverseMotor"), (2, 2, "BeamRelay"),
+    (0, 1, "QSwitch"), (1, 1, "LaserCoupler"), (2, 1, "LaserCoupler"), (3, 1, "QSwitch"),
+    (0, 0, "QSwitch"), (1, 0, "LaserCore"), (2, 0, "LaserDestabiliser"),
+    (0, -1, "LaserPump"), (1, -1, "LaserCavity"), (2, -1, "LaserCavity"), (3, -1, "LaserPump"),
+    (0, -2, "LaserPump"), (1, -2, "LaserCavity"), (2, -2, "LaserCavity"), (3, -2, "LaserPump"),
+]
+KITS.append({
+    "name": "PD Laser Turret",
+    "description": "Point defence that sees all round: a laser bank on the hull feeding an emitter on a small turret through a Beam Relay. Burns down missiles from 3,500 out, eight pulses a second, but draws 240 MW while it recharges.",
+    "parts": [part(t, x - 2, y - 3, "North") for x, y, t in PD_LASER_UNIT]
+             + [part("LaserEmitter", 0, 0, "East", turret=True), part("LaserLens", 1, 0, "East", turret=True)],
+    "shell": None,
+    "point_defence": True,
+})
+
 # 11. Cutter: a steady burning beam.
 KITS.append({
     "name": "Cutter Laser",
