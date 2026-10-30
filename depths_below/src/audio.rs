@@ -38,6 +38,12 @@ pub struct GameAudioPlugin;
 
 impl Plugin for GameAudioPlugin {
     fn build(&self, app: &mut App) {
+        // DEPTHS_MUTE=1 (every automated run): silent from the first frame,
+        // before any sound can start -- not from whenever the settings are
+        // first applied, by which time a loop could already be playing.
+        if std::env::var("DEPTHS_MUTE").ok().as_deref() == Some("1") {
+            app.insert_resource(GlobalVolume::new(Volume::Linear(0.0)));
+        }
         app
             .init_resource::<AlarmState>()
             .add_systems(Startup, load_audio)
@@ -618,10 +624,13 @@ fn update_ambient_volume(
     mut sink_query: Query<&mut AudioSink, With<AmbientLoopAudio>>,
     global: Res<GlobalVolume>,
 ) {
-    if !settings.is_changed() && !global.is_changed() {
+    let Ok(mut sink) = sink_query.single_mut() else { return };
+    // A sink only exists a frame after its sound starts: a mute set before
+    // then never reached it, and the drone droned on in silent runs.
+    if !settings.is_changed() && !global.is_changed() && !sink.is_added() {
         return;
     }
-    if let Ok(mut sink) = sink_query.single_mut() {
+    {
         sink.set_volume(Volume::Linear(AMBIENT_VOL * settings.music_volume * master(&global)));
     }
 }

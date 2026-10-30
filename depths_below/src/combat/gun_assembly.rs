@@ -148,8 +148,17 @@ pub fn range_for(stats: &GunStats) -> f32 {
 /// What a built gun's round does against what its shell design adds up to.
 /// Ships were drawn twice as big, four times the blocks: at 1x a fight at
 /// range took a big ship 2-9% of its hull in two minutes, half an hour to a
-/// kill (combat lab, 2026-10-29).
-pub const BUILT_DAMAGE_SCALE: f32 = 2.5;
+/// kill (combat lab, 2026-10-29). Tuned for a mid-size warship to die in
+/// two or three minutes of focused fire (the user's call): 6x and 10x
+/// made the enemy's guns as deadly, and a sniper fight is decided by range
+/// more than by damage.
+pub const BUILT_DAMAGE_SCALE: f32 = 4.0;
+
+/// BUILT_DAMAGE_SCALE, or DEPTHS_GUN_DAMAGE for tuning runs (tools/combat-lab).
+pub fn built_damage_scale() -> f32 {
+    static V: std::sync::OnceLock<f32> = std::sync::OnceLock::new();
+    *V.get_or_init(|| std::env::var("DEPTHS_GUN_DAMAGE").ok().and_then(|v| v.parse().ok()).unwrap_or(BUILT_DAMAGE_SCALE))
+}
 
 /// Projectile caliber scale (combat::new_projectiles::caliber_scale), from
 /// gauge: a 150 mm gun is 1.0, a 500 mm one 3.3.
@@ -659,7 +668,7 @@ pub fn assemble_guns(
         for (fp, mut assembly) in guns {
             assembly.ship = Some(ship);
             if let Ok((mut base, mut mount, mut weapon)) = firing.get_mut(fp) {
-                base.damage = assembly.stats.damage * BUILT_DAMAGE_SCALE;
+                base.damage = assembly.stats.damage * built_damage_scale();
                 base.range = range_for(&assembly.stats);
                 base.fire_rate = (assembly.stats.rpm / 60.0).max(0.0);
                 // A magazine shot off takes its shells with it.

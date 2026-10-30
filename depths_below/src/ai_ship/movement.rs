@@ -413,7 +413,8 @@ pub fn ai_ship_movement_system(
             let max_weapon_range = reach.get(&_entity).copied().unwrap_or(0.0);
 
             // Fights at range, FtD-style: a ship holds where its weapons
-            // still connect -- 80% of its longest reach -- inside its
+            // still connect -- 70% of its longest reach, so a sniper's fight
+            // stays inside its target's guns too -- inside its
             // faction's band, and never past 90% of what it can hit. Snipers
             // hang back 5-8 km, line ships 3.5-6, brawlers close to 2-3 km,
             // and the Recursive Kingdom still rams (that IS their identity).
@@ -424,7 +425,7 @@ pub fn ai_ship_movement_system(
                 match fighting_band(*ship_type) {
                     None => 0.0,
                     Some((lo, hi)) if max_weapon_range > 0.0 => {
-                        (max_weapon_range * 0.8).clamp(lo, hi).min(max_weapon_range * 0.9)
+                        (max_weapon_range * 0.7).clamp(lo, hi).min(max_weapon_range * 0.9)
                     }
                     Some((lo, _)) => lo,
                 }
