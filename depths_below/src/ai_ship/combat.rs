@@ -392,9 +392,8 @@ pub fn ai_weapon_fire_system(
             // velocity in made the aim over-compensate by shooter_vel ×
             // travel_time — a big miss for a ship strafing its standoff orbit.
             // Leading purely on the TARGET's velocity matches how the round
-            // actually travels. Enemies aim true (no accuracy spread); the
-            // target's own jinking over the flight is the only reason to miss.
-            let aim_point = crate::combat::targeting::lead_prediction::calculate_lead(
+            // actually travels.
+            let lead = crate::combat::targeting::lead_prediction::calculate_lead(
                 muzzle,
                 Vec2::ZERO,
                 aim_base,
@@ -403,7 +402,15 @@ pub fn ai_weapon_fire_system(
                 proj_speed,
                 crate::combat::targeting::lead_prediction::PredictionTier::BasicLead,
                 weapon.range,
-            ).aim_point;
+            );
+            // A built gun scatters as the player's does (new_projectiles): its
+            // own spread, worse at range. Enemy rounds used to fly dead true,
+            // so every battery in a fleet put every shell on one reactor from
+            // 7 km the moment its guns could bear.
+            let aim_point = match gun {
+                Some((g, _)) => crate::combat::apply_accuracy_spread(muzzle, lead.aim_point, lead.distance_accuracy * 0.85, g.stats.spread_deg * 4.0),
+                None => lead.aim_point,
+            };
 
             // Launchers get real missiles, not a fast red bullet. Enemy
             // tubes routed through the legacy straight-line path, so none of

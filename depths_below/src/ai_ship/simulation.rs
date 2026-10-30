@@ -170,7 +170,13 @@ pub fn init_world_simulation(
                     _ => FleetKind::Patrol,
                 };
                 let faction = faction_named(f.trim()).unwrap_or(AiShipType::TerranHegemony);
-                let mut rng = rand::thread_rng();
+                // DEPTHS_FLEET_SEED=<n>: the same ships every run, so two test
+                // fights can be compared at all.
+                use rand::SeedableRng;
+                let mut rng = match std::env::var("DEPTHS_FLEET_SEED").ok().and_then(|v| v.parse::<u64>().ok()) {
+                    Some(seed) => rand::rngs::StdRng::seed_from_u64(seed + i as u64),
+                    None => rand::rngs::StdRng::from_entropy(),
+                };
                 let mut held = super::fleet::Held::new();
                 // Even: from the east heading west (the original single fleet);
                 // odd: from the west heading east, a little offset.

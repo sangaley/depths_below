@@ -10,7 +10,12 @@ more of the player's ship gone for less of its own:
     python3 tools/combat-lab/train.py <out_dir> <binary> --compare <old_binary> [secs] [workers]
 
 Run from depths_below/, with a copy of the built binary so a rebuild can't
-change it mid-run. --compare runs every faction on both binaries instead.
+change it mid-run, and its shared libraries in DEPTHS_LAB_LIBS (a debug build
+links libstd and bevy dynamically and a copy can't find them alone). --compare
+runs every faction on both binaries instead.
+
+Stops at once if a fight produces no report: a run that can't start would
+otherwise score every setting 0 and look like it had trained.
 """
 import json, os, re, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor
@@ -24,7 +29,7 @@ START = dict(jink=0.6, focus=2.0, withdraw=1.0, kite_margin=600.0, close_to=0.55
 STEPS = dict(jink=[0.3, 1.0], focus=[1.3, 3.5], withdraw=[0.6, 1.5], kite_margin=[200.0, 1200.0],
              close_to=[0.4, 0.75], recover_shield=[0.05, 0.35], salvo_beat=[0.0, 14.0], flank=[0.3, 1.0])
 # An improvement has to beat this to count: fights have noise of their own.
-MARGIN = 0.015
+MARGIN = 0.03
 LINE = re.compile(r"COMBAT t=(\d+) player hull=[\d.]+ blocks=(\d+)/(\d+) .*?\| (.*)")
 ENEMY = re.compile(r"(\w+)/(?:\w+|-) hull=[\d.]+ blocks=(\d+)/(\d+) d=\d+ (\w+)")
 
@@ -34,10 +39,14 @@ def fight(binary, faction, secs, weights, out, tag):
     env = dict(os.environ, DEPTHS_MUTE="1", DEPTHS_SKIP_MENU="1", DEPTHS_OFFSCREEN="1", DEPTHS_MOVETEST="1",
                DEPTHS_MOVETEST_ENEMY_SHOOTS="1", DEPTHS_MOVETEST_FLEET=f"{faction}:Patrol",
                DEPTHS_MOVETEST_FLEET_AT="0,6000", DEPTHS_COMBAT_REPORT="1", DEPTHS_DESIGN="designs/starter.json",
-               DEPTHS_KEYS=f"3:Backslash,4:Space~{secs}", NO_COLOR="1",
+               DEPTHS_KEYS=f"3:Backslash,4:Space~{secs}", NO_COLOR="1", DEPTHS_FLEET_SEED=os.environ.get("LAB_SEED", "3"),
                DEPTHS_AI_WEIGHTS=",".join(f"{k}={v}" for k, v in weights.items()))
+    # Bevy looks for assets beside the binary unless told otherwise.
+    env["BEVY_ASSET_ROOT"] = ROOT
+    if os.environ.get("DEPTHS_LAB_LIBS"):
+        env["DYLD_LIBRARY_PATH"] = os.environ["DEPTHS_LAB_LIBS"]
     with open(log, "w") as f:
-        p = subprocess.Popen(["caffeinate", "-di", binary], cwd=ROOT, env=env, stdout=f, stderr=subprocess.STDOUT)
+        p = subprocess.Popen([binary], cwd=ROOT, env=env, stdout=f, stderr=subprocess.STDOUT)
         time.sleep(secs + 6)
         p.terminate()
         try:
@@ -46,12 +55,13 @@ def fight(binary, faction, secs, weights, out, tag):
             p.kill()
     text = re.sub(r"\x1b\[[0-9;]*m", "", open(log, errors="replace").read())
     rows = LINE.findall(text)
-    if not rows:
-        return dict(faction=faction, ok=False, fit=0.0, player=0.0, enemy=0.0, killed=0, ships=0, panics=text.count("panicked"))
-    _, alive, start, enemies = rows[-1]
+    # Ships can leave sensor range: the last line that still shows them.
+    seen = [r for r in rows if ENEMY.findall(r[3])]
+    if not seen:
+        raise SystemExit(f"{faction} ({tag}): no ships in the report, see {log}\n{text[-400:]}")
+    _, alive, start, _ = rows[-1]
+    enemies = seen[-1][3]
     player = 1 - int(alive) / max(int(start), 1)
-    best = {}
-    # Ships leave the report if they go far off: use every line's worst for each slot.
     found = ENEMY.findall(enemies)
     gone = total = killed = 0
     for _, blocks, first, state in found:
@@ -70,8 +80,7 @@ def fight(binary, faction, secs, weights, out, tag):
 def evaluate(pool, binary, weights, secs, out, tag, factions=TRAIN_ON):
     jobs = [pool.submit(fight, binary, f, secs, weights, out, tag) for f in factions]
     res = [j.result() for j in jobs]
-    good = [r for r in res if r["ok"]]
-    return sum(r["fit"] for r in good) / max(len(good), 1), res
+    return sum(r["fit"] for r in res) / len(res), res
 
 
 def main():
@@ -91,6 +100,9 @@ def main():
         report.write(line + "\n")
         report.flush()
 
+    # The fights run bare: caffeinate is a system binary, and macOS strips
+    # DYLD_LIBRARY_PATH from anything started through one.
+    subprocess.Popen(["caffeinate", "-di", "-w", str(os.getpid())])
     with ThreadPoolExecutor(workers) as pool:
         if compare:
             say("| faction | old: your loss | old: their loss | old: killed | new: your loss | new: their loss | new: killed |\n|---|---|---|---|---|---|---|")

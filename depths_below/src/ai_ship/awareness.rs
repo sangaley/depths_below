@@ -33,6 +33,8 @@ const REACH_EDGE: f32 = 1.12;
 /// Seconds of hull left, at the rate it's going, before it will pull back to
 /// recover.
 const RECOVER_WHEN_DYING_IN: f32 = 120.0;
+/// What's left of a ship, outgunned, before it decides to run.
+const HURT_ENOUGH_TO_RUN: f32 = 0.75;
 /// Guns left below which a hull counts as disarmed.
 const DISARMED: f32 = 0.15;
 
@@ -276,7 +278,10 @@ pub fn choose_tactic(me: &Hull, them: &Hull, t: &Temperament, mind: &Mind, r: &R
         if losing_exchange {
             return (Tactic::Withdraw, "losing the exchange");
         }
-        if r.balance < withdraw_under && (me.lost_rate > 0.0 || me.blocks_left() < 0.9) {
+        // Outgunned is a reason to leave once it has cost something real: a
+        // ship that ran from a scratch never fired a shot, just shuttled in and
+        // out of range.
+        if r.balance < withdraw_under && me.blocks_left() < HURT_ENOUGH_TO_RUN {
             return (Tactic::Withdraw, "outgunned and hurt");
         }
         // Stays gone until the fight has really changed.
@@ -713,7 +718,9 @@ mod tests {
         let them = Hull { pos: Vec2::new(6000.0, 0.0), ..hull(7000.0) };
         let r = Reading { balance: 0.3, ..reading() };
         assert_ne!(think(&hull(7000.0), &them, r), Tactic::Withdraw, "not hurt yet");
-        let hurt = Hull { blocks: 400, ..hull(7000.0) };
+        let scratched = Hull { blocks: 495, lost_rate: 0.5, ..hull(7000.0) };
+        assert_ne!(think(&scratched, &them, r), Tactic::Withdraw, "not from a scratch");
+        let hurt = Hull { blocks: 300, ..hull(7000.0) };
         assert_eq!(think(&hurt, &them, r), Tactic::Withdraw);
     }
 
