@@ -20,8 +20,7 @@ pub struct StarfieldStar {
 
 /// Marks the sparse decorative background planets (as opposed to star
 /// sparkles, which also carry `StarfieldStar` for the shared parallax/wrap
-/// system) — read by camera::update_depth_vignette to give them a gentler
-/// darkness treatment than the rest of the world.
+/// system).
 #[derive(Component)]
 pub struct BackgroundPlanet;
 

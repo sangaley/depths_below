@@ -583,7 +583,7 @@ impl Plugin for DemoPlugin {
         if std::env::var("DEPTHS_HIDE_PLAYER").ok().as_deref() == Some("1") {
             app.add_systems(
                 PostUpdate,
-                (|mut q: Query<&mut Visibility, Or<(With<crate::components::Ship>, With<crate::camera::LightConeVisual>, With<crate::world::home_base::BaseArrow>, With<crate::contracts::bounty_nav::BountyArrow>)>>| {
+                (|mut q: Query<&mut Visibility, Or<(With<crate::components::Ship>, With<crate::world::home_base::BaseArrow>, With<crate::contracts::bounty_nav::BountyArrow>)>>| {
                     for mut v in &mut q {
                         *v = Visibility::Hidden;
                     }

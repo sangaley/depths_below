@@ -34,6 +34,11 @@ const LEAVE_CHANCE: f32 = 0.25;
 /// Off-screen pace. Stations can be 400 km apart: crossing at the old 60 u/s
 /// took two hours, and nobody ever saw anyone arrive anywhere.
 const CRUISE: (f32, f32) = (600.0, 900.0);
+/// On-screen pace, at least. Going by thrust a laden freighter on patrol speed
+/// made 80 u/s: 40 seconds to cross one ship-length, which from any distance
+/// looked parked. Its escorts go a little faster, to keep up.
+pub const SPEED_ON_SCREEN: f32 = 380.0;
+pub const ESCORT_SPEED_ON_SCREEN: f32 = 460.0;
 /// New traders start this far from the station they're bound for.
 const ARRIVING_FROM: (f32, f32) = (55_000.0, 110_000.0);
 
@@ -63,6 +68,10 @@ pub fn trade_factions(owner: Option<AiShipType>) -> Vec<AiShipType> {
     }
     who
 }
+
+/// The fleets on trade runs, for the helm.
+#[derive(Resource, Default)]
+pub struct TradingFleets(pub std::collections::HashSet<u32>);
 
 /// The next place to go from `from`: any stop but the one it just left.
 pub fn next_stop<'a>(stops: &'a [Stop], left: &str, rng: &mut impl Rng) -> Option<&'a Stop> {
@@ -140,7 +149,8 @@ pub fn run_traffic(
     stations: Res<crate::world::home_base::SystemStations>,
     ports: Res<crate::diplomacy::stations::FactionStations>,
     player: Query<&Transform, With<Ship>>,
-    mut leaders: Query<(&SimShipId, &mut AiShipNav, &super::fleet::FleetMember)>,
+    mut trading: ResMut<TradingFleets>,
+    mut leaders: Query<(&Transform, &crate::components::Velocity, &mut AiShipNav, &super::fleet::FleetMember)>,
 ) {
     if crate::demo::skip_ai_ship_spawn() && std::env::var("DEPTHS_TRAFFIC").is_err() {
         return;
@@ -269,6 +279,9 @@ pub fn run_traffic(
         }
     }
 
+    trading.0.clear();
+    trading.0.extend(sim.fleets.iter().filter(|f| f.trade.is_some()).map(|f| f.id));
+
     // Ships on screen are flown by their leader: give it the same orders.
     let orders: std::collections::HashMap<u32, Vec2> = sim
         .fleets
@@ -276,8 +289,11 @@ pub fn run_traffic(
         .filter(|f| f.trade.is_some() && live.contains(&f.id))
         .map(|f| (f.id, f.destination))
         .collect();
-    for (_, mut nav, member) in leaders.iter_mut().filter(|(_, _, m)| m.leader) {
+    for (tf, velocity, mut nav, member) in leaders.iter_mut().filter(|(.., m)| m.leader) {
         if let Some(to) = orders.get(&member.fleet) {
+            if crate::combat::gun_assembly::trace() && (now % 5.0) < TICK_S {
+                info!("TRADER {} on screen at {:.0},{:.0} going {:.0} u/s, {:.0} km from its point", member.fleet, tf.translation.x, tf.translation.y, velocity.0.length(), tf.translation.truncate().distance(*to) / 1000.0);
+            }
             if nav.waypoints.len() != 1 || nav.waypoints[0] != *to {
                 nav.waypoints = vec![*to];
                 nav.current_waypoint = 0;

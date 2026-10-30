@@ -236,6 +236,7 @@ pub fn ai_ship_movement_system(
     field: Res<super::awareness::Battlefield>,
     mind: Res<super::awareness::Mind>,
     minds: Query<&super::awareness::Awareness>,
+    trading: Res<super::traffic::TradingFleets>,
 ) {
     let dt = time.delta_secs();
     let player_obstacle = player.single().ok().map(|(tf, c)| {
@@ -352,6 +353,12 @@ pub fn ai_ship_movement_system(
 
         let blocks = children.len();
         let max_speed = (ai_top_speed(total_thrust, blocks, faction_mult) * behavior_mult).min(AI_MAX_SPEED);
+        // A trader about its business gets on with it.
+        let max_speed = match member.filter(|m| *behavior == AiShipBehavior::Patrolling && trading.0.contains(&m.fleet)) {
+            Some(m) if m.leader => max_speed.max(super::traffic::SPEED_ON_SCREEN),
+            Some(_) => max_speed.max(super::traffic::ESCORT_SPEED_ON_SCREEN),
+            None => max_speed,
+        };
         let turn_rate = ai_turn_rate(blocks);
         // Harbour traffic goes slow. A ship going about its business near a
         // faction starport keeps to harbour speed; one fighting or running

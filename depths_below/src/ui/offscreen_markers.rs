@@ -159,9 +159,7 @@ pub fn update_offscreen_markers(
     }
 
     // The next expedition record, when it lies in this system: an amber
-    // marker at any range, and over the derelict itself once it's in view --
-    // a derelict is dark until the torch finds it, so "on screen" is not
-    // "visible".
+    // marker at any range, and over the derelict itself once it's in view.
     let (expedition, streaming, carriers) = &trail;
     if let Some((system, title)) = expedition.next {
         if streaming.loaded_system == Some(system) {

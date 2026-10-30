@@ -57,6 +57,7 @@ impl Plugin for AiShipPlugin {
             .init_resource::<WorldSimulation>()
             .init_resource::<awareness::Battlefield>()
             .init_resource::<awareness::Mind>()
+            .init_resource::<traffic::TradingFleets>()
             .register_required_components::<AiShip, awareness::Awareness>()
             .init_resource::<scavenger::ScavengerWaves>()
             // Ordered after the galaxy layout exists (CelestialPlugin) —

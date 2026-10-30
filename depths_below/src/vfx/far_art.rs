@@ -17,10 +17,6 @@
 //! damage tint that change without a block going. Close in nothing is baked
 //! at all.
 //!
-//! Out here is dark (camera::update_depth_vignette): an enemy's blocks are lit
-//! only by your torch, and what they show is whatever the light left on them
-//! that frame. So an enemy's picture is baked fully lit and takes its light
-//! from the torch as a whole, by the same rule -- never frozen half-lit.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::camera::visibility::RenderLayers;
@@ -82,11 +78,6 @@ pub fn art_alpha(zoom: f32) -> f32 {
 #[derive(Component)]
 pub struct FarArt {
     sprite: Entity,
-    /// The player's ship and its turrets: never dark, like their blocks.
-    /// Anything else is lit by the torch (camera::TorchLight).
-    always_lit: bool,
-    /// Half the picture's size, for where the torch is checked.
-    half: Vec2,
     image: Handle<Image>,
     baked: Option<LayoutVersion>,
     baked_at: f32,
@@ -335,16 +326,14 @@ impl MipCache {
 pub fn attach_far_art(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
-    owners: Query<(Entity, Has<TurretBody>, Has<Ship>, Option<&ChildOf>), (Or<(With<Ship>, With<AiShip>, With<TurretBody>, With<crate::combat::severance::DetachedSection>)>, Without<FarArt>)>,
-    players: Query<(), With<Ship>>,
+    owners: Query<(Entity, Has<TurretBody>), (Or<(With<Ship>, With<AiShip>, With<TurretBody>, With<crate::combat::severance::DetachedSection>)>, Without<FarArt>)>,
 ) {
     // DEPTHS_NO_FAR_ART=1: blocks all the way out, to measure against.
     static OFF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     if *OFF.get_or_init(|| std::env::var_os("DEPTHS_NO_FAR_ART").is_some()) {
         return;
     }
-    for (owner, turret, player, parent) in owners.iter() {
-        let always_lit = player || parent.is_some_and(|p| players.contains(p.parent()));
+    for (owner, turret) in owners.iter() {
         let image = images.add(Image::new_fill(
             Extent3d { width: 1, height: 1, depth_or_array_layers: 1 },
             TextureDimension::D2,
@@ -362,7 +351,7 @@ pub fn attach_far_art(
                 ChildOf(owner),
             ))
             .id();
-        commands.entity(owner).try_insert(FarArt { sprite, always_lit, half: Vec2::ZERO, image, baked: None, baked_at: f32::NEG_INFINITY, sprites: 0 });
+        commands.entity(owner).try_insert(FarArt { sprite, image, baked: None, baked_at: f32::NEG_INFINITY, sprites: 0 });
     }
 }
 
@@ -417,7 +406,6 @@ pub fn bake_far_art(
 
     for (_, _, owner) in due.into_iter().take(BAKES_PER_FRAME) {
         let Ok((_, mut art, version, children)) = owners.get_mut(owner) else { continue };
-        let lit = art.always_lit;
         let mut layers: Vec<(f32, Entity, &Sprite, &Transform)> = children
             .into_iter()
             .flatten()
@@ -437,12 +425,7 @@ pub fn bake_far_art(
                 let (src_w, src_h) = (art.w as f32 * art.step, art.h as f32 * art.step);
                 let rect = sprite.rect.unwrap_or(Rect::new(0.0, 0.0, src_w, src_h));
                 let size = sprite.custom_size.unwrap_or(rect.size()) * t.scale.truncate().abs();
-                // An enemy's alphas are the torch's (all or nothing aside):
-                // painted lit, the picture is lit as a whole instead.
-                let mut tint = sprite.color.to_linear();
-                if !lit && tint.alpha > 0.0 {
-                    tint.alpha = 1.0;
-                }
+                let tint = sprite.color.to_linear();
                 Some(Stamp {
                     at: t.translation.truncate(),
                     angle: t.rotation.to_euler(EulerRot::ZYX).0,
@@ -464,7 +447,6 @@ pub fn bake_far_art(
         }
         canvas.rim();
         let (centre, size) = canvas.placement();
-        art.half = size * 0.5;
         art.sprites = stamps.len();
         // DEPTHS_FAR_TRACE=1 logs each bake; DEPTHS_FAR_DUMP=<dir> writes
         // each picture there as raw RGBA.
@@ -499,9 +481,7 @@ pub fn bake_far_art(
 pub fn show_far_art(
     mut commands: Commands,
     camera: Res<CameraState>,
-    torch: Res<crate::camera::TorchLight>,
     owners: Query<(&FarArt, Option<&Children>)>,
-    placed: Query<&GlobalTransform, With<FarArtSprite>>,
     pictured: Pictured,
     mut sprites: Query<(&mut Sprite, &mut Visibility), (With<FarArtSprite>, Without<HullSegment>, Without<Module>)>,
     hidden: Query<Entity, With<FarHidden>>,
@@ -509,9 +489,8 @@ pub fn show_far_art(
 ) {
     let alpha = art_alpha(camera.zoom);
     for (art, _) in owners.iter() {
-        let light = if art.always_lit || alpha <= 0.0 { 1.0 } else { placed.get(art.sprite).map_or(1.0, |gt| lit_by(&torch, gt, art.half)) };
         let Ok((mut sprite, mut vis)) = sprites.get_mut(art.sprite) else { continue };
-        let want = alpha * light;
+        let want = alpha;
         // Not shown until it's been baked once.
         let want_vis = if want > 0.0 && art.baked_at.is_finite() { Visibility::Inherited } else { Visibility::Hidden };
         if *vis != want_vis {
@@ -545,19 +524,6 @@ pub fn show_far_art(
             commands.entity(block).try_remove::<(RenderLayers, FarHidden)>();
         }
     }
-}
-
-/// How lit a picture is: the most light the torch puts on its middle or the
-/// middles of its four sides, so a ship half in the cone shows.
-fn lit_by(torch: &crate::camera::TorchLight, picture: &GlobalTransform, half: Vec2) -> f32 {
-    let centre = picture.translation().truncate();
-    let (_, rotation, _) = picture.to_scale_rotation_translation();
-    let along = (rotation * Vec3::X).truncate() * half.x;
-    let across = (rotation * Vec3::Y).truncate() * half.y;
-    [Vec2::ZERO, along, -along, across, -across]
-        .into_iter()
-        .map(|d| torch.ship_at(centre + d))
-        .fold(0.0, f32::max)
 }
 
 /// Off the flight screen every block draws again.

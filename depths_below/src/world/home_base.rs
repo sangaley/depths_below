@@ -402,11 +402,7 @@ pub fn station_collider_circles(radius: f32) -> Vec<(Vec2, f32)> {
     circles
 }
 
-/// Every sprite a station is drawn from. A station is a lit installation, so
-/// the flashlight vignette leaves it alone (camera::update_depth_vignette) --
-/// without this, everything outside the torch cone faded to black and a
-/// kilometres-wide station turned into a dim silhouette the moment you
-/// launched.
+/// Every sprite a station is drawn from.
 #[derive(Component)]
 pub struct StationPart;
 
