@@ -121,6 +121,11 @@ def main():
                 trial = dict(best, **{dial: v})
                 s, _ = evaluate(pool, binary, trial, secs, out, "trial")
                 keep = s > score + MARGIN
+                # One good run is usually luck: it has to do it again.
+                if keep:
+                    again, _ = evaluate(pool, binary, trial, secs, out, "confirm")
+                    s = (s + again) / 2
+                    keep = s > score + MARGIN
                 say(f"{dial}={v}: {s:+.3f} vs {score:+.3f} {'KEPT' if keep else ''}")
                 if keep:
                     best, score = trial, s
