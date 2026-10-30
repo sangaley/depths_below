@@ -49,6 +49,8 @@ pub struct Hull {
     pub faction: Option<AiShipType>,
     /// Its longest gun or beam.
     pub reach: f32,
+    /// The range at which half its gun firepower can bear (`fighting_reach`).
+    pub firing_reach: f32,
     pub missile_reach: f32,
     /// Damage a second its live guns and launchers can put out.
     pub firepower: f32,
@@ -75,6 +77,10 @@ impl Hull {
     /// Seconds until it's gone, at the rate it's going.
     pub fn time_to_die(&self) -> f32 {
         if self.lost_rate > 0.01 { self.blocks as f32 / self.lost_rate } else { f32::INFINITY }
+    }
+    /// Where it fights from: its main armament's reach, not its longest gun's.
+    pub fn fighting(&self) -> f32 {
+        if self.firing_reach > 0.0 { self.firing_reach } else { self.reach }
     }
     /// Gun range or, for a ship with nothing else, missile range.
     pub fn any_reach(&self) -> f32 {
@@ -229,6 +235,23 @@ impl Default for Mind {
     }
 }
 
+/// The range at which half of a ship's firepower can bear, from `(range,
+/// damage a second)` for each gun. A ship with one long gun and a battery of
+/// short ones has to go in close to fight at all: Synthesis ships hold 18 km
+/// disruptors and 7 km plasma casters, and held off at 13 km doing nothing.
+pub fn fighting_reach(guns: &mut [(f32, f32)]) -> f32 {
+    let total: f32 = guns.iter().map(|g| g.1).sum();
+    guns.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let mut bearing = 0.0;
+    for (range, power) in guns.iter() {
+        bearing += power;
+        if bearing >= total * 0.5 {
+            return *range;
+        }
+    }
+    0.0
+}
+
 /// What a target is worth shooting: the firepower killing it takes off the
 /// board for the damage that costs. Whatever's in reach, hurting this ship,
 /// or called by its fleet counts for more; a hull already disarmed counts for
@@ -316,10 +339,10 @@ pub fn choose_tactic(me: &Hull, them: &Hull, t: &Temperament, mind: &Mind, r: &R
             return (Tactic::Recover, "shields down, pulling back");
         }
     }
-    if them.reach > me.reach * REACH_EDGE {
+    if them.fighting() > me.fighting() * REACH_EDGE {
         return (Tactic::Close, "they outrange it");
     }
-    if t.kites && t.cunning >= 0.5 && me.reach > them.reach * REACH_EDGE {
+    if t.kites && t.cunning >= 0.5 && me.fighting() > them.fighting() * REACH_EDGE {
         return (Tactic::Kite, "it outranges them");
     }
     // A friend holds their eye: go round the back.
@@ -483,6 +506,7 @@ pub fn survey_battlefield(
         missile_reach: f32,
         firepower: f32,
         guns: u32,
+        ranges: Vec<(f32, f32)>,
     }
     let mut tally: HashMap<Entity, Guns> = HashMap::default();
     for (weapon, module, owner, point_defence) in weapons.iter() {
@@ -498,6 +522,7 @@ pub fn survey_battlefield(
             g.missile_reach = g.missile_reach.max(weapon.range);
         } else {
             g.reach = g.reach.max(weapon.range);
+            g.ranges.push((weapon.range, weapon.damage * weapon.fire_rate.max(0.05)));
         }
         g.firepower += weapon.damage * weapon.fire_rate.max(0.05);
         g.guns += 1;
@@ -505,8 +530,9 @@ pub fn survey_battlefield(
 
     let previous = std::mem::take(&mut field.hulls);
     let mut take = |entity: Entity, mut hull: Hull, field: &mut Battlefield| {
-        let g = tally.remove(&entity).unwrap_or_default();
+        let mut g = tally.remove(&entity).unwrap_or_default();
         hull.reach = g.reach;
+        hull.firing_reach = fighting_reach(&mut g.ranges);
         hull.missile_reach = g.missile_reach;
         hull.firepower = g.firepower;
         hull.guns = g.guns;
@@ -831,6 +857,15 @@ mod tests {
         assert!(to.x < -3000.0, "{to}");
         let alone = retreat_point(&me, &them, std::iter::empty());
         assert!(alone.x < -5000.0, "{alone}");
+    }
+
+    #[test]
+    fn a_ship_fights_from_where_its_main_guns_reach() {
+        // Mostly short plasma, a little long ion: it has to close.
+        assert_eq!(fighting_reach(&mut [(18_000.0, 10.0), (7_500.0, 90.0)]), 7_500.0);
+        // Mostly long guns, a few short: it can stand off.
+        assert_eq!(fighting_reach(&mut [(23_000.0, 80.0), (7_500.0, 20.0)]), 23_000.0);
+        assert_eq!(fighting_reach(&mut []), 0.0);
     }
 
     #[test]

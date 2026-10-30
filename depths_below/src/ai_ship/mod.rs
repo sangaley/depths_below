@@ -1,4 +1,5 @@
 pub mod awareness;
+pub mod traffic;
 pub mod components;
 mod layouts;
 pub mod spawner;
@@ -48,6 +49,7 @@ impl Plugin for AiShipPlugin {
                 standing_spawns::war_fleets,
                 standing_spawns::tick_missions,
                 standing_spawns::allies_defend_player,
+                traffic::run_traffic,
             )
                 .run_if(in_state(crate::states::GameState::Exploring)),
         );

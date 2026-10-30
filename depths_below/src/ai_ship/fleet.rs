@@ -58,6 +58,22 @@ pub struct SimFleet {
     /// Sent after you, or with you (ai_ship::standing_spawns).
     #[serde(default)]
     pub mission: Mission,
+    /// A trader on its rounds (ai_ship::traffic), which flies it.
+    #[serde(default)]
+    pub trade: Option<TradeRun>,
+}
+
+/// Where a trader is on its rounds.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct TradeRun {
+    /// Seconds left at its berth.
+    pub dwell: f32,
+    /// The station or system it's making for.
+    pub bound_for: String,
+    /// Where it last called, so it goes somewhere else next.
+    pub last_stop: String,
+    /// The system it's leaving for.
+    pub leaving: Option<u32>,
 }
 
 /// What a fleet sent because of your standing is doing.
@@ -89,6 +105,7 @@ impl SimFleet {
             route: Vec::new(),
             leg: 0,
             mission: Mission::None,
+            trade: None,
         }
     }
 

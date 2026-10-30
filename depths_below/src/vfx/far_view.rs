@@ -89,6 +89,35 @@ pub fn attach_far_view(
     }
 }
 
+/// A trader's label says who it is and where it's headed, as that changes.
+#[allow(clippy::type_complexity)]
+pub fn label_traders(
+    time: Res<Time>,
+    mut next: Local<f32>,
+    sim: Res<crate::ai_ship::components::WorldSimulation>,
+    ships: Query<(&FarView, &AiShipType, Option<&AiShipClass>, &crate::ai_ship::fleet::FleetMember)>,
+    mut texts: Query<&mut Text2d>,
+    children: Query<&Children>,
+) {
+    if time.elapsed_secs() < *next {
+        return;
+    }
+    *next = time.elapsed_secs() + 1.0;
+    for (view, faction, class, member) in ships.iter() {
+        let Some(fleet) = sim.fleet(member.fleet).filter(|f| f.trade.is_some()) else { continue };
+        let name = class.and_then(|c| crate::ai_ship::roster::find(*faction, c.0)).map(|c| c.name);
+        let line = crate::ai_ship::traffic::trader_label(fleet, name);
+        let shadows = children.get(view.label).into_iter().flat_map(|c| c.iter());
+        for entity in std::iter::once(view.label).chain(shadows) {
+            if let Ok(mut text) = texts.get_mut(entity) {
+                if text.0 != line {
+                    text.0.clone_from(&line);
+                }
+            }
+        }
+    }
+}
+
 /// How far a ship's blocks reach, re-measured when its layout changes.
 pub fn measure_far_view(mut ships: Query<(&mut FarView, &ShipGrid, &LayoutVersion)>) {
     for (mut view, grid, version) in ships.iter_mut() {

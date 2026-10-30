@@ -23,7 +23,7 @@ pub const RENDER_DISTANCE: f32 = 48_000.0;
 /// now run from a 70-block skiff to a 2,300-block boss, so a ship count was
 /// either a thin swarm or a frame-rate cliff. 6,000 is about what eight of the
 /// old mid-size hulls cost, and holds a whole swarm or a few capitals.
-const MAX_LIVE_AI_BLOCKS: usize = 6_000;
+const MAX_LIVE_AI_BLOCKS: usize = 9_000;
 
 /// Most AI blocks brought into being in one frame. Spawning is a whole ship's
 /// worth of entities at once, about a millisecond per hundred blocks: since
@@ -766,7 +766,11 @@ pub fn tick_world_simulation(
 
         let to_dest = fleet.destination - fleet.position;
         let remaining = to_dest.length();
-        if remaining <= ARRIVE_RADIUS {
+        let trading = fleet.trade.is_some();
+        if trading && remaining <= ARRIVE_RADIUS {
+            // ai_ship::traffic decides where a trader goes from here.
+            fleet.velocity = Vec2::ZERO;
+        } else if remaining <= ARRIVE_RADIUS {
             fleet.destination = next_fleet_waypoint(&mut rng, fleet, &anchors);
         } else {
             let want = to_dest / remaining * fleet.cruise;
@@ -776,7 +780,7 @@ pub fn tick_world_simulation(
         if fleet.velocity.length() > 1.0 {
             fleet.heading = fleet.velocity.to_angle();
         }
-        if fleet.position.distance(fleet.home_zone) > fleet.patrol_radius {
+        if !trading && fleet.position.distance(fleet.home_zone) > fleet.patrol_radius {
             fleet.destination = match fleet.kind {
                 // A convoy strayed off its run heads for its next stop.
                 FleetKind::Convoy if !fleet.route.is_empty() => fleet.route[fleet.leg],

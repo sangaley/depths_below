@@ -416,7 +416,11 @@ pub fn ai_ship_movement_system(
             // ship in a faction using the same fixed distance regardless of
             // loadout. Falls back to the old faction defaults only if a ship
             // somehow has no active weapons (e.g. mid-repair).
-            let max_weapon_range = reach.get(&_entity).copied().unwrap_or(0.0);
+            // Its main armament's reach: its longest gun can be a long way
+            // past where the rest of its guns do anything.
+            let longest = reach.get(&_entity).copied().unwrap_or(0.0);
+            let max_weapon_range = field.hulls.get(&_entity).map_or(longest, |h| h.fighting()).max(1.0).min(longest.max(1.0));
+            let max_weapon_range = if longest > 0.0 { max_weapon_range } else { 0.0 };
 
             // Fights at range, FtD-style: a ship holds where its weapons
             // still connect -- 70% of its longest reach, so a sniper's fight

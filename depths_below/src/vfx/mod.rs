@@ -81,6 +81,7 @@ impl Plugin for VfxPlugin {
                     .chain()
                     .run_if(in_state(GameState::Exploring)),
             )
+            .add_systems(Update, far_view::label_traders.run_if(in_state(GameState::Exploring)))
             .add_systems(OnExit(GameState::Exploring), far_view::clear_far_labels)
             // Further out still, each ship and turret is one baked picture
             // of itself instead of hundreds of tiny blocks.

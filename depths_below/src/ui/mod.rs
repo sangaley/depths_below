@@ -2710,6 +2710,9 @@ fn refresh_crew_duty_labels(
 /// on each axis around `center` — big enough to fit every faction territory
 /// (25k-175k out) and a star system (star at ~50k-100k out from its own
 /// local_center, planets orbiting another 25k-45k+ beyond that).
+const MAP_HOSTILE: Color = Color::srgb(1.0, 0.15, 0.15);
+const MAP_NEUTRAL: Color = Color::srgb(0.62, 0.66, 0.72);
+const MAP_TRADER: Color = Color::srgb(0.35, 0.85, 0.75);
 const MAP_WORLD_RANGE: f32 = 600_000.0;
 
 /// Converts a world position to a pixel offset within a square map panel of
@@ -2789,7 +2792,8 @@ fn current_map_range(world_data: &MapWorldData) -> f32 {
 /// toggle_map_overlay's own params plus these pushed it past that.
 #[derive(bevy::ecs::system::SystemParam)]
 struct MapWorldData<'w, 's> {
-    ai_ship_query: Query<'w, 's, &'static Transform, With<crate::ai_ship::components::AiShip>>,
+    ai_ship_query: Query<'w, 's, (&'static Transform, &'static crate::ai_ship::components::AiShipType, Has<crate::ai_ship::fleet::CivilianHull>), With<crate::ai_ship::components::AiShip>>,
+    faction_standing: Res<'w, crate::diplomacy::FactionStanding>,
     sim: Res<'w, crate::ai_ship::components::WorldSimulation>,
     star_query: Query<'w, 's, &'static Transform, With<crate::celestial::components::Star>>,
     planet_query: Query<'w, 's, &'static Transform, With<crate::celestial::components::Planet>>,
@@ -2828,7 +2832,8 @@ struct MapSnapshot {
     planets: Vec<Vec2>,
     /// Each planet's orbit as (star position, semi-major axis, eccentricity).
     orbits: Vec<(Vec2, f32, f32)>,
-    hostiles: Vec<Vec2>,
+    /// Every ship in the system, coloured by what it is to you.
+    hostiles: Vec<(Vec2, Color)>,
     bounties: Vec<Vec2>,
     wrecks_found: usize,
     caves_found: usize,
@@ -3020,7 +3025,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
                 ));
             }
             // Hostiles: real (in render range) + still-off-screen simulated
-            for hostile_pos in &snap.hostiles {
+            for (hostile_pos, dot_color) in &snap.hostiles {
                 let (x, y) = world_to_map_px(*hostile_pos, snap.map_center, panel_size, snap.map_range);
                 map.spawn((
                     Node {
@@ -3031,7 +3036,7 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
                         height: Val::Px(4.0),
                         ..default()
                     },
-                    BackgroundColor(Color::srgb(1.0, 0.15, 0.15)),
+                    BackgroundColor(*dot_color),
                 ));
             }
             // Active bounty targets, highlighted on top of the generic red
@@ -3107,7 +3112,9 @@ fn spawn_map_overlay(commands: &mut Commands, snap: &MapSnapshot) {
             let entries: &[(Color, &str)] = &[
                 (Color::srgb(0.3, 0.9, 1.0), "You"),
                 (Color::srgb(0.25, 1.0, 0.35), "Station"),
-                (Color::srgb(1.0, 0.15, 0.15), "Hostile"),
+                (MAP_HOSTILE, "Hostile"),
+                (MAP_NEUTRAL, "Neutral"),
+                (MAP_TRADER, "Trader"),
                 (Color::srgb(1.0, 0.2, 0.85), "Bounty target"),
                 (Color::srgb(1.0, 0.9, 0.4), "Star"),
                 (Color::srgb(0.5, 0.6, 0.8), "Planet"),
@@ -3403,11 +3410,25 @@ fn build_map_snapshot(
     // space, so plotting its raw position on THIS system's local map would
     // be meaningless (or just pile up at the map edge). Only this system's
     // own off-screen ships belong on the local tactical view.
-    let mut hostiles: Vec<Vec2> = world_data.ai_ship_query.iter().map(|t| t.translation.truncate()).collect();
+    let standing = &world_data.faction_standing;
+    let dot = |faction: crate::ai_ship::components::AiShipType, civilian: bool| {
+        if civilian {
+            MAP_TRADER
+        } else if standing.attacks_player(faction) {
+            MAP_HOSTILE
+        } else {
+            MAP_NEUTRAL
+        }
+    };
+    let trading: std::collections::HashSet<u32> =
+        world_data.sim.fleets.iter().filter(|f| f.trade.is_some()).map(|f| f.id).collect();
+    let mut hostiles: Vec<(Vec2, Color)> = world_data.ai_ship_query.iter()
+        .map(|(t, f, civilian)| (t.translation.truncate(), dot(*f, civilian)))
+        .collect();
     hostiles.extend(
         world_data.sim.ships.iter()
             .filter(|s| !s.spawned && s.behavior != crate::ai_ship::components::SimBehavior::Dead && Some(s.system_id) == current_system)
-            .map(|s| s.position)
+            .map(|s| (s.position, dot(s.faction, trading.contains(&s.fleet))))
     );
 
     let bounties: Vec<Vec2> = crate::contracts::bounty_nav::active_bounty_positions_with_id(
