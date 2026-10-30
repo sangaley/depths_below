@@ -1015,13 +1015,16 @@ pub fn check_ai_cripple(
         // to work the ship.
         let crew_alive = children.iter().filter_map(|c| crew_query.get(c).ok()).filter(|c| c.health > 0.0).count() as u32;
         let crewless = complement.is_some_and(|c| c.0 > 0 && crew_alive as f32 <= c.0 as f32 * CRIPPLE_THRESHOLD);
+        // A class it was never built with is nothing it lost: an Oracle has no
+        // guns and no engines to begin with, and read as a derelict from birth.
+        let built_to_fight_or_fly = loadout.is_none_or(|l| l.guns > 0 || l.engines > 0);
         let why = if headless {
             "its bridge is gone"
         } else if powerless {
             "its reactors are failing"
         } else if crewless {
             "its crew are dead"
-        } else if toothless && immobile {
+        } else if toothless && immobile && built_to_fight_or_fly {
             "derelict adrift"
         } else {
             continue;

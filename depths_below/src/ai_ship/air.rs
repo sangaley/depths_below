@@ -30,12 +30,19 @@ const DIFFUSE_RATE: f32 = 2.5;
 const STEP: f32 = 0.05;
 /// Air below this and a crewman is gasping.
 pub const THIN_AIR: f32 = 0.3;
-/// Seconds of held breath, from full.
-const BREATH_SECS: f32 = 5.0;
+/// Seconds of emergency air, from full. Your crew have 90-second suits and
+/// nine seconds took a whole enemy crew: one hole at the bow and a capital with
+/// forty guns struck its colours a minute later, barely scratched.
+const BREATH_SECS: f32 = 30.0;
 /// Seconds to die once the breath is gone.
 const SUFFOCATE_SECS: f32 = 4.0;
 /// Breath back per second in good air, as a share of a full one.
 const RECOVER_PER_S: f32 = 0.2;
+/// Holes one crewman seals in a second: a big crew keeps up under fire, a
+/// handful of survivors doesn't.
+const SEAL_PER_CREW_S: f32 = 1.0 / 60.0;
+/// How fast life support brings a sealed ship's air back, per second.
+const REFILL_PER_S: f32 = 0.05;
 
 /// One enemy ship's air, in its own grid cells.
 #[derive(Component, Default)]
@@ -44,6 +51,10 @@ pub struct AiAir {
     pub pressure: HashMap<IVec2, f32>,
     /// Time not yet stepped.
     since: f32,
+    /// Breaches its crew have patched. Still wounds, no longer leaks.
+    pub sealed: HashSet<IVec2>,
+    /// Work done toward the next patch.
+    patching: f32,
 }
 
 /// Where an AI crewman is when he isn't manning anything.
@@ -136,7 +147,7 @@ pub fn fill_ai_air(
             let at = tiles[(i * 7919) % tiles.len()];
             commands.entity(c).try_insert(AiCrewBerth(at));
         }
-        commands.entity(ship).try_insert(AiAir { pressure: inside.into_iter().map(|c| (c, 1.0)).collect(), since: 0.0 });
+        commands.entity(ship).try_insert(AiAir { pressure: inside.into_iter().map(|c| (c, 1.0)).collect(), ..default() });
     }
 }
 
@@ -161,14 +172,33 @@ pub fn breathe_ai_ships(
     }
     // Only ships with a hole in them: an intact one is full and stays full.
     for (ship, mut air, holes, children) in ships.iter_mut() {
+        // Damage control: whoever is alive works through the holes, and once
+        // the last is sealed life support brings the air back.
+        let hands = children.iter().filter_map(|c| crew.get(c).ok()).filter(|(_, m, _)| m.health > 0.0).count();
+        air.patching += hands as f32 * SEAL_PER_CREW_S * dt;
+        let air = &mut *air;
+        let unsealed: Vec<IVec2> = holes.0.difference(&air.sealed).copied().collect();
+        for hole in unsealed.iter().take(air.patching as usize) {
+            air.sealed.insert(*hole);
+        }
+        air.patching = if unsealed.is_empty() { 0.0 } else { air.patching.fract() };
+        let open: HashSet<IVec2> = holes.0.difference(&air.sealed).copied().collect();
+
         air.since += dt;
         let mut steps = 0;
         while air.since >= STEP && steps < 10 {
             air.since -= STEP;
             steps += 1;
-            step_air(&mut air.pressure, &holes.0, STEP);
+            if !open.is_empty() {
+                step_air(&mut air.pressure, &open, STEP);
+            }
         }
         air.since = air.since.min(STEP);
+        if open.is_empty() && hands > 0 {
+            for p in air.pressure.values_mut() {
+                *p = (*p + REFILL_PER_S * dt).min(1.0);
+            }
+        }
 
         // Who is where: on station if manning one, else in his berth.
         let posts: HashMap<Entity, IVec2> = children
@@ -182,7 +212,7 @@ pub fn breathe_ai_ships(
                 continue;
             }
             let Some(at) = posts.get(&entity).copied().or(berth.map(|b| b.0)) else { continue };
-            let pressure = if holes.0.contains(&at) { 0.0 } else { air.pressure.get(&at).copied().unwrap_or(1.0) };
+            let pressure = if open.contains(&at) { 0.0 } else { air.pressure.get(&at).copied().unwrap_or(1.0) };
             if pressure >= THIN_AIR {
                 member.oxygen = (member.oxygen + 100.0 * RECOVER_PER_S * dt).min(100.0);
                 continue;
@@ -217,6 +247,48 @@ mod tests {
         for _ in 0..(secs / STEP) as u32 {
             step_air(pressure, holes, STEP);
         }
+    }
+
+    /// `crew` hands aboard a corridor with one hole in it, after `secs`:
+    /// was it sealed, and how much air is left?
+    fn damage_control(crew: u32, secs: u32) -> (bool, f32) {
+        let mut app = App::new();
+        app.init_resource::<Time>();
+        app.add_message::<CrewDamaged>();
+        app.add_systems(Update, breathe_ai_ships);
+        let hole = IVec2::new(-1, 0);
+        let ship = app.world_mut().spawn((
+            AiShip,
+            AiAir { pressure: corridor(30), ..default() },
+            Breaches([hole].into_iter().collect()),
+        )).id();
+        for _ in 0..crew {
+            app.world_mut().spawn((
+                CrewMember { name: "Kade".into(), health: 100.0, max_health: 100.0, oxygen: 100.0, morale: 100.0, state: crate::components::CrewState::Idle },
+                OwnedByAiShip { root: ship },
+                AiCrewBerth(IVec2::new(29, 0)),
+                ChildOf(ship),
+            ));
+        }
+        for _ in 0..secs * 20 {
+            app.world_mut().resource_mut::<Time>().advance_by(std::time::Duration::from_millis(50));
+            app.update();
+        }
+        let air = app.world().get::<AiAir>(ship).unwrap();
+        (air.sealed.contains(&hole), air.pressure.values().sum::<f32>() / 30.0)
+    }
+
+    #[test]
+    fn a_crew_seals_the_hole_and_the_air_comes_back() {
+        let (sealed, air) = damage_control(60, 25);
+        assert!(sealed);
+        assert!(air > 0.95, "life support brought it back: {air}");
+    }
+
+    #[test]
+    fn a_handful_of_survivors_cannot_keep_up() {
+        assert!(damage_control(60, 2).0, "sixty hands, a hole a second");
+        assert!(!damage_control(2, 2).0, "two hands take half a minute over it");
     }
 
     #[test]
