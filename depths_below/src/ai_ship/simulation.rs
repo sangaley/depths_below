@@ -1006,7 +1006,10 @@ pub fn sync_simulation_entities(
         // Nearest first; one that doesn't fit waits rather than letting a
         // farther, smaller one jump the queue. The first always fits, or a
         // fleet bigger than the budget could never appear.
-        if spawned_any && live_blocks + group.cost > max_live_ai_blocks() {
+        // A fleet already partly on screen (arriving over several frames,
+        // SPAWN_BLOCKS_PER_FRAME) always finishes: held back by the budget,
+        // the rest of it never came and the fleet stayed split for good.
+        if spawned_any && !live_fleets.contains(&group.fleet) && live_blocks + group.cost > max_live_ai_blocks() {
             break;
         }
         let fleet = sim.fleet(group.fleet).cloned();
