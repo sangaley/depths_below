@@ -964,14 +964,28 @@ pub fn check_ai_cripple(
     crew_query: Query<&crate::components::CrewMember, With<OwnedByAiShip>>,
     mut destroyed_events: MessageWriter<AiShipDestroyed>,
     mut notifications: MessageWriter<ShowNotification>,
+    decks: Query<&Children, With<crate::combat::turret_deck::TurretBody>>,
 ) {
     for (entity, transform, ship_type, children, mut state, bounty, loadout, station, complement) in ai_ships.iter_mut() {
         if state.is_destroyed { continue; }
+        // Nothing has touched it. A big hull spawns over several frames, and
+        // one still arriving has no guns or engines yet: it was read as a
+        // derelict and struck its colours with its whole crew aboard.
+        if state.last_hit_timer >= 999.0 { continue; }
         // A station has no engines by design, and an unarmed one (the
         // Silence's Monastery) no guns: neither has anything to strike.
         if station && loadout.is_none_or(|l| l.guns == 0) { continue; }
 
-        let (guns_alive, guns_total) = subsystem_tally(entity, children, &module_query, is_weapon_module);
+        // Its guns stand on its turrets as well as its deck. Counting the deck
+        // alone found none on a modern ship, so it was "toothless" from the
+        // moment it arrived, and losing its engines finished it.
+        let (guns_alive, guns_total) = children.iter().filter_map(|c| decks.get(c).ok()).fold(
+            subsystem_tally(entity, children, &module_query, is_weapon_module),
+            |(alive, total), deck| {
+                let (a, t) = subsystem_tally(entity, deck, &module_query, is_weapon_module);
+                (alive + a, total + t)
+            },
+        );
         let (engines_alive, engines_total) = subsystem_tally(entity, children, &module_query, is_engine_module);
 
         // Against the spawn-time loadout, not the survivors: dead modules are
@@ -1406,7 +1420,7 @@ mod cripple_tests {
             AiShip,
             Transform::default(),
             AiShipType::RecursiveKingdom,
-            AiShipState::default(),
+            AiShipState { last_hit_timer: 0.0, ..default() },
             AiLoadout { guns: 4, engines: 2, hull_max: 1000.0, ..default() },
         )).id();
         app.world_mut().spawn((
@@ -1422,6 +1436,43 @@ mod cripple_tests {
         );
     }
 
+    /// A big hull arriving over several frames: built with guns and engines,
+    /// none of them spawned yet, and nothing has touched it.
+    #[test]
+    fn a_ship_still_spawning_in_does_not_strike() {
+        let mut app = App::new();
+        app.add_message::<AiShipDestroyed>();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, check_ai_cripple);
+        let ship = app.world_mut().spawn((
+            AiShip, Transform::default(), AiShipType::TerranHegemony, AiShipState::default(),
+            AiLoadout { guns: 6, engines: 20, command: 8, power_mw: 4720.0, ..default() },
+        )).id();
+        app.world_mut().spawn((module(ModuleType::HelmStation, 0.0), OwnedByAiShip { root: ship }, ChildOf(ship)));
+        app.update();
+        assert!(!app.world().get::<AiShipState>(ship).unwrap().is_destroyed);
+    }
+
+    /// Engines gone, but its guns are on its turrets, a level below the ship.
+    #[test]
+    fn guns_on_turrets_count_and_a_ship_with_them_fights_on_without_engines() {
+        let mut app = App::new();
+        app.add_message::<AiShipDestroyed>();
+        app.add_message::<ShowNotification>();
+        app.add_systems(Update, check_ai_cripple);
+        let ship = app.world_mut().spawn((
+            AiShip, Transform::default(), AiShipType::TerranHegemony, AiShipState { last_hit_timer: 0.0, ..default() },
+            AiLoadout { guns: 2, engines: 4, ..default() },
+        )).id();
+        let ring = app.world_mut().spawn((module(ModuleType::TurretRing, 0.0), OwnedByAiShip { root: ship }, ChildOf(ship))).id();
+        let turret = app.world_mut().spawn((crate::combat::turret_deck::TurretBody::new(ring, IVec2::ZERO, 3), ChildOf(ship))).id();
+        for _ in 0..2 {
+            app.world_mut().spawn((module(ModuleType::Gatling, 100.0), OwnedByAiShip { root: ship }, ChildOf(turret)));
+        }
+        app.update();
+        assert!(!app.world().get::<AiShipState>(ship).unwrap().is_destroyed);
+    }
+
     /// A fully armed, fully driven ship with these modules besides, built
     /// with `loadout`: does it strike?
     fn strikes(loadout: AiLoadout, alive: &[(ModuleType, f32)]) -> bool {
@@ -1430,7 +1481,7 @@ mod cripple_tests {
         app.add_message::<ShowNotification>();
         app.add_systems(Update, check_ai_cripple);
         let ship = app.world_mut().spawn((
-            AiShip, Transform::default(), AiShipType::RecursiveKingdom, AiShipState::default(), loadout,
+            AiShip, Transform::default(), AiShipType::RecursiveKingdom, AiShipState { last_hit_timer: 0.0, ..default() }, loadout,
         )).id();
         let mut kit = vec![(ModuleType::Gatling, 0.0), (ModuleType::StandardEngine, 0.0)];
         kit.extend_from_slice(alive);
@@ -1467,7 +1518,7 @@ mod cripple_tests {
             app.add_message::<ShowNotification>();
             app.add_systems(Update, check_ai_cripple);
             let ship = app.world_mut().spawn((
-                AiShip, Transform::default(), AiShipType::RecursiveKingdom, AiShipState::default(),
+                AiShip, Transform::default(), AiShipType::RecursiveKingdom, AiShipState { last_hit_timer: 0.0, ..default() },
                 AiLoadout { guns: 1, engines: 1, ..default() }, super::super::air::AiCrewComplement(8),
             )).id();
             for t in [ModuleType::Gatling, ModuleType::StandardEngine] {

@@ -83,9 +83,6 @@ pub fn ai_brain_system(
     creature_grid: Res<CreatureGrid>,
     // Ships riding out a reactor breach — see the BERSERK arm below.
     melting_down: Query<Entity, With<ReactorMeltdown>>,
-    // Every module class, for guns_left — the same tally check_ai_cripple
-    // runs, so withdrawing and striking colours read one count.
-    module_query: Query<(&Module, &OwnedByAiShip)>,
     standing: Res<crate::diplomacy::FactionStanding>,
     // Faction stations hold fire for their own rule, and reach: a hull
     // kilometres across has guns in range long before its centre is.
@@ -148,7 +145,7 @@ pub fn ai_brain_system(
     let player_frame: Option<(Vec2, Quat)> =
         player_ship.iter().next().map(|(_, t, _)| (t.translation.truncate(), t.rotation));
 
-    for (entity, transform, ship_type, mut state, mut behavior, mut nav, mut timer, mut ai_target, children, loadout, member, civilian, escort, hunter) in ai_ships.iter_mut() {
+    for (entity, transform, ship_type, mut state, mut behavior, mut nav, mut timer, mut ai_target, children, _, member, civilian, escort, hunter) in ai_ships.iter_mut() {
         timer.timer.tick(time.delta());
         if !timer.timer.just_finished() {
             continue;
@@ -247,12 +244,11 @@ pub fn ai_brain_system(
         // despawned, so counting the survivors read a ship down to its last
         // gun as fully armed and the withdraw below never tripped. No guns
         // at all is 0, not "all of them".
-        let guns_left = {
-            let (alive, total) = super::combat::subsystem_tally(
-                entity, children, &module_query, super::combat::is_weapon_module,
-            );
-            super::combat::surviving_fraction(alive, total, loadout.map(|l| l.guns))
-        };
+        //
+        // From the survey, which sees turret guns: counting the deck alone
+        // read a fully armed ship as disarmed, and the Corpse Stars ran from
+        // every fight they were ever in.
+        let guns_left = me.map_or(1.0, |m| if m.peak_guns == 0 { 0.0 } else { m.guns_left() });
 
         // Perception
         let player_info = player_snapshot.map(|(e, p, _)| (e, p, pos.distance(p)));
