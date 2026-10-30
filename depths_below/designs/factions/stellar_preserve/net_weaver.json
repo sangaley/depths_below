@@ -18176,6 +18176,552 @@
    }
   },
   {
+   "module_type": "TurretRingSmall",
+   "grid_pos": [
+    27,
+    -28
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    26,
+    -28
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
+   "grid_pos": [
+    27,
+    -27
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    26,
+    -27
+   ],
+   "rotation": "South",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "FiringPiece",
+   "grid_pos": [
+    0,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     27,
+     -28
+    ],
+    "shell": {
+     "base": "None",
+     "casings": 2,
+     "bodies": [
+      "Frag",
+      "ProximityFuse"
+     ],
+     "head": "Frag"
+    },
+    "point_defence": true
+   }
+  },
+  {
+   "module_type": "GaugeReducer",
+   "grid_pos": [
+    0,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     27,
+     -28
+    ]
+   }
+  },
+  {
+   "module_type": "GaugeReducer",
+   "grid_pos": [
+    0,
+    -1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     27,
+     -28
+    ]
+   }
+  },
+  {
+   "module_type": "GunBarrel",
+   "grid_pos": [
+    1,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     27,
+     -28
+    ]
+   }
+  },
+  {
+   "module_type": "Loader",
+   "grid_pos": [
+    -1,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     27,
+     -28
+    ]
+   }
+  },
+  {
+   "module_type": "ClipRack",
+   "grid_pos": [
+    -1,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     27,
+     -28
+    ]
+   }
+  },
+  {
+   "module_type": "BreechCooler",
+   "grid_pos": [
+    -1,
+    -1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     27,
+     -28
+    ]
+   }
+  },
+  {
+   "module_type": "BreechCooler",
+   "grid_pos": [
+    1,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     27,
+     -28
+    ]
+   }
+  },
+  {
+   "module_type": "TurretRingSmall",
+   "grid_pos": [
+    -22,
+    15
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    -21,
+    15
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
+   "grid_pos": [
+    -22,
+    14
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    -21,
+    14
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "FiringPiece",
+   "grid_pos": [
+    0,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     -22,
+     15
+    ],
+    "shell": {
+     "base": "None",
+     "casings": 2,
+     "bodies": [
+      "Frag",
+      "ProximityFuse"
+     ],
+     "head": "Frag"
+    },
+    "point_defence": true
+   }
+  },
+  {
+   "module_type": "GaugeReducer",
+   "grid_pos": [
+    0,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     -22,
+     15
+    ]
+   }
+  },
+  {
+   "module_type": "GaugeReducer",
+   "grid_pos": [
+    0,
+    -1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     -22,
+     15
+    ]
+   }
+  },
+  {
+   "module_type": "GunBarrel",
+   "grid_pos": [
+    1,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     -22,
+     15
+    ]
+   }
+  },
+  {
+   "module_type": "Loader",
+   "grid_pos": [
+    -1,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     -22,
+     15
+    ]
+   }
+  },
+  {
+   "module_type": "ClipRack",
+   "grid_pos": [
+    -1,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     -22,
+     15
+    ]
+   }
+  },
+  {
+   "module_type": "BreechCooler",
+   "grid_pos": [
+    -1,
+    -1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     -22,
+     15
+    ]
+   }
+  },
+  {
+   "module_type": "BreechCooler",
+   "grid_pos": [
+    1,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     -22,
+     15
+    ]
+   }
+  },
+  {
+   "module_type": "TurretRingSmall",
+   "grid_pos": [
+    3,
+    33
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "TraverseMotor",
+   "grid_pos": [
+    4,
+    33
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "AmmoHoist",
+   "grid_pos": [
+    3,
+    32
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "Magazine",
+   "grid_pos": [
+    4,
+    32
+   ],
+   "rotation": "North",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": null
+  },
+  {
+   "module_type": "FiringPiece",
+   "grid_pos": [
+    0,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     3,
+     33
+    ],
+    "shell": {
+     "base": "None",
+     "casings": 2,
+     "bodies": [
+      "Frag",
+      "ProximityFuse"
+     ],
+     "head": "Frag"
+    },
+    "point_defence": true
+   }
+  },
+  {
+   "module_type": "GaugeReducer",
+   "grid_pos": [
+    0,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     3,
+     33
+    ]
+   }
+  },
+  {
+   "module_type": "GaugeReducer",
+   "grid_pos": [
+    0,
+    -1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     3,
+     33
+    ]
+   }
+  },
+  {
+   "module_type": "GunBarrel",
+   "grid_pos": [
+    1,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     3,
+     33
+    ]
+   }
+  },
+  {
+   "module_type": "Loader",
+   "grid_pos": [
+    -1,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     3,
+     33
+    ]
+   }
+  },
+  {
+   "module_type": "ClipRack",
+   "grid_pos": [
+    -1,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     3,
+     33
+    ]
+   }
+  },
+  {
+   "module_type": "BreechCooler",
+   "grid_pos": [
+    -1,
+    -1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     3,
+     33
+    ]
+   }
+  },
+  {
+   "module_type": "BreechCooler",
+   "grid_pos": [
+    1,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     3,
+     33
+    ]
+   }
+  },
+  {
    "module_type": "MissileWarner",
    "grid_pos": [
     27,

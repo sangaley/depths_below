@@ -26,7 +26,11 @@ pub fn combat_report(
     player: Query<(&Transform, Option<&Children>), With<Ship>>,
     blocks: Query<(), (Or<(With<Module>, With<HullSegment>)>, Without<DestroyedModule>, Without<HullDestroyed>)>,
     crew: Query<(), (With<CrewMember>, Without<OwnedByAiShip>)>,
-    enemies: Query<(&Transform, &AiShipType, Option<&AiShipClass>, &AiShipState, &AiShipBehavior), With<AiShip>>,
+    enemies: Query<(Entity, &Transform, &AiShipType, Option<&AiShipClass>, &AiShipState, &AiShipBehavior), With<AiShip>>,
+    // Every enemy block still standing, by its ship: hull integrity alone
+    // counts bare floor, and most rounds land on what stands over it.
+    enemy_blocks: Query<&OwnedByAiShip, (Or<(With<Module>, With<HullSegment>)>, Without<DestroyedModule>, Without<HullDestroyed>)>,
+    mut enemy_start: Local<bevy::platform::collections::HashMap<Entity, usize>>,
 ) {
     if !on() {
         return;
@@ -40,16 +44,24 @@ pub fn combat_report(
     let at = at.translation.truncate();
     let alive = children.map_or(0, |c| c.iter().filter(|e| blocks.contains(*e)).count());
     let start = *start_blocks.get_or_insert(alive);
+    let mut standing: bevy::platform::collections::HashMap<Entity, usize> = Default::default();
+    for owner in enemy_blocks.iter() {
+        *standing.entry(owner.root).or_insert(0) += 1;
+    }
     let mut seen: Vec<String> = enemies
         .iter()
-        .filter_map(|(tf, faction, class, state, behavior)| {
+        .filter_map(|(ship, tf, faction, class, state, behavior)| {
             let d = tf.translation.truncate().distance(at);
+            let now_blocks = standing.get(&ship).copied().unwrap_or(0);
+            let first = *enemy_start.entry(ship).or_insert(now_blocks);
             (d <= crate::camera::SENSOR_RANGE * 1.5).then(|| {
                 format!(
-                    "{:?}/{} hull={:.2} d={:.0} {}",
+                    "{:?}/{} hull={:.2} blocks={}/{} d={:.0} {}",
                     faction,
                     class.map_or("-", |c| c.0),
                     state.hull_integrity,
+                    now_blocks,
+                    first,
                     d,
                     if state.is_destroyed { "DESTROYED".to_string() } else { format!("{behavior:?}") }
                 )

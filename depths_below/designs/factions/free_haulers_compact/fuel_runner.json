@@ -22092,102 +22092,6 @@
    "extras": null
   },
   {
-   "module_type": "FiringPiece",
-   "grid_pos": [
-    0,
-    0
-   ],
-   "rotation": "East",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     8,
-     -16
-    ]
-   }
-  },
-  {
-   "module_type": "Loader",
-   "grid_pos": [
-    -1,
-    0
-   ],
-   "rotation": "East",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     8,
-     -16
-    ]
-   }
-  },
-  {
-   "module_type": "ClipRack",
-   "grid_pos": [
-    -1,
-    1
-   ],
-   "rotation": "East",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     8,
-     -16
-    ]
-   }
-  },
-  {
-   "module_type": "BreechCooler",
-   "grid_pos": [
-    -1,
-    -1
-   ],
-   "rotation": "East",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     8,
-     -16
-    ]
-   }
-  },
-  {
-   "module_type": "GunBarrel",
-   "grid_pos": [
-    1,
-    0
-   ],
-   "rotation": "East",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     8,
-     -16
-    ]
-   }
-  },
-  {
-   "module_type": "GunBarrel",
-   "grid_pos": [
-    2,
-    0
-   ],
-   "rotation": "East",
-   "custom_name": null,
-   "subcomponents": null,
-   "extras": {
-    "turret": [
-     8,
-     -16
-    ]
-   }
-  },
-  {
    "module_type": "TurretRingSmall",
    "grid_pos": [
     24,
@@ -23308,6 +23212,64 @@
     "turret": [
      48,
      6
+    ],
+    "shell": {
+     "base": "None",
+     "casings": 2,
+     "bodies": [
+      "Frag",
+      "ProximityFuse"
+     ],
+     "head": "Frag"
+    },
+    "point_defence": true
+   }
+  },
+  {
+   "module_type": "GaugeReducer",
+   "grid_pos": [
+    0,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     48,
+     6
+    ]
+   }
+  },
+  {
+   "module_type": "GaugeReducer",
+   "grid_pos": [
+    0,
+    -1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     48,
+     6
+    ]
+   }
+  },
+  {
+   "module_type": "GunBarrel",
+   "grid_pos": [
+    1,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     48,
+     6
     ]
    }
   },
@@ -23360,10 +23322,10 @@
    }
   },
   {
-   "module_type": "GunBarrel",
+   "module_type": "BreechCooler",
    "grid_pos": [
     1,
-    0
+    1
    ],
    "rotation": "East",
    "custom_name": null,
@@ -23376,9 +23338,9 @@
    }
   },
   {
-   "module_type": "GunBarrel",
+   "module_type": "FiringPiece",
    "grid_pos": [
-    2,
+    0,
     0
    ],
    "rotation": "East",
@@ -23386,8 +23348,130 @@
    "subcomponents": null,
    "extras": {
     "turret": [
-     48,
-     6
+     8,
+     -16
+    ],
+    "shell": {
+     "base": "None",
+     "casings": 2,
+     "bodies": [
+      "Frag",
+      "ProximityFuse"
+     ],
+     "head": "Frag"
+    },
+    "point_defence": true
+   }
+  },
+  {
+   "module_type": "GaugeReducer",
+   "grid_pos": [
+    0,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     8,
+     -16
+    ]
+   }
+  },
+  {
+   "module_type": "GaugeReducer",
+   "grid_pos": [
+    0,
+    -1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     8,
+     -16
+    ]
+   }
+  },
+  {
+   "module_type": "GunBarrel",
+   "grid_pos": [
+    1,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     8,
+     -16
+    ]
+   }
+  },
+  {
+   "module_type": "Loader",
+   "grid_pos": [
+    -1,
+    0
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     8,
+     -16
+    ]
+   }
+  },
+  {
+   "module_type": "ClipRack",
+   "grid_pos": [
+    -1,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     8,
+     -16
+    ]
+   }
+  },
+  {
+   "module_type": "BreechCooler",
+   "grid_pos": [
+    -1,
+    -1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     8,
+     -16
+    ]
+   }
+  },
+  {
+   "module_type": "BreechCooler",
+   "grid_pos": [
+    1,
+    1
+   ],
+   "rotation": "East",
+   "custom_name": null,
+   "subcomponents": null,
+   "extras": {
+    "turret": [
+     8,
+     -16
     ]
    }
   },

@@ -71,7 +71,7 @@ def loadouts(out):
 
 
 LINE = re.compile(r"COMBAT t=(\d+) player hull=([\d.]+) blocks=(\d+)/(\d+) power=(\d+)/(\d+) crew=(\d+) \| (.*)")
-ENEMY = re.compile(r"(\w+)/(\w+|-) hull=([\d.]+) d=(\d+) (\w+)")
+ENEMY = re.compile(r"(\w+)/(\w+|-) hull=([\d.]+) blocks=(\d+)/(\d+) d=(\d+) (\w+)")
 
 
 def fight(out, loadout, path, faction, secs):
@@ -84,7 +84,8 @@ def fight(out, loadout, path, faction, secs):
     log = re.sub(r"\x1b\[[0-9;]*m", "", log)
     rows = []
     for m in LINE.finditer(log):
-        enemies = [dict(faction=e[0], cls=e[1], hull=float(e[2]), d=int(e[3]), state=e[4]) for e in ENEMY.findall(m.group(8))]
+        enemies = [dict(faction=e[0], cls=e[1], hull=float(e[2]), blocks=int(e[3]), start=int(e[4]), d=int(e[5]), state=e[6])
+                   for e in ENEMY.findall(m.group(8))]
         rows.append(dict(t=int(m.group(1)), hull=float(m.group(2)), blocks=int(m.group(3)), start=int(m.group(4)),
                          gen=int(m.group(5)), use=int(m.group(6)), crew=int(m.group(7)), enemies=enemies))
     c = Counter()
@@ -113,6 +114,8 @@ def summarise(r):
     return dict(
         player_hull=last["hull"], player_blocks=f"{last['blocks']}/{last['start']}", power=f"{last['gen']}/{last['use']}", crew=last["crew"],
         enemies=len(en), killed=dead, enemy_hull_avg=round(sum(e["hull"] for e in en) / max(len(en), 1), 2),
+        enemy_blocks_lost=round(1 - sum(e["blocks"] for e in en) / max(sum(e["start"] for e in en), 1), 3),
+        player_blocks_lost=round(1 - last["blocks"] / max(last["start"], 1), 3),
         first_kill_s=first_kill, engage_range_median=sorted(engaged)[len(engaged) // 2] if engaged else None,
         behaviors=dict(Counter(e["state"] for e in en)),
     )
@@ -129,8 +132,10 @@ def main():
     if os.path.exists(resfile):
         results = json.load(open(resfile))
     done = {(r["loadout"], r["faction"]) for r in results}
-    for loadout, path in paths.items():
-        for faction in FACTIONS:
+    # LAB_LOADOUTS / LAB_FACTIONS (comma lists) narrow a campaign.
+    pick = lambda var, all_: [x for x in all_ if not os.environ.get(var) or x in os.environ[var].split(",")]
+    for loadout, path in [(l, paths[l]) for l in pick("LAB_LOADOUTS", list(paths))]:
+        for faction in pick("LAB_FACTIONS", FACTIONS):
             if (loadout, faction) in done or (filt and filt not in f"{loadout}_{faction}"):
                 continue
             r = fight(out, loadout, path, faction, secs)
@@ -138,12 +143,12 @@ def main():
             results.append(r)
             json.dump(results, open(resfile, "w"), indent=1)
             print(loadout, faction, r["summary"], r["counts"], flush=True)
-    lines = ["| loadout | enemy | your hull | blocks | power | killed | enemy hull | 1st kill | range | your msl | their msl | PD kills | panics |",
-             "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+    lines = ["| loadout | enemy | your blocks lost | their blocks lost | power | killed | 1st kill | range | your msl | their msl | PD kills | panics |",
+             "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for r in results:
         s, c = r["summary"], r["counts"]
-        lines.append(f"| {r['loadout']} | {r['faction']} | {s.get('player_hull')} | {s.get('player_blocks')} | {s.get('power')} | "
-                     f"{s.get('killed')}/{s.get('enemies')} | {s.get('enemy_hull_avg')} | {s.get('first_kill_s')} | {s.get('engage_range_median')} | "
+        lines.append(f"| {r['loadout']} | {r['faction']} | {s.get('player_blocks_lost')} | {s.get('enemy_blocks_lost')} | {s.get('power')} | "
+                     f"{s.get('killed')}/{s.get('enemies')} | {s.get('first_kill_s')} | {s.get('engage_range_median')} | "
                      f"{c['player_missiles']} | {c['enemy_missiles']} | {c['flak_kills'] + c['laser_pd_kills']} | {c['panics']} |")
     open(os.path.join(out, "results.md"), "w").write("\n".join(lines) + "\n")
     print("\n".join(lines))

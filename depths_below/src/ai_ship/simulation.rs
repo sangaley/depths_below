@@ -1820,8 +1820,11 @@ mod wreck_bookkeeping_tests {
         };
         let player = app.world_mut().query_filtered::<Entity, With<Ship>>().single(app.world()).unwrap();
         app.world_mut().entity_mut(player).insert(Transform::from_translation(centre.extend(0.0)));
-        app.update();
-        app.update();
+        // A big fleet arrives over a few frames (SPAWN_BLOCKS_PER_FRAME):
+        // give it time to finish coming.
+        for _ in 0..20 {
+            app.update();
+        }
 
         let mut members = app.world_mut().query::<&super::super::fleet::FleetMember>();
         let live: Vec<u32> = members.iter(app.world()).map(|m| m.fleet).collect();

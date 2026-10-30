@@ -135,9 +135,21 @@ pub fn round_size(gauge_mm: f32) -> Vec2 {
     Vec2::new(length, length * 0.25)
 }
 
+/// How far a gun reaches. Small bores are close-in weapons: a light round
+/// sheds its speed and wanders, so reach goes with the square root of the
+/// bore against 150 mm -- a 60 mm autocannon about 5 km, a 170 mm gun a
+/// touch over its old 7. Massed autocannons used to shred ships from 7 km
+/// out (combat lab, 2026-10-29).
 pub fn range_for(stats: &GunStats) -> f32 {
-    (4000.0 + stats.velocity_mps * 4.0) * stats.range_mult.max(1.0)
+    let bore = (stats.gauge_mm / 150.0).sqrt().clamp(0.55, 1.15);
+    (4000.0 + stats.velocity_mps * 4.0) * bore * stats.range_mult.max(1.0)
 }
+
+/// What a built gun's round does against what its shell design adds up to.
+/// Ships were drawn twice as big, four times the blocks: at 1x a fight at
+/// range took a big ship 2-9% of its hull in two minutes, half an hour to a
+/// kill (combat lab, 2026-10-29).
+pub const BUILT_DAMAGE_SCALE: f32 = 2.5;
 
 /// Projectile caliber scale (combat::new_projectiles::caliber_scale), from
 /// gauge: a 150 mm gun is 1.0, a 500 mm one 3.3.
@@ -647,7 +659,7 @@ pub fn assemble_guns(
         for (fp, mut assembly) in guns {
             assembly.ship = Some(ship);
             if let Ok((mut base, mut mount, mut weapon)) = firing.get_mut(fp) {
-                base.damage = assembly.stats.damage;
+                base.damage = assembly.stats.damage * BUILT_DAMAGE_SCALE;
                 base.range = range_for(&assembly.stats);
                 base.fire_rate = (assembly.stats.rpm / 60.0).max(0.0);
                 // A magazine shot off takes its shells with it.

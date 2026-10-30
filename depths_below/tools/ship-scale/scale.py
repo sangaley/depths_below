@@ -541,7 +541,9 @@ def main():
         s.arm(own)
         cells = len(src["hull_cells"])
         if armed and faction != "the_silence":
-            s.point_defence(own, 8 if station else 1 if cells < 300 else 2 if cells < 800 else 4)
+            # About one CIWS per 400 cells of the doubled hull, 1 to 8: one
+            # turret downed 2 of a Choir swarm's 35 missiles (combat lab).
+            s.point_defence(own, 8 if station else max(1, min(8, round(len(s.hull) / 400))))
             s.warners(2 if cells < 300 else 4)
         out = s.design()
         line = ", ".join(f"{n} {k}" for k, n in sorted(s.report.items()) if n)
