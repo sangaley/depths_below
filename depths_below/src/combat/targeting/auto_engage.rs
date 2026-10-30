@@ -21,7 +21,7 @@ use super::{AimLock, TargetSelection};
 /// Furthest away an unlocked battery will pick a fight on its own. Matches
 /// the ship-target range in `cycle_target`, so what `\` can select and what
 /// the guns will engage unprompted are the same set.
-const AUTO_ENGAGE_RANGE: f32 = 9000.0;
+const AUTO_ENGAGE_RANGE: f32 = 27_000.0;
 
 /// How long one gun stays on one block before rolling another. Randomised per
 /// gun so a battery drifts across the hull instead of every barrel jumping to

@@ -25,8 +25,8 @@ ALL = ["EternalHegemony", "TerranHegemony", "GildedThrone", "BrokenChoir", "Corp
        "SynthesisCollective", "Shepherd", "RecursiveKingdom"]
 # The factions that think: the Choir fight by reflex and the dials barely touch them.
 TRAIN_ON = ["TerranHegemony", "GildedThrone", "EternalHegemony", "SynthesisCollective", "CorpseStars", "RecursiveKingdom"]
-START = dict(jink=0.6, focus=2.0, withdraw=1.0, kite_margin=600.0, close_to=0.55, recover_shield=0.15, salvo_beat=8.0, flank=0.6)
-STEPS = dict(jink=[0.3, 1.0], focus=[1.3, 3.5], withdraw=[0.6, 1.5], kite_margin=[200.0, 1200.0],
+START = dict(jink=0.6, focus=2.0, withdraw=1.0, kite_margin=1800.0, close_to=0.55, recover_shield=0.15, salvo_beat=8.0, flank=0.6)
+STEPS = dict(jink=[0.3, 1.0], focus=[1.3, 3.5], withdraw=[0.6, 1.5], kite_margin=[600.0, 3600.0],
              close_to=[0.4, 0.75], recover_shield=[0.05, 0.35], salvo_beat=[0.0, 14.0], flank=[0.3, 1.0])
 # An improvement has to beat this to count: fights have noise of their own.
 MARGIN = 0.03
@@ -38,7 +38,7 @@ def fight(binary, faction, secs, weights, out, tag):
     log = os.path.join(out, f"{tag}_{faction}.log")
     env = dict(os.environ, DEPTHS_MUTE="1", DEPTHS_SKIP_MENU="1", DEPTHS_OFFSCREEN="1", DEPTHS_MOVETEST="1",
                DEPTHS_MOVETEST_ENEMY_SHOOTS="1", DEPTHS_MOVETEST_FLEET=f"{faction}:Patrol",
-               DEPTHS_MOVETEST_FLEET_AT="0,6000", DEPTHS_COMBAT_REPORT="1", DEPTHS_DESIGN="designs/starter.json",
+               DEPTHS_MOVETEST_FLEET_AT="0,20000", DEPTHS_COMBAT_REPORT="1", DEPTHS_DESIGN="designs/starter.json",
                DEPTHS_KEYS=f"3:Backslash,4:Space~{secs}", NO_COLOR="1", DEPTHS_FLEET_SEED=os.environ.get("LAB_SEED", "3"),
                DEPTHS_AI_WEIGHTS=",".join(f"{k}={v}" for k, v in weights.items()))
     # Bevy looks for assets beside the binary unless told otherwise.

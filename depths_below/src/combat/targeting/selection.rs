@@ -74,7 +74,7 @@ pub fn cycle_target(
 
     for (entity, transform) in ai_ship_query.iter() {
         let dist = ship_pos.distance(transform.translation.truncate());
-        if dist > 9000.0 { continue; } // Was 2000 — shorter than the new weapon/standoff ranges, couldn't lock a ship holding its own distance
+        if dist > 27_000.0 { continue; } // Was 2000 — shorter than the new weapon/standoff ranges, couldn't lock a ship holding its own distance
         targets.push((entity, dist, "Hostile Ship", TargetType::Ship));
     }
 

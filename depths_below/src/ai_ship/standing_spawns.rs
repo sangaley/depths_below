@@ -29,7 +29,7 @@ use crate::diplomacy::{FactionStanding, StandingTier};
 
 /// How far out a hunt or war fleet starts: past where ships materialise, so
 /// it arrives rather than appears.
-const ARRIVAL_RANGE: f32 = 18_000.0;
+const ARRIVAL_RANGE: f32 = 54_000.0;
 /// First hunt after this long in a system with a faction that hates you.
 const FIRST_HUNT: f32 = 240.0;
 /// Then one every this long, give or take.

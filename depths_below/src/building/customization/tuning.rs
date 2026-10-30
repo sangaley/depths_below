@@ -115,13 +115,14 @@ pub fn is_missile_weapon(module_type: ModuleType) -> bool {
 /// Single source of truth for kinetic projectile muzzle speed — the firing
 /// system and the tuning window's live stat readout both use this.
 pub fn base_projectile_speed(module_type: ModuleType) -> f32 {
-    match module_type {
+    let tuned: f32 = match module_type {
         ModuleType::Railgun => 9000.0,
         ModuleType::Coilgun => 8000.0,
         ModuleType::Cannon => 6000.0,
         ModuleType::Gatling => 5000.0,
         _ => 6000.0,
-    }
+    };
+    tuned * crate::combat::gun_assembly::RANGE_SCALE
 }
 
 /// UI label for the velocity slider — it means different things per family.

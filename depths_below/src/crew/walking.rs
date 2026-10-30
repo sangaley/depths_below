@@ -861,7 +861,7 @@ mod walking_tests {
 /// How near a hostile has to be before the crew stop doing chores and stay at
 /// their posts. Generous on purpose — you should not have damage-control teams
 /// strolling into the open while something is still shooting at you.
-pub const COMBAT_RANGE: f32 = 2600.0;
+pub const COMBAT_RANGE: f32 = 24_000.0;
 
 /// Is anything hostile close enough to count as a fight?
 ///

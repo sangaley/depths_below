@@ -65,7 +65,8 @@ impl Default for CameraState {
             // that far, see combat::PROJECTILE_SPEED) sat right at the
             // screen edge even fully zoomed out. 20.0 gives ~25,600x14,400
             // visible, comfortably framing a long-range fight.
-            max_zoom: 20.0,
+            // A fight at 20 km, framed: fight_framing_zoom.
+            max_zoom: 70.0,
             shake_intensity: 0.0,
             shake_decay: 5.0,
             shake_offset: Vec2::ZERO,
@@ -424,7 +425,7 @@ pub fn fight_framing_zoom(reach: f32, view_height: f32) -> f32 {
     (2.3 * reach / view_height).max(DEFAULT_ZOOM)
 }
 
-/// Fights happen at 5-8 km now. While an enemy is fighting you inside sensor
+/// Fights happen at around 20 km now. While an enemy is fighting you inside sensor
 /// range, the camera stays out far enough to keep the nearest such ship, all
 /// of it, on screen -- easing out and back in on its own. Zoom by hand
 /// during the fight and the camera is yours until it's over.
@@ -735,13 +736,13 @@ impl Default for TorchLight {
 
 /// Past this everything is hidden outright, for performance, lit or not.
 /// Past where ships appear (ai_ship::simulation::RENDER_DISTANCE).
-pub const CULL_RANGE: f32 = 20_000.0;
+pub const CULL_RANGE: f32 = 60_000.0;
 
 /// How far the ship's sensors hold a ship as a contact, torch or no torch:
 /// fights happen at 5-8 km, well past the torch's reach, and a ship you're
 /// trading fire with can't be a black hole. Exploring stays dark: rocks,
 /// wrecks and stations still wait for the torch.
-pub const SENSOR_RANGE: f32 = 14_000.0;
+pub const SENSOR_RANGE: f32 = 42_000.0;
 /// How bright a sensor contact is drawn: a shade under lit, so you can tell
 /// what the torch is on.
 pub const CONTACT_LIGHT: f32 = 0.8;

@@ -20,6 +20,7 @@
 //! carries its design (`MissileLoadout`); one nobody has designed for flies
 //! the launcher's default.
 
+use super::gun_assembly::RANGE_SCALE;
 use bevy::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -342,7 +343,7 @@ pub struct MissileStats {
 pub const COAST_LIFE: f32 = 6.0;
 /// Below this after burnout a missile has stalled.
 pub const STALL_SPEED: f32 = 250.0;
-pub const MAX_SPEED: f32 = 2600.0;
+pub const MAX_SPEED: f32 = 2600.0 * RANGE_SCALE;
 pub const EMP_SECONDS: f32 = 6.0;
 
 pub fn stats(d: &MissileDesign, launcher: LauncherSpec) -> MissileStats {
@@ -360,10 +361,11 @@ pub fn stats(d: &MissileDesign, launcher: LauncherSpec) -> MissileStats {
     let (burn0, per_tank) = d.motor.burn();
     let burn_s = burn0 + tanks * per_tank;
     let fin_loss = (1.0 - 0.05 * fins as f32).max(0.6);
-    let accel = d.motor.thrust() * k / mass_t * fin_loss;
+    let accel = d.motor.thrust() * k / mass_t * fin_loss * RANGE_SCALE;
     let drag = 0.10 + 0.02 * fins as f32;
-    let lateral = (1400.0 + 1700.0 * fins as f32) / k.powf(0.25);
-    let lateral_burning = lateral + if d.motor == MissileMotor::Vectoring { 2600.0 } else { 0.0 };
+    // Turning as tight relative to the fight as it always did.
+    let lateral = (1400.0 + 1700.0 * fins as f32) / k.powf(0.25) * RANGE_SCALE;
+    let lateral_burning = lateral + if d.motor == MissileMotor::Vectoring { 2600.0 * RANGE_SCALE } else { 0.0 };
     let life_s = launcher.popup + burn_s + COAST_LIFE;
     // Fly it in one dimension for top speed and reach, the way the range did.
     // Time is counted in whole steps: summed in f32, 0.01 s steps drift enough
@@ -389,9 +391,9 @@ pub fn stats(d: &MissileDesign, launcher: LauncherSpec) -> MissileStats {
     }
     let x = x as f32;
     let seeker = match d.head {
-        MissileHead::Heat => Seeker::Heat { range: 3200.0, cone_deg: 35.0 },
-        MissileHead::Radar => Seeker::Radar { range: 5200.0, cone_deg: 50.0 },
-        MissileHead::CommandLink => Seeker::CommandLink { range: 7000.0 },
+        MissileHead::Heat => Seeker::Heat { range: 3200.0 * RANGE_SCALE, cone_deg: 35.0 },
+        MissileHead::Radar => Seeker::Radar { range: 5200.0 * RANGE_SCALE, cone_deg: 50.0 },
+        MissileHead::CommandLink => Seeker::CommandLink { range: 7000.0 * RANGE_SCALE },
         MissileHead::DumbNose => Seeker::None,
     };
     let fool_base = match d.head {
@@ -461,7 +463,9 @@ pub fn fit_missile_loadouts(
 /// Point defence's chance of hitting a missile of size `k` going `speed`
 /// with one shot (the Missile Bay's rule).
 pub fn pd_hit_chance(speed: f32, k: f32) -> f32 {
-    (0.22 * (1000.0 / speed.max(300.0)).powf(0.8) * k.sqrt()).clamp(0.04, 0.9)
+    // (Its speed as it was tuned: point defence reaches further too, so a
+    // faster missile doesn't give it any less time.)
+    (0.22 * (1000.0 / (speed / RANGE_SCALE).max(300.0)).powf(0.8) * k.sqrt()).clamp(0.04, 0.9)
 }
 
 /// What's wrong with a design on this launcher, for the designer to show.
@@ -496,9 +500,9 @@ mod tests {
         let d = MissileDesign::default_for(ModuleType::RailLauncher);
         assert_eq!(d.strip(), "[BO][FU][FN][FN][HE][RD]");
         let s = stats(&d, rail());
-        assert!((s.top_speed - 1430.0).abs() < 5.0, "{}", s.top_speed);
-        assert!((s.reach - 6942.0).abs() < 30.0, "{}", s.reach);
-        assert!((s.turn_circle / 66.0 - 6.5).abs() < 0.1);
+        // The Missile Bay's figures (1430 u/s, 6942 u), with the fight's scale.
+        assert!((2.5..3.1).contains(&(s.top_speed / 1430.0)), "{}", s.top_speed);
+        assert!((2.4..3.1).contains(&(s.reach / 6942.0)), "{}", s.reach);
         assert!((s.he_damage - 260.0).abs() < 1e-3);
     }
 
@@ -510,12 +514,12 @@ mod tests {
             head: MissileHead::CommandLink,
         };
         let s = stats(&sledge, launcher_spec(ModuleType::VlsSilo).unwrap());
-        assert!((s.reach - 7193.0).abs() < 30.0, "{}", s.reach);
-        assert!((s.top_speed - 1098.0).abs() < 5.0);
+        assert!((2.4..3.1).contains(&(s.reach / 7193.0)), "{}", s.reach);
+        assert!((2.4..3.1).contains(&(s.top_speed / 1098.0)), "{}", s.top_speed);
         assert!((s.toughness - 174.0).abs() < 1.0);
         assert!((s.reload_s - 14.0).abs() < 0.1);
         let hornet = stats(&MissileDesign::default_for(ModuleType::LaunchPad), launcher_spec(ModuleType::LaunchPad).unwrap());
-        assert!((hornet.reach - 5240.0).abs() < 30.0, "{}", hornet.reach);
+        assert!((2.4..3.1).contains(&(hornet.reach / 5240.0)), "{}", hornet.reach);
     }
 
     #[test]

@@ -21,6 +21,7 @@
 //! fires only at missiles its ship's warners have spotted.
 
 use bevy::platform::collections::{HashMap, HashSet};
+use super::gun_assembly::RANGE_SCALE;
 use bevy::prelude::*;
 
 use crate::components::{DestroyedModule, HullSegment, Module, ModuleType, Ship};
@@ -34,7 +35,7 @@ pub const PUMP_RATE: f32 = 12.0;
 pub const PUMP_POWER_MW: f32 = 60.0;
 pub const PUMP_IDLE_MW: f32 = 2.0;
 /// How far point defence reaches for a missile.
-pub const PD_REACH: f32 = 3500.0;
+pub const PD_REACH: f32 = 3500.0 * RANGE_SCALE;
 /// How deep a pulse carries.
 pub const PULSE_DEPTH: usize = 6;
 /// Cells are 66 units across.
@@ -69,13 +70,13 @@ pub fn bank_stats(cavities: u32, q_switches: u32, doublers: u32, destabilisers: 
 
 /// How much of the beam is left after `distance` units.
 pub fn reaching(distance: f32, lenses: u32, point_defence: bool) -> f32 {
-    let l = 3000.0 * (1.0 + lenses as f32).sqrt() * if point_defence { 2.0 } else { 1.0 };
+    let l = 3000.0 * RANGE_SCALE * (1.0 + lenses as f32).sqrt() * if point_defence { 2.0 } else { 1.0 };
     (-distance / l).exp()
 }
 
 /// Furthest a laser bothers firing: where 5% of it is left.
 pub fn max_range(lenses: u32) -> f32 {
-    3.0 * 3000.0 * (1.0 + lenses as f32).sqrt()
+    3.0 * 3000.0 * RANGE_SCALE * (1.0 + lenses as f32).sqrt()
 }
 
 /// A hull-mounted emitter's arc, degrees either side of where it faces: a

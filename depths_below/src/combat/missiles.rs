@@ -34,7 +34,7 @@ const BURN_TIME: f32 = 1.4;
 /// single biggest lever on whether a missile can corner: dropping the cap
 /// from 2200 to 1200 cuts the circle it flies to under a third of its old
 /// size before agility is touched at all.
-const MISSILE_MAX_SPEED: f32 = 1200.0;
+const MISSILE_MAX_SPEED: f32 = 1200.0 * super::gun_assembly::RANGE_SCALE;
 
 /// Radians of steering authority a fresh missile carries. Every radian it
 /// turns is deducted; at zero it coasts, so only a missile genuinely fighting
@@ -99,7 +99,7 @@ const LATERAL_GUIDED: f32 = 5200.0;
 const LATERAL_HEAVY: f32 = 3200.0;
 
 /// Inside this range the seeker is allowed a harder turn — the terminal dive.
-const TERMINAL_RANGE: f32 = 300.0;
+const TERMINAL_RANGE: f32 = 300.0 * super::gun_assembly::RANGE_SCALE;
 const TERMINAL_AGILITY_BONUS: f32 = 1.6;
 
 /// Seconds before self-destruct, per launcher. Heavy carries the most: range
@@ -461,7 +461,7 @@ pub fn launch_missiles(commands: &mut Commands, l: &MissileLaunch) -> u32 {
                 target: if max_lateral > 0.0 { l.target } else { None },
                 burn_fuel: BURN_TIME * bulk,
                 reserve_fuel: RESERVE_TURN,
-                thrust: BOOST_THRUST * l.thrust_mult / bulk,
+                thrust: BOOST_THRUST * l.thrust_mult / bulk * super::gun_assembly::RANGE_SCALE,
                 max_lateral,
                 arm_distance: 80.0,
                 blast_radius: blast_radius_for(size_mult),

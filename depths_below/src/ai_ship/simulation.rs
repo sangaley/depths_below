@@ -11,7 +11,7 @@ use super::spawner;
 /// sniper holding its range sat right on the edge of being real. 16,000
 /// puts a ship on screen, as a sensor contact (camera::SENSOR_RANGE), well
 /// before it's in reach.
-pub const RENDER_DISTANCE: f32 = 16_000.0;
+pub const RENDER_DISTANCE: f32 = 48_000.0;
 
 /// How many AI blocks (hull cells + modules) may exist as real entities at once.
 ///
@@ -56,7 +56,7 @@ fn max_live_ai_blocks() -> usize {
 /// actually use its weapon's range. 14,000 clears the max standoff with
 /// real margin and stays under camera::cull_range (16,000) so a ship
 /// doesn't visually vanish before it's converted back to simulation either.
-const DESPAWN_DISTANCE: f32 = 20_000.0;
+const DESPAWN_DISTANCE: f32 = 60_000.0;
 
 /// Initialize the world simulation with all factions in their territories
 pub fn init_world_simulation(
@@ -1695,13 +1695,13 @@ mod wreck_bookkeeping_tests {
     fn an_untracked_ship_is_adopted_when_it_leaves() {
         let mut app = app();
         let tracked = add_spawned(&mut app, 100.0);
-        app.world_mut().spawn((AiShip, AiShipType::RecursiveKingdom, state(false), Transform::from_xyz(50_000.0, 0.0, 0.0)));
+        app.world_mut().spawn((AiShip, AiShipType::RecursiveKingdom, state(false), Transform::from_xyz(90_000.0, 0.0, 0.0)));
         app.update();
         let sim = app.world().resource::<WorldSimulation>();
         assert_eq!(sim.ships.len(), 2, "the stray was adopted");
         let first = sim.ships.iter().find(|s| s.id == tracked).unwrap();
         assert!(first.spawned && first.position.x == 100.0, "the tracked ship's record was left alone");
-        assert!(sim.ships.iter().any(|s| s.position.x == 50_000.0 && !s.spawned));
+        assert!(sim.ships.iter().any(|s| s.position.x == 90_000.0 && !s.spawned));
     }
 
     /// The whole round trip: a ship spawns from its entry, loses blocks,
@@ -1731,7 +1731,7 @@ mod wreck_bookkeeping_tests {
         }
         // The player leaves: the ship goes back into the simulation.
         let player = app.world_mut().query_filtered::<Entity, With<Ship>>().single(app.world()).unwrap();
-        app.world_mut().entity_mut(player).insert(Transform::from_xyz(-40_000.0, 0.0, 0.0));
+        app.world_mut().entity_mut(player).insert(Transform::from_xyz(-100_000.0, 0.0, 0.0));
         app.update();
         let sim = app.world().resource::<WorldSimulation>();
         let wounds = sim.ships[0].wounds.clone().expect("its damage was written down");
@@ -1769,9 +1769,9 @@ mod wreck_bookkeeping_tests {
             let members = super::super::fleet::crew(&fleet, &super::super::fleet::hulls_of(AiShipType::TerranHegemony, &[lancer, lancer, lancer]));
             sim.add_fleet(fleet, members);
             // Strung out: only the first is inside render distance.
-            sim.ships[0].position = Vec2::new(8_000.0, 0.0);
-            sim.ships[1].position = Vec2::new(12_000.0, 0.0);
-            sim.ships[2].position = Vec2::new(30_000.0, 0.0);
+            sim.ships[0].position = Vec2::new(24_000.0, 0.0);
+            sim.ships[1].position = Vec2::new(36_000.0, 0.0);
+            sim.ships[2].position = Vec2::new(90_000.0, 0.0);
         }
         app.update();
         let mut members = app.world_mut().query::<&super::super::fleet::FleetMember>();
@@ -1781,13 +1781,13 @@ mod wreck_bookkeeping_tests {
 
         // The player moves off; one member is still near.
         let player = app.world_mut().query_filtered::<Entity, With<Ship>>().single(app.world()).unwrap();
-        app.world_mut().entity_mut(player).insert(Transform::from_xyz(40_000.0, 0.0, 0.0));
+        app.world_mut().entity_mut(player).insert(Transform::from_xyz(120_000.0, 0.0, 0.0));
         app.update();
         assert_eq!(members.iter(app.world()).count(), 3, "a fleet member left while another was in range");
         assert!(app.world().resource::<WorldSimulation>().ships.iter().all(|s| s.spawned));
 
         // And then all of it is far: it goes back as one, in formation.
-        app.world_mut().entity_mut(player).insert(Transform::from_xyz(-60_000.0, 0.0, 0.0));
+        app.world_mut().entity_mut(player).insert(Transform::from_xyz(-180_000.0, 0.0, 0.0));
         app.update();
         app.update();
         assert_eq!(members.iter(app.world()).count(), 0);

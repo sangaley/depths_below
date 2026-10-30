@@ -22,7 +22,7 @@ use crate::events::AiShipDamaged;
 
 const SURVEY_EVERY_S: f32 = 0.25;
 /// How far a ship looks when it weighs up its side against theirs.
-const FORCE_RADIUS: f32 = 16_000.0;
+const FORCE_RADIUS: f32 = 48_000.0;
 /// How long a hit stays on its mind, in seconds (the rate halves in about 0.7 of this).
 const MEMORY_S: f32 = 8.0;
 /// Seconds a ship sticks with a tactic before it will change its mind, so it
@@ -202,7 +202,7 @@ impl Default for Mind {
             jink: 0.6,
             focus: 2.0,
             withdraw: 1.0,
-            kite_margin: 600.0,
+            kite_margin: 1_800.0,
             close_to: 0.55,
             recover_shield: 0.15,
             salvo_beat: 8.0,
@@ -385,7 +385,7 @@ pub fn retreat_point(me: &Hull, them: &Hull, friends: impl Iterator<Item = Vec2>
         .min_by(|a, b| a.distance(me.pos).total_cmp(&b.distance(me.pos)));
     match shelter {
         Some(friend) => friend + away * (me.radius * 2.0),
-        None => me.pos + away * 8_000.0,
+        None => me.pos + away * 24_000.0,
     }
 }
 

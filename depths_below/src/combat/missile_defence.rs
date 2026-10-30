@@ -25,7 +25,7 @@ use crate::combat::new_projectiles::MissileProjectile;
 
 /// Inbound missiles inside this range set the launchers off, and a decoy
 /// fools a seeker inside this range of it.
-pub const DECOY_RANGE: f32 = 3500.0;
+pub const DECOY_RANGE: f32 = 3500.0 * super::gun_assembly::RANGE_SCALE;
 /// Seconds between throws, per launcher.
 pub const DECOY_INTERVAL: f32 = 4.0;
 /// Seconds a decoy lasts.
@@ -34,7 +34,7 @@ pub const DECOY_LIFE: f32 = 4.0;
 /// How far a Missile Warner sees an incoming missile: far enough to call one
 /// fired from a sniper's range (5-8 km), so point defence turns onto it
 /// and decoys go out in time. Was 4,500, inside the range ships now fight at.
-pub const WARNER_RANGE: f32 = 8000.0;
+pub const WARNER_RANGE: f32 = 8000.0 * super::gun_assembly::RANGE_SCALE;
 
 /// On every ship: the enemy missiles its warners can see this frame, and
 /// how many warners it has left to see them with.
@@ -206,7 +206,7 @@ pub fn age_decoys(time: Res<Time>, mut commands: Commands, mut decoys: Query<(En
 }
 
 /// How far out a point defence gun reaches for missiles.
-pub const PD_RANGE: f32 = 4000.0;
+pub const PD_RANGE: f32 = 4000.0 * super::gun_assembly::RANGE_SCALE;
 
 /// Where a round at `speed` from `from` meets something at `at` moving at
 /// `vel` (relative to the shooter). None if it can't catch it.

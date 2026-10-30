@@ -420,14 +420,14 @@ pub fn build_registry() -> ModuleRegistry {
         power_consumption: 20.0,
         color: Color::srgb(0.7, 0.3, 0.2),
         companion: CompanionData::Weapon {
-            damage: 50.0, range: 5400.0, fire_rate: 0.6, ammo: 30,
+            damage: 50.0, range: 16200.0, fire_rate: 0.6, ammo: 30,
             mount_type: MountType::Turret, ammo_type: AmmoType::Bullet,
         },
         customizable: true,
         cost: 113,
         base_stats: CalculatedStats {
             weapon: Some(WeaponStats {
-                damage: 50.0, range: 5400.0, fire_rate: 0.6, max_ammo: 30, power_cost: 20.0,
+                damage: 50.0, range: 16200.0, fire_rate: 0.6, max_ammo: 30, power_cost: 20.0,
             }),
             ..Default::default()
         },
@@ -444,7 +444,7 @@ pub fn build_registry() -> ModuleRegistry {
         power_consumption: 40.0,
         color: Color::srgb(0.5, 0.5, 0.8),
         companion: CompanionData::Weapon {
-            damage: 100.0, range: 8400.0, fire_rate: 0.25, ammo: 15,
+            damage: 100.0, range: 25200.0, fire_rate: 0.25, ammo: 15,
             mount_type: MountType::Fixed, ammo_type: AmmoType::Bullet,
         },
         customizable: true,
@@ -463,7 +463,7 @@ pub fn build_registry() -> ModuleRegistry {
         power_consumption: 25.0,
         color: Color::srgb(0.4, 0.5, 0.7),
         companion: CompanionData::Weapon {
-            damage: 19.0, range: 6000.0, fire_rate: 2.0, ammo: 60,
+            damage: 19.0, range: 18000.0, fire_rate: 2.0, ammo: 60,
             mount_type: MountType::Turret, ammo_type: AmmoType::Bullet,
         },
         customizable: true,
@@ -486,7 +486,7 @@ pub fn build_registry() -> ModuleRegistry {
             // fire-rate reward. Range down from 3900 (was blurring into
             // mid-range territory); damage up from 6.5 to help offset the
             // exposure of actually being that close.
-            damage: 8.0, range: 2200.0, fire_rate: 6.0, ammo: 300,
+            damage: 8.0, range: 6600.0, fire_rate: 6.0, ammo: 300,
             mount_type: MountType::Turret, ammo_type: AmmoType::Bullet,
         },
         customizable: true,
@@ -506,7 +506,7 @@ pub fn build_registry() -> ModuleRegistry {
         power_consumption: 35.0,
         color: Color::srgb(0.3, 0.7, 0.3),
         companion: CompanionData::Weapon {
-            damage: 25.0, range: 5400.0, fire_rate: 1.0, ammo: 999,
+            damage: 25.0, range: 16200.0, fire_rate: 1.0, ammo: 999,
             mount_type: MountType::Turret, ammo_type: AmmoType::Charge,
         },
         customizable: true,
@@ -525,7 +525,7 @@ pub fn build_registry() -> ModuleRegistry {
         power_consumption: 30.0,
         color: Color::srgb(0.8, 0.4, 0.1),
         companion: CompanionData::Weapon {
-            damage: 44.0, range: 4200.0, fire_rate: 0.8, ammo: 999,
+            damage: 44.0, range: 12600.0, fire_rate: 0.8, ammo: 999,
             mount_type: MountType::Broadside, ammo_type: AmmoType::Charge,
         },
         customizable: true,
@@ -547,7 +547,7 @@ pub fn build_registry() -> ModuleRegistry {
             // Short-range brawler: a disable effect is a close-quarters tool
             // by nature. Range down from 4200 to sit clearly below the
             // mid-range tier (Cannon/Coilgun/Laser/PlasmaCaster at 4200-6000).
-            damage: 12.5, range: 1800.0, fire_rate: 0.5, ammo: 999,
+            damage: 12.5, range: 5400.0, fire_rate: 0.5, ammo: 999,
             mount_type: MountType::Turret, ammo_type: AmmoType::Charge,
         },
         customizable: true,
@@ -567,14 +567,14 @@ pub fn build_registry() -> ModuleRegistry {
         power_consumption: 25.0,
         color: Color::srgb(0.7, 0.2, 0.2),
         companion: CompanionData::Weapon {
-            damage: 75.0, range: 9600.0, fire_rate: 0.3, ammo: 12,
+            damage: 75.0, range: 28800.0, fire_rate: 0.3, ammo: 12,
             mount_type: MountType::Fixed, ammo_type: AmmoType::Missile,
         },
         customizable: true,
         cost: 150,
         base_stats: CalculatedStats {
             weapon: Some(WeaponStats {
-                damage: 75.0, range: 9600.0, fire_rate: 0.3, max_ammo: 12, power_cost: 25.0,
+                damage: 75.0, range: 28800.0, fire_rate: 0.3, max_ammo: 12, power_cost: 25.0,
             }),
             ..Default::default()
         },
@@ -591,7 +591,7 @@ pub fn build_registry() -> ModuleRegistry {
         power_consumption: 20.0,
         color: Color::srgb(0.8, 0.3, 0.2),
         companion: CompanionData::Weapon {
-            damage: 44.0, range: 8400.0, fire_rate: 0.4, ammo: 16,
+            damage: 44.0, range: 25200.0, fire_rate: 0.4, ammo: 16,
             mount_type: MountType::Turret, ammo_type: AmmoType::Missile,
         },
         customizable: true,
@@ -614,13 +614,13 @@ pub fn build_registry() -> ModuleRegistry {
         power_consumption: 10.0,
         color: Color::srgb(0.75, 0.45, 0.25),
         companion: CompanionData::Weapon {
-            damage: 60.0, range: 5200.0, fire_rate: 0.3, ammo: 12,
+            damage: 60.0, range: 15600.0, fire_rate: 0.3, ammo: 12,
             mount_type: MountType::Fixed, ammo_type: AmmoType::Missile,
         },
         customizable: true,
         cost: 90,
         base_stats: CalculatedStats {
-            weapon: Some(WeaponStats { damage: 60.0, range: 5200.0, fire_rate: 0.3, max_ammo: 12, power_cost: 10.0 }),
+            weapon: Some(WeaponStats { damage: 60.0, range: 15600.0, fire_rate: 0.3, max_ammo: 12, power_cost: 10.0 }),
             ..Default::default()
         },
         crew_station: false,
@@ -635,13 +635,13 @@ pub fn build_registry() -> ModuleRegistry {
         power_consumption: 20.0,
         color: Color::srgb(0.75, 0.45, 0.25),
         companion: CompanionData::Weapon {
-            damage: 260.0, range: 6900.0, fire_rate: 0.15, ammo: 8,
+            damage: 260.0, range: 20700.0, fire_rate: 0.15, ammo: 8,
             mount_type: MountType::Fixed, ammo_type: AmmoType::Missile,
         },
         customizable: true,
         cost: 220,
         base_stats: CalculatedStats {
-            weapon: Some(WeaponStats { damage: 260.0, range: 6900.0, fire_rate: 0.15, max_ammo: 8, power_cost: 20.0 }),
+            weapon: Some(WeaponStats { damage: 260.0, range: 20700.0, fire_rate: 0.15, max_ammo: 8, power_cost: 20.0 }),
             ..Default::default()
         },
         crew_station: false,
@@ -656,13 +656,13 @@ pub fn build_registry() -> ModuleRegistry {
         power_consumption: 35.0,
         color: Color::srgb(0.75, 0.45, 0.25),
         companion: CompanionData::Weapon {
-            damage: 2000.0, range: 7200.0, fire_rate: 0.07, ammo: 6,
+            damage: 2000.0, range: 21600.0, fire_rate: 0.07, ammo: 6,
             mount_type: MountType::Fixed, ammo_type: AmmoType::Missile,
         },
         customizable: true,
         cost: 480,
         base_stats: CalculatedStats {
-            weapon: Some(WeaponStats { damage: 2000.0, range: 7200.0, fire_rate: 0.07, max_ammo: 6, power_cost: 35.0 }),
+            weapon: Some(WeaponStats { damage: 2000.0, range: 21600.0, fire_rate: 0.07, max_ammo: 6, power_cost: 35.0 }),
             ..Default::default()
         },
         crew_station: false,
@@ -678,7 +678,7 @@ pub fn build_registry() -> ModuleRegistry {
         power_consumption: 15.0,
         color: Color::srgb(0.6, 0.2, 0.1),
         companion: CompanionData::Weapon {
-            damage: 19.0, range: 4800.0, fire_rate: 1.5, ammo: 40,
+            damage: 19.0, range: 14400.0, fire_rate: 1.5, ammo: 40,
             mount_type: MountType::Fixed, ammo_type: AmmoType::Missile,
         },
         customizable: true,
@@ -736,7 +736,7 @@ pub fn build_registry() -> ModuleRegistry {
         power_consumption: 30.0,
         color: Color::srgb(0.4, 0.3, 0.7),
         companion: CompanionData::Weapon {
-            damage: 6.0, range: 1200.0, fire_rate: 0.2, ammo: 5,
+            damage: 6.0, range: 3600.0, fire_rate: 0.2, ammo: 5,
             mount_type: MountType::Broadside, ammo_type: AmmoType::Charge,
         },
         customizable: true,
@@ -1424,7 +1424,7 @@ pub fn build_registry() -> ModuleRegistry {
         companion: CompanionData::Weapon {
             // Placeholders: combat::gun_assembly works the real numbers out
             // from the parts around it and overwrites these.
-            damage: 10.0, range: 6000.0, fire_rate: 0.2, ammo: 40,
+            damage: 10.0, range: 18000.0, fire_rate: 0.2, ammo: 40,
             mount_type: MountType::Fixed, ammo_type: AmmoType::Bullet,
         }, customizable: false, cost: 60,
         base_stats: CalculatedStats::default(), crew_station: false,

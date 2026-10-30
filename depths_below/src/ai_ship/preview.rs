@@ -24,7 +24,7 @@ use super::components::*;
 use crate::components::Ship;
 
 /// How far out ships are drawn.
-pub const PREVIEW_RANGE: f32 = 35_000.0;
+pub const PREVIEW_RANGE: f32 = 105_000.0;
 /// How bright a preview is right at the edge of materialising, and at the
 /// edge of the preview range.
 const NEAR_ALPHA: f32 = 1.0;

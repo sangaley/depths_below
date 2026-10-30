@@ -33,7 +33,7 @@ use crate::spatial::CreatureGrid;
 /// of reflexively assuming it was the player. Falls back to best_target if
 /// the real attacker died, left range, or was never recorded.
 /// How near something hostile comes before a civilian hull runs from it.
-const CIVILIAN_ALARM: f32 = 5_000.0;
+const CIVILIAN_ALARM: f32 = 15_000.0;
 
 /// The way a civilian hull runs: away from every threat at once, the nearer
 /// ones counting for more, and -- once it's running -- mostly the way it's
@@ -989,7 +989,7 @@ pub fn ai_brain_system(
                 // "Engages anything in an enormous detection range" — now
                 // actually anything, via best_target.
                 if let Some((_, t_pos)) = best_target {
-                    if pos.distance(t_pos) < 9000.0 {
+                    if pos.distance(t_pos) < 27_000.0 {
                         actions.push(ScoredAction {
                             score: 90.0,
                             behavior: AiShipBehavior::Engaging,
@@ -1017,7 +1017,7 @@ pub fn ai_brain_system(
                 // "If you're in range, it's already coming for you" —
                 // whoever "you" is, via best_target.
                 if let Some((_, t_pos)) = best_target {
-                    if pos.distance(t_pos) < 12000.0 {
+                    if pos.distance(t_pos) < 36_000.0 {
                         actions.push(ScoredAction {
                             score: 100.0,
                             behavior: AiShipBehavior::Engaging,

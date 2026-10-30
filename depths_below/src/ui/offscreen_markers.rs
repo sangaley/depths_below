@@ -18,7 +18,7 @@ use super::theme::{ThemeColors, ThemeFonts};
 
 /// Ships further out than this get no marker. Well past the 8-10k standoff AI
 /// gunners hold, short of the whole streamed-in neighbourhood.
-pub const MARKER_RANGE: f32 = 25_000.0;
+pub const MARKER_RANGE: f32 = 70_000.0;
 
 /// Size of one marker (chevron over a range label), in UI pixels.
 const MARKER_SIZE: Vec2 = Vec2::new(56.0, 32.0);

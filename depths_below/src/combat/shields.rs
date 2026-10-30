@@ -554,8 +554,8 @@ const SHIELD_HP_POWER_BONUS: f32 = 0.35;
 const SHIELD_ARC_HALF: f32 = 0.7; // ~40° half → ~80° lit "patch"
 const SHIELD_ARC_SOFT: f32 = 0.22; // angular fade at the segment ends (radians)
 const SHIELD_ARC_TRAVERSE: f32 = 11.0; // rad/s — fast, so it reaches the shot in time
-const SHIELD_ARC_TRACK_RANGE: f32 = 1400.0; // pre-aim at incoming fire this far out
-const SHIELD_ARC_ACTIVE_RANGE: f32 = 650.0; // segment lights up when a shot is this close
+const SHIELD_ARC_TRACK_RANGE: f32 = 1400.0 * super::gun_assembly::RANGE_SCALE; // pre-aim at incoming fire this far out
+const SHIELD_ARC_ACTIVE_RANGE: f32 = 650.0 * super::gun_assembly::RANGE_SCALE; // segment lights up when a shot is this close
 
 // --- Enemy (flanking) shields ---
 /// Enemy shields are directional too — they face the player but swing slowly,

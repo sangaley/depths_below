@@ -32,7 +32,7 @@ const ALARM_VOL: f32 = 0.40;
 const ENGINE_MAX_VOL: f32 = 0.40;
 
 /// Distance (world units) beyond which off-ship sounds are inaudible.
-const AUDIBLE_RANGE: f32 = 9000.0;
+const AUDIBLE_RANGE: f32 = 30_000.0;
 
 pub struct GameAudioPlugin;
 

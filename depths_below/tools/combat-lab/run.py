@@ -77,7 +77,7 @@ ENEMY = re.compile(r"(\w+)/(\w+|-) hull=([\d.]+) blocks=(\d+)/(\d+) d=(\d+) (\w+
 def fight(out, loadout, path, faction, secs):
     label = f"lab_{loadout}_{faction}"
     env = [f"DEPTHS_DESIGN={path}", "DEPTHS_OFFSCREEN=1", "DEPTHS_MOVETEST=1", "DEPTHS_MOVETEST_ENEMY_SHOOTS=1",
-           f"DEPTHS_MOVETEST_FLEET={faction}:Patrol", "DEPTHS_MOVETEST_FLEET_AT=0,6000",
+           f"DEPTHS_MOVETEST_FLEET={faction}:Patrol", "DEPTHS_MOVETEST_FLEET_AT=0,20000",
            "DEPTHS_COMBAT_REPORT=1", "DEPTHS_GUN_TRACE=1", f"DEPTHS_KEYS=3:Backslash,4:Space~{secs}"]
     # LAB_ENV: extra game settings for a tuning run, e.g. "DEPTHS_GUN_DAMAGE=6".
     env += [e for e in os.environ.get("LAB_ENV", "").split() if e]

@@ -531,7 +531,7 @@ fn aim_priority(faction: AiShipType) -> &'static [crate::components::ModuleCateg
 /// How far a distress call reaches. Tuned to a patrol/nest cluster, not the
 /// whole map — territories sit tens of thousands of units apart, so a call
 /// only ever wakes a faction's own neighbours, never a distant faction.
-const DISTRESS_RADIUS: f32 = 4500.0;
+const DISTRESS_RADIUS: f32 = 13_500.0;
 /// How long a summoned ship stays aggro'd on the caller's target before it
 /// drifts back to its own patrol.
 const ALERT_DURATION: f32 = 25.0;

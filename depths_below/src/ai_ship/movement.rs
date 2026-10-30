@@ -70,11 +70,11 @@ pub fn fighting_band(faction: AiShipType) -> Option<(f32, f32)> {
     match faction {
         RecursiveKingdom => None,
         // Snipers: big guns and the discipline to stay out of reach.
-        EternalHegemony | TerranHegemony | GildedThrone => Some((5_000.0, 8_000.0)),
+        EternalHegemony | TerranHegemony | GildedThrone => Some((18_000.0, 22_000.0)),
         // Brawlers: frag swarms, EMP and tractor beams want it close.
-        BrokenChoir | CorpseStars | Shepherd => Some((1_800.0, 3_000.0)),
+        BrokenChoir | CorpseStars | Shepherd => Some((5_000.0, 9_000.0)),
         // Everyone else holds the line between.
-        _ => Some((3_500.0, 6_000.0)),
+        _ => Some((12_000.0, 18_000.0)),
     }
 }
 
@@ -422,7 +422,7 @@ pub fn ai_ship_movement_system(
             // still connect -- 70% of its longest reach, so a sniper's fight
             // stays inside its target's guns too -- inside its
             // faction's band, and never past 90% of what it can hit. Snipers
-            // hang back 5-8 km, line ships 3.5-6, brawlers close to 2-3 km,
+            // hang back 18-22 km, line ships 12-18, brawlers close to 5-9 km,
             // and the Recursive Kingdom still rams (that IS their identity).
             // It used to be half its reach capped at 3 km, from when slow
             // shells on small ships never landed at range; ships are twice
@@ -814,9 +814,9 @@ mod fighting_band_tests {
     #[test]
     fn snipers_hold_far_out_brawlers_close_and_the_kingdom_rams() {
         let (lo, hi) = fighting_band(AiShipType::EternalHegemony).unwrap();
-        assert!(lo >= 5_000.0 && hi <= 8_000.0);
+        assert!(lo >= 18_000.0 && hi <= 22_000.0);
         let (_, brawl) = fighting_band(AiShipType::BrokenChoir).unwrap();
-        assert!(brawl <= 3_000.0);
+        assert!(brawl <= 9_000.0);
         assert!(fighting_band(AiShipType::RecursiveKingdom).is_none());
     }
 }

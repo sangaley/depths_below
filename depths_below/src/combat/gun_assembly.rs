@@ -101,7 +101,14 @@ pub fn trace() -> bool {
 /// Game units per second for each metre per second of muzzle velocity.
 /// 850 m/s -- a full burn -- flies at 2,550 u/s, between the old cannon and
 /// railgun speeds once the range they reach is taken into account.
-pub const GAME_SPEED_PER_MPS: f32 = 3.0;
+///
+/// Tripled with `RANGE_SCALE`: fights moved out from 7 km to 20, and a shell
+/// has to arrive in about the same time or nothing that moves gets hit.
+pub const GAME_SPEED_PER_MPS: f32 = 3.0 * RANGE_SCALE;
+/// How much further every weapon reaches, and how much faster what it fires
+/// flies, than the numbers they were first tuned with. Fights happen at 20 km:
+/// the starter ship is 3.4 km long, and 7 km was two ship-lengths.
+pub const RANGE_SCALE: f32 = 3.0;
 /// The arc a spinal gun can fire in: it has no turret, you aim the ship.
 pub const SPINAL_ARC_DEG: f32 = 8.0;
 /// Metres of shell one Magazine block holds: big shells eat storage. At 20
@@ -135,14 +142,13 @@ pub fn round_size(gauge_mm: f32) -> Vec2 {
     Vec2::new(length, length * 0.25)
 }
 
-/// How far a gun reaches. Small bores are close-in weapons: a light round
-/// sheds its speed and wanders, so reach goes with the square root of the
-/// bore against 150 mm -- a 60 mm autocannon about 5 km, a 170 mm gun a
-/// touch over its old 7. Massed autocannons used to shred ships from 7 km
-/// out (combat lab, 2026-10-29).
+/// How far a gun reaches. A light round sheds its speed and wanders, so reach
+/// goes with the square root of the bore against 150 mm, but not far: fights
+/// are at 20 km and a 60 mm autocannon (20 km) has to take part, a 170 mm gun
+/// reaching 23.6.
 pub fn range_for(stats: &GunStats) -> f32 {
-    let bore = (stats.gauge_mm / 150.0).sqrt().clamp(0.55, 1.15);
-    (4000.0 + stats.velocity_mps * 4.0) * bore * stats.range_mult.max(1.0)
+    let bore = (stats.gauge_mm / 150.0).sqrt().clamp(0.9, 1.15);
+    (4000.0 + stats.velocity_mps * 4.0) * bore * stats.range_mult.max(1.0) * RANGE_SCALE
 }
 
 /// What a built gun's round does against what its shell design adds up to.
