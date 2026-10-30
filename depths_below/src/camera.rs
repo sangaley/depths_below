@@ -813,7 +813,7 @@ fn update_depth_vignette(
     windows_query: Query<&Window>,
     cam_query: Query<(&Camera, &GlobalTransform), With<MainCamera>>,
     mut sprite_query: Query<
-        (&mut Sprite, &GlobalTransform, &mut Visibility, Option<&ChildOf>, Has<crate::ai_ship::components::OwnedByAiShip>),
+        (&mut Sprite, &GlobalTransform, &mut Visibility, Option<&ChildOf>, Has<crate::ai_ship::components::OwnedByAiShip>, Has<crate::combat::severance::SeveredBlock>),
         // Grouped into nested tuples because Bevy's filter tuple tops out at
         // sixteen and this is past it. The grouping is also the honest
         // structure: three different reasons not to touch a sprite's alpha.
@@ -944,7 +944,7 @@ fn update_depth_vignette(
     let cull_range = CULL_RANGE;
     *torch = TorchLight { ship_pos, facing, omni_radius, cone_range, dark: !(depth < 20.0 || no_dark()) };
 
-    for (mut sprite, global_transform, mut visibility, parent, ai_block) in sprite_query.iter_mut() {
+    for (mut sprite, global_transform, mut visibility, parent, ai_block, severed) in sprite_query.iter_mut() {
         // Never cull or dim anything on the player's own ship (hull, modules,
         // crew, and what hangs off a module). Only the direct parent used to
         // be checked, so barrels, wedge plates and damage-overlay tiles were
@@ -998,7 +998,7 @@ fn update_depth_vignette(
 
         // The torch's rule (TorchLight::at), shared with the far pictures;
         // an enemy ship's blocks are sensor contacts too.
-        let alpha = if ai_block { torch.ship_at(world_pos) } else { torch.at(world_pos) };
+        let alpha = if ai_block || severed { torch.ship_at(world_pos) } else { torch.at(world_pos) };
         if sprite.color.alpha() != alpha {
             sprite.color.set_alpha(alpha);
         }

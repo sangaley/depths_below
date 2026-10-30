@@ -561,6 +561,8 @@ impl Plugin for CombatPlugin {
                 Update,
                 (
                     severance::check_section_severance,
+                    severance::cut_test_hook.run_if(severance::cut_hook_on),
+                    severance::severed_turrets_change_hands,
                     severance::move_detached_sections,
                     severance::debris_collision,
                     chain_reactions::trigger_chain_reactions,

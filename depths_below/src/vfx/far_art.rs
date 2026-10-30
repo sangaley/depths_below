@@ -335,7 +335,7 @@ impl MipCache {
 pub fn attach_far_art(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
-    owners: Query<(Entity, Has<TurretBody>, Has<Ship>, Option<&ChildOf>), (Or<(With<Ship>, With<AiShip>, With<TurretBody>)>, Without<FarArt>)>,
+    owners: Query<(Entity, Has<TurretBody>, Has<Ship>, Option<&ChildOf>), (Or<(With<Ship>, With<AiShip>, With<TurretBody>, With<crate::combat::severance::DetachedSection>)>, Without<FarArt>)>,
     players: Query<(), With<Ship>>,
 ) {
     // DEPTHS_NO_FAR_ART=1: blocks all the way out, to measure against.

@@ -1171,6 +1171,9 @@ mod save_scope_tests {
                 has_fuel: false,
                 meltdown_timer: Some(10.0),
                 mass: 50.0,
+                spin: 1.5,
+                age: 0.0,
+                ours: true,
             });
 
             for root in [ai, wreck] {
