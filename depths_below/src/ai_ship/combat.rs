@@ -99,8 +99,16 @@ pub fn ai_weapon_fire_system(
         Query<(&crate::combat::gun_assembly::GunAssembly, Option<&crate::combat::gun_assembly::GunMuzzle>)>,
         Query<&crate::combat::turret_deck::TurretBody>,
     ),
+    // What it makes of the fight: how big the target is, whether it's
+    // running, and when the salvo goes (ai_ship::awareness).
+    read: (
+        Res<super::awareness::Battlefield>,
+        Res<super::awareness::Mind>,
+        Query<&super::awareness::Awareness>,
+    ),
 ) {
     let (turret_decks, assemblies, turret_bodies) = &built;
+    let (field, mind, minds) = &read;
     // DEPTHS_MOVETEST_ENEMY spawns a target dummy that's shot-free by
     // default (for testing movement/damage-model in isolation). Set
     // DEPTHS_MOVETEST_ENEMY_SHOOTS=1 too to let it fire back.
@@ -113,7 +121,10 @@ pub fn ai_weapon_fire_system(
     let player = player_query.single().ok();
 
     for (ai_entity, ai_transform, ship_type, behavior, mut ai_target, children, ai_power, state) in ai_ships.iter_mut() {
-        if !ship_may_fire(behavior, state) {
+        // A ship pulling out of a fight it has lost goes on shooting at whoever
+        // it's running from.
+        let covering_retreat = *behavior == AiShipBehavior::Fleeing && ai_target.entity.is_some() && !state.is_destroyed;
+        if !ship_may_fire(behavior, state) && !covering_retreat {
             continue;
         }
 
@@ -164,13 +175,20 @@ pub fn ai_weapon_fire_system(
         // Default to centre-of-mass; only override when this faction targets
         // subsystems AND a matching live module is found on the target.
         let mut aim_base = centroid;
-        let priorities = aim_priority(*ship_type);
+        // A target that's running gets its drive shot out, whatever the doctrine.
+        let aim_engines = minds.get(ai_entity).is_ok_and(|a| a.aim_engines);
+        let priorities = if aim_engines {
+            &[crate::components::ModuleCategory::Propulsion][..]
+        } else {
+            aim_priority(*ship_type)
+        };
         if !priorities.is_empty() {
             if let Some(target_entity) = ai_target.entity {
                 // Reuse the cached pick while it's still a live module.
                 let cached = ai_target.subsystem
                     .and_then(|m| module_pos_query.get(m).ok())
                     .filter(|(module, _)| module.is_active && module.health > 0.0)
+                    .filter(|(module, _)| priorities.iter().any(|cat| aim_matches(module.module_type, *cat)))
                     .map(|(_, gt)| gt.translation().truncate());
                 if let Some(p) = cached {
                     aim_base = p;
@@ -186,7 +204,7 @@ pub fn ai_weapon_fire_system(
                             for child in kids.iter() {
                                 let Ok((module, gt)) = module_pos_query.get(child) else { continue };
                                 if !module.is_active || module.health <= 0.0 { continue; }
-                                if module.module_type.category() != *cat { continue; }
+                                if !aim_matches(module.module_type, *cat) { continue; }
                                 let wp = gt.translation().truncate();
                                 let d = wp.distance(ai_pos);
                                 if best.map_or(true, |(_, _, bd)| d < bd) {
@@ -207,6 +225,8 @@ pub fn ai_weapon_fire_system(
             }
         }
 
+        ai_target.aim_at = ai_target.entity.map(|_| aim_base);
+
         // Target velocity, for lead prediction (player and AI both carry it).
         let target_vel = ai_target.entity
             .and_then(|e| velocity_query.get(e).ok())
@@ -217,6 +237,11 @@ pub fn ai_weapon_fire_system(
         // farther out than the hull centroid doesn't push the target out of
         // "in range" on its own.
         let dist_to_target = ai_pos.distance(centroid);
+        // A round only has to reach the near side of the hull, not its middle:
+        // a ship holding at the edge of its reach measured to the far centre
+        // of a big target, sat out of "range", and never fired.
+        let target_radius = ai_target.entity.and_then(|e| field.hulls.get(&e)).map_or(0.0, |h| h.radius);
+        let salvo = super::awareness::salvo_open(time.elapsed_secs(), mind);
 
         // The hull's own weapons, then whatever stands on its turrets.
         let guns: Vec<(Entity, Option<Entity>)> = children
@@ -286,7 +311,7 @@ pub fn ai_weapon_fire_system(
             // this was the same thing on a small hull, but a capital or a
             // station is kilometres across, and its outer batteries sat
             // silent with the enemy well inside their reach.
-            if dist_to_target.min(muzzle.distance(centroid)) > weapon.range {
+            if dist_to_target.min(muzzle.distance(centroid)) - target_radius * 0.8 > weapon.range {
                 continue;
             }
 
@@ -321,6 +346,12 @@ pub fn ai_weapon_fire_system(
             // Tick cooldown
             cooldown.timer.tick(time.delta());
             if !cooldown.timer.is_finished() {
+                continue;
+            }
+            // Launchers wait for the salvo, loaded.
+            let launcher = silo || crate::building::is_launcher(module.module_type)
+                || crate::combat::missile_design::is_built_launcher(module.module_type);
+            if launcher && !salvo {
                 continue;
             }
 
@@ -445,6 +476,17 @@ pub fn ai_weapon_fire_system(
             }
         }
     }
+}
+
+/// Does this block answer to that doctrine? "Silence the guns" has to mean a
+/// built gun too: its parts are their own category, and a doctrine that only
+/// looked for the old weapon blocks found none on a modern ship and went for
+/// the next thing on its list. The ring is the part to hit: a turret with its
+/// ring shot out is jammed for good.
+fn aim_matches(module_type: ModuleType, category: crate::components::ModuleCategory) -> bool {
+    use crate::components::ModuleCategory::*;
+    module_type.category() == category
+        || (category == Weapons && matches!(module_type, ModuleType::TurretRingSmall | ModuleType::TurretRing | ModuleType::TurretRingLarge))
 }
 
 /// Which enemy subsystems a faction tries to shoot out, in priority order. An

@@ -717,7 +717,7 @@ pub fn traverse_turrets(
         // after the cursor or the ship's chosen target.
         let on_pd = laser_pd || children.into_iter().flatten().any(|c| pd.0.contains(*c));
         let target = if pd_aim.is_some() || on_pd { pd_aim } else { match ai_target {
-            Some(t) => t.entity.map(|e| whereabouts.get(e).map(|g| g.translation().truncate()).unwrap_or(t.position)),
+            Some(t) => t.entity.map(|e| t.aim_at.unwrap_or_else(|| whereabouts.get(e).map(|g| g.translation().truncate()).unwrap_or(t.position))),
             None => {
                 let first_gun = children.into_iter().flatten().find(|c| engaged.contains(**c));
                 aim.for_turret(first_gun.and_then(|c| engaged.get(*c).ok()).map(|a| a.point))

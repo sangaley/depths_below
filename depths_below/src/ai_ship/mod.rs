@@ -1,3 +1,4 @@
+pub mod awareness;
 pub mod components;
 mod layouts;
 pub mod spawner;
@@ -52,6 +53,9 @@ impl Plugin for AiShipPlugin {
         );
         app
             .init_resource::<WorldSimulation>()
+            .init_resource::<awareness::Battlefield>()
+            .init_resource::<awareness::Mind>()
+            .register_required_components::<AiShip, awareness::Awareness>()
             .init_resource::<scavenger::ScavengerWaves>()
             // Ordered after the galaxy layout exists (CelestialPlugin) —
             // init_world_simulation reads GalaxyMap/SystemStreamingManager
@@ -67,7 +71,7 @@ impl Plugin for AiShipPlugin {
                     // location, which was most of what made fights feel
                     // constant/unavoidable. Territories + roaming wanderers are
                     // the encounter source now; ships stay on their own patrols.
-                    ai_brain::ai_brain_system,
+                    (awareness::survey_battlefield, ai_brain::ai_brain_system).chain(),
                     movement::ai_ship_movement_system,
                     movement::ai_thruster_system,
                     movement::ai_fuel_system,

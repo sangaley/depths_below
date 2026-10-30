@@ -91,6 +91,10 @@ pub fn ai_brain_system(
     // kilometres across has guns in range long before its centre is.
     stations: Query<(), With<crate::diplomacy::FactionStation>>,
     reach: Query<&crate::combat::shields::ShipShield>,
+    // What each ship makes of the fight (ai_ship::awareness).
+    field: Res<super::awareness::Battlefield>,
+    mind: Res<super::awareness::Mind>,
+    minds: Query<&super::awareness::Awareness>,
 ) {
     // --- Pre-pass: snapshot every living ship's position + "threat value"
     // (block count + 2x active weapon damage — cheap proxies for size and
@@ -183,7 +187,10 @@ pub fn ai_brain_system(
         }
 
         let under_fire = state.last_hit_timer < 5.0;
-        let hull_pct = state.hull_integrity;
+        let me = field.hulls.get(&entity).copied();
+        // What's left of the whole ship: hull_integrity only counts its floor,
+        // and read a ship shot to pieces as nearly whole.
+        let hull_pct = me.map_or(state.hull_integrity, |m| m.blocks_left());
         let fuel_pct = state.fuel / state.max_fuel.max(1.0);
         let depth = (-pos.y / 10.0).max(0.0);
 
@@ -194,11 +201,10 @@ pub fn ai_brain_system(
         // start the fight from its own weapon range. 1.05x max range clears the
         // standoff comfortably, so the two systems don't oscillate between
         // engage and disengage.
-        let max_weapon_range = children.iter()
-            .filter_map(|c| weapon_query.get(c).ok())
-            .filter(|(_, module, _)| module.is_active && module.health > 0.0)
-            .map(|(weapon, _, _)| weapon.range)
-            .fold(0.0_f32, f32::max);
+        // From the survey: built guns stand on turrets, a level below the
+        // ship, and reading its own children saw none of them, so a ship with
+        // guns reaching 8 km didn't start a fight until 4.
+        let max_weapon_range = me.map_or(0.0, |m| m.any_reach());
         let engage_range = if max_weapon_range > 0.0 { max_weapon_range * 1.05 } else { 4400.0 };
         // Guns ride the hull, so a big hull reaches further than its centre.
         let engage_range = engage_range + reach.get(entity).map_or(0.0, |s| s.radius * 0.8);
@@ -273,16 +279,29 @@ pub fn ai_brain_system(
         let at_war = |e: Entity| {
             ai_factions.iter().any(|(f, t)| *f == e && crate::ai_ship::components::factions_hostile(*ship_type, *t))
         };
+        let awareness = minds.get(entity).ok();
+        let fleet_call = member.and_then(|m| field.fleet_calls.get(&m.fleet)).copied();
+        // What each contact is worth shooting (awareness::target_worth): what
+        // it can do, what killing it takes, who it's hurting, what the fleet
+        // has called, and who else is already on it.
+        let worth = |e: Entity, hull: &super::awareness::Hull, v: f32| -> f32 {
+            let held = Some(e) == held_target;
+            let Some(me) = me else {
+                return if held { v * TARGET_STICKINESS } else { v };
+            };
+            let shooting_me = hull.target == Some(entity) || awareness.is_some_and(|a| a.hurt_by.iter().any(|(by, _)| *by == e));
+            let allies = field.hulls.iter().filter(|(a, h)| **a != entity && h.target == Some(e) && h.faction == Some(*ship_type)).count() as u32;
+            super::awareness::target_worth(&me, hull, shooting_me, fleet_call == Some(e), allies, held, &mind)
+        };
         let best_target: Option<(Entity, Vec2)> = player_snapshot.iter()
             .map(|&(e, p, v)| (e, p, v))
             .chain(ai_snapshot.iter().filter(|(e, _, _)| *e != entity && at_war(*e)).map(|&(e, p, v)| (e, p, v)))
             .filter(|(_, p, _)| pos.distance(*p) < engage_range)
-            .map(|(e, p, v)| (e, p, if Some(e) == held_target { v * TARGET_STICKINESS } else { v }))
-            .max_by(|(_, pa, va), (_, pb, vb)| {
-                let score_a = va / pos.distance(*pa).max(200.0);
-                let score_b = vb / pos.distance(*pb).max(200.0);
-                score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
+            .map(|(e, p, v)| {
+                let score = field.hulls.get(&e).map_or(v / pos.distance(p).max(200.0), |hull| worth(e, hull, v));
+                (e, p, score)
             })
+            .max_by(|(_, _, a), (_, _, b)| a.total_cmp(b))
             .map(|(e, p, _)| (e, p));
 
         // Real attacker resolution for "under fire" retaliation — replaces
@@ -513,6 +532,16 @@ pub fn ai_brain_system(
                     }
                 }
 
+                // And anyone its faction has declared against, in range.
+                if let Some((_, t_pos)) = best_target {
+                    actions.push(ScoredAction {
+                        score: 78.0,
+                        behavior: AiShipBehavior::Engaging,
+                        destination: Some(t_pos),
+                        target: best_target,
+                    });
+                }
+
                 // Under fire → fight back (fanatics don't flee easily),
                 // against whoever actually shot them.
                 if under_fire {
@@ -607,6 +636,18 @@ pub fn ai_brain_system(
             // Ram intruders upward. Don't flee. Ignore shallow threats.
             // ----------------------------------------------------------------
             AiShipType::CorpseStars => {
+                // Shot at, it answers wherever it is: above its own depth it
+                // used to turn its back and sink while you shelled it.
+                if depth < 600.0 && under_fire {
+                    if let Some((_, t_pos)) = attacker_target {
+                        actions.push(ScoredAction {
+                            score: 95.0,
+                            behavior: AiShipBehavior::Engaging,
+                            destination: Some(t_pos),
+                            target: attacker_target,
+                        });
+                    }
+                }
                 // Only active in deep void - idle near station
                 if depth < 600.0 {
                     actions.push(ScoredAction {
@@ -876,7 +917,7 @@ pub fn ai_brain_system(
                 // whichever one happens to be the player)
                 if hull_pct < 0.25 {
                     if let Some((_, t_pos)) = best_target {
-                        if pos.distance(t_pos) < 600.0 {
+                        if pos.distance(t_pos) < 2_500.0 {
                             actions.push(ScoredAction {
                                 score: 100.0,
                                 behavior: AiShipBehavior::Engaging,
@@ -889,8 +930,10 @@ pub fn ai_brain_system(
 
                 // Attack aggressively — swarm mentality, whatever's closest
                 // and worth swarming, not specifically the player.
+                // (Anything it can reach: at 500 u it never started a fight at
+                // all, on hulls wider than that.)
                 if let Some((_, t_pos)) = best_target {
-                    if pos.distance(t_pos) < 500.0 {
+                    if pos.distance(t_pos) < engage_range {
                         actions.push(ScoredAction {
                             score: 80.0,
                             behavior: AiShipBehavior::Engaging,
@@ -1062,6 +1105,20 @@ pub fn ai_brain_system(
             if let Some(dest) = best.destination {
                 nav.destination = Some(dest);
             }
+            // It has decided this fight is lost: it runs for a friend or for
+            // open space, with its guns still on whoever it was fighting.
+            let withdrawing = *behavior == AiShipBehavior::Engaging
+                && !hunter
+                && awareness.is_some_and(|a| a.tactic == super::awareness::Tactic::Withdraw);
+            if withdrawing {
+                if let (Some(me), Some(them)) = (me, best.target.and_then(|(e, _)| field.hulls.get(&e))) {
+                    *behavior = AiShipBehavior::Fleeing;
+                    let friends = field.hulls.iter()
+                        .filter(|(e, h)| **e != entity && h.faction == Some(*ship_type) && h.lost_rate < 1.0 && h.firepower > 0.0)
+                        .map(|(_, h)| h.pos);
+                    nav.destination = Some(super::awareness::retreat_point(&me, them, friends));
+                }
+            }
             // An escort with nothing better to do keeps its place in the
             // formation instead of flying a patrol of its own.
             nav.face = None;
@@ -1081,6 +1138,7 @@ pub fn ai_brain_system(
             // keep aiming at a module that belonged to the old target.
             if ai_target.entity != new_target {
                 ai_target.subsystem = None;
+                ai_target.aim_at = None;
             }
             ai_target.entity = new_target;
             ai_target.position = best.target.map(|(_, p)| p).unwrap_or(pos);

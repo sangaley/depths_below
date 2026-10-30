@@ -26,7 +26,7 @@ pub fn combat_report(
     player: Query<(&Transform, Option<&Children>), With<Ship>>,
     blocks: Query<(), (Or<(With<Module>, With<HullSegment>)>, Without<DestroyedModule>, Without<HullDestroyed>)>,
     crew: Query<(), (With<CrewMember>, Without<OwnedByAiShip>)>,
-    enemies: Query<(Entity, &Transform, &AiShipType, Option<&AiShipClass>, &AiShipState, &AiShipBehavior), With<AiShip>>,
+    enemies: Query<(Entity, &Transform, &AiShipType, Option<&AiShipClass>, &AiShipState, &AiShipBehavior, Option<&crate::ai_ship::awareness::Awareness>), With<AiShip>>,
     // Every enemy block still standing, by its ship: hull integrity alone
     // counts bare floor, and most rounds land on what stands over it.
     enemy_blocks: Query<&OwnedByAiShip, (Or<(With<Module>, With<HullSegment>)>, Without<DestroyedModule>, Without<HullDestroyed>)>,
@@ -50,7 +50,7 @@ pub fn combat_report(
     }
     let mut seen: Vec<String> = enemies
         .iter()
-        .filter_map(|(ship, tf, faction, class, state, behavior)| {
+        .filter_map(|(ship, tf, faction, class, state, behavior, mind)| {
             let d = tf.translation.truncate().distance(at);
             let now_blocks = standing.get(&ship).copied().unwrap_or(0);
             let first = *enemy_start.entry(ship).or_insert(now_blocks);
@@ -63,7 +63,7 @@ pub fn combat_report(
                     now_blocks,
                     first,
                     d,
-                    if state.is_destroyed { "DESTROYED".to_string() } else { format!("{behavior:?}") }
+                    if state.is_destroyed { "DESTROYED".to_string() } else { format!("{behavior:?}:{:?}", mind.map_or(crate::ai_ship::awareness::Tactic::None, |m| m.tactic)) }
                 )
             })
         })

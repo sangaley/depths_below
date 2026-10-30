@@ -78,6 +78,8 @@ pub fn fighting_band(faction: AiShipType) -> Option<(f32, f32)> {
     }
 }
 
+use super::awareness::Tactic;
+
 fn filming_standoff() -> Option<f32> {
     static V: std::sync::OnceLock<Option<f32>> = std::sync::OnceLock::new();
     *V.get_or_init(|| std::env::var("DEPTHS_STANDOFF").ok().and_then(|v| v.parse().ok()))
@@ -230,6 +232,10 @@ pub fn ai_ship_movement_system(
     // into it, and an escort could wedge itself between the Pincer's claws.
     player: Query<(&Transform, &crate::ship::collision::Collider), (With<Ship>, Without<AiShip>)>,
     faction_stations: Res<crate::diplomacy::stations::FactionStations>,
+    // What the ship has decided to do about the fight (ai_ship::awareness).
+    field: Res<super::awareness::Battlefield>,
+    mind: Res<super::awareness::Mind>,
+    minds: Query<&super::awareness::Awareness>,
 ) {
     let dt = time.delta_secs();
     let player_obstacle = player.single().ok().map(|(tf, c)| {
@@ -438,13 +444,32 @@ pub fn ai_ship_movement_system(
             // past what they reach. The hulls only set a floor, so two big
             // ships never shove each other. Adding its own size on top parked
             // a big sniper 11-12 km off with guns that reach 7.
-            let (standoff, floor, ceiling) = if standoff > 0.0 {
+            let awareness = minds.get(_entity).ok();
+            let tactic = awareness.map_or(Tactic::None, |a| a.tactic);
+            let enemy = target.and_then(|t| t.entity).and_then(|e| field.hulls.get(&e));
+            let (standoff, floor, ceiling, closing, backing) = if standoff > 0.0 {
                 let target_r = target_reach(target, &hulls);
                 let floor = own_radius + target_r + 600.0;
                 let ceiling = if max_weapon_range > 0.0 { max_weapon_range * 0.95 + target_r } else { f32::MAX };
-                ((standoff + target_r).max(floor), floor, ceiling.max(floor))
+                let (hold, closing, backing) = super::awareness::plan_range(
+                    tactic, standoff + target_r, max_weapon_range, enemy.map_or(0.0, |e| e.reach),
+                    own_radius, target_r, floor, ceiling.max(floor), &mind,
+                );
+                // A ship recovering goes out past its own guns on purpose.
+                let ceiling = if tactic == Tactic::Recover { hold } else { ceiling };
+                (hold, floor, ceiling.max(floor), closing, backing)
             } else {
-                (0.0, 0.0, 0.0)
+                (0.0, 0.0, 0.0, 0.5, 0.4)
+            };
+            let temper = super::awareness::temperament(*ship_type);
+            // Weave, in fractions of top speed, once it's in a fight.
+            let weave = if tactic == Tactic::None {
+                0.0
+            } else {
+                super::awareness::jink(
+                    _entity.to_bits(), time.elapsed_secs(), &temper, &mind,
+                    awareness.map_or(0.0, |a| a.hurt_rate), awareness.map_or(f32::INFINITY, |a| a.inbound_eta),
+                )
             };
 
             if standoff > 0.0 && (dist < standoff * 1.3 || hold_lines()) && dist > 1.0 {
@@ -456,16 +481,21 @@ pub fn ai_ship_movement_system(
                 // fires. No perpetual circling.
                 let bits = _entity.to_bits();
                 let jitter = 0.8 + ((bits % 13) as f32 / 13.0) * 0.35; // 0.8..1.15
-                let hold = (standoff * jitter).clamp(floor, ceiling);
+                // Only a settled line keeps its jitter: a tactic means the range.
+                let settled = matches!(tactic, Tactic::None | Tactic::Hold | Tactic::Flank);
+                let hold = (standoff * if settled { jitter } else { 1.0 }).clamp(floor, ceiling);
                 if crate::combat::gun_assembly::trace() && (time.elapsed_secs() % 2.0) < dt {
                     info!("STANDOFF {:?} {:?}: {:.0} u off, holding {:.0} (reach {:.0})", _entity, ship_type, dist, hold, max_weapon_range);
                 }
                 let radial = if hold_lines() {
                     Vec2::ZERO
-                } else if dist > hold * 1.1 {
-                    direction * max_speed * 0.5 // drift in
-                } else if dist < hold * 0.7 {
-                    -direction * max_speed * 0.4 // ease back
+                // ...and comes back in before its guns stop reaching: the 10%
+                // of slack took a ship holding near its limit out of range and
+                // left it there, shooting nothing.
+                } else if dist > (hold * 1.1).min(ceiling) {
+                    direction * max_speed * closing // drift in
+                } else if dist < hold * (if settled { 0.7 } else { 0.92 }) {
+                    -direction * max_speed * backing // ease back
                 } else {
                     Vec2::ZERO // in the pocket — hold position
                 };
@@ -475,6 +505,18 @@ pub fn ai_ship_movement_system(
                 let sway_sign = if bits & 1 == 0 { 1.0 } else { -1.0 };
                 let tangent = Vec2::new(-direction.y, direction.x) * sway_sign;
                 let sway = tangent * max_speed * 0.1 * (time.elapsed_secs() * 0.4 + phase).sin();
+                // In a fight it weaves, to spoil anyone leading it; working round
+                // a target, it goes for their stern.
+                let side = Vec2::new(-direction.y, direction.x);
+                let sway = sway + side * max_speed * weave;
+                let sway = match (tactic, enemy, field.hulls.get(&_entity)) {
+                    (Tactic::Flank, Some(them), Some(me)) => {
+                        // `side` is anticlockwise round this ship looking at
+                        // the target; round the target it's the other way.
+                        sway - side * max_speed * mind.flank * super::awareness::flank_side(me, them)
+                    }
+                    _ => sway,
+                };
                 // And off any hull crowding its own: every ship holding on
                 // one target parked in the same spot, and a side became one
                 // heap of overlapping hulls. Now it spreads along its line.
@@ -508,7 +550,8 @@ pub fn ai_ship_movement_system(
 
                 // Gradually accelerate toward desired velocity
                 let arrive = arrive_factor(dist, max_speed, settle, *behavior == AiShipBehavior::Engaging);
-                let desired_vel = direction * max_speed * arrive;
+                let side = Vec2::new(-direction.y, direction.x);
+                let desired_vel = direction * max_speed * arrive + side * max_speed * weave * 0.7;
                 velocity.0 = velocity.0.lerp(desired_vel, vel_blend);
 
                 // Face where it's going -- or, close to the point, where it's

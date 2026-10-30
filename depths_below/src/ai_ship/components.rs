@@ -234,6 +234,11 @@ impl Default for AiShipNav {
 #[derive(Component, Default)]
 pub struct AiShipTarget {
     pub entity: Option<Entity>,
+    /// The exact point the guns are laid on, set each frame by the gunnery:
+    /// the subsystem or the middle of the hull, not the ship's root. Turrets
+    /// train on this, because a built gun only fires within a few degrees of
+    /// where its barrel points.
+    pub aim_at: Option<Vec2>,
     pub position: Vec2,
     /// The specific enemy module this ship is trying to shoot OUT — a weapon,
     /// engine, or reactor, chosen by faction doctrine (ai_ship::combat's
