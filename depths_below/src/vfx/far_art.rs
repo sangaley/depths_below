@@ -368,6 +368,9 @@ type Pictured<'w, 's> = Query<
     ),
 >;
 
+/// The glow of a wound in the far picture.
+const EMBER: (f32, f32, f32) = (1.0, 0.22, 0.03);
+
 /// How much of a block is left, 0..1, for how dark it paints.
 fn wear_of(hull: Option<&HullSegment>, module: Option<&Module>) -> f32 {
     let (health, max) = match (hull, module) {
@@ -392,7 +395,7 @@ pub fn bake_far_art(
     camera: Res<CameraState>,
     time: Res<Time>,
     mut images: ResMut<Assets<Image>>,
-    mut owners: Query<(Entity, &mut FarArt, Option<&LayoutVersion>, Option<&Children>)>,
+    mut owners: Query<(Entity, &mut FarArt, Option<&LayoutVersion>, Option<&Children>, Option<&super::ship_roof::Scars>)>,
     pictured: Pictured,
     mut sprites: Query<(&mut Sprite, &mut Transform), (With<FarArtSprite>, Without<HullSegment>, Without<Module>)>,
     mut cache: Local<MipCache>,
@@ -406,7 +409,7 @@ pub fn bake_far_art(
     // Never baked first, then changed, then the stalest.
     let mut due: Vec<(u8, f32, Entity)> = owners
         .iter()
-        .filter_map(|(e, art, version, _)| {
+        .filter_map(|(e, art, version, ..)| {
             let since = now - art.baked_at;
             let cost_ms = art.sprites as f32 / SPRITES_PER_MS;
             let rank = match (art.baked, version) {
@@ -421,11 +424,11 @@ pub fn bake_far_art(
     due.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
 
     for (_, _, owner) in due.into_iter().take(BAKES_PER_FRAME) {
-        let Ok((_, mut art, version, children)) = owners.get_mut(owner) else { continue };
-        let mut layers: Vec<(f32, Entity, &Sprite, &Transform, f32)> = children
+        let Ok((_, mut art, version, children, scars)) = owners.get_mut(owner) else { continue };
+        let mut layers: Vec<(f32, Entity, &Sprite, &Transform, f32, Option<IVec2>)> = children
             .into_iter()
             .flatten()
-            .filter_map(|c| pictured.get(*c).ok().filter(|(_, _, v, ..)| **v != Visibility::Hidden).map(|(s, t, _, hull, module)| (t.translation.z, *c, s, t, wear_of(hull, module))))
+            .filter_map(|c| pictured.get(*c).ok().filter(|(_, _, v, ..)| **v != Visibility::Hidden).map(|(s, t, _, hull, module)| (t.translation.z, *c, s, t, wear_of(hull, module), hull.map(|h| h.grid_position))))
             .collect();
         layers.sort_by(|a, b| a.0.total_cmp(&b.0));
 
@@ -434,9 +437,9 @@ pub fn bake_far_art(
             cache.get(&images, &sprite.image);
         }
         let white = Mip::white();
-        let stamps: Vec<Stamp> = layers
+        let mut stamps: Vec<Stamp> = layers
             .iter()
-            .filter_map(|(_, _, sprite, t, wear)| {
+            .filter_map(|(_, _, sprite, t, wear, _)| {
                 let art = if sprite.image.id() == Handle::<Image>::default().id() { &white } else { cache.0.get(&sprite.image.id())? };
                 let (src_w, src_h) = (art.w as f32 * art.step, art.h as f32 * art.step);
                 let rect = sprite.rect.unwrap_or(Rect::new(0.0, 0.0, src_w, src_h));
@@ -455,6 +458,23 @@ pub fn bake_far_art(
                 })
             })
             .collect();
+        // Wounds glow, on top of everything.
+        if let Some(scars) = scars {
+            let standing = layers.iter().filter_map(|(.., cell)| *cell).collect();
+            for (cell, bright) in super::ship_roof::embers(scars, &standing) {
+                let size = Vec2::splat(crate::building::GRID_SIZE * 1.3);
+                stamps.push(Stamp {
+                    at: crate::building::grid_to_local(cell),
+                    angle: 0.0,
+                    size,
+                    rect: Rect::new(0.0, 0.0, white.w as f32 * white.step, white.h as f32 * white.step),
+                    flip_x: false,
+                    flip_y: false,
+                    tint: LinearRgba::new(EMBER.0 * bright, EMBER.1 * bright, EMBER.2 * bright, 0.95),
+                    art: &white,
+                });
+            }
+        }
         art.baked = version.copied();
         art.baked_at = now;
         let Some(bounds) = stamps.iter().map(Stamp::bounds).reduce(|a, b| a.union(b)) else { continue };

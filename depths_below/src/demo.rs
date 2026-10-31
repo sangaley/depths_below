@@ -38,7 +38,7 @@ use crate::combat::targeting::fire_groups::FireGroupState;
 //                          in their textures' own colours, untinted.
 //   DEPTHS_FLY_TO=station — autopilot to the nearest station: turn, burn, brake,
 //                          press F. For filming an approach and docking.
-//   DEPTHS_ZOOM=<z> — hold the camera at that zoom (1.8 default, 70 furthest out).
+//   DEPTHS_ZOOM=<z> — hold the camera at that zoom (1.8 default, 90 furthest out).
 //   DEPTHS_ZOOM_RAMP=<from>:<to>:<secs>[:<delay>] — ease the zoom from one value
 //                          to another over <secs> of real time, starting
 //                          <delay> real seconds after launch. For filming.

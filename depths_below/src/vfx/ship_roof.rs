@@ -277,8 +277,11 @@ pub struct AiRoofLaid(usize, usize, usize);
 /// nothing on it gets a clean deck plate, so a module shot off used to be
 /// replaced by fresh plating and the ship looked untouched: 1,253 blocks down
 /// to 536 and the same picture. These get a burn instead.
+///
+/// `.1` is the hull cells shot away, for the far picture: a hole in a dark ship
+/// against dark space doesn't show from 20 km, so its torn edges glow.
 #[derive(Component, Default, Debug)]
-pub struct Scars(pub HashSet<IVec2>);
+pub struct Scars(pub HashSet<IVec2>, pub HashSet<IVec2>);
 
 /// Colour of a scar: burnt metal.
 const SCAR: (f32, f32, f32) = (0.055, 0.035, 0.03);
@@ -290,6 +293,8 @@ const SCAR_SHADE: f32 = 0.95;
 pub fn note_scars(
     lost: Query<(&Module, &ChildOf), Added<crate::components::DestroyedModule>>,
     built: Query<(&Module, &ChildOf), Added<Module>>,
+    hull_lost: Query<(&HullSegment, &ChildOf), Added<HullDestroyed>>,
+    hull_built: Query<(&HullSegment, &ChildOf), Added<HullSegment>>,
     mut ships: Query<&mut Scars>,
 ) {
     let cells = |m: &Module| ShipGrid::cells_for(m.grid_position, m.size, m.rotation, footprints::footprint_override(m.module_type));
@@ -307,6 +312,27 @@ pub fn note_scars(
             scars.0.extend(cells(module));
         }
     }
+    for (hull, parent) in hull_built.iter() {
+        if let Ok(mut scars) = ships.get_mut(parent.parent()) {
+            scars.1.remove(&hull.grid_position);
+        }
+    }
+    for (hull, parent) in hull_lost.iter() {
+        if let Ok(mut scars) = ships.get_mut(parent.parent()) {
+            scars.1.insert(hull.grid_position);
+        }
+    }
+}
+
+/// Where the far picture glows, with how bright, 0..1: about half of what's
+/// burnt out, and the edge of every hole. All of a wound would be a solid orange
+/// blob, and a hole's middle is empty space.
+pub fn embers(scars: &Scars, standing: &HashSet<IVec2>) -> Vec<(IVec2, f32)> {
+    const SIDES: [IVec2; 4] = [IVec2::X, IVec2::NEG_X, IVec2::Y, IVec2::NEG_Y];
+    let speckled = |c: &IVec2| (c.x.wrapping_mul(73) ^ c.y.wrapping_mul(179)).rem_euclid(2) == 0;
+    let burns = scars.0.iter().filter(|c| speckled(c) && standing.contains(*c)).map(|c| (*c, 1.0));
+    let edges = scars.1.iter().filter(|c| !standing.contains(*c) && SIDES.iter().any(|s| standing.contains(&(**c + *s)))).map(|c| (*c, 0.7));
+    burns.chain(edges).collect()
 }
 
 /// The floor cells showing a scar, and the roof with them taken out.
@@ -445,6 +471,20 @@ pub fn clear_ship_roof(mut commands: Commands, tiles: Query<Entity, With<RoofTil
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_wound_glows_at_its_edge_and_not_all_over() {
+        let standing: HashSet<IVec2> = (0..5).map(|x| IVec2::new(x, 0)).collect();
+        // A long hole, one row up from the hull and two rows up.
+        let holes: HashSet<IVec2> = (0..5).flat_map(|x| [IVec2::new(x, 1), IVec2::new(x, 2)]).collect();
+        let glow = embers(&Scars(HashSet::new(), holes), &standing);
+        assert_eq!(glow.len(), 5, "only the row touching what's left: {glow:?}");
+        assert!(glow.iter().all(|(c, _)| c.y == 1));
+        // A burn out on a floor that's still there speckles.
+        let burns: HashSet<IVec2> = standing.clone();
+        let speckle = embers(&Scars(burns, HashSet::new()), &standing);
+        assert!(!speckle.is_empty() && speckle.len() < 5, "{speckle:?}");
+    }
+
     #[test]
     fn a_lost_module_leaves_a_burn_and_not_a_clean_plate() {
         let roof: HashSet<IVec2> = [IVec2::new(0, 0), IVec2::new(1, 0)].into_iter().collect();

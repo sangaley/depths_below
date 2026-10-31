@@ -89,13 +89,16 @@ pub fn attach_far_view(
     }
 }
 
-/// A trader's label says who it is and where it's headed, as that changes.
+/// Keep each ship's label current: how much of it is left, so a fight reads
+/// from where a block is a pixel or two across, and for a trader who it is and
+/// where it's headed.
 #[allow(clippy::type_complexity)]
-pub fn label_traders(
+pub fn label_ships(
     time: Res<Time>,
     mut next: Local<f32>,
     sim: Res<crate::ai_ship::components::WorldSimulation>,
-    ships: Query<(&FarView, &AiShipType, Option<&AiShipClass>, &crate::ai_ship::fleet::FleetMember)>,
+    field: Res<crate::ai_ship::awareness::Battlefield>,
+    ships: Query<(Entity, &FarView, &AiShipType, Option<&AiShipClass>, Option<&crate::ai_ship::fleet::FleetMember>, Has<crate::diplomacy::FactionStation>, &crate::ai_ship::components::AiShipState)>,
     mut texts: Query<&mut Text2d>,
     children: Query<&Children>,
 ) {
@@ -103,10 +106,16 @@ pub fn label_traders(
         return;
     }
     *next = time.elapsed_secs() + 1.0;
-    for (view, faction, class, member) in ships.iter() {
-        let Some(fleet) = sim.fleet(member.fleet).filter(|f| f.trade.is_some()) else { continue };
-        let name = class.and_then(|c| crate::ai_ship::roster::find(*faction, c.0)).map(|c| c.name);
-        let line = crate::ai_ship::traffic::trader_label(fleet, name);
+    for (ship, view, faction, class, member, station, state) in ships.iter() {
+        let trader = member.and_then(|m| sim.fleet(m.fleet)).filter(|f| f.trade.is_some());
+        let line = match trader {
+            Some(fleet) => {
+                let name = class.and_then(|c| crate::ai_ship::roster::find(*faction, c.0)).map(|c| c.name);
+                crate::ai_ship::traffic::trader_label(fleet, name)
+            }
+            None => label_text(*faction, class, station),
+        };
+        let line = condition_text(line, state.is_destroyed, field.hulls.get(&ship).map(|h| h.blocks_left()));
         let shadows = children.get(view.label).into_iter().flat_map(|c| c.iter());
         for entity in std::iter::once(view.label).chain(shadows) {
             if let Ok(mut text) = texts.get_mut(entity) {
@@ -115,6 +124,17 @@ pub fn label_traders(
                 }
             }
         }
+    }
+}
+
+/// A label with the ship's state on the end, once there's something to say.
+fn condition_text(line: String, wrecked: bool, left: Option<f32>) -> String {
+    if wrecked {
+        return format!("{line} - wrecked");
+    }
+    match left {
+        Some(left) if left < 0.995 => format!("{line} - {:.0}%", left * 100.0),
+        _ => line,
     }
 }
 
@@ -184,6 +204,14 @@ mod tests {
         assert_eq!(far_alpha(FAR_FROM), 0.0);
         assert_eq!(far_alpha(FAR_SOLID), 1.0);
         assert!(far_alpha(5.7) > 0.0 && far_alpha(5.7) < 1.0);
+    }
+
+    #[test]
+    fn a_label_says_how_much_is_left_once_it_is_hurt() {
+        assert_eq!(condition_text("Lancer".into(), false, Some(1.0)), "Lancer");
+        assert_eq!(condition_text("Lancer".into(), false, Some(0.72)), "Lancer - 72%");
+        assert_eq!(condition_text("Lancer".into(), true, Some(0.3)), "Lancer - wrecked");
+        assert_eq!(condition_text("Lancer".into(), false, None), "Lancer");
     }
 
     #[test]

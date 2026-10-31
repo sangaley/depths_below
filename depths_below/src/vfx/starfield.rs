@@ -201,7 +201,7 @@ mod tests {
     #[test]
     fn the_box_covers_the_screen_at_every_zoom() {
         // A 1440p window at the widest zoom has to fall inside the box.
-        for zoom in [0.5, 1.8, 8.0, 20.0, 70.0] {
+        for zoom in [0.5, 1.8, 8.0, 20.0, 90.0] {
             let (seen_w, seen_h) = (2560.0 * zoom, 1440.0 * zoom);
             let s = field_scale(zoom);
             assert!(FIELD_W * s >= seen_w, "too narrow at zoom {zoom}");

@@ -59,7 +59,7 @@ impl Default for CameraState {
             // screen edge even fully zoomed out. 20.0 gives ~25,600x14,400
             // visible, comfortably framing a long-range fight.
             // A fight at 20 km, framed: fight_framing_zoom.
-            max_zoom: 70.0,
+            max_zoom: 90.0,
             shake_intensity: 0.0,
             shake_decay: 5.0,
             shake_offset: Vec2::ZERO,
@@ -311,7 +311,9 @@ pub fn fight_framing_zoom(reach: f32, view_height: f32) -> f32 {
     if view_height <= 0.0 {
         return DEFAULT_ZOOM;
     }
-    (2.3 * reach / view_height).max(DEFAULT_ZOOM)
+    // Far enough to keep it well clear of the HUD along the top: at 2.3 an
+    // enemy sat half under it, too near the edge to see what you'd done to it.
+    (2.9 * reach / view_height).max(DEFAULT_ZOOM)
 }
 
 /// Fights happen at around 20 km now. While an enemy is fighting you inside sensor
@@ -655,6 +657,6 @@ mod fight_framing_tests {
     fn a_fight_7_km_off_fits_on_screen() {
         let zoom = fight_framing_zoom(7000.0, 720.0);
         assert!(zoom * 720.0 / 2.0 > 7000.0, "half the view covers the enemy: {zoom}");
-        assert!(zoom < 25.0);
+        assert!(zoom < 30.0);
     }
 }
