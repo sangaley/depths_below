@@ -51,6 +51,12 @@ pub fn ship_input(
 /// make it four times as quick.
 const TUNED_CELLS: f32 = 210.0;
 
+/// How heavy a hull of this many cells flies, against the 210 cells a ship's
+/// mass and drag were tuned on.
+pub fn heft_of(cells: usize) -> f32 {
+    (cells as f32 / TUNED_CELLS).max(0.25)
+}
+
 /// Converts raw engine thrust into usable acceleration. Without this, the
 /// starter ship's 1200 thrust / 1200 mass gave 1 unit/s² — one grid cell
 /// per second per second, i.e. imperceptible. 180x puts cruising speed a
@@ -143,7 +149,7 @@ pub fn ship_movement(
                 .map(|h| h.grid_position)
                 .collect();
             let scale = turn_scale(cells.iter().copied());
-            let heft = (cells.len() as f32 / TUNED_CELLS).max(0.25);
+            let heft = heft_of(cells.len());
             *turning = Some((*layout, scale, heft));
             (scale, heft)
         }

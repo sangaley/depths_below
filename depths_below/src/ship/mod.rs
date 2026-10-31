@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-mod movement;
+pub mod movement;
 mod systems;
 pub mod towing;
 mod power;

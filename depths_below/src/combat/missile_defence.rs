@@ -53,11 +53,61 @@ impl MissileWarning {
 /// Which enemy missiles each ship's warners see: those within
 /// `WARNER_RANGE` of a live Missile Warner. A ship with none sees nothing.
 #[allow(clippy::type_complexity)]
+/// Which ship is on which side, for telling a threat from a friend's salvo.
+#[derive(bevy::ecs::system::SystemParam)]
+pub struct Sides<'w, 's> {
+    factions: Query<'w, 's, &'static crate::ai_ship::components::AiShipType>,
+    escorts: Query<'w, 's, (), With<crate::ai_ship::standing_spawns::PlayerEscort>>,
+    players: Query<'w, 's, (), With<Ship>>,
+}
+
+impl Sides<'_, '_> {
+    /// Is a missile fired by `owner` something `me` should shoot down? Not its
+    /// own, and not its side's: this only ever excluded the ship itself, so a
+    /// fleet's point defence shot down the fleet's own salvo on the way out.
+    pub fn threat(&self, me: Entity, owner: Option<Entity>) -> bool {
+        let Some(owner) = owner else { return true };
+        if owner == me {
+            return false;
+        }
+        let side = |e: Entity| -> MissileSide {
+            if self.players.contains(e) {
+                MissileSide::You
+            } else if self.escorts.contains(e) {
+                MissileSide::YourEscort
+            } else {
+                self.factions.get(e).map_or(MissileSide::Unknown, |f| MissileSide::Faction(*f))
+            }
+        };
+        side_threat(side(me), side(owner))
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum MissileSide {
+    You,
+    YourEscort,
+    Faction(crate::ai_ship::components::AiShipType),
+    /// Its ship has gone since it fired.
+    Unknown,
+}
+
+/// Would a ship on side `me` shoot down a missile from side `owner`?
+pub fn side_threat(me: MissileSide, owner: MissileSide) -> bool {
+    use MissileSide::*;
+    match (me, owner) {
+        (You | YourEscort, You | YourEscort) => false,
+        (Faction(a), Faction(b)) => crate::ai_ship::components::factions_hostile(a, b),
+        _ => true,
+    }
+}
+
 pub fn spot_missiles(
     mut commands: Commands,
     mut ships: Query<(Entity, Option<&Children>, Option<&mut MissileWarning>), Or<(With<Ship>, With<crate::ai_ship::components::AiShip>)>>,
     warners: Query<(&Module, &GlobalTransform), Without<DestroyedModule>>,
     missiles: Query<(Entity, &Transform, &MissileProjectile)>,
+    sides: Sides,
 ) {
     for (ship, children, warning) in ships.iter_mut() {
         let eyes: Vec<Vec2> = children
@@ -69,7 +119,7 @@ pub fn spot_missiles(
             .collect();
         let spotted = spotted_by(
             &eyes,
-            missiles.iter().filter(|(_, _, m)| m.owner_ship != Some(ship)).map(|(e, t, _)| (e, t.translation.truncate())),
+            missiles.iter().filter(|(_, _, m)| sides.threat(ship, m.owner_ship)).map(|(e, t, _)| (e, t.translation.truncate())),
         );
         let now = MissileWarning { spotted, warners: eyes.len() as u32 };
         match warning {
@@ -116,6 +166,7 @@ pub fn throw_decoys(
     ships: Query<(Entity, &GlobalTransform, &Children, Option<&Velocity>, Option<&MissileWarning>), Or<(With<Ship>, With<crate::ai_ship::components::AiShip>)>>,
     launchers: Query<(Entity, &Module, &GlobalTransform), Without<DestroyedModule>>,
     missiles: Query<(Entity, &Transform, &MissileProjectile, &BuiltMissile)>,
+    sides: Sides,
     mut ready_at: Local<HashMap<Entity, f32>>,
 ) {
     let now = time.elapsed_secs();
@@ -133,7 +184,7 @@ pub fn throw_decoys(
             }
             let inbound: Vec<Vec2> = missiles
                 .iter()
-                .filter(|(e, _, m, b)| m.owner_ship != Some(ship) && fools(heat, b.head) && warning.sees(*e))
+                .filter(|(e, _, m, b)| sides.threat(ship, m.owner_ship) && fools(heat, b.head) && warning.sees(*e))
                 .map(|(_, t, _, _)| t.translation.truncate())
                 .filter(|p| p.distance(here) < DECOY_RANGE)
                 .collect();
@@ -168,11 +219,12 @@ pub fn throw_decoys(
 pub fn seduce_seekers(
     mut decoys: Query<(Entity, &Transform, &mut MissileDecoy)>,
     mut missiles: Query<(Entity, &Transform, &MissileProjectile, &mut BuiltMissile)>,
+    sides: Sides,
 ) {
     for (decoy, decoy_tf, mut d) in decoys.iter_mut() {
         let at = decoy_tf.translation.truncate();
         for (m, tf, projectile, mut b) in missiles.iter_mut() {
-            if b.decoy.is_some() || !b.locked || !fools(d.heat, b.head) || projectile.owner_ship == Some(d.ship) {
+            if b.decoy.is_some() || !b.locked || !fools(d.heat, b.head) || !sides.threat(d.ship, projectile.owner_ship) {
                 continue;
             }
             if d.rolled.contains(&m) || tf.translation.truncate().distance(at) > DECOY_RANGE {
@@ -259,6 +311,19 @@ pub fn pd_solution(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_fleet_does_not_shoot_down_its_own_salvo() {
+        use crate::ai_ship::components::AiShipType::*;
+        use MissileSide::*;
+        assert!(!side_threat(Faction(TerranHegemony), Faction(TerranHegemony)), "same faction");
+        assert!(side_threat(Faction(TerranHegemony), Faction(RecursiveKingdom)), "at war");
+        assert!(side_threat(Faction(TerranHegemony), You));
+        assert!(side_threat(You, Faction(TerranHegemony)));
+        assert!(!side_threat(You, YourEscort), "your escort's missiles are yours");
+        assert!(!side_threat(YourEscort, You));
+        assert!(side_threat(Faction(TerranHegemony), Unknown), "fired by a ship that's gone");
+    }
+
     use super::*;
 
     #[test]

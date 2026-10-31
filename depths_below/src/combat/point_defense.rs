@@ -76,6 +76,7 @@ pub fn intercept_missiles(
     ), (With<InterceptMode>, Without<DestroyedModule>)>,
     missile_query: Query<(Entity, &Transform, &Velocity, &MissileProjectile)>,
     mut commands: Commands,
+    sides: super::missile_defence::Sides,
 ) {
     let Ok((player_ship, ship_transform)) = ship_query.single() else { return };
     let ship_pos = ship_transform.translation.truncate();
@@ -86,7 +87,7 @@ pub fn intercept_missiles(
         // Our own warhead is not a threat, however it happens to be flying.
         // The heading filter below catches an outbound salvo, but not one
         // that has looped back around on a target behind us.
-        if missile.owner_ship == Some(player_ship) { continue; }
+        if !sides.threat(player_ship, missile.owner_ship) { continue; }
         let missile_pos = transform.translation.truncate();
         let to_ship = ship_pos - missile_pos;
         let dist = to_ship.length();
@@ -180,10 +181,11 @@ pub fn pd_missile_collision(
     proj_query: Query<(Entity, &PointDefenseRound, &Projectile, &Transform)>,
     mut missile_query: Query<(&Transform, &MissileProjectile, Option<&mut super::missiles::BuiltMissile>)>,
     missile_grid: Res<crate::spatial::MissileGrid>,
+    sides: super::missile_defence::Sides,
 ) {
     for (proj_entity, pd, proj, proj_transform) in proj_query.iter() {
         let proj_pos = proj_transform.translation.truncate();
-        let enemy = |m: &MissileProjectile| m.owner_ship != Some(pd.ship);
+        let enemy = |m: &MissileProjectile| sides.threat(pd.ship, m.owner_ship);
 
         if let Some(flak) = proj.flak {
             let fused = missile_grid.0.nearby(proj_pos, flak.fuse).any(|(e, _)| {

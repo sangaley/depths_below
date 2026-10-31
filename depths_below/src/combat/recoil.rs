@@ -35,9 +35,9 @@ const EJECT_RECOIL_SPEED: f32 = 200.0;
 /// Uses Newton's third law: F_recoil = mass_projectile × velocity_projectile
 pub fn apply_weapon_recoil(
     mut recoil: ResMut<RecoilAccumulator>,
-    mut ship_query: Query<(&mut Velocity, &mut ShipPhysics), With<Ship>>,
+    mut ship_query: Query<(&mut Velocity, &mut ShipPhysics, Option<&crate::building::ShipGrid>), With<Ship>>,
 ) {
-    let Ok((mut velocity, mut physics)) = ship_query.single_mut() else { return };
+    let Ok((mut velocity, mut physics, grid)) = ship_query.single_mut() else { return };
 
     if recoil.force.length_squared() < 0.001 && recoil.torque.abs() < 0.001 {
         return;
@@ -48,12 +48,18 @@ pub fn apply_weapon_recoil(
     // dt made every shot's kick proportional to frame time and about sixty
     // times too small — a railgun moved the ship 0.1 u/s instead of 7.5, so
     // recoil existed on paper and was imperceptible in the seat.
-    velocity.0 += recoil.force / physics.mass;
+    //
+    // Against the ship's real weight (ship::movement flies it by the same
+    // heft): the bare mass is what a 210-cell hull weighs, so a ship four times
+    // the size was shoved like the small one. Its turning inertia goes with
+    // size twice over, once for the mass and once for the longer lever.
+    let heft = grid.map_or(1.0, |g| crate::ship::movement::heft_of(g.cells.len()));
+    velocity.0 += recoil.force / (physics.mass * heft);
 
     // Real angular recoil. This used to fake spin by nudging the ship
     // sideways, because the system had no mutable ShipPhysics to write to —
     // so an off-centre gun shoved the hull instead of turning it.
-    physics.angular_velocity += recoil.torque / (physics.mass * MOMENT_OF_INERTIA);
+    physics.angular_velocity += recoil.torque / (physics.mass * heft * heft * MOMENT_OF_INERTIA);
 
     // Clear accumulator for next frame
     recoil.force = Vec2::ZERO;
@@ -78,6 +84,17 @@ fn absorber_reduction(
     1.0 - (count as f32 * 0.25).min(0.75) // Max 75% reduction
 }
 
+/// The kick of one round, with damage standing in for its mass. Taken at the
+/// values this was tuned for: built guns' damage was scaled up to shorten
+/// fights, and every round's speed to reach further, and neither makes a shell
+/// any heavier. Counting them made a 170 mm shot kick about 50 times over and
+/// firing a broadside flew the ship backwards. A heavy gun's heavier shell does
+/// count: it kicks harder, less often.
+pub fn round_momentum(damage: f32, speed: f32, built_gun: bool) -> f32 {
+    let scale = if built_gun { crate::combat::gun_assembly::built_damage_scale() } else { 1.0 };
+    damage / scale * 0.01 * speed / crate::combat::gun_assembly::RANGE_SCALE
+}
+
 /// System: calculate recoil when kinetic projectiles are spawned
 pub fn accumulate_projectile_recoil(
     new_projectiles: Query<(&Projectile, &Velocity, &Transform), Added<Projectile>>,
@@ -100,14 +117,8 @@ pub fn accumulate_projectile_recoil(
         if crate::combat::turret_deck::ship_of(projectile.owner, &owners, &turret_bodies) != Some(player_ship) {
             continue;
         }
-        // Projectile momentum = damage as proxy for mass × velocity
-        // Heavier rounds (more damage) create more recoil
-        let projectile_mass = projectile.damage * 0.01; // Scale factor
-        let proj_speed = proj_velocity.0.length();
-
-        // Recoil force = opposite of projectile direction × momentum
         let proj_dir = proj_velocity.0.normalize_or_zero();
-        let recoil_force = -proj_dir * projectile_mass * proj_speed;
+        let recoil_force = -proj_dir * round_momentum(projectile.damage, proj_velocity.0.length(), guns.contains(projectile.owner));
 
         // A gun built from parts soaks its own recoil: each of ITS absorbers
         // takes one unit of the recoil the shot makes (a muzzle brake has
@@ -156,5 +167,23 @@ pub fn accumulate_missile_recoil(
         // already going.
         let missile_mass = missile.damage * 0.005;
         recoil.force += -missile.launch_dir * missile_mass * EJECT_RECOIL_SPEED * absorber_reduction;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scaling_the_fight_up_does_not_make_shells_kick_harder() {
+        use crate::combat::gun_assembly::{built_damage_scale, RANGE_SCALE};
+        // A 170 mm shell at its tuned 373 damage and 2,550 u/s.
+        let kick = round_momentum(373.0 * built_damage_scale(), 2_550.0 * RANGE_SCALE, true);
+        assert!((kick - 373.0 * 0.01 * 2_550.0).abs() < 1.0, "{kick}");
+    }
+
+    #[test]
+    fn a_bigger_shell_still_kicks_harder() {
+        assert!(round_momentum(1_490.0, 7_650.0, true) > round_momentum(43.0, 7_650.0, true) * 10.0);
     }
 }
