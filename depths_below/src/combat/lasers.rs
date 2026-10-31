@@ -68,15 +68,66 @@ pub fn bank_stats(cavities: u32, q_switches: u32, doublers: u32, destabilisers: 
     }
 }
 
+/// How far a bare beam goes before it's down to about a third. At fight range
+/// (20 km) that leaves a bare emitter a quarter of its strength, and one with
+/// two lenses nearly half: lenses matter, but a laser still works out there.
+const BEAM_FALLOFF: f32 = 15_000.0;
+/// What a charge is worth against a ship. Guns' damage was scaled up to make
+/// fights end, and beams were left behind at a tenth of a gun: a whole bank's
+/// pumps did what one 170 mm gun does in a few seconds.
+pub const BEAM_DAMAGE_SCALE: f32 = 16.0;
+
 /// How much of the beam is left after `distance` units.
 pub fn reaching(distance: f32, lenses: u32, point_defence: bool) -> f32 {
-    let l = 3000.0 * RANGE_SCALE * (1.0 + lenses as f32).sqrt() * if point_defence { 2.0 } else { 1.0 };
+    let l = BEAM_FALLOFF * (1.0 + lenses as f32).sqrt() * if point_defence { 2.0 } else { 1.0 };
     (-distance / l).exp()
+}
+
+/// The stretch of a beam worth walking through a ship's grid, as distances
+/// along it: just round the ship. A grid walk stops after a set number of cells,
+/// and started back at the muzzle it ran out long before reaching a ship 17 km
+/// off, so the beam went straight through and hit nothing.
+pub fn beam_window(along: f32, radius: f32, span: f32) -> (f32, f32) {
+    let reach = radius + 2.0 * CELL;
+    ((along - reach).max(0.0), (along + reach).min(span))
+}
+
+/// Every block along a beam, however long it is. A grid walk goes 24 cells,
+/// because nothing else the game fires crosses more than that in a frame; a
+/// beam crosses all of it at once, so it walks in stretches. Within 24 cells of
+/// the muzzle was the only place a laser could ever hit a hull. `t_enter` runs
+/// from `from`, in cells.
+fn walk_beam(grid: &crate::building::ShipGrid, from: Vec2, to: Vec2) -> Vec<crate::building::GridStep> {
+    const STRETCH: f32 = 20.0;
+    let len = from.distance(to);
+    let dir = (to - from).normalize_or_zero();
+    let mut steps: Vec<crate::building::GridStep> = Vec::new();
+    let mut done = 0.0;
+    while done < len {
+        let next = (done + STRETCH).min(len);
+        for mut step in grid.walk(from + dir * done, from + dir * next) {
+            step.t_enter += done;
+            // A cell the last stretch ended in: it's the same block.
+            match steps.last_mut() {
+                Some(last) if last.cell == step.cell => last.span += step.span,
+                _ => steps.push(step),
+            }
+        }
+        done = next;
+    }
+    steps
+}
+
+/// How wide a beam is drawn, core and glow in world units: thicker the more
+/// damage a second it's putting out, and never too thin to see at this zoom.
+pub fn beam_widths(power: f32, zoom: f32) -> (f32, f32) {
+    let core = (power.max(0.0).sqrt() * 0.9).clamp(2.5, 70.0).max(zoom * 1.2);
+    (core, core * 3.0)
 }
 
 /// Furthest a laser bothers firing: where 5% of it is left.
 pub fn max_range(lenses: u32) -> f32 {
-    3.0 * 3000.0 * RANGE_SCALE * (1.0 + lenses as f32).sqrt()
+    3.0 * BEAM_FALLOFF * (1.0 + lenses as f32).sqrt()
 }
 
 /// A hull-mounted emitter's arc, degrees either side of where it faces: a
@@ -447,7 +498,9 @@ pub fn fire_lasers(
                 }
                 match on_turret {
                     Some(body) => body.aim,
-                    None => ai_target.and_then(|t| t.entity.and_then(|x| whereabouts.get(x).ok()).map(|g| g.translation().truncate()).or(Some(t.position))),
+                    // Where its guns are laid, not the target's root, which can be
+                    // off the end of the ship.
+                    None => ai_target.and_then(|t| t.aim_at.or_else(|| t.entity.and_then(|x| whereabouts.get(x).ok()).map(|g| g.translation().truncate())).or(Some(t.position))),
                 }
             };
             let Some(mark) = mark else {
@@ -503,13 +556,14 @@ pub struct LaserBeamFx {
     pub max: f32,
 }
 
-fn draw_beam(commands: &mut Commands, from: Vec2, to: Vec2, colour: Color, pulse: bool) {
+fn draw_beam(commands: &mut Commands, from: Vec2, to: Vec2, colour: Color, pulse: bool, power: f32, zoom: f32) {
     let mid = (from + to) / 2.0;
     let len = from.distance(to);
     let angle = (to - from).to_angle();
     let life = if pulse { 0.12 } else { 0.05 };
     let core = colour.mix(&Color::WHITE, 0.55);
-    for (width, c, z) in [(if pulse { 16.0 } else { 10.0 }, colour.with_alpha(0.22), 0.6), (if pulse { 4.0 } else { 2.5 }, core, 0.61)] {
+    let (core_width, glow_width) = beam_widths(power, zoom);
+    for (width, c, z) in [(glow_width, colour.with_alpha(0.22), 0.6), (core_width, core, 0.61)] {
         commands.spawn((
             Sprite { color: c, custom_size: Some(Vec2::new(len, width)), ..default() },
             Transform { translation: mid.extend(z), rotation: Quat::from_rotation_z(angle), ..default() },
@@ -544,15 +598,25 @@ pub fn resolve_laser_shots(
     mut missiles: Query<(&Transform, Option<&mut super::missiles::BuiltMissile>), With<super::new_projectiles::MissileProjectile>>,
     mut ai_damage: MessageWriter<crate::events::AiShipDamaged>,
     mut player_hits: super::new_projectiles::PlayerHitEffects,
+    view: (Res<Time>, Query<&Projection, With<crate::camera::MainCamera>>),
     terrain: (Res<crate::ship::collision::ColliderGrid>, Query<(&Transform, &crate::ship::collision::Collider), crate::ship::collision::TerrainFilter>),
 ) {
+    let dt = view.0.delta_secs().max(1e-4);
+    let zoom = match view.1.single() {
+        Ok(Projection::Orthographic(o)) => o.scale,
+        _ => 1.0,
+    };
     for shot in shots.read() {
         let colour = beam_colour(shot.stats.wavelength_nm);
+        // Damage a second it's putting out at full strength: a steady beam's
+        // energy is this frame's, a pulse's is one of so many a second.
+        let per_second = if shot.pulse { shot.stats.shots.max(1) as f32 } else { 1.0 / dt };
+        let power = shot.energy * shot.stats.damage_per_charge * BEAM_DAMAGE_SCALE * per_second;
         // Point defence: straight onto the missile.
         if let Some(m) = shot.missile {
             let Ok((t, built)) = missiles.get_mut(m) else { continue };
             let at = t.translation.truncate();
-            let dmg = shot.energy * shot.stats.damage_per_charge * reaching(at.distance(shot.from), shot.lenses, true);
+            let dmg = shot.energy * shot.stats.damage_per_charge * BEAM_DAMAGE_SCALE * reaching(at.distance(shot.from), shot.lenses, true);
             let down = match built {
                 Some(mut b) => {
                     b.hp -= dmg;
@@ -560,7 +624,7 @@ pub fn resolve_laser_shots(
                 }
                 None => true,
             };
-            draw_beam(&mut commands, shot.from, at, colour, shot.pulse);
+            draw_beam(&mut commands, shot.from, at, colour, shot.pulse, power, zoom);
             if down {
                 commands.entity(m).try_despawn();
                 super::spawn_hit_effect(&mut commands, at, Color::srgb(1.0, 0.7, 0.4), 15.0);
@@ -587,6 +651,25 @@ pub fn resolve_laser_shots(
         }
         let mut best: Option<Hit> = None;
         let span = shot.from.distance(end);
+        // Where the beam leaves its own ship. It may fire across its own hull
+        // (no gun needs a clear line off its own deck), but nothing comes out
+        // of a hull until it's out the other side: drawn from the muzzle, it
+        // looked like a beam shooting through the ship.
+        let mut drawn_from = shot.from;
+        if let Ok((_, tf, gt, _, shield, _)) = ships.get(shot.ship) {
+            if let Ok(grid) = grids.0.get(shot.ship) {
+                let inv = gt.affine().inverse();
+                let to_cell = |w: Vec2| {
+                    let p = inv.transform_point3(w.extend(0.0)).truncate();
+                    Vec2::new(p.x / CELL, (p.y + 33.0) / CELL)
+                };
+                let along = (shield.world_center(tf) - shot.from).dot(shot.dir);
+                let far = (along + shield.radius + 2.0 * CELL).max(0.0);
+                if let Some(last) = walk_beam(grid, to_cell(shot.from), to_cell(shot.from + shot.dir * far)).last() {
+                    drawn_from = shot.from + shot.dir * ((last.t_enter + last.span) * CELL);
+                }
+            }
+        }
         for (ship, tf, gt, children, shield, _) in ships.iter() {
             if ship == shot.ship {
                 continue;
@@ -625,10 +708,12 @@ pub fn resolve_laser_shots(
                     let p = inv.transform_point3(w.extend(0.0)).truncate();
                     Vec2::new(p.x / CELL, (p.y + half) / CELL)
                 };
-                let (a, b) = (to_cell(shot.from), to_cell(end));
+                let (near, far) = beam_window(along, shield.radius, span);
+                let (a, b) = (to_cell(shot.from + shot.dir * near), to_cell(shot.from + shot.dir * far));
                 let dir_local = (b - a).normalize_or_zero();
                 let mut steps = Vec::new();
-                for step in grid.walk(a, b) {
+                let walked = walk_beam(grid, a, b);
+                for step in walked.iter() {
                     if is_turret && modules.get(step.entity).is_ok_and(|m| matches!(m.module_type, ModuleType::GunBarrel | ModuleType::MuzzleBrake)) {
                         continue;
                     }
@@ -642,8 +727,8 @@ pub fn resolve_laser_shots(
                         }
                     }
                 }
-                let Some(first) = grid.walk(a, b).into_iter().find(|s| steps.first().is_some_and(|(e, _)| *e == s.entity)) else { continue };
-                let dist = first.t_enter * CELL;
+                let Some(first) = walked.iter().find(|s| steps.first().is_some_and(|(e, _)| *e == s.entity)) else { continue };
+                let dist = near + first.t_enter * CELL;
                 let nearer = best.as_ref().is_none_or(|h| if is_turret { dist <= h.dist + 1.0 } else { dist < h.dist });
                 if nearer {
                     best = Some(Hit { ship, dist, shield: false, layer: Some((layer, is_turret, roof)), steps });
@@ -663,12 +748,13 @@ pub fn resolve_laser_shots(
                     .collect();
                 info!("LASER miss: from {:?} toward {:?}; {}", shot.from, shot.dir, near.join("; "));
             }
-            draw_beam(&mut commands, shot.from, end, colour, shot.pulse);
+            draw_beam(&mut commands, drawn_from, end, colour, shot.pulse, power * reaching(span, shot.lenses, false), zoom);
             continue;
         };
         let hit_at = shot.from + shot.dir * hit.dist;
-        draw_beam(&mut commands, shot.from, hit_at, colour, shot.pulse);
-        let mut left = shot.energy * shot.stats.damage_per_charge * reaching(hit.dist, shot.lenses, false);
+        let strength = reaching(hit.dist, shot.lenses, false);
+        draw_beam(&mut commands, drawn_from, hit_at, colour, shot.pulse, power * strength, zoom);
+        let mut left = shot.energy * shot.stats.damage_per_charge * BEAM_DAMAGE_SCALE * strength;
         let is_player = ships.get(hit.ship).is_ok_and(|s| s.5);
         if is_player && player_hits.god_mode() {
             continue;
@@ -744,6 +830,53 @@ impl LaserBank {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_beam_finds_a_block_far_past_a_grid_walks_reach() {
+        let mut grid = crate::building::ShipGrid::default();
+        let block = Entity::from_raw_u32(7).unwrap();
+        grid.cells.insert(IVec2::new(90, 0), block);
+        // Ninety cells off: a single grid walk gives up at 24.
+        assert!(grid.walk(Vec2::ZERO, Vec2::new(120.0, 0.0)).is_empty());
+        let steps = walk_beam(&grid, Vec2::ZERO, Vec2::new(120.0, 0.0));
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].entity, block);
+        assert!((steps[0].t_enter - 89.5).abs() < 1.0, "{}", steps[0].t_enter);
+        // Right where one stretch ends and the next starts, it's one block.
+        let mut grid = crate::building::ShipGrid::default();
+        grid.cells.insert(IVec2::new(20, 0), block);
+        assert_eq!(walk_beam(&grid, Vec2::ZERO, Vec2::new(60.0, 0.0)).len(), 1);
+    }
+
+
+    #[test]
+    fn the_more_damage_the_thicker_the_beam() {
+        let (thin, _) = beam_widths(50.0, 1.8);
+        let (thick, glow) = beam_widths(1_000.0, 1.8);
+        assert!(thick > thin * 2.0, "{thin} {thick}");
+        assert!(glow > thick);
+        // A tiny one still shows from far out.
+        assert!(beam_widths(10.0, 60.0).0 >= 60.0);
+    }
+
+    #[test]
+    fn a_beam_walks_only_the_stretch_round_the_ship() {
+        // A ship 17 km off, 2 km across: a window a few km long, well within
+        // the cells a grid walk will go.
+        let (near, far) = beam_window(17_000.0, 2_000.0, 45_000.0);
+        assert!(near > 14_000.0 && far < 20_000.0, "{near} {far}");
+        assert!(far - near < 66.0 * 100.0);
+        assert_eq!(beam_window(100.0, 2_000.0, 45_000.0).0, 0.0, "right up against it");
+        assert!(beam_window(44_000.0, 2_000.0, 45_000.0).1 <= 45_000.0);
+    }
+
+    #[test]
+    fn a_laser_still_works_at_fight_range() {
+        assert!(reaching(20_000.0, 0, false) > 0.2, "bare");
+        assert!(reaching(20_000.0, 2, false) > 0.4, "two lenses");
+        assert!(max_range(0) > 40_000.0);
+    }
+
     use super::*;
 
     fn sheet(rows: &[&str]) -> (HashMap<IVec2, ModuleType>, IVec2) {
