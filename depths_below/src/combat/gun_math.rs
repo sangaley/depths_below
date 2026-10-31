@@ -86,6 +86,19 @@ pub fn gauge_mm(increasers: u32, reducers: u32) -> f32 {
         .clamp(MIN_GAUGE_MM, MAX_GAUGE_MM)
 }
 
+/// What a big bore gives up and gets, against a 60 mm autocannon: how many
+/// times longer between shots, and how many times the damage in each. As in
+/// From the Depths, a battleship's gun fires rarely and every shell matters: a
+/// 170 mm gun is about 8 rpm for 4.3 times the shell, and a 500 mm gun a shot
+/// every couple of minutes per loader for twenty times. Damage outruns the
+/// wait, so the big gun is the better one, if you can afford to miss.
+pub fn heavy_gun(gauge_mm: f32) -> (f32, f32) {
+    let heft = (gauge_mm / MIN_GAUGE_FOR_HEFT).max(1.0);
+    (heft.powf(1.26).min(MAX_SLOWER), heft.powf(1.4))
+}
+const MIN_GAUGE_FOR_HEFT: f32 = 60.0;
+const MAX_SLOWER: f32 = 6.0;
+
 pub fn stats(parts: &GunParts) -> GunStats {
     use super::shell::{ShellBase, ShellHead, HEAT_JET_DAMAGE, HEAT_PEN_PER_MM};
     let shell = &parts.shell;
@@ -100,16 +113,18 @@ pub fn stats(parts: &GunParts) -> GunStats {
     // Kinetic damage goes with the hard metal in the shell (2 for the
     // default AP head + solid body); a HEAT jet adds its own, at any speed.
     let mut damage = 30.0 * g * g * speed * shell.kinetic_weight() / 2.0;
+    let (slower, harder) = heavy_gun(gauge);
     let penetration = if shell.head == ShellHead::Heat {
         damage += HEAT_JET_DAMAGE * g * g;
         gauge * HEAT_PEN_PER_MM
     } else {
         gauge * 1.1 * speed * shell.penetration_factor()
     };
+    let damage = damage * harder;
 
     // A loader must be long enough for the shell; each one works in parallel,
     // sped up 25% per clip of rack beside it.
-    let base_reload = 2.4 * g.powf(1.35) * shell_m;
+    let base_reload = 2.4 * g.powf(1.35) * shell_m * slower;
     let mut rpm_loaders = 0.0;
     let mut working = 0;
     let mut ready = 0;
@@ -125,7 +140,7 @@ pub fn stats(parts: &GunParts) -> GunStats {
         ready += 1 + (SHELLS_PER_CLIP as f32 * l.clips).floor() as u32;
     }
     // Propellant is the heat: the default shell's two casings make 0.6 g^1.5.
-    let heat_per_shot = g.powf(1.5) * 0.3 * shell.casings as f32;
+    let heat_per_shot = g.powf(1.5) * 0.3 * shell.casings as f32 * slower;
     let cooling = 0.2 + 0.6 * parts.coolers as f32;
     let rpm_heat = 60.0 * cooling / heat_per_shot;
     let rpm = rpm_loaders.min(rpm_heat);
@@ -197,13 +212,32 @@ mod gun_math_tests {
     }
 
     #[test]
+    fn a_bigger_gun_fires_slower_and_hits_far_harder() {
+        // Small bores are left as they were.
+        assert_eq!(heavy_gun(60.0), (1.0, 1.0));
+        assert_eq!(heavy_gun(20.0), (1.0, 1.0));
+        let (slower, harder) = heavy_gun(170.0);
+        assert!((3.0..4.5).contains(&slower), "{slower}");
+        assert!((4.0..5.0).contains(&harder), "{harder}");
+        // At every size up the shell gains more than the wait costs.
+        let mut last = 1.0;
+        for gauge in [100.0, 170.0, 280.0, 400.0, 500.0] {
+            let (slower, harder) = heavy_gun(gauge);
+            let per_second = harder / slower;
+            assert!(per_second >= last, "{gauge}: {per_second}");
+            last = per_second;
+        }
+    }
+
+    #[test]
     fn the_preview_spinal_gun_comes_out_as_the_preview_says() {
         let s = stats(&spinal());
         assert_eq!(s.gauge_mm, 500.0);
         assert!((s.shell_m - 1.5).abs() < 1e-5);
         assert!((s.velocity_mps - 1030.0).abs() < 0.5);
-        assert!((s.reload_s - 21.05).abs() < 0.1, "{}", s.reload_s);
-        assert!((s.rpm - 11.4).abs() < 0.1, "{}", s.rpm);
+        // 21 s and 11.4 rpm by the loaders alone, then six times as slow.
+        assert!((s.reload_s - 21.05 * 6.0).abs() < 0.6, "{}", s.reload_s);
+        assert!((s.rpm - 11.4 / 6.0).abs() < 0.1, "{}", s.rpm);
         assert_eq!(s.working_loaders, 4);
         assert_eq!(s.ready_rack, 4 * 7);
         assert_eq!(s.rail_power_mw, 3.0);

@@ -102,14 +102,14 @@ pub fn update_ship_roof(
     mut commands: Commands,
     assets: Res<AssetServer>,
     camera: Res<CameraState>,
-    ships: Query<Entity, With<Ship>>,
+    ships: Query<(Entity, &Scars), With<Ship>>,
     hull: Query<(&HullSegment, &ChildOf), (Without<HullDestroyed>, Without<OwnedByAiShip>)>,
     modules: Query<(&Module, &ChildOf), (Without<DestroyedModule>, Without<OwnedByAiShip>)>,
     mut tiles: Query<(Entity, &mut Sprite, &RoofTile)>,
-    mut last: Local<Option<(Entity, usize, usize)>>,
+    mut last: Local<Option<(Entity, usize, usize, usize)>>,
 ) {
     let alpha = roof_alpha(camera.zoom);
-    let Ok(ship) = ships.single() else { return };
+    let Ok((ship, scars)) = ships.single() else { return };
     if alpha <= 0.0 {
         if last.is_some() {
             for (tile, _, _) in tiles.iter() {
@@ -121,7 +121,7 @@ pub fn update_ship_roof(
     }
     let mine_hull: Vec<(&HullSegment, &ChildOf)> = hull.iter().filter(|(_, p)| p.parent() == ship).collect();
     let mine_modules: Vec<&Module> = modules.iter().filter(|(_, p)| p.parent() == ship).map(|(m, _)| m).collect();
-    let key = (ship, mine_hull.len(), mine_modules.len());
+    let key = (ship, mine_hull.len(), mine_modules.len(), scars.0.len());
     // Tiles cleared from outside (clear_ship_roof) are laid again too.
     if *last == Some(key) && !tiles.is_empty() {
         for (_, mut sprite, tile) in tiles.iter_mut() {
@@ -146,7 +146,7 @@ pub fn update_ship_roof(
         })
         .collect();
     let parts: Vec<(Vec<IVec2>, bool)> = footprints.iter().map(|(c, above, _)| (c.clone(), *above)).collect();
-    let roof = roof_cells(&cells, &parts);
+    let (roof, burnt) = scarred(roof_cells(&cells, &parts), &scars.0);
     let frame = frame_cells(&cells, &footprints);
     // The ship's skin, cell by cell; the roof is the commonest of it.
     let skin: HashMap<IVec2, HullMaterial> = mine_hull.iter().map(|(s, _)| (s.grid_position, s.material)).collect();
@@ -181,6 +181,18 @@ pub fn update_ship_roof(
             },
             Transform::from_translation(grid_to_local(cell).extend(ROOF_Z)),
             RoofTile(1.0),
+            ChildOf(ship),
+        ));
+    }
+    for cell in burnt {
+        commands.spawn((
+            Sprite {
+                color: Color::srgba(SCAR.0, SCAR.1, SCAR.2, SCAR_SHADE * alpha),
+                custom_size: Some(Vec2::splat(crate::building::GRID_SIZE)),
+                ..default()
+            },
+            Transform::from_translation(grid_to_local(cell).extend(ROOF_Z)),
+            RoofTile(SCAR_SHADE),
             ChildOf(ship),
         ));
     }
@@ -259,7 +271,50 @@ pub struct AiRoofTile(pub f32);
 
 /// On an AI ship whose roof is laid, with the block counts it was laid for.
 #[derive(Component)]
-pub struct AiRoofLaid(usize, usize);
+pub struct AiRoofLaid(usize, usize, usize);
+
+/// The floor cells a ship has lost a module from. Zoomed out, a floor with
+/// nothing on it gets a clean deck plate, so a module shot off used to be
+/// replaced by fresh plating and the ship looked untouched: 1,253 blocks down
+/// to 536 and the same picture. These get a burn instead.
+#[derive(Component, Default, Debug)]
+pub struct Scars(pub HashSet<IVec2>);
+
+/// Colour of a scar: burnt metal.
+const SCAR: (f32, f32, f32) = (0.055, 0.035, 0.03);
+const SCAR_SHADE: f32 = 0.95;
+
+/// Keep each ship's scars: a module lost marks its cells, a module rebuilt
+/// clears them.
+#[allow(clippy::type_complexity)]
+pub fn note_scars(
+    lost: Query<(&Module, &ChildOf), Added<crate::components::DestroyedModule>>,
+    built: Query<(&Module, &ChildOf), Added<Module>>,
+    mut ships: Query<&mut Scars>,
+) {
+    let cells = |m: &Module| ShipGrid::cells_for(m.grid_position, m.size, m.rotation, footprints::footprint_override(m.module_type));
+    for (module, parent) in built.iter() {
+        if let Ok(mut scars) = ships.get_mut(parent.parent()) {
+            if !scars.0.is_empty() {
+                for cell in cells(module) {
+                    scars.0.remove(&cell);
+                }
+            }
+        }
+    }
+    for (module, parent) in lost.iter() {
+        if let Ok(mut scars) = ships.get_mut(parent.parent()) {
+            scars.0.extend(cells(module));
+        }
+    }
+}
+
+/// The floor cells showing a scar, and the roof with them taken out.
+pub fn scarred(roof: HashSet<IVec2>, scars: &HashSet<IVec2>) -> (HashSet<IVec2>, Vec<IVec2>) {
+    let burnt: Vec<IVec2> = roof.iter().filter(|c| scars.contains(*c)).copied().collect();
+    let clean = roof.into_iter().filter(|c| !scars.contains(c)).collect();
+    (clean, burnt)
+}
 
 /// Lay the zoomed-out roof on every AI ship, and fade it with the zoom.
 #[allow(clippy::type_complexity)]
@@ -267,7 +322,7 @@ pub fn update_ai_roofs(
     mut commands: Commands,
     assets: Res<AssetServer>,
     camera: Res<CameraState>,
-    roots: Query<(Entity, Option<&AiRoofLaid>), With<crate::ai_ship::components::AiShip>>,
+    roots: Query<(Entity, Option<&AiRoofLaid>, &Scars), With<crate::ai_ship::components::AiShip>>,
     hull: Query<(&HullSegment, &OwnedByAiShip), Without<HullDestroyed>>,
     modules: Query<(&Module, &OwnedByAiShip), Without<DestroyedModule>>,
     mut tiles: Query<(Entity, &mut Sprite, &AiRoofTile, &ChildOf)>,
@@ -287,10 +342,10 @@ pub fn update_ai_roofs(
     for (m, owner) in modules.iter() {
         mods_by.entry(owner.root).or_default().push(m);
     }
-    for (root, laid) in roots.iter() {
+    for (root, laid, scars) in roots.iter() {
         let hulls = hull_by.get(&root).map(|v| v.as_slice()).unwrap_or(&[]);
         let mods = mods_by.get(&root).map(|v| v.as_slice()).unwrap_or(&[]);
-        if hulls.is_empty() || laid.is_some_and(|l| l.0 == hulls.len() && l.1 == mods.len()) {
+        if hulls.is_empty() || laid.is_some_and(|l| l.0 == hulls.len() && l.1 == mods.len() && l.2 == scars.0.len()) {
             continue;
         }
         for (tile, _, _, parent) in tiles.iter() {
@@ -316,7 +371,20 @@ pub fn update_ai_roofs(
         }
         let material = counts.into_iter().max_by_key(|(_, n)| *n).map_or(HullMaterial::Steel, |(m, _)| m);
         let image = assets.load(roof_path(material));
-        for cell in roof_cells(&cells, &parts) {
+        let (roof, burnt) = scarred(roof_cells(&cells, &parts), &scars.0);
+        for cell in burnt {
+            commands.spawn((
+                Sprite {
+                    color: Color::srgba(SCAR.0, SCAR.1, SCAR.2, SCAR_SHADE * alpha),
+                    custom_size: Some(Vec2::splat(crate::building::GRID_SIZE)),
+                    ..default()
+                },
+                Transform::from_translation(grid_to_local(cell).extend(ROOF_Z)),
+                AiRoofTile(SCAR_SHADE),
+                ChildOf(root),
+            ));
+        }
+        for cell in roof {
             let plate = cell.div_euclid(IVec2::splat(2));
             let q = cell.rem_euclid(IVec2::splat(2));
             let rect = Rect::new(q.x as f32 * 128.0, (1 - q.y) as f32 * 128.0, q.x as f32 * 128.0 + 128.0, (2 - q.y) as f32 * 128.0);
@@ -346,7 +414,7 @@ pub fn update_ai_roofs(
                 ChildOf(root),
             ));
         }
-        commands.entity(root).try_insert(AiRoofLaid(hulls.len(), mods.len()));
+        commands.entity(root).try_insert(AiRoofLaid(hulls.len(), mods.len(), scars.0.len()));
     }
 }
 
@@ -377,6 +445,15 @@ pub fn clear_ship_roof(mut commands: Commands, tiles: Query<Entity, With<RoofTil
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_lost_module_leaves_a_burn_and_not_a_clean_plate() {
+        let roof: HashSet<IVec2> = [IVec2::new(0, 0), IVec2::new(1, 0)].into_iter().collect();
+        let scars: HashSet<IVec2> = [IVec2::new(1, 0), IVec2::new(9, 9)].into_iter().collect();
+        let (clean, burnt) = scarred(roof, &scars);
+        assert!(clean.contains(&IVec2::new(0, 0)) && !clean.contains(&IVec2::new(1, 0)));
+        assert_eq!(burnt, vec![IVec2::new(1, 0)], "only floor that's still there burns");
+    }
+
     use super::*;
 
     #[test]

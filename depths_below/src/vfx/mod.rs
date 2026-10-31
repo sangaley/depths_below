@@ -81,6 +81,9 @@ impl Plugin for VfxPlugin {
                     .chain()
                     .run_if(in_state(GameState::Exploring)),
             )
+            .register_required_components::<crate::components::Ship, ship_roof::Scars>()
+            .register_required_components::<crate::ai_ship::components::AiShip, ship_roof::Scars>()
+            .add_systems(Update, ship_roof::note_scars.before(ship_roof::update_ship_roof).run_if(in_state(GameState::Exploring)))
             .add_systems(Update, far_view::label_traders.run_if(in_state(GameState::Exploring)))
             .add_systems(OnExit(GameState::Exploring), far_view::clear_far_labels)
             // Further out still, each ship and turret is one baked picture

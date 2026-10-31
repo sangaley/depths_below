@@ -361,12 +361,28 @@ pub fn attach_far_art(
 type Pictured<'w, 's> = Query<
     'w,
     's,
-    (&'static Sprite, &'static Transform, &'static Visibility),
+    (&'static Sprite, &'static Transform, &'static Visibility, Option<&'static HullSegment>, Option<&'static Module>),
     (
         Or<(With<HullSegment>, With<Module>, With<super::ship_roof::RoofTile>, With<super::ship_roof::AiRoofTile>)>,
         Without<FarArtSprite>,
     ),
 >;
+
+/// How much of a block is left, 0..1, for how dark it paints.
+fn wear_of(hull: Option<&HullSegment>, module: Option<&Module>) -> f32 {
+    let (health, max) = match (hull, module) {
+        (Some(h), _) => (h.health, h.max_health),
+        (_, Some(m)) => (m.health, m.max_health),
+        _ => return 1.0,
+    };
+    if max > 0.0 { (health / max).clamp(0.0, 1.0) } else { 1.0 }
+}
+
+/// A block's colour for the picture: darker as it's shot up, down to a third.
+fn worn(tint: LinearRgba, left: f32) -> LinearRgba {
+    let k = 0.33 + 0.67 * left;
+    LinearRgba::new(tint.red * k, tint.green * k, tint.blue * k, tint.alpha)
+}
 
 /// Bake the pictures that are out of date, a few a frame, only when they can
 /// be seen.
@@ -406,26 +422,27 @@ pub fn bake_far_art(
 
     for (_, _, owner) in due.into_iter().take(BAKES_PER_FRAME) {
         let Ok((_, mut art, version, children)) = owners.get_mut(owner) else { continue };
-        let mut layers: Vec<(f32, Entity, &Sprite, &Transform)> = children
+        let mut layers: Vec<(f32, Entity, &Sprite, &Transform, f32)> = children
             .into_iter()
             .flatten()
-            .filter_map(|c| pictured.get(*c).ok().filter(|(_, _, v)| **v != Visibility::Hidden).map(|(s, t, _)| (t.translation.z, *c, s, t)))
+            .filter_map(|c| pictured.get(*c).ok().filter(|(_, _, v, ..)| **v != Visibility::Hidden).map(|(s, t, _, hull, module)| (t.translation.z, *c, s, t, wear_of(hull, module))))
             .collect();
         layers.sort_by(|a, b| a.0.total_cmp(&b.0));
 
         // Shrink any art not seen before, then paint bottom up.
-        for (_, _, sprite, _) in &layers {
+        for (_, _, sprite, ..) in &layers {
             cache.get(&images, &sprite.image);
         }
         let white = Mip::white();
         let stamps: Vec<Stamp> = layers
             .iter()
-            .filter_map(|(_, _, sprite, t)| {
+            .filter_map(|(_, _, sprite, t, wear)| {
                 let art = if sprite.image.id() == Handle::<Image>::default().id() { &white } else { cache.0.get(&sprite.image.id())? };
                 let (src_w, src_h) = (art.w as f32 * art.step, art.h as f32 * art.step);
                 let rect = sprite.rect.unwrap_or(Rect::new(0.0, 0.0, src_w, src_h));
                 let size = sprite.custom_size.unwrap_or(rect.size()) * t.scale.truncate().abs();
                 let tint = sprite.color.to_linear();
+                let tint = worn(tint, *wear);
                 Some(Stamp {
                     at: t.translation.truncate(),
                     angle: t.rotation.to_euler(EulerRot::ZYX).0,
@@ -468,7 +485,7 @@ pub fn bake_far_art(
         // Fully out, what was just painted stops drawing (blocks built or
         // laid since the last bake included).
         if full {
-            for (_, block, _, _) in &layers {
+            for (_, block, ..) in &layers {
                 commands.entity(*block).try_insert((RenderLayers::layer(HIDDEN_LAYER), FarHidden));
             }
         }
